@@ -1,0 +1,35 @@
+{
+ "trigger": "div[menuitem] \"Delete\"",
+ "focusOnOpen": "div[menuitem] \"Delete\"",
+ "panel": {
+  "panelRole": null,
+  "dialogRole": null,
+  "ariaModal": null,
+  "labelledby": null,
+  "x": 528,
+  "y": 384,
+  "w": 384,
+  "h": 132,
+  "bg": "rgb(226, 226, 229)",
+  "rad": "3px",
+  "bs": "rgba(0, 0, 0, 0.1) 0px 10px 15px -3px, rgba(0, 0, 0, 0.1) 0px 4px 6px "
+ },
+ "tabs": [
+  "OUT div[menuitem] \"Delete\"",
+  "OUT div[menuitem] \"Delete\"",
+  "OUT div[menuitem] \"Delete\"",
+  "OUT div[menuitem] \"Delete\"",
+  "OUT div[menuitem] \"Delete\"",
+  "OUT div[menuitem] \"Delete\"",
+  "OUT div[menuitem] \"Delete\"",
+  "OUT div[menuitem] \"Delete\""
+ ],
+ "shiftTabs": [
+  "OUT div[menuitem] \"Delete\"",
+  "OUT div[menuitem] \"Delete\"",
+  "OUT div[menuitem] \"Delete\""
+ ],
+ "openAfterEsc": true,
+ "openAfterClose": false,
+ "focusAfterClose": "BODY"
+}

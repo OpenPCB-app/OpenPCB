@@ -1,0 +1,71 @@
+3d                     btnH={'icon:20': 7, 'text:23': 7, 'text:34': 6, 'text:51': 5, 'text:25': 3, 'icon:28': 3, 'icon:32': 1, 'icon:16': 1, 'icon:22': 1, 'text:24': 1, 'text:21': 1, 'icon:18': 1, 'icon:30': 1, 'text:32': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('GUIDE-VALIDATE r15', 34), ('Close GUIDE-VALIDA', 16), ('Schem', 34), ('PCB', 34), ('3D', 34), ('BOM', 34)]
+     tablists: [('Open designs', 34, {'34': 1}, {'11px': 1}, 'roving', 1), ('', 34, {'34': 5}, {'11px': 5}, 'roving', 4), ('Side panel', 24, {'23': 1}, {'11px': 1}, 'roving', 0)]
+assistant              btnH={'icon:24': 10, 'text:67': 6, 'text:51': 5, 'text:19': 4, 'text:88': 4, 'icon:28': 2, 'icon:32': 1, 'text:27': 1, 'text:16': 1, 'text:32': 1, 'icon:30': 1, 'text:20': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('Collapse sidebar', 28), ('New', 27), ('All 12', 19), ('Pinned 0', 19), ('Linked 4', 19), ('Archived 0', 19)]
+     search: [('Search chats', 15, 29, '11px', '0px/2px')]
+bom                    btnH={'text:34': 6, 'text:51': 5, 'text:20': 3, 'text:14': 3, 'icon:32': 1, 'icon:16': 1, 'icon:22': 1, 'text:24': 1, 'icon:20': 1, 'text:22': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('GUIDE-VALIDATE r15', 34), ('Close GUIDE-VALIDA', 16), ('Schem', 34), ('PCB', 34), ('3D', 34), ('BOM', 34)]
+     search: [('Filter ref, value, M', 15, 22, '11px', '0px/2px')]
+     segs: [('BOM filter', 22, ['20'], ['10px'], '2px')]
+     tablists: [('Open designs', 34, {'34': 1}, {'11px': 1}, 'roving', 1), ('', 34, {'34': 5}, {'11px': 5}, 'roving', 4)]
+designer-empty         btnH={'text:15': 20, 'text:51': 5, 'text:34': 5, 'text:18': 3, 'text:22': 3, 'icon:32': 1, 'icon:22': 1, 'text:24': 1, 'icon:20': 1, 'text:28': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('Schem', 34), ('PCB', 34), ('3D', 34), ('BOM', 34), ('DRC', 34), ('Parts', 18)]
+     search: [('Filter ref, value, n', 15, 20, '11px', '0px/2px')]
+     segs: [('Outline view', 20, ['18'], ['10px'], '2px')]
+     tablists: [('Open designs', 34, {}, {}, 'roving', 0), ('', 34, {'34': 5}, {'11px': 5}, 'roving', 5)]
+docs                   btnH={'icon:24': 16, 'icon:20': 10, 'text:51': 5, 'icon:32': 1, 'text:20': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32)]
+     search: [('Search...', 32, 32, '12px', '2px/0px')]
+drc                    btnH={'text:31': 20, 'text:14': 20, 'text:34': 6, 'text:51': 5, 'text:18': 3, 'text:22': 3, 'text:20': 2, 'icon:32': 1, 'icon:16': 1, 'icon:22': 1, 'text:24': 1, 'icon:20': 1, 'text:21': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('GUIDE-VALIDATE r15', 34), ('Close GUIDE-VALIDA', 16), ('Schem', 34), ('PCB', 34), ('3D', 34), ('BOM', 34)]
+     segs: [('1 20 0', 18, ['18'], ['10px'], '0px')]
+     tablists: [('Open designs', 34, {'34': 1}, {'11px': 1}, 'roving', 1), ('', 34, {'34': 5}, {'11px': 5}, 'roving', 4)]
+home-grid              btnH={'icon:16': 12, 'icon:22': 10, 'text:51': 5, 'text:22': 4, 'text:24': 4, 'text:20': 2, 'icon:32': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('Star', 16), ('Star', 16), ('Star', 16), ('Star', 16), ('Star', 16), ('Star', 16)]
+     search: [('Search designs…', 15, 22, '11px', '0px/2px')]
+     segs: [('View', 22, ['20'], ['10px'], '2px')]
+home-list              btnH={'icon:16': 13, 'text:51': 5, 'text:22': 4, 'text:24': 4, 'text:20': 2, 'icon:32': 1, 'icon:22': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('Star', 16), ('Star', 16), ('Star', 16), ('Star', 16), ('Star', 16), ('Star', 16)]
+     search: [('Search designs…', 15, 22, '11px', '0px/2px')]
+     segs: [('View', 22, ['20'], ['10px'], '2px')]
+library-detail         btnH={'text:51': 5, 'text:22': 3, 'icon:22': 2, 'icon:32': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32)]
+library-grid           btnH={'text:222': 16, 'text:51': 5, 'text:15': 5, 'text:22': 4, 'text:20': 2, 'icon:32': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('Source', 15), ('Family', 15), ('Mount', 15), ('Package', 15), ('Other', 15), ('74HC00 Quad NAND S', 222)]
+     search: [('Search name, MPN, pa', 15, 22, '11px', '0px/2px'), ('Filter family…', 15, 22, '11px', '0px/2px'), ('Filter other…', 15, 22, '11px', '0px/2px')]
+     segs: [('Result view', 22, ['20'], ['10px'], '2px')]
+library-table          btnH={'text:51': 5, 'text:22': 5, 'text:15': 5, 'text:20': 2, 'icon:32': 1, 'icon:22': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('Source', 15), ('Family', 15), ('Mount', 15), ('Package', 15), ('Other', 15)]
+     search: [('Search name, MPN, pa', 15, 22, '11px', '0px/2px'), ('Filter family…', 15, 22, '11px', '0px/2px'), ('Filter other…', 15, 22, '11px', '0px/2px')]
+     segs: [('Result view', 22, ['20'], ['10px'], '2px')]
+library-wizard-step1   btnH={'text:51': 5, 'text:17': 4, 'text:27': 2, 'icon:32': 1, 'icon:24': 1, 'text:32': 1, 'text:28': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('1. Symbol', 17), ('2. Footprints', 17), ('3. 3D Model', 17), ('4. Metadata', 17), ('Next', 32), ('Import file', 27)]
+pcb                    btnH={'icon:16': 33, 'text:22': 14, 'text:21': 8, 'text:34': 6, 'icon:24': 6, 'text:51': 5, 'text:24': 5, 'text:18': 5, 'icon:22': 4, 'text:23': 3, 'text:15': 2, 'text:20': 2, 'icon:32': 1, 'icon:20': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('GUIDE-VALIDATE r15', 34), ('Close GUIDE-VALIDA', 16), ('Schem', 34), ('PCB', 34), ('3D', 34), ('BOM', 34)]
+     segs: [('PCB tools', 30, ['24'], ['12px', '11px'], '0px'), ('Display mode', 20, ['18'], ['10px'], '2px')]
+     tablists: [('Open designs', 34, {'34': 1}, {'11px': 1}, 'roving', 1), ('', 34, {'34': 5}, {'11px': 5}, 'roving', 4), ('PCB layers', 22, {'21': 7}, {'10px': 7}, 'roving', 0), ('Side panel', 24, {'23': 3}, {'11px': 3}, 'roving', 0)]
+pcb-rules-dialog       btnH={'icon:16': 33, 'text:22': 14, 'text:21': 8, 'icon:24': 7, 'text:34': 6, 'text:51': 5, 'text:24': 5, 'text:18': 5, 'icon:22': 4, 'text:23': 4, 'text:15': 2, 'text:29': 2, 'text:20': 2, 'icon:32': 1, 'icon:20': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('GUIDE-VALIDATE r15', 34), ('Close GUIDE-VALIDA', 16), ('Schem', 34), ('PCB', 34), ('3D', 34), ('BOM', 34)]
+     segs: [('PCB tools', 30, ['24'], ['12px', '11px'], '0px'), ('Display mode', 20, ['18'], ['10px'], '2px')]
+     tablists: [('Open designs', 34, {'34': 1}, {'11px': 1}, 'roving', 1), ('', 34, {'34': 5}, {'11px': 5}, 'roving', 4), ('PCB layers', 22, {'21': 7}, {'10px': 7}, 'roving', 0), ('Side panel', 24, {'23': 3}, {'11px': 3}, 'roving', 0)]
+schematic              btnH={'text:24': 7, 'text:34': 6, 'text:51': 5, 'icon:16': 5, 'icon:22': 4, 'icon:24': 4, 'text:22': 4, 'text:18': 3, 'text:23': 3, 'text:14': 2, 'icon:32': 1, 'icon:20': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('GUIDE-VALIDATE r15', 34), ('Close GUIDE-VALIDA', 16), ('Schem', 34), ('PCB', 34), ('3D', 34), ('BOM', 34)]
+     search: [('Filter ref, value, n', 15, 20, '11px', '0px/2px')]
+     segs: [('Schematic tools', 30, ['24'], ['11px', '12px'], '0px'), ('Outline view', 20, ['18'], ['10px'], '2px')]
+     tablists: [('Open designs', 34, {'34': 1}, {'11px': 1}, 'roving', 1), ('', 34, {'34': 5}, {'11px': 5}, 'roving', 4), ('Side panel', 24, {'23': 3}, {'11px': 3}, 'roving', 0)]
+settings-about         btnH={'text:51': 5, 'text:36': 5, 'icon:32': 2, 'text:20': 1, 'text:15': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('Back', 32), ('General', 36), ('Libraries', 36), ('Assistant', 36), ('Privacy', 36), ('About', 36)]
+     search: [('Search settings', 32, 32, '12px', '2px/0px')]
+settings-assistant     btnH={'text:36': 7, 'text:51': 5, 'icon:32': 2, 'text:35': 2, 'text:25': 1, 'text:33': 1, 'text:41': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('Back', 32), ('General', 36), ('Libraries', 36), ('Assistant', 36), ('Privacy', 36), ('About', 36)]
+     search: [('Search settings', 32, 32, '12px', '2px/0px')]
+settings-general       btnH={'text:51': 5, 'text:36': 5, 'text:25': 3, 'icon:32': 2}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('Back', 32), ('General', 36), ('Libraries', 36), ('Assistant', 36), ('Privacy', 36), ('About', 36)]
+     search: [('Search settings', 32, 32, '12px', '2px/0px')]
+settings-libraries     btnH={'text:51': 5, 'text:36': 5, 'text:34': 4, 'icon:32': 2, 'text:25': 1}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('Back', 32), ('General', 36), ('Libraries', 36), ('Assistant', 36), ('Privacy', 36), ('About', 36)]
+     search: [('Search settings', 32, 32, '12px', '2px/0px')]
+settings-privacy       btnH={'text:51': 5, 'text:36': 5, 'icon:32': 2}
+     odd: [('Home', 51), ('Designer', 51), ('Library', 51), ('Docs', 51), ('Assistant', 51), ('Settings', 32), ('Back', 32), ('General', 36), ('Libraries', 36), ('Assistant', 36), ('Privacy', 36), ('About', 36)]
+     search: [('Search settings', 32, 32, '12px', '2px/0px')]

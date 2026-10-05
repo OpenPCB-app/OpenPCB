@@ -1,28 +1,46 @@
 # Current State
 
-Last verified: 2026-09-18 11:31 (snapshot: clean tree, HEAD `7c8c0af` + this handoff refresh; full gate run 11:20 on the S15 code, unchanged since — only docs were committed after it)
+Last verified: 2026-09-26 01:30
 
-- **Branch:** `master`; S15 committed 2026-09-18 as `0f7c002`, the S15b source research as `54b08f2`, the
-  handoff files as `7c8c0af` (+ one refresh commit); clean tree, nothing staged; local `master` is ahead of
-  `origin/master` — NOT pushed (push only on the user's word).
-- **Changed files (S15):** new `docs/pcb-hardening/15-high-speed-runway.md`,
-  `src/modules/designer/backend/pcb/{board-settings-serialize,board-settings-known-keys}.ts`,
-  tests `src/core/backend/tests/{board-settings-serialize,assistant-export-refusal}.test.ts`;
-  modified `src/modules/designer/backend/pcb/pcb-store.ts` (every settings writer routed,
-  `loadBoardSettingsRow`, `serializePcbBoardSettings`), `backend/import/kicad-project/commit.ts`,
-  `backend/export/index.ts` (422 for `layerCount > 4`), `src/core/backend/tests/designer-export.test.ts`,
-  `src/modules/assistant/backend/tools/read-tools.ts` (export refusal → `ok: false`),
-  `src/modules/designer/frontend/pcb/PcbExportDialog.tsx` (refusal shown in the preview),
-  `src/modules/designer/AGENTS.md`, `.claude/skills/pcb-hardening-review/references/scope-and-invariants.md`,
-  docs (`OPEN_FINDINGS.md`, `PROGRAM.md`, contracts 00 / 10 / 13 / 14, `TODO.md`, `HANDOFF.md`,
-  `CURRENT_STATE.md`); new `docs/pcb-hardening/sources/jlcpcb-stackup-2026-09-18.md`.
-- **Build/test:** backend `bun test` 3068 pass / 22 known library+assistant fails / 8 skip / 0 todo
-  (3098); tsc 44 (repo root); Vitest 66 files 594 + 1 todo; `gen:contracts` clean; `gen:check` fails
-  only on the pre-existing `gen:copilot-schemas:check` ENOENT (no generated file dirty); worker smoke
-  byte-identical (census 85); e2e DRC + routing + live-parity 5 + 1 skip; lock 034652c3; the eleven
-  golden fixtures untouched (shasums as at the S14 close: arcs cd6b067e · areas 99c49eb3 · census
-  c02bd526 · cutouts 43fbd513 · dfm 47573fd3 · electrical a9990112 · holes c8ab6694 · pours
-  ab245110 · rules ed0705e8 · si 0c45b4d6 · small 95fbb3dc).
-- **Key decisions:** see `PROGRAM.md` S15 bullet and contract 15 (§2.1 the serializer rule and its
-  limits, §3 binding extension rules, §4 the S15b brief, §8 ledgers: critique 24, Astra run 0, R1 9).
-- **Blockers:** none. `../shared` still untagged at `e882332` (blocks S12c only; S15b is free).
+- **Branch:** `master`, clean. It is level with `origin/master` at `47142ad`, pushed on the user's word.
+- **Commits this session:**
+  - `6e8c2e0`: `.gitignore` `/docs/qa/`
+  - `6f5fca1`: kit and tokens (F0a)
+  - `e64a464`: designer backend (DB)
+  - `47142ad`: library backend (LB)
+- **Changed areas:**
+  - `src/shared/frontend/ui/**`: new primitives, plus focus and roving edits.
+  - New shared modules: `src/shared/frontend/http/problem.ts` and `src/shared/frontend/keyboard/*`.
+  - Frontend core: `src/core/frontend/src/index.css` (tokens), `ui-discipline.test.ts` with its baseline JSON, and the `components/ui/dialog.tsx` shim.
+  - `docs/design/design-tokens.md`.
+  - Designer backend: routes, commands (`batch.ts`), `projection-world`, BOM overrides (migration `0019_bom_override_part_binding`), export naming, KiCad inspect errors.
+  - Library backend: `component-filter.ts`, queries/routes paging, migration `0011_untrusted_core_sources`, `source-ids.ts`, clone.
+  - SDK types: `src/sdks/{designer,library}`.
+  - New bun tests: `designer-*` and `library-*`.
+- **Gates after wave A:**
+
+  | Gate | Result | Baseline |
+  |---|---|---|
+  | `npm run typecheck:frontend` | 0 | 0 |
+  | `npx tsc -p tsconfig.modules.json` | no errors outside the baseline set | 16 unique errors |
+  | `npm run test:react` | 77 files, 696 passed + 1 todo | 66/594 |
+  | `npm run build:frontend` | ok | — |
+  | `cd src/core/backend && bun test` | 3119 pass / 22 fail / 8 skip | 3068/22 |
+  | e2e chromium | not re-run since wave A | 39 pass / 4 skip / 3 fail |
+
+  - The 22 backend failures are the known environment failures (CoreLibrary pack cap and one assistant cloud-credential test).
+  - The 3 baseline e2e failures: two 3D KiCad-ZIP upload specs, and one console-noise spec caused by the offline cloud in `.env.local`.
+- **QA archive:** `docs/qa/2026-09-ui-qa/` (≈900 MB, gitignored, the user backs it up manually).
+  - 344 approved triage entries: `data/triage-approved.json`.
+  - Owner briefs: `fix/owners/*.md`.
+  - Protocol and spec: `fix/FIX_PROTOCOL.md`, `fix/KIT_SPEC.md`.
+  - API contracts: `fix/contracts/{F0a,DB,LB}.md`.
+  - Wave A hand-offs: `fix/results/wave-a-crossowner.md` (35).
+- **Key decisions:**
+  - Strict file ownership lets implementers work in parallel in the main checkout. Only the orchestrator commits.
+  - Grid 1.27 mm for the schematic and 0.25 mm for the PCB, default ON.
+  - Proposals P1–P5 are approved; P6 is not.
+  - Package-rooted S1s are mitigated now. T-317, T-244/245 and T-132 are release blockers for dedicated sessions.
+- **Blockers:** none.
+- **Next wave:** B = F0b app wiring plus G grid snap. The PCB-hardening S15b is still pending in parallel.
+- **Running processes:** the QA stacks may still be up from session 6: backends on 3100/3200/3300 and Vite on 1520/1620/1720. Their data is in an ephemeral scratchpad, so rebuild them from `docs/qa/2026-09-ui-qa/raw-run/` (see `HANDOFF.md` step 6).

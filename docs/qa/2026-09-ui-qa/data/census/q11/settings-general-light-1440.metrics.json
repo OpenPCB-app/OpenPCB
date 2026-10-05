@@ -1,0 +1,555 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "light",
+ "vw": 1440,
+ "vh": 900,
+ "docW": 1440,
+ "bands": [
+  {
+   "tag": "header",
+   "x": 80,
+   "y": 0,
+   "w": 1360,
+   "h": 52,
+   "text": "Settings Search settings",
+   "cls": "flex h-[52px] flex-shrink-0 items-center gap-3 border-b border-border px-3",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  }
+ ],
+ "rows": [
+  {
+   "parent": "mt-3 flex w-full flex-col items-center gap-2",
+   "px": 4,
+   "py": 137,
+   "child": "BUTTON.flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center g",
+   "n": 4,
+   "heights": {
+    "51": 4
+   },
+   "w": 72,
+   "sample": "Designer"
+  },
+  {
+   "parent": "Settings",
+   "px": 80,
+   "py": 52,
+   "child": "DIV.mb-1 pt-3 first:pt-0",
+   "n": 3,
+   "heights": {
+    "66": 1,
+    "92": 1,
+    "104": 1
+   },
+   "w": 189,
+   "sample": "WORKSPACE General Libraries"
+  },
+  {
+   "parent": "space-y-8 pb-24",
+   "px": 567,
+   "py": 70,
+   "child": "SECTION.space-y-3 rounded-control border border-border bg-surface-panel p-5",
+   "n": 3,
+   "heights": {
+    "101": 2,
+    "105": 1
+   },
+   "w": 596,
+   "sample": "Appearance Light Dark System"
+  }
+ ],
+ "btnHeights": {
+  "text:51": 5,
+  "text:36": 5,
+  "text:25": 3,
+  "icon:32": 2
+ },
+ "btnVariants": {
+  "h51 fs12px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 134) fw400": {
+   "n": 5,
+   "ex": [
+    "Home",
+    "Designer",
+    "Library"
+   ]
+  },
+  "h36 fs12px r2px bg:rgb(226, 226, 229) bd:none fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "General"
+   ]
+  },
+  "h36 fs12px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(85, 85, 92) fw400": {
+   "n": 4,
+   "ex": [
+    "Libraries",
+    "Assistant",
+    "Privacy"
+   ]
+  },
+  "h25 fs11px r2px bg:rgb(28, 28, 31) bd:rgba(0, 0, 0, 0) fg:rgb(245, 245, 245) fw500": {
+   "n": 1,
+   "ex": [
+    "Light"
+   ]
+  },
+  "h25 fs11px r2px bg:rgba(0, 0, 0, 0) bd:rgba(0, 0, 0, 0) fg:rgb(38, 38, 43) fw500": {
+   "n": 2,
+   "ex": [
+    "Dark",
+    "System"
+   ]
+  }
+ },
+ "btnOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 137,
+   "w": 72,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 195,
+   "w": 72,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 858,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 92,
+   "y": 10,
+   "w": 32,
+   "h": 32,
+   "label": "Back",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:te",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 84,
+   "w": 189,
+   "h": 36,
+   "text": "General",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors bg-surface-selected font-medium text-text",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 122,
+   "w": 189,
+   "h": 36,
+   "text": "Libraries",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors text-text-secondary hover:bg-surface-hove",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 192,
+   "w": 189,
+   "h": 36,
+   "text": "Assistant",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors text-text-secondary hover:bg-surface-hove",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 262,
+   "w": 189,
+   "h": 36,
+   "text": "Privacy",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors text-text-secondary hover:bg-surface-hove",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 300,
+   "w": 189,
+   "h": 36,
+   "text": "About",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors text-text-secondary hover:bg-surface-hove",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 593,
+   "y": 194,
+   "w": 56,
+   "h": 25,
+   "text": "Light",
+   "cls": "flex min-w-[3.5rem] flex-col items-center justify-center rounded-control border border-transparent px-3 py-1 text-xs font-medium transition-",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 653,
+   "y": 194,
+   "w": 56,
+   "h": 25,
+   "text": "Dark",
+   "cls": "flex min-w-[3.5rem] flex-col items-center justify-center rounded-control border border-transparent px-3 py-1 text-xs font-medium transition-",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 713,
+   "y": 194,
+   "w": 63,
+   "h": 25,
+   "text": "System",
+   "cls": "flex min-w-[3.5rem] flex-col items-center justify-center rounded-control border border-transparent px-3 py-1 text-xs font-medium transition-",
+   "fs": "11px"
+  }
+ ],
+ "inputs": [
+  {
+   "tag": "input",
+   "x": 1228,
+   "y": 10,
+   "w": 200,
+   "h": 32,
+   "cls": "h-8 w-full rounded-control border border-border-control bg-surface-input pl-8 pr-2 text-sm text-text placeholder:text-text-tertiary focus:bo",
+   "type": "search",
+   "ph": "Search settings",
+   "fs": "12px",
+   "rad": "2px",
+   "bg": "rgb(255, 255, 255)",
+   "bd": "rgb(207, 207, 212)",
+   "wrapH": 32,
+   "wrapRad": "0px",
+   "native": "auto"
+  }
+ ],
+ "tablists": [],
+ "segs": [],
+ "radii": {
+  "2px": 11
+ },
+ "radEx": {},
+ "shadows": [],
+ "shadowCount": 0,
+ "blurs": [],
+ "grads": [],
+ "fontSizes": {
+  "12px": 10,
+  "10px": 8,
+  "11px": 5,
+  "13px": 2
+ },
+ "fontFam": {
+  "IBM Plex Sans": 25
+ },
+ "weights": {
+  "400": 13,
+  "500": 8,
+  "600": 4
+ },
+ "small": [],
+ "big": [],
+ "iconSizes": {
+  "18x18": 8,
+  "20x20": 5,
+  "16x16": 2
+ },
+ "iconStroke": {
+  "1.5px/attr1.5": 15
+ },
+ "iconOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-layout-grid h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 137,
+   "w": 72,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-pen-tool h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 195,
+   "w": 72,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-box h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-book-open h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-bot h-5 w-5"
+  },
+  {
+   "tag": "a",
+   "x": 24,
+   "y": 818,
+   "w": 32,
+   "h": 32,
+   "label": "Report a bug or request a feature",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-circle-dot h-[18px] w-[18p"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 858,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-strong",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-settings h-[18px] w-[18px]"
+  },
+  {
+   "tag": "button",
+   "x": 92,
+   "y": 10,
+   "w": 32,
+   "h": 32,
+   "label": "Back",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-arrow-left h-[18px] w-[18p"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 84,
+   "w": 189,
+   "h": 36,
+   "text": "General",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors bg-surface-selected font-medium text-text",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-settings h-[18px] w-[18px]"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 122,
+   "w": 189,
+   "h": 36,
+   "text": "Libraries",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors text-text-secondary hover:bg-surface-hove",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-library h-[18px] w-[18px] "
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 192,
+   "w": 189,
+   "h": 36,
+   "text": "Assistant",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors text-text-secondary hover:bg-surface-hove",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-bot h-[18px] w-[18px] shri"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 262,
+   "w": 189,
+   "h": 36,
+   "text": "Privacy",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors text-text-secondary hover:bg-surface-hove",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-lock h-[18px] w-[18px] shr"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 300,
+   "w": 189,
+   "h": 36,
+   "text": "About",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors text-text-secondary hover:bg-surface-hove",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-info h-[18px] w-[18px] shr"
+  }
+ ],
+ "otherSvgs": [],
+ "floats": [],
+ "alerts": [],
+ "headings": [
+  {
+   "tag": "h1",
+   "x": 136,
+   "y": 17,
+   "w": 49,
+   "h": 18,
+   "text": "Settings",
+   "cls": "text-base font-medium text-text-strong",
+   "fs": "13px",
+   "fw": "500"
+  },
+  {
+   "tag": "h2",
+   "x": 567,
+   "y": 70,
+   "w": 596,
+   "h": 18,
+   "text": "General",
+   "cls": "text-base font-semibold text-text-strong",
+   "fs": "13px",
+   "fw": "600"
+  },
+  {
+   "tag": "h3",
+   "x": 588,
+   "y": 161,
+   "w": 554,
+   "h": 16,
+   "text": "Appearance",
+   "cls": "text-sm font-semibold text-text-strong",
+   "fs": "12px",
+   "fw": "600"
+  },
+  {
+   "tag": "h3",
+   "x": 588,
+   "y": 298,
+   "w": 554,
+   "h": 16,
+   "text": "Updates",
+   "cls": "text-sm font-semibold text-text-strong",
+   "fs": "12px",
+   "fw": "600"
+  },
+  {
+   "tag": "h3",
+   "x": 588,
+   "y": 431,
+   "w": 554,
+   "h": 16,
+   "text": "Files & logs",
+   "cls": "text-sm font-semibold text-text-strong",
+   "fs": "12px",
+   "fw": "600"
+  }
+ ],
+ "canvases": [],
+ "overflowX": [],
+ "clipped": [
+  {
+   "tag": "span",
+   "x": 1227,
+   "y": 9,
+   "w": 1,
+   "h": 1,
+   "text": "Search settings",
+   "cls": "sr-only",
+   "sw": 83,
+   "cw": 1,
+   "to": "clip"
+  }
+ ]
+}

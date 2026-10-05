@@ -1,0 +1,1 @@
+() => { const S = window.__qaShim; const w = S.watch || {}; return JSON.stringify({ events: w.events, shifts: (w.shifts || []).slice(0, 12), longtasks: S.longtasks.slice(-10), blocked: S.blocked.slice(-10), log: S.log.slice(-25).map(l => l.t + ' ' + l.method + ' ' + l.path) }); }

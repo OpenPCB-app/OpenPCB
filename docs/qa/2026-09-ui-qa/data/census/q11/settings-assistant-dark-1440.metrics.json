@@ -1,0 +1,791 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "dark",
+ "vw": 1440,
+ "vh": 900,
+ "docW": 1440,
+ "bands": [
+  {
+   "tag": "header",
+   "x": 80,
+   "y": 0,
+   "w": 1360,
+   "h": 52,
+   "text": "Settings Search settings",
+   "cls": "flex h-[52px] flex-shrink-0 items-center gap-3 border-b border-border px-3",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "button",
+   "x": 567,
+   "y": 750,
+   "w": 596,
+   "h": 41,
+   "text": "Add another provider",
+   "cls": "flex items-center justify-center gap-1.5 rounded-control border border-dashed border-border-control px-3.5 py-3 text-xs text-text-tertiary h",
+   "n": 1,
+   "bb": true,
+   "bt": true,
+   "bg": "rgba(0, 0, 0, 0)"
+  }
+ ],
+ "rows": [
+  {
+   "parent": "mt-3 flex w-full flex-col items-center gap-2",
+   "px": 4,
+   "py": 137,
+   "child": "BUTTON.flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center g",
+   "n": 4,
+   "heights": {
+    "51": 4
+   },
+   "w": 72,
+   "sample": "Designer"
+  },
+  {
+   "parent": "Settings",
+   "px": 80,
+   "py": 52,
+   "child": "DIV.mb-1 pt-3 first:pt-0",
+   "n": 3,
+   "heights": {
+    "66": 1,
+    "92": 1,
+    "104": 1
+   },
+   "w": 189,
+   "sample": "WORKSPACE General Libraries"
+  },
+  {
+   "parent": "grid gap-3 md:grid-cols-2",
+   "px": 567,
+   "py": 155,
+   "child": "LABEL.block",
+   "n": 4,
+   "heights": {
+    "51": 4
+   },
+   "w": 292,
+   "sample": "Default provider LM Studio OpenAI OpenRo"
+  },
+  {
+   "parent": "flex flex-col gap-1.5",
+   "px": 567,
+   "py": 456,
+   "child": "DIV.overflow-hidden rounded-control border transition-colors border-border bg-surface-panel",
+   "n": 4,
+   "heights": {
+    "51": 1,
+    "53": 2,
+    "54": 1
+   },
+   "w": 596,
+   "sample": "LM Studio LOCAL Disabled"
+  }
+ ],
+ "btnHeights": {
+  "text:36": 7,
+  "text:51": 5,
+  "icon:32": 2,
+  "text:35": 2,
+  "text:25": 1,
+  "text:33": 1,
+  "text:41": 1
+ },
+ "btnVariants": {
+  "h51 fs12px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 132) fw400": {
+   "n": 5,
+   "ex": [
+    "Home",
+    "Designer",
+    "Library"
+   ]
+  },
+  "h36 fs12px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(168, 168, 173) fw400": {
+   "n": 4,
+   "ex": [
+    "General",
+    "Libraries",
+    "Privacy"
+   ]
+  },
+  "h36 fs12px r2px bg:rgb(38, 38, 43) bd:none fg:rgb(245, 245, 245) fw500": {
+   "n": 1,
+   "ex": [
+    "Assistant"
+   ]
+  },
+  "h25 fs11px r2px bg:rgba(51, 209, 255, 0.08) bd:oklab(0.801763 -0.101473 -0.0946634 / 0.4) fg:rgb(245, 245, 245) fw400": {
+   "n": 1,
+   "ex": [
+    "Add provider"
+   ]
+  },
+  "h35 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(217, 217, 217) fw400": {
+   "n": 2,
+   "ex": [
+    "LM Studio\nLOCAL\nDisabled",
+    "oMLX\nLOCAL\nDisabled"
+   ]
+  },
+  "h36 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(217, 217, 217) fw400": {
+   "n": 2,
+   "ex": [
+    "OpenAI\nNeeds API key to ",
+    "OpenRouter\nDEFAULT\nActiv"
+   ]
+  },
+  "h33 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(217, 217, 217) fw400": {
+   "n": 1,
+   "ex": [
+    "OpenCode Zen\nDisabled"
+   ]
+  },
+  "h41 fs11px r2px bg:rgba(0, 0, 0, 0) bd:rgb(42, 42, 46) fg:rgb(127, 127, 132) fw400": {
+   "n": 1,
+   "ex": [
+    "Add another provider"
+   ]
+  }
+ },
+ "btnOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 137,
+   "w": 72,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 195,
+   "w": 72,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 858,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 92,
+   "y": 10,
+   "w": 32,
+   "h": 32,
+   "label": "Back",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:te",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 84,
+   "w": 189,
+   "h": 36,
+   "text": "General",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors text-text-secondary hover:bg-surface-hove",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 122,
+   "w": 189,
+   "h": 36,
+   "text": "Libraries",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors text-text-secondary hover:bg-surface-hove",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 192,
+   "w": 189,
+   "h": 36,
+   "text": "Assistant",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors bg-surface-selected font-medium text-text",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 262,
+   "w": 189,
+   "h": 36,
+   "text": "Privacy",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors text-text-secondary hover:bg-surface-hove",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 300,
+   "w": 189,
+   "h": 36,
+   "text": "About",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors text-text-secondary hover:bg-surface-hove",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1062,
+   "y": 421,
+   "w": 101,
+   "h": 25,
+   "text": "Add provider",
+   "cls": "inline-flex items-center gap-1 rounded-control border border-selection/40 bg-selection-soft px-2.5 py-1 text-xs text-text-strong hover:bg-se",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 578,
+   "y": 465,
+   "w": 550,
+   "h": 35,
+   "text": "LM Studio LOCAL Disabled",
+   "cls": "flex min-w-0 flex-1 items-center gap-2.5 text-left text-xs text-text",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 578,
+   "y": 524,
+   "w": 550,
+   "h": 36,
+   "text": "OpenAI Needs API key to activate",
+   "cls": "flex min-w-0 flex-1 items-center gap-2.5 text-left text-xs text-text",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 578,
+   "y": 584,
+   "w": 550,
+   "h": 36,
+   "text": "OpenRouter DEFAULT Active \u00b7 nvidia/nemot",
+   "cls": "flex min-w-0 flex-1 items-center gap-2.5 text-left text-xs text-text",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 578,
+   "y": 643,
+   "w": 550,
+   "h": 35,
+   "text": "oMLX LOCAL Disabled",
+   "cls": "flex min-w-0 flex-1 items-center gap-2.5 text-left text-xs text-text",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 578,
+   "y": 702,
+   "w": 550,
+   "h": 33,
+   "text": "OpenCode Zen Disabled",
+   "cls": "flex min-w-0 flex-1 items-center gap-2.5 text-left text-xs text-text",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 567,
+   "y": 750,
+   "w": 596,
+   "h": 41,
+   "text": "Add another provider",
+   "cls": "flex items-center justify-center gap-1.5 rounded-control border border-dashed border-border-control px-3.5 py-3 text-xs text-text-tertiary h",
+   "fs": "11px"
+  }
+ ],
+ "inputs": [
+  {
+   "tag": "input",
+   "x": 1228,
+   "y": 10,
+   "w": 200,
+   "h": 32,
+   "cls": "h-8 w-full rounded-control border border-border-control bg-surface-input pl-8 pr-2 text-sm text-text placeholder:text-text-tertiary focus:bo",
+   "type": "search",
+   "ph": "Search settings",
+   "fs": "12px",
+   "rad": "2px",
+   "bg": "rgb(12, 12, 13)",
+   "bd": "rgb(42, 42, 46)",
+   "wrapH": 32,
+   "wrapRad": "0px",
+   "native": "auto"
+  },
+  {
+   "tag": "select",
+   "x": 567,
+   "y": 176,
+   "w": 292,
+   "h": 30,
+   "text": "LM Studio OpenAI OpenRouter oMLX OpenCod",
+   "cls": "w-full rounded-control border border-border bg-surface-input px-2.5 py-1.5 text-xs outline-none",
+   "type": "select-one",
+   "ph": null,
+   "fs": "11px",
+   "rad": "2px",
+   "bg": "rgb(12, 12, 13)",
+   "bd": "rgb(30, 30, 33)",
+   "wrapH": 51,
+   "wrapRad": "0px",
+   "native": "auto"
+  },
+  {
+   "tag": "select",
+   "x": 871,
+   "y": 176,
+   "w": 292,
+   "h": 30,
+   "text": "Strict grounded Friendly tutorial Minima",
+   "cls": "w-full rounded-control border border-border bg-surface-input px-2.5 py-1.5 text-xs outline-none",
+   "type": "select-one",
+   "ph": null,
+   "fs": "11px",
+   "rad": "2px",
+   "bg": "rgb(12, 12, 13)",
+   "bd": "rgb(30, 30, 33)",
+   "wrapH": 51,
+   "wrapRad": "0px",
+   "native": "auto"
+  },
+  {
+   "tag": "select",
+   "x": 567,
+   "y": 238,
+   "w": 292,
+   "h": 30,
+   "text": "Small \u00b7 ~16 KB Medium \u00b7 ~64 KB Large \u00b7 ~",
+   "cls": "w-full rounded-control border border-border bg-surface-input px-2.5 py-1.5 text-xs outline-none",
+   "type": "select-one",
+   "ph": null,
+   "fs": "11px",
+   "rad": "2px",
+   "bg": "rgb(12, 12, 13)",
+   "bd": "rgb(30, 30, 33)",
+   "wrapH": 51,
+   "wrapRad": "0px",
+   "native": "auto"
+  },
+  {
+   "tag": "select",
+   "x": 871,
+   "y": 238,
+   "w": 292,
+   "h": 30,
+   "text": "Auto read \u00b7 confirm writes Confirm all w",
+   "cls": "w-full rounded-control border border-border bg-surface-input px-2.5 py-1.5 text-xs outline-none",
+   "type": "select-one",
+   "ph": null,
+   "fs": "11px",
+   "rad": "2px",
+   "bg": "rgb(12, 12, 13)",
+   "bd": "rgb(30, 30, 33)",
+   "wrapH": 51,
+   "wrapRad": "0px",
+   "native": "auto"
+  }
+ ],
+ "tablists": [],
+ "segs": [],
+ "radii": {
+  "2px": 18,
+  "4px": 2,
+  "circle/pill": 8
+ },
+ "radEx": {
+  "4px": [
+   {
+    "tag": "span",
+    "x": 692,
+    "y": 280,
+    "w": 52,
+    "h": 15,
+    "text": "Advanced",
+    "cls": "rounded bg-surface-hover px-1.5 text-[9px]"
+   },
+   {
+    "tag": "span",
+    "x": 744,
+    "y": 386,
+    "w": 43,
+    "h": 15,
+    "text": "Caution",
+    "cls": "rounded bg-amber-100 px-1.5 text-[9px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+   }
+  ],
+  "pill>12": [
+   {
+    "tag": "span",
+    "x": 680,
+    "y": 465,
+    "w": 56,
+    "h": 18,
+    "text": "LOCAL",
+    "cls": "inline-flex h-[18px] shrink-0 items-center gap-1.5 rounded-pill px-2 font-medium [&_svg]:h-3 [&_svg]:w-3 [&_svg]:shrink-0 bg-status-neutral-"
+   },
+   {
+    "tag": "span",
+    "x": 692,
+    "y": 584,
+    "w": 67,
+    "h": 18,
+    "text": "DEFAULT",
+    "cls": "inline-flex h-[18px] shrink-0 items-center gap-1.5 rounded-pill px-2 font-medium [&_svg]:h-3 [&_svg]:w-3 [&_svg]:shrink-0 bg-selection-soft "
+   },
+   {
+    "tag": "span",
+    "x": 656,
+    "y": 643,
+    "w": 56,
+    "h": 18,
+    "text": "LOCAL",
+    "cls": "inline-flex h-[18px] shrink-0 items-center gap-1.5 rounded-pill px-2 font-medium [&_svg]:h-3 [&_svg]:w-3 [&_svg]:shrink-0 bg-status-neutral-"
+   }
+  ]
+ },
+ "shadows": [],
+ "shadowCount": 0,
+ "blurs": [],
+ "grads": [],
+ "fontSizes": {
+  "11px": 16,
+  "12px": 12,
+  "10px": 11,
+  "9px": 5,
+  "13px": 1,
+  "15px": 1
+ },
+ "fontFam": {
+  "IBM Plex Sans": 45,
+  "IBM Plex Mono": 1
+ },
+ "weights": {
+  "400": 29,
+  "500": 16,
+  "600": 1
+ },
+ "small": [
+  {
+   "tag": "span",
+   "x": 692,
+   "y": 280,
+   "w": 52,
+   "h": 15,
+   "text": "Advanced",
+   "cls": "rounded bg-surface-hover px-1.5 text-[9px]",
+   "fs": "9px"
+  },
+  {
+   "tag": "span",
+   "x": 744,
+   "y": 386,
+   "w": 43,
+   "h": 15,
+   "text": "Caution",
+   "cls": "rounded bg-amber-100 px-1.5 text-[9px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+   "fs": "9px"
+  },
+  {
+   "tag": "span",
+   "x": 680,
+   "y": 465,
+   "w": 56,
+   "h": 18,
+   "text": "LOCAL",
+   "cls": "inline-flex h-[18px] shrink-0 items-center gap-1.5 rounded-pill px-2 font-medium [&_svg]:h-3 [&_svg]:w-3 [&_svg]:shrink-0 bg-status-neutral-",
+   "fs": "9px"
+  },
+  {
+   "tag": "span",
+   "x": 692,
+   "y": 584,
+   "w": 67,
+   "h": 18,
+   "text": "DEFAULT",
+   "cls": "inline-flex h-[18px] shrink-0 items-center gap-1.5 rounded-pill px-2 font-medium [&_svg]:h-3 [&_svg]:w-3 [&_svg]:shrink-0 bg-selection-soft ",
+   "fs": "9px"
+  },
+  {
+   "tag": "span",
+   "x": 656,
+   "y": 643,
+   "w": 56,
+   "h": 18,
+   "text": "LOCAL",
+   "cls": "inline-flex h-[18px] shrink-0 items-center gap-1.5 rounded-pill px-2 font-medium [&_svg]:h-3 [&_svg]:w-3 [&_svg]:shrink-0 bg-status-neutral-",
+   "fs": "9px"
+  }
+ ],
+ "big": [],
+ "iconSizes": {
+  "16x16": 12,
+  "18x18": 8,
+  "20x20": 5,
+  "12x12": 3,
+  "14x14": 1
+ },
+ "iconStroke": {
+  "1.5px/attr1.5": 15,
+  "2px/attr2": 14
+ },
+ "iconOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-layout-grid h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 137,
+   "w": 72,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-pen-tool h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 195,
+   "w": 72,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-box h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-book-open h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-bot h-5 w-5"
+  },
+  {
+   "tag": "a",
+   "x": 24,
+   "y": 818,
+   "w": 32,
+   "h": 32,
+   "label": "Report a bug or request a feature",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-circle-dot h-[18px] w-[18p"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 858,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-strong",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-settings h-[18px] w-[18px]"
+  },
+  {
+   "tag": "button",
+   "x": 92,
+   "y": 10,
+   "w": 32,
+   "h": 32,
+   "label": "Back",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-arrow-left h-[18px] w-[18p"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 84,
+   "w": 189,
+   "h": 36,
+   "text": "General",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors text-text-secondary hover:bg-surface-hove",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-settings h-[18px] w-[18px]"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 122,
+   "w": 189,
+   "h": 36,
+   "text": "Libraries",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors text-text-secondary hover:bg-surface-hove",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-library h-[18px] w-[18px] "
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 192,
+   "w": 189,
+   "h": 36,
+   "text": "Assistant",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors bg-surface-selected font-medium text-text",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-bot h-[18px] w-[18px] shri"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 262,
+   "w": 189,
+   "h": 36,
+   "text": "Privacy",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors text-text-secondary hover:bg-surface-hove",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-lock h-[18px] w-[18px] shr"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 300,
+   "w": 189,
+   "h": 36,
+   "text": "About",
+   "cls": "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-control px-2 text-sm transition-colors text-text-secondary hover:bg-surface-hove",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-info h-[18px] w-[18px] shr"
+  }
+ ],
+ "otherSvgs": [],
+ "floats": [],
+ "alerts": [],
+ "headings": [
+  {
+   "tag": "h1",
+   "x": 136,
+   "y": 17,
+   "w": 49,
+   "h": 18,
+   "text": "Settings",
+   "cls": "text-base font-medium text-text-strong",
+   "fs": "13px",
+   "fw": "500"
+  },
+  {
+   "tag": "h2",
+   "x": 567,
+   "y": 70,
+   "w": 596,
+   "h": 20,
+   "text": "Assistant",
+   "cls": "text-lg font-semibold",
+   "fs": "15px",
+   "fw": "600"
+  }
+ ],
+ "canvases": [],
+ "overflowX": [],
+ "clipped": [
+  {
+   "tag": "span",
+   "x": 1227,
+   "y": 9,
+   "w": 1,
+   "h": 1,
+   "text": "Search settings",
+   "cls": "sr-only",
+   "sw": 83,
+   "cw": 1,
+   "to": "clip"
+  }
+ ]
+}

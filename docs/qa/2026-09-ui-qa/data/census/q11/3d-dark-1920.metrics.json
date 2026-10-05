@@ -1,0 +1,1025 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "dark",
+ "vw": 1920,
+ "vh": 1080,
+ "docW": 1920,
+ "bands": [
+  {
+   "tag": "header",
+   "x": 80,
+   "y": 0,
+   "w": 1840,
+   "h": 34,
+   "text": "GUIDE-VALIDATE r15 Schem PCB 3D BOM DRC ",
+   "cls": "grid h-[34px] shrink-0 grid-cols-[1fr_auto_1fr] items-stretch border-b border-border bg-surface-rail",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(15, 15, 16)"
+  },
+  {
+   "tag": "div",
+   "x": 1621,
+   "y": 34,
+   "w": 299,
+   "h": 24,
+   "role": "tablist",
+   "label": "Side panel",
+   "text": "Assistant",
+   "cls": "flex h-[24px] shrink-0 items-stretch border-b border-border bg-surface-rail",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(15, 15, 16)"
+  },
+  {
+   "tag": "button",
+   "x": 1632,
+   "y": 106,
+   "w": 230,
+   "h": 32,
+   "label": "Tools + streaming OK",
+   "text": "nvidia/nemotron-3.5-li\u2026 STRICT",
+   "cls": "flex h-8 max-w-[260px] items-center gap-1.5 rounded-control border border-slate-300 bg-white px-2.5 text-xs text-slate-600 hover:border-slat",
+   "n": 1,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(17, 17, 19)"
+  },
+  {
+   "tag": "div",
+   "x": 1633,
+   "y": 928,
+   "w": 276,
+   "h": 54,
+   "text": "Type / for commands Type @ to reference ",
+   "cls": "flex items-center gap-3 border-b border-slate-100 bg-slate-50/60 px-3 py-1 text-[10px] text-slate-400 dark:border-slate-800 dark:bg-black/10",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "oklab(0 0 0 / 0.1)"
+  },
+  {
+   "tag": "div",
+   "x": 1633,
+   "y": 1045,
+   "w": 276,
+   "h": 24,
+   "text": "15 tools \u00b7 64k context",
+   "cls": "flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-3 py-1 text-[10px] text-slate-400 dark:border-slate-800 ",
+   "n": 1,
+   "bb": false,
+   "bt": true,
+   "bg": "oklab(0 0 0 / 0.1)"
+  },
+  {
+   "tag": "div",
+   "x": 341,
+   "y": 1056,
+   "w": 1278,
+   "h": 24,
+   "text": "iso studio dark FPS \u2014 Zoom \u2014",
+   "cls": "pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-4 border-t border-slate-800 bg-slate-950/90 px-3 py-1 text-[10px] text",
+   "n": 1,
+   "bb": false,
+   "bt": true,
+   "bg": "oklab(0.154793 0.000591978 -0.00201665 / 0.9)"
+  }
+ ],
+ "rows": [
+  {
+   "parent": "mt-3 flex w-full flex-col items-center gap-2",
+   "px": 4,
+   "py": 137,
+   "child": "BUTTON.flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center g",
+   "n": 3,
+   "heights": {
+    "51": 3
+   },
+   "w": 72,
+   "sample": "Library"
+  },
+  {
+   "parent": "tablist",
+   "px": 873,
+   "py": 0,
+   "child": "BUTTON.inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs tran",
+   "n": 5,
+   "heights": {
+    "34": 5
+   },
+   "w": 62,
+   "sample": "Schem"
+  },
+  {
+   "parent": "flex h-full min-h-0 flex-col overflow-y-auto text-slate-200",
+   "px": 80,
+   "py": 34,
+   "child": "DIV.border-b border-slate-800 px-3 py-2.5",
+   "n": 5,
+   "heights": {
+    "61": 1,
+    "62": 1,
+    "67": 1,
+    "91": 1,
+    "143": 1
+   },
+   "w": 259,
+   "sample": "CAMERA Iso Persp Top Front Side Back"
+  },
+  {
+   "parent": "grid grid-cols-3 gap-1",
+   "px": 92,
+   "py": 64,
+   "child": "BUTTON.rounded px-1 py-1 text-[10px] bg-slate-800/60 text-slate-400 hover:bg-slate-800",
+   "n": 5,
+   "heights": {
+    "23": 5
+   },
+   "w": 76,
+   "sample": "Persp"
+  },
+  {
+   "parent": "border-b border-slate-800 px-3 py-2.5",
+   "px": 80,
+   "py": 125,
+   "child": "LABEL.flex cursor-pointer items-center justify-between py-0.5 text-[11px] text-slate-300",
+   "n": 5,
+   "heights": {
+    "21": 5
+   },
+   "w": 235,
+   "sample": "Components"
+  },
+  {
+   "parent": "flex flex-wrap gap-1.5",
+   "px": 92,
+   "py": 297,
+   "child": "BUTTON.h-5 w-5 rounded ",
+   "n": 5,
+   "heights": {
+    "20": 5
+   },
+   "w": 20,
+   "sample": ""
+  },
+  {
+   "parent": "space-y-1.5 px-3 py-2.5 text-[11px]",
+   "px": 1416,
+   "py": 85,
+   "child": "DIV.flex items-center gap-2",
+   "n": 3,
+   "heights": {
+    "17": 3
+   },
+   "w": 166,
+   "sample": "Board 50.0 \u00d7 30.0 mm"
+  }
+ ],
+ "btnHeights": {
+  "icon:20": 7,
+  "text:23": 7,
+  "text:34": 6,
+  "text:51": 5,
+  "text:25": 3,
+  "icon:28": 3,
+  "icon:32": 1,
+  "icon:16": 1,
+  "icon:22": 1,
+  "text:24": 1,
+  "text:21": 1,
+  "icon:18": 1,
+  "icon:30": 1,
+  "text:32": 1
+ },
+ "btnVariants": {
+  "h51 fs12px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 132) fw400": {
+   "n": 4,
+   "ex": [
+    "Home",
+    "Library",
+    "Docs"
+   ]
+  },
+  "h51 fs12px r2px bg:rgb(28, 28, 31) bd:none fg:rgb(245, 245, 245) fw400": {
+   "n": 1,
+   "ex": [
+    "Designer"
+   ]
+  },
+  "h34 fs11px r0px bg:rgb(12, 12, 13) bd:none fg:rgb(245, 245, 245) fw500": {
+   "n": 1,
+   "ex": [
+    "GUIDE-VALIDATE\nr15"
+   ]
+  },
+  "h34 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 132) fw400": {
+   "n": 4,
+   "ex": [
+    "Schem",
+    "PCB",
+    "BOM"
+   ]
+  },
+  "h34 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(245, 245, 245) fw500": {
+   "n": 1,
+   "ex": [
+    "3D"
+   ]
+  },
+  "h24 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 132) fw400": {
+   "n": 1,
+   "ex": [
+    "Assistant"
+   ]
+  },
+  "h23 fs10px r4px bg:rgba(51, 209, 255, 0.08) bd:none fg:rgb(245, 245, 245) fw400": {
+   "n": 1,
+   "ex": [
+    "Iso"
+   ]
+  },
+  "h23 fs10px r4px bg:oklab(0.227712 0.00158683 -0.0055169 / 0.6) bd:none fg:rgb(168, 168, 173) fw400": {
+   "n": 5,
+   "ex": [
+    "Persp",
+    "Top",
+    "Front"
+   ]
+  },
+  "h21 fs10px r4px bg:rgba(0, 0, 0, 0) bd:rgb(44, 44, 49) fg:rgb(168, 168, 173) fw400": {
+   "n": 1,
+   "ex": [
+    "Export STEP"
+   ]
+  },
+  "h25 fs11px r4px bg:rgb(58, 58, 64) bd:none fg:rgb(255, 255, 255) fw400": {
+   "n": 1,
+   "ex": [
+    "Snapshot"
+   ]
+  },
+  "h25 fs11px r4px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(168, 168, 173) fw400": {
+   "n": 1,
+   "ex": [
+    "Measure"
+   ]
+  },
+  "h23 fs11px r0px bg:rgb(17, 17, 19) bd:none fg:rgb(245, 245, 245) fw500": {
+   "n": 1,
+   "ex": [
+    "Assistant"
+   ]
+  },
+  "h25 fs11px r4px bg:rgba(0, 0, 0, 0) bd:rgb(28, 28, 31) fg:rgb(236, 236, 238) fw400": {
+   "n": 1,
+   "ex": [
+    "No chat yet"
+   ]
+  },
+  "h32 fs11px r2px bg:rgb(17, 17, 19) bd:rgb(44, 44, 49) fg:rgb(196, 196, 201) fw400": {
+   "n": 1,
+   "ex": [
+    "nvidia/nemotron-3.5-li\u2026\n"
+   ]
+  }
+ },
+ "btnOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 137,
+   "w": 64,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 195,
+   "w": 72,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 1038,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "fs": "12px"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 0,
+   "w": 170,
+   "h": 34,
+   "role": "tab",
+   "tid": "design-tab-b5a31f3e-de4f-434a-9922-a6ba9fcf1c8c",
+   "text": "GUIDE-VALIDATE r15",
+   "cls": "group relative flex min-w-[120px] max-w-[200px] cursor-pointer select-none items-center gap-1.5 px-2 text-xs transition-colors self-stretch ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 225,
+   "y": 9,
+   "w": 16,
+   "h": 16,
+   "label": "Close GUIDE-VALIDATE",
+   "cls": "flex h-4 w-4 shrink-0 items-center justify-center rounded-control text-text-tertiary transition-opacity hover:bg-surface-hover hover:text-te",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 873,
+   "y": 0,
+   "w": 62,
+   "h": 34,
+   "role": "tab",
+   "text": "Schem",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 935,
+   "y": 0,
+   "w": 49,
+   "h": 34,
+   "role": "tab",
+   "text": "PCB",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 984,
+   "y": 0,
+   "w": 42,
+   "h": 34,
+   "role": "tab",
+   "tid": "designer-view-3d",
+   "text": "3D",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 1026,
+   "y": 0,
+   "w": 52,
+   "h": 34,
+   "role": "tab",
+   "text": "BOM",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 1078,
+   "y": 0,
+   "w": 49,
+   "h": 34,
+   "role": "tab",
+   "text": "DRC",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 92,
+   "y": 64,
+   "w": 76,
+   "h": 23,
+   "text": "Iso",
+   "cls": "rounded px-1 py-1 text-[10px] bg-accent-soft text-accent-text",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 172,
+   "y": 64,
+   "w": 76,
+   "h": 23,
+   "text": "Persp",
+   "cls": "rounded px-1 py-1 text-[10px] bg-slate-800/60 text-slate-400 hover:bg-slate-800",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 251,
+   "y": 64,
+   "w": 76,
+   "h": 23,
+   "text": "Top",
+   "cls": "rounded px-1 py-1 text-[10px] bg-slate-800/60 text-slate-400 hover:bg-slate-800",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 92,
+   "y": 91,
+   "w": 76,
+   "h": 23,
+   "text": "Front",
+   "cls": "rounded px-1 py-1 text-[10px] bg-slate-800/60 text-slate-400 hover:bg-slate-800",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 172,
+   "y": 91,
+   "w": 76,
+   "h": 23,
+   "text": "Side",
+   "cls": "rounded px-1 py-1 text-[10px] bg-slate-800/60 text-slate-400 hover:bg-slate-800",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 251,
+   "y": 91,
+   "w": 76,
+   "h": 23,
+   "text": "Back",
+   "cls": "rounded px-1 py-1 text-[10px] bg-slate-800/60 text-slate-400 hover:bg-slate-800",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 1503,
+   "y": 55,
+   "w": 69,
+   "h": 21,
+   "label": "STEP / STL export \u2014 coming soon",
+   "text": "Export STEP",
+   "cls": "shrink-0 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400 opacity-70",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 1576,
+   "y": 57,
+   "w": 18,
+   "h": 18,
+   "label": "Collapse mechanical panel",
+   "cls": "shrink-0 cursor-pointer rounded p-0.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 893,
+   "y": 1015,
+   "w": 87,
+   "h": 25,
+   "text": "Snapshot",
+   "cls": "flex items-center gap-1.5 rounded bg-violet-600 px-2.5 py-1 text-[11px] text-white hover:bg-violet-500",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 984,
+   "y": 1015,
+   "w": 82,
+   "h": 25,
+   "label": "Measure tool \u2014 coming soon",
+   "text": "Measure",
+   "cls": "flex items-center gap-1.5 rounded px-2.5 py-1 text-[11px] text-slate-400 opacity-70",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 1621,
+   "y": 34,
+   "w": 72,
+   "h": 23,
+   "role": "tab",
+   "text": "Assistant",
+   "cls": "inline-flex items-center gap-1.5 border-r border-border px-3 text-xs whitespace-nowrap transition-colors outline-none disabled:cursor-not-al",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 1632,
+   "y": 71,
+   "w": 174,
+   "h": 25,
+   "text": "No chat yet",
+   "cls": "flex w-full items-center justify-between gap-2 rounded border border-slate-200 px-2 py-1 text-left text-xs hover:bg-slate-50 dark:border-sla",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 1812,
+   "y": 68,
+   "w": 30,
+   "h": 30,
+   "label": "New design chat",
+   "cls": "rounded border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1848,
+   "y": 69,
+   "w": 28,
+   "h": 28,
+   "label": "Open in Assistant view",
+   "cls": "rounded border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-800 dark:hover:bg-slate-900",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1882,
+   "y": 69,
+   "w": 28,
+   "h": 28,
+   "label": "Close chat",
+   "cls": "rounded border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-100 dark:border-slate-800 dark:hover:bg-slate-900",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1632,
+   "y": 106,
+   "w": 230,
+   "h": 32,
+   "label": "Tools + streaming OK",
+   "text": "nvidia/nemotron-3.5-li\u2026 STRICT",
+   "cls": "flex h-8 max-w-[260px] items-center gap-1.5 rounded-control border border-slate-300 bg-white px-2.5 text-xs text-slate-600 hover:border-slat",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 1871,
+   "y": 1007,
+   "w": 28,
+   "h": 28,
+   "label": "Send",
+   "cls": "mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-600 text-white hover:bg-violet-500 disabled:bg-slate-200 disab",
+   "fs": "12px"
+  }
+ ],
+ "inputs": [
+  {
+   "tag": "select",
+   "x": 92,
+   "y": 358,
+   "w": 235,
+   "h": 26,
+   "label": "Lighting scene",
+   "text": "Studio dark Studio light Outdoor Transpa",
+   "cls": "w-full rounded border border-slate-700 bg-slate-950 px-1.5 py-1 text-[11px] text-slate-300 outline-none",
+   "type": "select-one",
+   "ph": null,
+   "fs": "11px",
+   "rad": "4px",
+   "bg": "rgb(12, 12, 13)",
+   "bd": "rgb(44, 44, 49)",
+   "wrapH": 67,
+   "wrapRad": "0px",
+   "native": "auto"
+  },
+  {
+   "tag": "textarea",
+   "x": 1643,
+   "y": 990,
+   "w": 220,
+   "h": 47,
+   "cls": "max-h-48 min-h-0 w-full resize-none overflow-y-auto bg-transparent text-sm leading-relaxed text-slate-800 outline-none placeholder:text-slat",
+   "type": "textarea",
+   "ph": "Ask about this design\u2026",
+   "fs": "12px",
+   "rad": "0px",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bd": "none",
+   "wrapH": 63,
+   "wrapRad": "0px",
+   "native": "auto"
+  }
+ ],
+ "tablists": [
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 0,
+   "w": 196,
+   "h": 34,
+   "role": "tablist",
+   "label": "Open designs",
+   "text": "GUIDE-VALIDATE r15",
+   "cls": "flex min-w-0 items-stretch overflow-x-auto",
+   "tabs": 1,
+   "tabH": {
+    "34": 1
+   },
+   "tabFs": {
+    "11px": 1
+   },
+   "roving": 1
+  },
+  {
+   "tag": "div",
+   "x": 873,
+   "y": 0,
+   "w": 254,
+   "h": 34,
+   "role": "tablist",
+   "text": "Schem PCB 3D BOM DRC",
+   "cls": "inline-flex items-stretch justify-center rounded-none bg-transparent text-text-tertiary data-[orientation=vertical]:h-auto data-[orientation",
+   "tabs": 5,
+   "tabH": {
+    "34": 5
+   },
+   "tabFs": {
+    "11px": 5
+   },
+   "roving": 4
+  },
+  {
+   "tag": "div",
+   "x": 1621,
+   "y": 34,
+   "w": 299,
+   "h": 24,
+   "role": "tablist",
+   "label": "Side panel",
+   "text": "Assistant",
+   "cls": "flex h-[24px] shrink-0 items-stretch border-b border-border bg-surface-rail",
+   "tabs": 1,
+   "tabH": {
+    "23": 1
+   },
+   "tabFs": {
+    "11px": 1
+   },
+   "roving": 0
+  }
+ ],
+ "segs": [],
+ "radii": {
+  "2px": 8,
+  "4px": 22,
+  "circle/pill": 3
+ },
+ "radEx": {
+  "4px": [
+   {
+    "tag": "button",
+    "x": 92,
+    "y": 64,
+    "w": 76,
+    "h": 23,
+    "text": "Iso",
+    "cls": "rounded px-1 py-1 text-[10px] bg-accent-soft text-accent-text"
+   },
+   {
+    "tag": "button",
+    "x": 172,
+    "y": 64,
+    "w": 76,
+    "h": 23,
+    "text": "Persp",
+    "cls": "rounded px-1 py-1 text-[10px] bg-slate-800/60 text-slate-400 hover:bg-slate-800"
+   },
+   {
+    "tag": "button",
+    "x": 251,
+    "y": 64,
+    "w": 76,
+    "h": 23,
+    "text": "Top",
+    "cls": "rounded px-1 py-1 text-[10px] bg-slate-800/60 text-slate-400 hover:bg-slate-800"
+   },
+   {
+    "tag": "button",
+    "x": 92,
+    "y": 91,
+    "w": 76,
+    "h": 23,
+    "text": "Front",
+    "cls": "rounded px-1 py-1 text-[10px] bg-slate-800/60 text-slate-400 hover:bg-slate-800"
+   },
+   {
+    "tag": "button",
+    "x": 172,
+    "y": 91,
+    "w": 76,
+    "h": 23,
+    "text": "Side",
+    "cls": "rounded px-1 py-1 text-[10px] bg-slate-800/60 text-slate-400 hover:bg-slate-800"
+   },
+   {
+    "tag": "button",
+    "x": 251,
+    "y": 91,
+    "w": 76,
+    "h": 23,
+    "text": "Back",
+    "cls": "rounded px-1 py-1 text-[10px] bg-slate-800/60 text-slate-400 hover:bg-slate-800"
+   }
+  ]
+ },
+ "shadows": [
+  {
+   "tag": "div",
+   "x": 1415,
+   "y": 46,
+   "w": 192,
+   "h": 265,
+   "text": "MECHANICAL Export STEP Board 50.0 \u00d7 30.0",
+   "cls": "pointer-events-auto absolute right-3 top-3 w-48 overflow-hidden rounded-lg border border-slate-800 bg-slate-900/90 text-slate-200 shadow-xl ",
+   "bs": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0"
+  },
+  {
+   "tag": "div",
+   "x": 886,
+   "y": 1010,
+   "w": 187,
+   "h": 35,
+   "text": "Snapshot Measure",
+   "cls": "pointer-events-auto absolute bottom-9 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/90 p",
+   "bs": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0"
+  },
+  {
+   "tag": "span",
+   "x": 1643,
+   "y": 118,
+   "w": 8,
+   "h": 8,
+   "cls": "h-2 w-2 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_6px_currentColor]",
+   "bs": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0"
+  }
+ ],
+ "shadowCount": 3,
+ "blurs": [
+  {
+   "tag": "div",
+   "x": 1415,
+   "y": 46,
+   "w": 192,
+   "h": 265,
+   "text": "MECHANICAL Export STEP Board 50.0 \u00d7 30.0",
+   "cls": "pointer-events-auto absolute right-3 top-3 w-48 overflow-hidden rounded-lg border border-slate-800 bg-slate-900/90 text-slate-200 shadow-xl ",
+   "bf": "blur(8px)"
+  },
+  {
+   "tag": "div",
+   "x": 886,
+   "y": 1010,
+   "w": 187,
+   "h": 35,
+   "text": "Snapshot Measure",
+   "cls": "pointer-events-auto absolute bottom-9 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/90 p",
+   "bf": "blur(8px)"
+  }
+ ],
+ "grads": [],
+ "fontSizes": {
+  "10px": 28,
+  "11px": 25,
+  "9px": 7,
+  "12px": 2
+ },
+ "fontFam": {
+  "IBM Plex Sans": 55,
+  "IBM Plex Mono": 7
+ },
+ "weights": {
+  "400": 48,
+  "500": 14
+ },
+ "small": [
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 44,
+   "w": 235,
+   "h": 14,
+   "text": "CAMERA",
+   "cls": "mb-1.5 text-[9px] font-medium uppercase tracking-wide text-slate-500",
+   "fs": "9px"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 135,
+   "w": 235,
+   "h": 14,
+   "text": "DISPLAY",
+   "cls": "mb-1.5 text-[9px] font-medium uppercase tracking-wide text-slate-500",
+   "fs": "9px"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 278,
+   "w": 235,
+   "h": 14,
+   "text": "BOARD COLOR",
+   "cls": "mb-1.5 text-[9px] font-medium uppercase tracking-wide text-slate-500",
+   "fs": "9px"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 338,
+   "w": 235,
+   "h": 14,
+   "text": "SCENE",
+   "cls": "mb-1.5 text-[9px] font-medium uppercase tracking-wide text-slate-500",
+   "fs": "9px"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 405,
+   "w": 235,
+   "h": 14,
+   "text": "TRANSPARENCY",
+   "cls": "mb-1.5 text-[9px] font-medium uppercase tracking-wide text-slate-500",
+   "fs": "9px"
+  },
+  {
+   "tag": "div",
+   "x": 1428,
+   "y": 178,
+   "w": 166,
+   "h": 14,
+   "text": "TALLEST PARTS",
+   "cls": "mb-1 text-[9px] font-medium uppercase tracking-wide text-slate-500",
+   "fs": "9px"
+  },
+  {
+   "tag": "span",
+   "x": 1788,
+   "y": 113,
+   "w": 44,
+   "h": 19,
+   "text": "STRICT",
+   "cls": "shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400",
+   "fs": "9px"
+  }
+ ],
+ "big": [],
+ "iconSizes": {
+  "12x12": 10,
+  "14x14": 10,
+  "20x20": 5,
+  "16x16": 3,
+  "18x18": 2
+ },
+ "iconStroke": {
+  "2px/attr2": 22,
+  "1.5px/attr1.5": 8
+ },
+ "iconOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-layout-grid h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 137,
+   "w": 64,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-pen-tool h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 195,
+   "w": 72,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-box h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-book-open h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-bot h-5 w-5"
+  },
+  {
+   "tag": "a",
+   "x": 24,
+   "y": 998,
+   "w": 32,
+   "h": 32,
+   "label": "Report a bug or request a feature",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-circle-dot h-[18px] w-[18p"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 1038,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-settings h-[18px] w-[18px]"
+  }
+ ],
+ "otherSvgs": [],
+ "floats": [],
+ "alerts": [],
+ "headings": [],
+ "canvases": [
+  [
+   341,
+   34,
+   1619,
+   1080
+  ]
+ ],
+ "overflowX": [],
+ "clipped": []
+}

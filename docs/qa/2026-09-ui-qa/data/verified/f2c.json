@@ -1,0 +1,1007 @@
+[
+ {
+  "id": "F2C-001",
+  "area": "assistant.space",
+  "title": "An unreachable default provider ends every run with 'Retrying this answer in chat-only mode.' and nothing else — the connection error is swallowed, no Retry, no way to Settings, and every indicator stays green",
+  "category": "error-handling",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "repro": [
+   "Stack B: Settings › Assistant — default provider is oMLX (http://127.0.0.1:8000/v1, nothing listening). The provider card says 'Active · Qwen3.5-27B-…' with a green dot",
+   "First-run view (chat list empty, simulated by routing GET /assistant/chats → []): the welcome screen offers four sample prompts under a green pill 'Qwen3.5-27B-…', with no hint that a local model server must be running and no provider setup CTA; clicking a suggestion leads to the same dead end",
+   "Assistant › New, model pill → Provider oMLX, type 'hello', Enter",
+   "Wait 5 s, then 60 s. Also repeat in the Designer dock (Cmd+I) on Schem and on PCB",
+   "Check GET /api/modules/tasks/tasks/<taskId> and GET /chats/<id>/messages"
+  ],
+  "expected": "Within a few seconds a clear error in the message bubble: 'Can't reach oMLX at http://127.0.0.1:8000 — is the server running?', with Retry and an 'Open provider settings' action. The provider status dot/pill turns red or amber.",
+  "actual": "After ~1.1 s the bubble shows only the italic line 'Provider failed while tools were enabled. Retrying this answer in chat-only mode.' Nothing else ever appears — no answer, no error, no Retry, no link to Settings. The task is status 'completed' with error null (created 18:56:35.723, completed 18:56:35.750), and the persisted message content is just that warning. The chat-only retry fails too (ECONNREFUSED), but its run.failed event is not captured. The run therefore counts as answered and the empty_response Retry path never fires. The same happens in the dock on Schem and PCB (each send adds another 'Retrying…' bubble). Every health indicator stays green throughout: the Settings card shows 'Active' (#6fbf7a, --status-success), the header pill dot is emerald #00bc7d, the sidebar footer dot is #6fbf7a and the chat row dot is green. The pill's model list shows 4 cached oMLX models, so nothing hints that the server is down.",
+  "evidence": {
+   "screenshots": [
+    "shots/f2c/dark/001-settings-assistant-omlx-active.png",
+    "shots/f2c/dark/005-omlx-hello-5s.png",
+    "shots/f2c/dark/013-dock-send-7s.png",
+    "shots/f2c/dark/014-dock-pcb-send.png",
+    "shots/f2c/light/110-omlx-hello-light.png",
+    "shots/f2c/light/111-dock-light-send.png",
+    "shots/f2c/light/114-1100-assistant-omlx.png",
+    "shots/f2c/light/124-first-run-assistant.png",
+    "shots/vf2c/dark/201-omlx-hello-1s.png",
+    "shots/vf2c/dark/202-omlx-hello-8s.png",
+    "shots/vf2c/dark/225-settings-assistant-omlx.png",
+    "shots/vf2c/light/236-1100-dock-omlx-refused.png",
+    "shots/vf2c/light/237-first-run-assistant.png"
+   ],
+   "console": [
+    "no errors or warnings logged"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/f2c/dark/001-settings-assistant-omlx-active.png",
+     "x": 623,
+     "y": 671,
+     "hex": "#6fbf7a",
+     "nearestToken": "--status-success",
+     "deltaE": 0.0
+    },
+    {
+     "file": "shots/f2c/dark/005-omlx-hello-5s.png",
+     "x": 1147,
+     "y": 28,
+     "hex": "#00bc7d",
+     "nearestToken": "--status-success",
+     "deltaE": 17.3
+    },
+    {
+     "file": "shots/f2c/light/110-omlx-hello-light.png",
+     "x": 1147,
+     "y": 28,
+     "hex": "#00bc7d",
+     "nearestToken": "--net-ground",
+     "deltaE": 28.1
+    }
+   ],
+   "network": [
+    "POST /api/modules/assistant/chats/d64eab56…/messages → 201",
+    "GET /api/modules/tasks/tasks/4894037c… → 200 {status:'completed', error:null}",
+    "message a91d2c4b content: '_Provider failed while tools were enabled. Retrying this answer in chat-only mode._'"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/backend/run-service.ts",
+    "line": 762,
+    "note": "on failedEvent writes the 'Retrying…' warning, then runs the chat-only retry without capturing its own run.failed"
+   },
+   {
+    "path": "src/modules/assistant/backend/run-service.ts",
+    "line": 790,
+    "note": "answeredOrToolWork() is true because the warning text is non-blank → no empty_response, task completes as success"
+   },
+   {
+    "path": "src/modules/assistant/backend/run-service.ts",
+    "line": 1241,
+    "note": "run.failed is only forwarded as an ai event; never turns the task into failed"
+   },
+   {
+    "path": "src/core/frontend/src/settings/panels/AssistantPanel.tsx",
+    "line": 621,
+    "note": "'Active ·' label depends only on enabled plus a model, not on reachability"
+   },
+   {
+    "path": "src/modules/assistant/frontend/components/ModelSelectorPill.tsx",
+    "line": 31,
+    "note": "green 'Tools + streaming OK' comes from a stale capabilities probe and never reflects the current connection (raw bg-emerald-500)"
+   },
+   {
+    "path": "src/modules/assistant/backend/run-service.ts",
+    "line": 754,
+    "note": "failedEvent captured only from the first (tools) loop; the chat-only retry loop at :776-795 never records its own run.failed"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 573,
+    "note": "run.failed is handled only for the cloud 401 refresh path; any other errorMessage is dropped (same in DesignerChatDock.tsx:378)"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1357,
+    "note": "sidebar footer dot is hard-coded bg-status-success"
+   }
+  ],
+  "suggestedFix": "Backend (run-service.ts:754-795): record run.failed from the chat-only retry loop too. When the retry also fails, or when the first failure is a transport error (fetch 'Unable to connect' / ECONNREFUSED / ENOTFOUND / abort-timeout, for which a tools-off retry is pointless), replace the 'Retrying…' text via setMessageContent with a readable error and throw so the task ends 'failed' with {type:'provider', message:`Can't reach ${provider.label} at ${baseUrl}`, retryable:true}. Frontend: render failed runs with Retry plus an 'Open provider settings' action (wire onOpenSettings, Q8-008) in both Space.tsx and DesignerChatDock.tsx. Drive the pill dot and the footer dot (Space.tsx:1357) from one status helper that includes the last run outcome / the 5 s reachability probe (assistant-service.ts:321-324), and show 'Unreachable' instead of 'Active' in AssistantPanel.tsx:621 when that probe fails.",
+  "fixScope": "backend-needed",
+  "estimate": "M",
+  "dedupeKey": "assistant.space:run-service:unreachable-provider-swallowed",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "reason": "Reproduced on stack B, dark 1440x900: Assistant > New > oMLX (127.0.0.1:8000, nothing listening) > 'hello vf2c r2' > Enter. After ~1 s the bubble shows only the italic 'Provider failed while tools were enabled. Retrying this answer in chat-only mode.'; nothing more at 8 s. Task c0cce17d: running→completed in 15 ms, error null; its event stream holds TWO run.failed chunks with errorMessage 'Unable to connect. Is the computer able to access the url?' (tools run + chat-only retry), so the backend knows the cause and drops it. Frontend only handles run.failed for cloud 401 (Space.tsx:573 / DesignerChatDock.tsx:378). Indicators after the failure: pill dot #00bc7d title 'Tools + streaming OK' (raw emerald, dE 17.3), footer and row dots #6fbf7a, Settings › Assistant 'oMLX · DEFAULT · LOCAL · Active · Qwen…'. Light 1100x720 dock: another 'Retrying…' bubble, only a Send button. First-run (GET /chats routed to []): welcome shows 4 sample prompts with no provider/server hint. No console errors. Not an environment artefact: a stopped local model server is the normal failure for the oMLX/LM Studio providers. Distinct from Q10-016 (dock 'paused' mapping) and Q8-017 (POST failure placement). S2 kept (error swallowed, run reported as success).",
+   "evidence": [
+    "shots/vf2c/dark/201-omlx-hello-1s.png",
+    "shots/vf2c/dark/202-omlx-hello-8s.png",
+    "shots/vf2c/dark/225-settings-assistant-omlx.png",
+    "shots/vf2c/light/236-1100-dock-omlx-refused.png",
+    "shots/vf2c/light/237-first-run-assistant.png",
+    "GET /api/modules/tasks/tasks/c0cce17d…/events → run.failed ×2 'Unable to connect…', task.completed (error null)",
+    "probe 202-omlx-hello-8s.png: pill 1147,28 #00bc7d; footer 95,881 #6fbf7a"
+   ],
+   "by": "vf2c"
+  }
+ },
+ {
+  "id": "F2C-002",
+  "area": "assistant.dock",
+  "title": "A hung local provider blocks the chat: provider calls have no timeout, and once the dock remounts mid-run (close/reopen or reload) a second send orphans the running task (it loses its Stop) while later messages queue behind it as a fake 'Working…'",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "284f64fc-6c44-4b49-bc92-076a4135fbf7",
+  "repro": [
+   "Stack B, default provider oMLX at 127.0.0.1:8000. Simulate a hung local server, e.g. LM Studio still loading a model: a TCP listener on :8000 that accepts and never replies (QA used f2c/blackhole.py)",
+   "QA-f2c-board → Cmd+I dock → type 'hello hung provider' → Enter: 'Working… Stop' appears (OK)",
+   "Reload the page and reopen Designer → dock: the bubble shows 'Working… Stop' again, but the composer now shows an enabled Send button instead of 'Stop generating'",
+   "Type 'second while running' → Enter",
+   "Open in Assistant view; press Stop on the visible run; send 'third message'"
+  ],
+  "expected": "Provider requests time out (e.g. 60–120 s for first byte) with a clear error. While a run is in flight the composer offers Stop, not a second Send. If a message is queued it reads 'Queued — waiting for the previous answer', and every in-flight run keeps a Stop control.",
+  "actual": "No timeout: the first task stayed 'streaming' for 6 min 51 s (19:04:34 → 19:11:25) and ended only because the fake server closed the socket. It then 'completed' with the misleading 'Retrying … chat-only mode' text (see F2C-001). After the reload, Send was enabled mid-run. The second send was accepted (201) and its task went to status 'waiting' (scope-serialised behind the hung task). The dock/space track one run per chat, so the new run replaced the old one: the hung run's bubble became an empty 'Assistant' header with no Stop, while the waiting run showed a spinner 'Working…'. 'waiting' is not handled in taskStage and falls through to 'running'. Stop cancels only the waiting task. The hung task has no control anywhere in the dock or the Assistant space, and every further message in that chat ('third message') again waits behind it, shown as 'Working…'. The only escapes are waiting it out or starting a new chat.",
+  "evidence": {
+   "screenshots": [
+    "shots/f2c/dark/018-dock-hung-3s.png",
+    "shots/f2c/dark/019-dock-hung-after-reload.png",
+    "shots/f2c/dark/020-dock-second-send-during-run.png",
+    "shots/f2c/dark/022-space-stuck-run.png",
+    "shots/vf2c/dark/208-dock-hung-4s.png",
+    "shots/vf2c/dark/209-dock-reopened-midrun.png",
+    "shots/vf2c/dark/210-dock-second-send.png",
+    "shots/vf2c/dark/211-dock-after-stop.png",
+    "shots/vf2c/dark/214-space-third-waiting.png"
+   ],
+   "network": [
+    "GET /api/modules/tasks/tasks/420e9f14… → streaming (19:04:34 … 19:11:25 then completed)",
+    "GET /api/modules/tasks/tasks/7ccd21be… → waiting (UI: 'Working…')",
+    "POST /api/modules/tasks/tasks/7ccd21be…/cancel → cancelled; 420e9f14 unaffected"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/DesignerChatDock.tsx",
+    "line": 113,
+    "note": "taskStage has no 'waiting' case → default 'running' → 'Working…' (same in Space.tsx:451)"
+   },
+   {
+    "path": "src/modules/assistant/frontend/DesignerChatDock.tsx",
+    "line": 466,
+    "note": "restored run bound per chat; a new submit overwrites the chat's single activeRun, orphaning the in-flight one"
+   },
+   {
+    "path": "src/modules/tasks/backend/runtime/task-runtime.ts",
+    "line": 103,
+    "note": "scope lock per chatId: later tasks wait for the hung one indefinitely"
+   },
+   {
+    "path": "src/modules/assistant/backend/assistant-service.ts",
+    "line": 324,
+    "note": "only the capability probe has AbortSignal.timeout; the chat completion call has none"
+   },
+   {
+    "path": "src/modules/assistant/frontend/DesignerChatDock.tsx",
+    "line": 998,
+    "note": "composer busy={loading}; loading is component state, so a remount (close/reopen dock, reload) resets it to false while restoreActiveTask only restores the bubble's run"
+   },
+   {
+    "path": "src/modules/assistant/frontend/DesignerChatDock.tsx",
+    "line": 682,
+    "note": "submit() writes activeRunsByChat[chatId] = new run, overwriting the in-flight one (one run per chat)"
+   },
+   {
+    "path": "src/modules/assistant/backend/run-service.ts",
+    "line": 752,
+    "note": "runChat gets only taskCtx.signal; ai-core postChatCompletions (openai-compatible.js:270) has no timeout of its own"
+   }
+  ],
+  "suggestedFix": "Backend: in run-service.ts pass signal: AbortSignal.any([taskCtx.signal, firstByteTimeout]) plus an idle-stream timer (reset per chunk; generous for local models, e.g. 180 s first byte / 60 s idle, configurable per provider) and fail the task with 'Provider did not respond in N s'. Frontend (DesignerChatDock.tsx and Space.tsx): derive composer busy/Stop from the selected chat's active run (status queued/waiting/running/streaming) instead of the local `loading` flag, so a remount keeps Stop; block or queue a second submit while a run is in flight, or keep a list of runs per chat so the earlier one keeps its Stop. Add case 'waiting' to both taskStage switches → 'Queued behind the previous answer…' with its own Cancel.",
+  "fixScope": "backend-needed",
+  "estimate": "M",
+  "dedupeKey": "assistant.dock:run-lifecycle:hung-provider-no-timeout-orphaned-run",
+  "knownRef": null,
+  "stack": "B",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "reason": "Reproduced on stack B (dark) with a temporary TCP black-hole on 127.0.0.1:8000 (accepts, never replies; closed after 7 min). QA-f2c-board › dock › 'vf2c r2 hung one' → 'Working… Stop' + 'Stop generating'. Refinement: no reload is needed — closing the dock and reopening it (Cmd+I) already shows the bubble's 'Stop' but the composer's 'Send' (busy={loading} is reset on remount). Second send 'vf2c r2 second while running' → 201, task 731f25ba status 'waiting', rendered as spinner 'Working… Stop'; the hung task fbfa0fbd's bubble became an empty 'Assistant' header with no Stop, in the dock and in the Assistant space. Stop cancelled only 731f25ba. A third message from the Space (0b81ed59) sat 'waiting' shown as 'Working…' for 5 min. No timeout: fbfa0fbd streamed 20:29:19.411Z → 20:36:11.645Z (6 m 52 s) and ended exactly when the black-hole closed its sockets, then 'completed' with the F2C-001 'Retrying…' text; 0b81ed59 started 4 ms later. Overlap: 'Send enabled after reload mid-run' shares the restore path with Q8-024, but Q8-024's root is binding to a hidden internal message; here the bubble restores correctly and the composer does not. Timeout, orphaning and the 'waiting' mapping are new. S2 kept (hung run uncontrollable, chat blocked; workaround: new chat).",
+   "evidence": [
+    "shots/vf2c/dark/208-dock-hung-4s.png",
+    "shots/vf2c/dark/209-dock-reopened-midrun.png",
+    "shots/vf2c/dark/210-dock-second-send.png",
+    "shots/vf2c/dark/211-dock-after-stop.png",
+    "shots/vf2c/dark/214-space-third-waiting.png",
+    "GET /api/modules/tasks/tasks/fbfa0fbd… → streaming 20:29:19 → completed 20:36:11 (error null)",
+    "731f25ba waiting → cancelled via Stop; fbfa0fbd unaffected; 0b81ed59 waiting 20:31:05 → started 20:36:11.649"
+   ],
+   "by": "vf2c"
+  }
+ },
+ {
+  "id": "F2C-003",
+  "area": "assistant.space",
+  "title": "After 'Open in Assistant view', every chat-list refresh (run end, Stop, delete) snaps the Assistant space back to that chat",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "284f64fc-6c44-4b49-bc92-076a4135fbf7",
+  "repro": [
+   "Designer › QA-f2c-board › dock (Cmd+I) › 'Open in Assistant view' (opens 'QA-f2c-board chat')",
+   "In the Assistant space click 'New', type 'jump test', press Enter",
+   "Within 0.5 s read the thread header",
+   "Also: in another chat press Stop / 'Stop generating' on a running answer"
+  ],
+  "expected": "The space stays on the chat you are using. 'Open in Assistant view' selects its chat once.",
+  "actual": "Within 0.5 s of sending, the header reads 'QA-f2c-board chat' again. The new chat (with the 'jump test' message and its answer) is deselected in the list, so the reply lands in a chat you are not looking at. Pressing 'Stop generating' in a new chat does the same: the run is cancelled, then the view jumps. The jump repeats on every refresh (send, run end, cancel) until you leave the Assistant space through the rail. After re-entering through the rail it does not happen.",
+  "evidence": {
+   "screenshots": [
+    "shots/f2c/dark/023-space-stop-hung.png",
+    "shots/f2c/dark/024-space-jump-after-run.png",
+    "shots/vf2c/dark/212-space-new-chat-running.png",
+    "shots/vf2c/dark/213-space-jump-after-stop.png"
+   ],
+   "console": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 331,
+    "note": "refreshChats: `next = routeChat ?? current` — the route param chatId wins over the user's current selection on every refresh"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 221,
+    "note": "routeChatId = params?.chatId stays set for the whole visit"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 681,
+    "note": "onTerminal → refreshChats() on every run end/cancel (also :855 delete, :881 bulk delete)"
+   },
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 1571,
+    "note": "onOpenFull navigates with { chatId }, which stays in params for the whole visit"
+   }
+  ],
+  "suggestedFix": "In assistant/frontend/Space.tsx apply routeChatId once: keep lastAppliedRouteChatRef, and in a useEffect on routeChatId select it only when it differs from the ref. In refreshChats (:327-344) drop the routeChat branch and keep `current` when it still exists, falling back to data[0]. Alternatively clear the chatId param via the navigation store after the first selection.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "assistant.space:refreshChats:route-chat-overrides-selection",
+  "knownRef": null,
+  "stack": "B",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "reason": "Reproduced on stack B (dark): dock › 'Open in Assistant view' (header 'QA-f2c-board chat') › New (header 'New chat') › 'vf2c r2 jump test' › Enter (provider black-holed, run in flight): header still 'New chat'. Press 'Stop generating': 0.3 s later the header reads 'QA-f2c-board chat' and the new chat is deselected. Refinement: the jump is triggered by refreshChats (run end, cancel, delete), not by the send itself; with an unreachable provider the run ends in ~20 ms, so it looks like 'within 0.5 s of sending'. Code: refreshChats prefers routeChatId over the current selection on every call. S2 kept (every answer in another chat yanks the user away; workaround: leave via the rail).",
+   "evidence": [
+    "shots/vf2c/dark/212-space-new-chat-running.png",
+    "shots/vf2c/dark/213-space-jump-after-stop.png"
+   ],
+   "by": "vf2c"
+  }
+ },
+ {
+  "id": "F2C-004",
+  "area": "assistant.space",
+  "title": "Model pill lists keyless cloud providers (OpenAI) as selectable with no hint, although Settings says 'Needs API key to activate', and the resulting 'API key required' error offers no way to add a key",
+  "category": "error-handling",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "repro": [
+   "Stack B (no keys). Assistant › chat on oMLX › model pill → Provider 'OpenAI'",
+   "Observe the Model field, pill dot and sidebar footer",
+   "Close the popover, type 'hello openai', Enter; press Enter again (retry)",
+   "Repeat in the Designer dock (Cmd+I)"
+  ],
+  "expected": "Unconfigured providers are marked in the Provider select ('OpenAI — needs API key') or disabled. Selecting one shows an inline 'Add API key' action. The model resets to that provider's default. A send error gives a one-click route to the provider settings.",
+  "actual": "The Provider select lists OpenAI with no hint. In the Assistant space the Model field becomes a free-text box still holding the oMLX model 'Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit' (the dock correctly switches to gpt-4o-mini, so the two surfaces disagree). The pill dot turns red (#fb2c36, raw red-500, tooltip-only 'API key required'), but the sidebar footer still shows a green dot with 'Qwen3.5-27B-… · OpenAI'. On send, POST /messages → 400 and a red banner 'API key required for provider: OpenAI' (Dismiss only) appears at the top of the thread, not next to the composer. There is no 'Add key'/'Open settings' link, the pill's 'Configure providers' is dead (Q8-008), and Enter just repeats the 400. The typed text stays in the composer (good) but is lost on reload. In a chat with history (light, 1100×720, 'QA-f2c-board chat') the same banner renders at top=-592px, above the scrolled thread. Nothing visible changes on send except the text staying in the composer (same placement root as Q8-017).",
+  "evidence": {
+   "screenshots": [
+    "shots/f2c/dark/006-pill-openai-nokey.png",
+    "shots/f2c/dark/007-openai-nokey-send.png",
+    "shots/f2c/dark/016-dock-openai-nokey.png",
+    "shots/f2c/light/115-1100-openai-nokey-light.png",
+    "shots/vf2c/dark/204-pill-openai-nokey.png",
+    "shots/vf2c/dark/205-openai-nokey-send.png"
+   ],
+   "console": [
+    "Failed to load resource: 400 (Bad Request) @ /api/modules/assistant/chats/d64eab56…/messages"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/f2c/dark/007-openai-nokey-send.png",
+     "x": 1147,
+     "y": 28,
+     "hex": "#fb2c36",
+     "nearestToken": "--net-power",
+     "deltaE": 22.8
+    },
+    {
+     "file": "shots/f2c/dark/007-openai-nokey-send.png",
+     "x": 95,
+     "y": 881,
+     "hex": "#6fbf7a",
+     "nearestToken": "--status-success",
+     "deltaE": 0.0
+    }
+   ],
+   "network": [
+    "GET /api/modules/assistant/providers/openai/models → 200 (empty → free-text model field)",
+    "POST /api/modules/assistant/chats/d64eab56…/messages → 400"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/components/ModelSelectorPill.tsx",
+    "line": 25,
+    "note": "only the pill dot knows about requiresApiKey; the provider <select> options don't"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1365,
+    "note": "sidebar footer dot is always green regardless of provider state"
+   }
+  ],
+  "suggestedFix": "ModelSelectorPill.tsx: render provider options with the same requiresApiKey && !hasApiKey check used for the dot (:25-29) — suffix '— needs API key' or disable the option, and under the select show an inline 'Add API key' link when such a provider is chosen. Map the 400 'API key required for provider: X' (Space.tsx / DesignerChatDock.tsx submit catch) to an inline composer notice with an 'Add API key' button that opens Settings › Assistant with that provider expanded. Model reset on provider change is Q10-015, banner placement is Q8-017, the dead 'Configure providers' is Q8-008 and the always-green footer dot is covered in F2C-001.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "assistant.space:model-pill:no-key-provider-flow",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "reason": "Reproduced on stack B (dark): Assistant › chat on oMLX › pill › Provider select lists 'OpenAI / oMLX / OpenCode Zen' with no hint (Settings › Assistant shows OpenAI 'Needs API key to activate'). Selecting OpenAI: Model becomes a free-text box still holding 'Qwen3.5-27B-…', pill dot red (title 'API key required'), footer dot #6fbf7a with 'Qwen3.5-… · OpenAI'. Send → 400 and a role=alert 'API key required for provider: OpenAI' (top=73 in this short chat) with only 'Dismiss error'; the typed text stays in the composer; the chat's provider is unchanged. Scope narrowed to what is not already reported: model carry-over = Q10-015 (same provider-change root), off-screen banner in long chats = Q8-017, dead 'Configure providers' = Q8-008, hard-coded footer dot = F2C-001. Remaining: keyless providers are selectable unflagged (contradicting Settings) and the error has no add-key route. S3 kept (visible inconsistency with Settings + dead-end error); the error copy itself is clear, so not higher.",
+   "evidence": [
+    "shots/vf2c/dark/204-pill-openai-nokey.png",
+    "shots/vf2c/dark/205-openai-nokey-send.png",
+    "shots/vf2c/dark/225-settings-assistant-omlx.png",
+    "POST /api/modules/assistant/chats/8d822fb1…/messages → 400 'API key required for provider: OpenAI'"
+   ],
+   "by": "vf2c"
+  }
+ },
+ {
+  "id": "F2C-005",
+  "area": "cross-cutting",
+  "title": "When the OS theme changes while the schematic is open (Appearance = System, the default), the canvas keeps the previous palette: parts go invisible on light, or a glaring white sheet appears in dark",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "284f64fc-6c44-4b49-bc92-076a4135fbf7",
+  "repro": [
+   "Settings › General › Appearance = System (the default when no preference is stored)",
+   "Open QA-f2c-board › Schem (parts + one wire), Fit schematic",
+   "Change the OS appearance (QA: page.emulateMedia({colorScheme:'light'}) then 'dark'), do not touch the canvas",
+   "Pixel-probe canvas bg, wire, part body and outline. Compare with a fresh reload in the same theme"
+  ],
+  "expected": "The whole schematic re-themes with the shell, identical to a fresh load in that theme (light: bg #f0f4fb, wire #3e506b, body #dbdbd9, outline #020616).",
+  "actual": "Dark → light (live): the background switches to #f0f4fb, but parts and wires keep the dark palette. Body is #030303 (black box), outlines #d9dbde (1.26:1 on the bg, so R1/C1/J1 are practically invisible), wire #a6b2c1 (1.95:1). Light → dark (live): the canvas turns into a bright #f5f5f0 sheet with light-palette parts inside the dark shell (17:1 against the surrounding chrome). The zoom cluster also stays in the old style. The stale palette stays until something re-renders the scene; any click on the canvas fixes it. Switching through Settings › Light/Dark is fine, because the designer unmounts while Settings is open. Library list/detail, portalled menus and Docs re-theme correctly on the same live switch. The PCB canvas is identical in both themes anyway (Q4-038).",
+  "evidence": {
+   "screenshots": [
+    "shots/f2c/light/059-system-live-light-schem.png",
+    "shots/f2c/light/051-fresh-light-schem.png",
+    "shots/f2c/dark/061-system-live-dark-schem.png",
+    "shots/f2c/dark/030-theme-base-dark-schem.png",
+    "shots/f2c/light/060-system-live-light-schem-after-interact.png",
+    "shots/vf2c/dark/226-system-dark-baseline-schem.png",
+    "shots/vf2c/light/227-system-live-light-schem.png",
+    "shots/vf2c/light/228-fresh-light-schem.png",
+    "shots/vf2c/dark/229-system-live-dark-from-light.png",
+    "shots/vf2c/dark/230-system-live-dark-after-fit.png",
+    "shots/vf2c/dark/231-system-live-dark-after-click.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/f2c/light/059-system-live-light-schem.png",
+     "x": 510,
+     "y": 480,
+     "hex": "#030303",
+     "nearestToken": "--surface-canvas-well",
+     "deltaE": 1.7
+    },
+    {
+     "file": "shots/f2c/light/059-system-live-light-schem.png",
+     "x": 433,
+     "y": 480,
+     "hex": "#d9dbde",
+     "nearestToken": "--divider",
+     "deltaE": 1.0
+    },
+    {
+     "file": "shots/f2c/light/059-system-live-light-schem.png",
+     "x": 650,
+     "y": 483,
+     "hex": "#a6b2c1",
+     "nearestToken": "--text-disabled",
+     "deltaE": 7.1
+    },
+    {
+     "file": "shots/f2c/light/051-fresh-light-schem.png",
+     "x": 433,
+     "y": 480,
+     "hex": "#020616",
+     "nearestToken": "--text-strong",
+     "deltaE": 7.3
+    },
+    {
+     "file": "shots/f2c/dark/061-system-live-dark-schem.png",
+     "x": 700,
+     "y": 700,
+     "hex": "#f5f5f0",
+     "nearestToken": "--text-strong",
+     "deltaE": 2.6
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/providers/ThemeProvider.tsx",
+    "line": 49,
+    "note": "system-change path calls setMode(nextMode); applyThemeClass runs later in a useEffect, so during that render <html data-color-mode> still holds the old mode"
+   },
+   {
+    "path": "node_modules/@openpcb/r3f-eda-canvas/dist/interaction/EdaCanvas.js",
+    "line": 10,
+    "note": "themeMode='auto' reads document.documentElement.dataset.colorMode at render time → resolves the stale mode"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/SchematicCanvas.tsx",
+    "line": 3264,
+    "note": "EdaCanvas gets backgroundColor from useTheme() but no themeMode prop, so bg and palette come from different sources"
+   },
+   {
+    "path": "src/core/frontend/src/lib/theme.ts",
+    "line": 67,
+    "note": "updateThemePreference applies the class synchronously (why the Settings path works); subscribeToSystemTheme (:75) only calls back"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/SchematicCanvas.tsx",
+    "line": 941,
+    "note": "canvasBackground is undefined in dark, so EdaCanvas falls back to getDefaultCanvasBackground(staleMode) → the #f5f5f0 sheet"
+   }
+  ],
+  "suggestedFix": "ThemeProvider.tsx:48-51: inside the subscribeToSystemTheme callback call applyThemeClass(nextMode) before setMode(nextMode), so the <html data-color-mode> read by EdaCanvas (r3f-eda-canvas EdaCanvas.js:10-19) is current during the re-render. Additionally pass themeMode={mode} from useTheme() to <EdaCanvas> in SchematicCanvas.tsx:3264 (and PcbCanvas), as ComponentDetailPage.tsx:590 already does, so palette and background come from React state.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "cross-cutting:theme:schematic-stale-palette-on-os-theme-change",
+  "knownRef": null,
+  "stack": "B",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "reason": "Reproduced on stack B in a fresh session with no stored theme (System), QA-f2c-board › Schem › Fit. Live emulateMedia dark→light (no canvas interaction): shell #f7f7f8, canvas bg #f0f4fb but U1 body #030303 (black box), outline #d9dbde, wire #a6b2c1; R1/C1/J1 washed out. Fresh light reload: outline #020616, body #dbdbd9, wire #3e506b. Live light→dark: shell #111113 but canvas stays a #f5f5f0 sheet with the light palette. Correction: Fit alone did NOT restore it in the light→dark case (camera move only); a canvas click did (bg #0e1116, outline #d9dbde). Root cause confirmed in code (ThemeProvider sets state before the <html> attribute; EdaCanvas resolves mode from the attribute at render; dark bg prop is undefined). Not excluded by PLAN §0 (palette values are out of scope, theme-switch correctness is not). Realistic in Electron: no nativeTheme override, so macOS Auto appearance reaches the renderer. Transient (any canvas click fixes it) → S3 kept.",
+   "evidence": [
+    "shots/vf2c/dark/226-system-dark-baseline-schem.png",
+    "shots/vf2c/light/227-system-live-light-schem.png",
+    "shots/vf2c/light/228-fresh-light-schem.png",
+    "shots/vf2c/dark/229-system-live-dark-from-light.png",
+    "shots/vf2c/dark/230-system-live-dark-after-fit.png",
+    "shots/vf2c/dark/231-system-live-dark-after-click.png",
+    "probe 227 (light): 700,700 #f0f4fb; 433,480 #d9dbde; 540,540 #030303; 650,483 #a6b2c1",
+    "probe 229/230 (dark): 700,700 #f5f5f0; 433,480 #020616; 540,540 #dbdbd9; probe 231 after click: #0e1116 / #d9dbde"
+   ],
+   "by": "vf2c"
+  }
+ },
+ {
+  "id": "F2C-006",
+  "knownRef": "K08",
+  "area": "library.browse",
+  "title": "If the Library list request fails, the table becomes a bare red 'HTTP 500' line with '0 of 76' — no message, no Retry. It recovers only after you change the search or a facet",
+  "category": "error-handling",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "repro": [
+   "Stack B. route '**/api/modules/library/components?**' → 500 problem+json (detail requests /components/:id/detail are not matched)",
+   "Open Library from Home (first open)",
+   "Type 'ne5' in search; clear it; tick Family › ic",
+   "unroute; wait 3 s; then toggle the facet again"
+  ],
+  "expected": "An inline error state in the table area: 'Couldn't load components' with the server's reason and a Retry button, plus a neutral count (not '0 of 76'). Recovery through Retry, or automatically on focus/refresh.",
+  "actual": "First open: the header says '76 parts · 3 sources' (from /facets), the count row says '0 of 76', and under it is a single 12px red line 'HTTP 500' (raw status, no explanation). The preview pane says 'Select a part to preview'. Search 'ne5' gives '1 part · 1 source' / '0 of 1' / 'HTTP 500'. The facet 'ic' gives '7 parts · 2 sources' / '0 of 7' / 'HTTP 500'. The facet rail and chips keep working, so the UI looks like the filter matched nothing. After unroute nothing refetches: the error stays until the query or a facet changes, or you leave Library and come back. The same bare error line is the delete/ZIP-import failure surface (K08/Q6-003), so this confirms K08 for the list-load path too.",
+  "evidence": {
+   "screenshots": [
+    "shots/f2c/dark/070-lib-list-500-first-open.png",
+    "shots/f2c/dark/071-lib-list-500-search.png",
+    "shots/f2c/dark/072-lib-list-500-facet.png",
+    "shots/f2c/dark/073-lib-list-recovered.png",
+    "shots/f2c/light/116-1100-lib-list-500-light.png",
+    "shots/vf2c/dark/215-lib-list-500.png",
+    "shots/vf2c/dark/216-lib-list-after-unroute.png",
+    "shots/vf2c/light/234-1100-lib-list-500.png"
+   ],
+   "console": [
+    "Failed to load resource: 500 @ /api/modules/library/components?limit=60",
+    "… ?q=ne5&limit=60",
+    "… ?tags=ic&limit=60"
+   ],
+   "network": [
+    "GET /api/modules/library/components?limit=60 → 500",
+    "GET /api/modules/library/facets → 200 (header counts keep claiming 76 parts)"
+   ],
+   "pixelProbes": [
+    {
+     "file": "computed style",
+     "x": 300,
+     "y": 76,
+     "hex": "#c2402f",
+     "nearestToken": "--status-danger",
+     "deltaE": 0
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 511,
+    "note": "throws `HTTP ${status}` and ignores the problem+json title/detail"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 729,
+    "note": "error rendered as a bare text-status-danger line, no retry/dismiss"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 564,
+    "note": "counts come from facets.total even when the list failed → '0 of 76'"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 536,
+    "note": "list effect deps are [searchUrl, refreshTick]; nothing bumps refreshTick on error, focus or online"
+   }
+  ],
+  "suggestedFix": "library/frontend/Space.tsx: in the list effect (:494-536) parse problem+json title/detail instead of `HTTP ${status}` (:511-513). Replace the bare line (:729-733) with a kit error state ('Couldn't load components', detail, Retry button that does setRefreshTick(v => v + 1)); hide the 'N of M' strip and the header part count while error is set. Keep this slot for list-load errors only; action failures go to NoticeViewport per Q6-003.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.browse:list-fetch:error-no-retry",
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "reason": "Reproduced on stack B: route **/api/modules/library/components?** → 500 problem+json, Home › Library (dark 1440): header '76 parts · 3 sources', strip '0 of 76', one red 11px 'HTTP 500' line (#c2402f), 'Select a part to preview', 0 Retry buttons. After unroute + 4 s: still 'HTTP 500' / '0 of 76' (no refetch). Light 1100x720: same. Relation: same error slot as K08/Q6-003 (action failures, S2) and the same no-retry pattern as F1D-003 (other lists); neither fix covers the Library list-load path, so kept as its own finding with knownRef K08. S3 kept: unlike F1D-003 the error is visible, only unhelpful and not recoverable in place.",
+   "evidence": [
+    "shots/vf2c/dark/215-lib-list-500.png",
+    "shots/vf2c/dark/216-lib-list-after-unroute.png",
+    "shots/vf2c/light/234-1100-lib-list-500.png",
+    "GET /api/modules/library/components?limit=60 → 500 (routed); GET /api/modules/library/facets → 200"
+   ],
+   "by": "vf2c"
+  }
+ },
+ {
+  "id": "F2C-007",
+  "area": "library.browse",
+  "title": "A failed /facets request is silent: the filter rail disappears and the header claims '60 parts · 0 sources' / '60 of 60' while the library has 76 parts in 3 sources",
+  "category": "error-handling",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B. route '**/api/modules/library/facets**' → 500",
+   "Home → Library",
+   "Read the header, count row and left rail",
+   "unroute; wait; type and delete a character in search"
+  ],
+  "expected": "The facet rail shows 'Filters unavailable — Retry' and the header keeps a truthful count, or none, instead of inventing one from the truncated list.",
+  "actual": "The left rail is an empty 220px column with no message. The header reads '60 parts · 0 sources' and the count row '60 of 60', although the library has 76 parts in 3 sources (the list is capped at 60, Q6-002). This tells the user the list is complete while 16 parts are unreachable. The only trace is a console 500. After unroute nothing refetches until the search text changes (then '76 parts · 3 sources', rail back).",
+  "evidence": {
+   "screenshots": [
+    "shots/f2c/dark/074-lib-facets-500.png",
+    "shots/vf2c/dark/217-lib-facets-500.png"
+   ],
+   "console": [
+    "Failed to load resource: 500 @ /api/modules/library/facets"
+   ],
+   "network": [
+    "GET /api/modules/library/facets → 500",
+    "GET /api/modules/library/components?limit=60 → 200"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 434,
+    "note": "`const { facets } = useLibraryFacets(...)` drops the hook's `error`"
+   },
+   {
+    "path": "src/modules/library/frontend/hooks/useLibraryFacets.ts",
+    "line": 70,
+    "note": "error captured but never surfaced"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 564,
+    "note": "totalCount falls back to components.length (the 60-item page) and sourceCount to 0"
+   }
+  ],
+  "suggestedFix": "library/frontend/Space.tsx:434 destructure `error` (and add a refetch to useLibraryFacets, e.g. bump refreshToken). When it is set, render 'Filters unavailable · Retry' in the facet rail and replace the header/strip counts (:564-565, :611, :683) with '60 shown' (no total, no source count) instead of falling back to components.length and facets.source.length = 0.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.browse:facets:silent-failure-wrong-counts",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "reason": "Reproduced on stack B (dark): route **/api/modules/library/facets** → 500, Home › Library: empty 220px left rail with no message, header '60 parts · 0 sources', strip '60 of 60', 60 rows, no error text; the API reports total 76 and 3 sources, and the table itself shows CORE/USER/KICAD badges. After unroute + 3 s: unchanged. Distinct root from F1C-013 (backend facets/list query mismatch) and Q6-009 (no-results state): here the hook's error is dropped. The '60' depends on the Q6-002 cap. S3 kept: the list itself is correct, only filters and counts are wrong, and it needs a facets failure.",
+   "evidence": [
+    "shots/vf2c/dark/217-lib-facets-500.png",
+    "GET /api/modules/library/facets → 500 (routed)",
+    "curl /api/modules/library/facets → total 76, 3 sources"
+   ],
+   "by": "vf2c"
+  }
+ },
+ {
+  "id": "F2C-008",
+  "area": "designer.comments",
+  "title": "If the comment list fails to load, every pin silently disappears; you can still post, and the new comment shows as '1' — no error, no Retry",
+  "category": "error-handling",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "284f64fc-6c44-4b49-bc92-076a4135fbf7",
+  "repro": [
+   "QA-f2c-board has 31 schematic threads",
+   "route '**/designs/*/comments?**' → 500 (only the list GET, not thread detail/commands)",
+   "Home → Designer (design opens on Schem), Fit schematic",
+   "Comment tool → click canvas → 'QA-f2c posted while list failed' → Cmd+Enter",
+   "unroute; wait 3 s; then Schem → PCB → Schem"
+  ],
+  "expected": "A visible 'Comments couldn't load · Retry' notice, e.g. a chip on the Comment toolbar button or a banner over the canvas. Posting is disabled, or clearly flagged, while the list is unknown. Pin numbers stay stable.",
+  "actual": "The canvas shows 0 pins, with no banner, toast or indicator. The only trace is a console 500. The design looks as if it had no comments. The Comment tool still works, and the new thread is created (POST 200) and drawn as pin '1'; once the list loads it becomes '32', so the numbers aren't stable identifiers. After unroute nothing refetches (still 1 pin after 3 s). The 31 threads come back only after switching view tabs or reopening the design. useDesignerComments sets `error`, but nothing renders it.",
+  "evidence": {
+   "screenshots": [
+    "shots/f2c/dark/089-comments-list-500.png",
+    "shots/f2c/dark/090-comments-500-new-pin.png",
+    "shots/f2c/dark/084-comments-30-threads.png",
+    "shots/vf2c/dark/218-comments-list-500.png",
+    "shots/vf2c/dark/219-comments-500-new-pin.png"
+   ],
+   "console": [
+    "Failed to load resource: 500 @ /api/modules/designer/designs/284f64fc…/comments?surface=schematic"
+   ],
+   "network": [
+    "GET …/comments?surface=schematic → 500",
+    "POST …/comments/commands → 200 (new thread rendered as #1)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/hooks/useDesignerComments.ts",
+    "line": 78,
+    "note": "catch → setError only; `error` is never consumed by Space.tsx:361"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/comments/CanvasCommentLayer.tsx",
+    "line": 103,
+    "note": "pin number = array index + 1 → renumbers when the list is partial"
+   }
+  ],
+  "suggestedFix": "designer/frontend/Space.tsx:361 read comments.error and render it: a danger dot on the Comment toolbar button plus a dismissible canvas banner 'Couldn't load comments · Retry' calling comments.refresh() (useDesignerComments.ts:59-83); also refresh on window focus/online. In CanvasCommentLayer.tsx:103 number pins from a stable per-design sequence (server-side ordinal or createdAt rank) instead of the array index.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.comments:list-load:silent-failure",
+  "knownRef": null,
+  "stack": "B",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "reason": "Reproduced on stack B (dark): route **/designs/*/comments?** → 500, Designer › QA-f2c-board › Schem: 0 pins, no banner/toast/alert, only a console 500. Comment tool › click › 'vf2c r2 posted while list failed' › Cmd+Enter: posted and drawn as pin '1'. Unroute + 3 s: still 1 pin. Schem → PCB → Schem: 34 pins (1–34), so the new thread was renumbered. grep: comments.error is not read anywhere. Note: the backend swallows cloud comment errors (routes.ts:296-313), so the realistic trigger is a local backend failure. S2 kept for consistency with F1D-003 / F1A-004: the design silently shows no comments (wrong data) and pin numbers are unstable.",
+   "evidence": [
+    "shots/vf2c/dark/218-comments-list-500.png",
+    "shots/vf2c/dark/219-comments-500-new-pin.png",
+    "GET …/designs/284f64fc…/comments?surface=schematic → 500 (routed)",
+    "POST …/comments/commands → ok (drawn as #1, later part of 1–34)"
+   ],
+   "by": "vf2c"
+  }
+ },
+ {
+  "id": "F2C-009",
+  "area": "designer.comments",
+  "title": "Posting a reply in a long comment thread gives no visible confirmation: the list stays scrolled at the top and the reply lands ~2400 px below the fold",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "284f64fc-6c44-4b49-bc92-076a4135fbf7",
+  "repro": [
+   "QA-f2c-board › Schem: thread #1 has a 2000-char first message, a 300-char URL reply and 25 short replies",
+   "Click pin 1",
+   "Scroll the thread to the top, type 'QA-f2c newest reply 26' in 'Reply to thread…', Cmd+Enter"
+  ],
+  "expected": "The thread opens scrolled to the newest message (or a 'N earlier messages' collapse), and posting a reply scrolls it into view. Short replies are compact, without a permanent reaction chip on each one.",
+  "actual": "The popup (320×570px, max-h 70%) opens with scrollTop 0 on the 2000-char opening message; the 25 replies are below (scrollHeight 2689 vs 429 visible). After posting, the composer clears but scrollTop stays 0. The new reply's top is at y=3051 while the list's visible range is 348–777, so there's no visible sign the reply posted. Each one-line reply takes ~70px (author row, text, and an always-visible 👍 reaction chip), so 25 replies make ~1800px of scroll. The header shows only 'Local · 3m', with no message count. Long text and the unbroken 300-char URL wrap correctly (no horizontal overflow), and the wheel scrolls the popup, not the canvas (good).",
+  "evidence": {
+   "screenshots": [
+    "shots/f2c/dark/081-comment-thread-2000.png",
+    "shots/f2c/dark/083-comment-long-url.png",
+    "shots/f2c/dark/085-comment-thread-27-msgs.png",
+    "shots/f2c/dark/086-comment-thread-27-bottom.png",
+    "shots/f2c/dark/087-comment-reply-not-scrolled.png",
+    "shots/vf2c/dark/220-comment-thread-open.png",
+    "shots/vf2c/dark/221-comment-reply-not-scrolled.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/comments/CommentThreadPopup.tsx",
+    "line": 314,
+    "note": "overflow-y-auto message list; no scroll-to-bottom on open or after addMessage"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/comments/CommentThreadPopup.tsx",
+    "line": 247,
+    "note": "popup max-h-[70%] w-80"
+   }
+  ],
+  "suggestedFix": "CommentThreadPopup.tsx: put a ref on the message list (:314) and, after a successful addMessage, scroll the new message into view (listRef.current.scrollTop = listRef.current.scrollHeight). Optionally scroll to the newest/first-unread on open once a thread has more than N messages, add 'N replies' to the header, and show the reaction chip only when a message has reactions (add-reaction on hover).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.comments:thread-popup:no-scroll-to-latest",
+  "knownRef": null,
+  "stack": "B",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "reason": "Reproduced on stack B (dark): QA-f2c-board › Schem › pin 1 (2008-char opener + replies, 29 items): scrollTop 0, scrollHeight 2828 vs clientHeight 429 (visible 348–777). Posted 'vf2c r2 newest reply' with Cmd+Enter: composer cleared, scrollTop stayed 0, the new reply's top at y=3176 — nothing visible changed. Narrowed: opening at the original message is a defensible convention (GitHub/Figma show the opener first), so the defect is the missing scroll/confirmation after posting (plus no message count). S3 kept.",
+   "evidence": [
+    "shots/vf2c/dark/220-comment-thread-open.png",
+    "shots/vf2c/dark/221-comment-reply-not-scrolled.png"
+   ],
+   "by": "vf2c"
+  }
+ },
+ {
+  "id": "F2C-010",
+  "area": "designer.comments",
+  "title": "Comment pins near the canvas edge are half-clipped instead of becoming edge chips, and nearby pins stack unreadably (no clustering)",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "designId": "284f64fc-6c44-4b49-bc92-076a4135fbf7",
+  "repro": [
+   "QA-f2c-board › Schem with 31 threads (10 anchored within ±3 mm of U1, the rest spread over ±45 × ±30 mm)",
+   "Fit schematic (zoom 20%)",
+   "Inspect the pin cluster on U1 and the right canvas edge"
+  ],
+  "expected": "Overlapping pins collapse into a count bubble ('10') that expands or zooms on click, or at least stay individually readable. Pins whose anchors are near an edge are fully drawn or turned into edge chips like the left side. Fit can include comment anchors, or offers a 'Fit comments' option.",
+  "actual": "Threads 2–10 and 12 render as a 60×80px stack over U1's pins and body. Numbers 3, 4, 5 and 7 are fully covered and 6/9 half-covered, so only the topmost thread is clickable without zooming in, and the pins also cover the U1 pin endpoints (clicking there opens a comment instead of starting a wire). On the right edge pins 28 (x 1119–1147) and 11 (1115–1143) are cut in half by the canvas edge at x=1139. On the left edge, threads 19 and 30 correctly turn into round off-screen chips, so the two sides behave differently. Fit schematic frames only the parts, which leaves 2 threads off-screen. Pins have no accessible name beyond the number (Q5-031). Dragging a pin works and persists (thread revision 2, new anchor). At 1100×720 (light), after the window shrinks, the U1 cluster's off-screen chips pile into one vertical stack of overlapping circles at the left edge (30, 24, 9, 29 and more hidden underneath). Pins 10, 12 and 4 are half-cut at the left edge and pin 23 at the right edge, and the chips never de-overlap.",
+  "evidence": {
+   "screenshots": [
+    "shots/f2c/dark/084-comments-30-threads.png",
+    "shots/f2c/dark/084b-comment-cluster-crop.png",
+    "shots/f2c/dark/084c-comment-right-edge-crop.png",
+    "shots/f2c/dark/088-comment-pin-drag.png",
+    "shots/f2c/light/113-1100-dock-comments-light.png",
+    "shots/vf2c/dark/222-comment-pins-fit.png",
+    "shots/vf2c/dark/223-comment-cluster-crop.png",
+    "shots/vf2c/dark/224-comment-right-edge-crop.png",
+    "shots/vf2c/light/233-1100-comment-pins.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/comments/CanvasCommentLayer.tsx",
+    "line": 101,
+    "note": "layer is overflow-hidden; the on-screen test uses the anchor point, not the pin's 28px box → half-clipped pins"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/comments/CanvasCommentLayer.tsx",
+    "line": 103,
+    "note": "every thread rendered as an individual pin, no clustering"
+   }
+  ],
+  "suggestedFix": "CanvasCommentLayer.tsx: decide on-screen with the pin box, not the anchor point — treat anchors within the pin size (28 px) of the canvas edge as off-screen so clampToEdge turns them into edge chips (inset by the pin size). Cluster pins whose screen positions fall within ~20 px into one count bubble that zooms/fans out on click. A thread list (menu on the Comment button) would make every thread reachable.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "designer.comments:pins:crowding-edge-clipping",
+  "knownRef": null,
+  "stack": "B",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "reason": "Reproduced on stack B. Dark 1440x900 (dock open, canvas x 341–1139) after Fit: pins 2–10 and 12 sit within x 467–531 / y 429–509 on U1 with several numbers covered; pins 11 (1115–1143) and 28 (1119–1147) are cut by the canvas edge while threads 19 and 30 on the left become round edge chips. Light 1100x720 (canvas 341–799): 11 (779–807) and 28 (781–809) clipped, chip 19 overlaps pin 15. Dropped sub-claim: 'Fit ignores comments' is expected (Fit schematic frames drawing content, as in KiCad/Figma). The 10-thread cluster was seeded via API, so crowding is the weaker half; edge clipping is the clear defect. S3 kept.",
+   "evidence": [
+    "shots/vf2c/dark/222-comment-pins-fit.png",
+    "shots/vf2c/dark/223-comment-cluster-crop.png",
+    "shots/vf2c/dark/224-comment-right-edge-crop.png",
+    "shots/vf2c/light/233-1100-comment-pins.png"
+   ],
+   "by": "vf2c"
+  }
+ },
+ {
+  "id": "F2C-011",
+  "area": "assistant.dock",
+  "title": "Dock header row overflows at the default dock width: with a local model name the tools badge is cut off at the window edge and the 'just now' timestamp is pushed out of view",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "designId": "284f64fc-6c44-4b49-bc92-076a4135fbf7",
+  "repro": [
+   "QA-f2c-board › Cmd+I (dock default width ~300px)",
+   "Chat on provider oMLX (model 'Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit')",
+   "Look at the row under the chat selector: model pill · tools badge · timestamp"
+  ],
+  "expected": "The pill truncates, or the row wraps, so the tools badge and timestamp stay inside the dock.",
+  "actual": "The pill (already truncated to 22 chars plus 'STRICT') and the shrink-0 badge/timestamp don't fit in the ~276px row. At 1440×900 the tools badge spans x 1405.9–1447.9 in a 1440px window, so its right half and the whole timestamp are clipped by the window edge. At 1100×720 it spans 1065.9–1107.9 in a 1100px window. The dock container has no overflow handling (the parent is overflow:visible), so the content is simply cut at the viewport edge. With the short 'gpt-4o-mini' model the row fits, so it depends on the model name.",
+  "evidence": {
+   "screenshots": [
+    "shots/f2c/dark/013-dock-send-7s.png",
+    "shots/f2c/dark/100-1100-dock-schem.png",
+    "shots/vf2c/dark/206-dock-open.png",
+    "shots/vf2c/dark/207-dock-header-row-crop.png",
+    "shots/vf2c/light/235-1100-dock-header.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/DesignerChatDock.tsx",
+    "line": 854,
+    "note": "`mt-2 flex items-center gap-2` row: pill has no min-w-0/flex-shrink, badge and timestamp are shrink-0"
+   },
+   {
+    "path": "src/modules/assistant/frontend/components/ModelSelectorPill.tsx",
+    "line": 39,
+    "note": "shortModel truncates by character count (22) rather than CSS width"
+   }
+  ],
+  "suggestedFix": "DesignerChatDock.tsx:854: give the ModelSelectorPill wrapper `min-w-0 flex-1` and make the pill button `min-w-0` with the model label `truncate` (CSS ellipsis instead of shortModel's 22-char slice, ModelSelectorPill.tsx:39); or move the timestamp to the chat selector row / hide it when the dock is narrower than ~340 px.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "assistant.dock:header-row:overflow-clipped-badge",
+  "knownRef": null,
+  "stack": "B",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "reason": "Reproduced on stack B, chat on oMLX, default dock width: dark 1440x900 row 1152–1430, pill 1152–1397.9, tools badge 1405.9–1447.9, timestamp '25m ago' 1455.9–1495.1 in a 1440 px window (badge half-clipped, timestamp invisible; crop 207). Light 1100x720: badge 1065.9–1107.9, timestamp 1115.9–1149.1 in 1100 px. Long model ids are the norm for local and OpenRouter models, so this is the common case. S3 kept.",
+   "evidence": [
+    "shots/vf2c/dark/206-dock-open.png",
+    "shots/vf2c/dark/207-dock-header-row-crop.png",
+    "shots/vf2c/light/235-1100-dock-header.png"
+   ],
+   "by": "vf2c"
+  }
+ },
+ {
+  "id": "F2C-012",
+  "area": "assistant.space",
+  "title": "'New' chat reuses the last-viewed chat's provider/model and ignores Settings › Assistant › Default provider",
+  "category": "bug",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Settings › Assistant: Default provider = oMLX",
+   "Assistant space: open chat 'edge unbound v2' (OpenCode Zen)",
+   "Click 'New'"
+  ],
+  "expected": "A new chat starts on the configured default provider/model (oMLX / Qwen…), or the pill clearly says it is carrying over the previous chat's model.",
+  "actual": "The new chat's pill reads 'big-pickle · Strict' (OpenCode Zen, and not even that chat's saved model 'deepseek-v4-flash-free', see Q8-001), and the first send creates the chat on that provider. The Settings default applies only when no chat was selected. The same happens after a reload: the auto-selected most-recent chat decides the provider of the next New chat.",
+  "evidence": {
+   "screenshots": [
+    "shots/f2c/dark/002-assistant-new-chat.png",
+    "shots/vf2c/dark/203-new-after-opencode-chat.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 828,
+    "note": "createChat posts `providerId || settings.defaultProviderId`; providerId still holds the previously selected chat's provider"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 734,
+    "note": "selecting a chat sets providerId; 'New' never resets it"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1389,
+    "note": "'New' calls createChat() directly; providerId/model are never reset first"
+   }
+  ],
+  "suggestedFix": "Space.tsx: in the 'New' handler (:1389, also :1161) reset providerId to settings.defaultProviderId and model to that provider's defaultModel before createChat(), or make createChat take explicit {providerId, model} for the New case. If carrying the last model over is the intended behaviour, relabel the Settings field (e.g. 'Provider for first chat') instead.",
+  "fixScope": "design-decision",
+  "estimate": "XS",
+  "dedupeKey": "assistant.space:new-chat:ignores-default-provider",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "reason": "Reproduced on stack B (dark): Settings defaultProviderId = omlx. Assistant › 'edge unbound v2' (OpenCode Zen) › pill 'big-pickle Strict' › New → pill still 'big-pickle Strict'; API: new chat dbfa681c {providerConfigId 5d25100b… (OpenCode Zen), model 'big-pickle'} (deleted afterwards). The wrong-model half ('big-pickle' instead of the chat's saved 'deepseek-v4-flash-free') is Q8-001's stale-list root; the provider inheritance is this finding. Related to F1D-001 (same createChat line, placeholder before settings load) but a different trigger. Reusing the last model is a product choice some chat apps make, hence S4 / design-decision.",
+   "evidence": [
+    "shots/vf2c/dark/203-new-after-opencode-chat.png",
+    "GET /api/modules/assistant/chats → newest dbfa681c providerConfigId=5d25100b… (OpenCode Zen), model big-pickle; settings.defaultProviderId=omlx"
+   ],
+   "by": "vf2c"
+  }
+ }
+]

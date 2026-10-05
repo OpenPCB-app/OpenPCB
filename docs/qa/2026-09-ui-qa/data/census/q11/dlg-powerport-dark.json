@@ -1,0 +1,148 @@
+{
+ "triggerBefore": "Place power port",
+ "afterOpen": "input \"Custom rail (e.g. +1V8)\"",
+ "container": {
+  "role": "dialog",
+  "modal": "true",
+  "label": "Place power port",
+  "x": 0,
+  "y": 0,
+  "w": 1440,
+  "h": 900,
+  "bg": "oklab(0 0 0 / 0.5)",
+  "rad": "0px",
+  "bs": "none",
+  "bd": "0px rgb(217, 217, 217)",
+  "inside": true
+ },
+ "tabs": [
+  {
+   "i": 1,
+   "inside": true,
+   "el": "button \"Cancel\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 2,
+   "inside": false,
+   "el": "button \"Home\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 3,
+   "inside": false,
+   "el": "button \"Designer\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 4,
+   "inside": false,
+   "el": "button \"Library\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 5,
+   "inside": false,
+   "el": "button \"Docs\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 6,
+   "inside": false,
+   "el": "button \"Assistant\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 7,
+   "inside": false,
+   "el": "a \"Report a bug or request a feature\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 8,
+   "inside": false,
+   "el": "button \"Settings\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 9,
+   "inside": false,
+   "el": "button \"Close GUIDE-VALIDATE\"",
+   "vis": true,
+   "fw": null,
+   "op": 0.8,
+   "inView": true
+  },
+  {
+   "i": 10,
+   "inside": false,
+   "el": "button \"New design\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 11,
+   "inside": false,
+   "el": "button[tab] \"Schem\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 12,
+   "inside": false,
+   "el": "button \"Open the assistant (\u2318/Ctrl+I)\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 13,
+   "inside": false,
+   "el": "button \"Toggle side panel\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 14,
+   "inside": false,
+   "el": "button \"Fit schematic\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  }
+ ],
+ "afterClose": "button \"Fit schematic\"",
+ "stillOpen": 0
+}

@@ -1,0 +1,2097 @@
+[
+ {
+  "id": "Q7-001",
+  "knownRef": "K06",
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/007-symbol-import-garbage.png"
+   ],
+   "console": [
+    "__qaDialogCalls = {confirm:1, log:['confirm: Close the wizard? Unsaved changes will be lost.']}"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/ImportWizardPage.tsx",
+    "line": 577,
+    "note": "window.confirm in handleClose"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Part wizard close uses native window.confirm ('Close the wizard? Unsaved changes will be lost.')",
+  "category": "bug",
+  "severity": "S2",
+  "repro": [
+   "Library → New part",
+   "Import file → Choose File → simple_resistor.kicad_sym (or garbage.step)",
+   "Click empty right panel so focus leaves the file input",
+   "Press Esc (or click the ← back arrow)"
+  ],
+  "expected": "In-app styled confirm dialog (kit Dialog) with Discard / Keep editing; works in Electron and is keyboard-trappable.",
+  "actual": "Browser-native window.confirm opens (spy: confirm=1, 'confirm: Close the wizard? Unsaved changes will be lost.'); playwright press blocks until the native dialog is dismissed. Native dialogs are unstyled, block the renderer and look amateur inside Electron.",
+  "suggestedFix": "Replace window.confirm in ImportWizardPage.handleClose with the shared kit confirm Dialog (src/shared/frontend/ui) rendered by the wizard; Esc/Back open it, Enter=Keep editing default.",
+  "dedupeKey": "library.wizard:close:native-confirm",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced on stack B (vq7-dark): imported simple_resistor.kicad_sym, clicked empty right panel (activeElement BODY), pressed Esc -> playwright modal state '\"confirm\" dialog with message \"Close the wizard? Unsaved changes will be lost.\"'; spy confirm=1. Code: ImportWizardPage.tsx:577 window.confirm inside handleClose, reached from the window Esc binding (:640) and the unlabeled back-arrow (:665). Native confirm in Electron = S2 per protocol.",
+   "evidence": [
+    "shots/vq7/dark/001-symbol-import-resistor.png",
+    "console: __qaDialogCalls={confirm:1, log:['confirm: Close the wizard? Unsaved changes will be lost.']}"
+   ]
+  }
+ },
+ {
+  "id": "Q7-002",
+  "knownRef": null,
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/002-symbol-import-resistor.png",
+    "shots/q7/dark/003-symbol-import-grid-toggled.png",
+    "shots/q7/dark/004-symbol-import-grid-zoomout.png",
+    "shots/q7/dark/010-draw-symbol-empty.png",
+    "shots/q7/dark/044-footprint-variant2.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "node_modules/@openpcb/r3f-eda-canvas/dist/primitives/GridShader.js",
+    "line": 56,
+    "note": "default param color=[0.58,0.64,0.72] is a fresh array every render -> resolvedColor changes -> useMemo (line 59) builds a new uniforms object every render"
+   },
+   {
+    "path": "node_modules/@openpcb/r3f-eda-canvas/dist/primitives/GridShader.js",
+    "line": 83,
+    "note": "useFrame writes uPixelsPerUnit into the latest uniforms object, not the one the ShaderMaterial/renderer holds"
+   },
+   {
+    "path": "node_modules/@openpcb/r3f-eda-canvas/dist/primitives/GridShader.js",
+    "line": 27,
+    "note": "gridPx < uMinSpacingPx -> discard (ppu stays 1.0)"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/steps/SymbolStep.tsx",
+    "line": 112,
+    "note": "showGrid hard-coded; symbolGridVisible (store) ignored"
+   }
+  ],
+  "fixScope": "shared-package",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Grid never renders in any wizard/preview canvas: GridShader's uPixelsPerUnit uniform is stuck at 1 so every fragment is discarded; symbol-import Grid toggle is also dead",
+  "category": "bug",
+  "severity": "S3",
+  "repro": [
+   "Library → New part → Import file → simple_resistor.kicad_sym",
+   "Observe canvas: Grid button shows active (bordered) but no grid dots/lines",
+   "Click Grid twice; zoom out with wheel"
+  ],
+  "expected": "Grid visible when toggle on, hidden when off (as in the footprint step).",
+  "actual": "No grid pixels anywhere (canvas histogram 100% #131313). Root cause found at runtime via the R3F root store: the grid ShaderMaterial's uPixelsPerUnit uniform = 1 while camera.zoom = 63.9 (after wheel: 90.3); mesh position/scale ARE updated each frame, so useFrame runs but writes into a different uniforms object than the one bound to the material (renderer-cached uniforms === material.uniforms, both still 1). With ppu=1 the fragment shader computes gridPx = 2 mm x 1 = 2 < uMinSpacingPx 4 and discards everything. Forcing material.uniforms.uPixelsPerUnit = camera.zoom + invalidate() makes the dot grid appear (shot 002). This runs on a real GPU (ANGLE Metal, Apple M4 Pro, WebGL2), so it is not a headless/SwiftShader artefact. Separately, SymbolStep passes showGrid literally so the import-mode Grid button only toggles its own style. Affects every GridShader user: symbol/footprint Draw editors, symbol/footprint import previews and PreviewCanvasShell (Library preview pane / detail page).",
+  "suggestedFix": "In OpenPCB-app/shared r3f-eda-canvas GridShader: hoist the default color to a module constant and create the uniforms object once (useMemo with [] or useRef), updating .value fields in place each render/frame; add a unit test that material.uniforms.uPixelsPerUnit tracks camera.zoom. Re-pin the tag here. In SymbolStep.tsx:112 pass showGrid={symbolGridVisible}.",
+  "dedupeKey": "library.wizard:symbol-import:grid-toggle-dead",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced in dark and on a real GPU (WebGL renderer string 'ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro)'), refuting the headless caveat. Inspected the live scene through @react-three/fiber _roots: grid mesh visible, renderOrder -2, but uPixelsPerUnit=1 vs zoom 63.9/90.3; forcing the uniform made the grid draw. Root cause is in the shared package GridShader, not the wizard.",
+   "evidence": [
+    "shots/vq7/dark/001-symbol-import-resistor.png",
+    "shots/vq7/dark/002-grid-forced-ppu.png",
+    "eval: [{zoom:63.88, grid:{vis:true, u:{g:2, ppu:1, a:0.18, min:4}}}] -> after forcing ppu=zoom, 8 px of #2a2d31 grid dots appear in the 300x230 probe region"
+   ]
+  }
+ },
+ {
+  "id": "Q7-003",
+  "knownRef": null,
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/005-symbol-import-opamp.png"
+   ],
+   "network": [
+    "POST /api/modules/library/imports/kicad/inspect → 200, preview.unitCount=3, pins[].unit=1..3, warnings=[]"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/steps/SymbolStep.tsx",
+    "line": 108,
+    "note": "SymbolPreviewCanvas given the whole preview model; no unit filter"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "M",
+  "status": "confirmed",
+  "title": "Multi-unit symbol import renders all units superimposed with no unit selector (pins 3/5, 2/6, 1/7 overlap)",
+  "category": "bug",
+  "severity": "S2",
+  "repro": [
+   "Library → New part → Import file → multi_unit_opamp.kicad_sym (LM358, 3 units)",
+   "Look at the preview + Symbol Details"
+  ],
+  "expected": "Preview shows one unit at a time with a Unit A/B/C selector (KiCad behaviour) and details list 'Units: 3'; or a warning that units are merged.",
+  "actual": "All 3 units drawn on top of each other: pin numbers 3 & 5, 2 & 6, 1 & 7 overprint each other, the power unit (8/4) body overlaps the op-amp bodies. Details say 'Pins 8', no unit count, no warning (inspect API returns unitCount=3 and per-pin unit, warnings=[]). User cannot tell whether the saved part will have overlapping pins.",
+  "suggestedFix": "Short term (wizard): when inspect returns preview.unitCount > 1, show a warning 'Multi-unit symbols are not supported yet - all N units will be merged into one body' and render a unit selector/filter in SymbolStep; add a 'Units' row to Symbol Details. Real fix needs multi-unit support in the designer (no unit concept exists in designer/schematic code today - SchematicCanvas hard-codes unit: 1), otherwise the merged pins (3/5, 2/6, 1/7 at identical coordinates) end up overlapping on the schematic.",
+  "dedupeKey": "library.wizard:symbol-import:multi-unit-overlap",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced: multi_unit_opamp.kicad_sym renders LM358 units A/B/C superimposed (pin numbers 3&5, 2&6, 1&7 overprint; power unit body overlaps). Inspect API: preview.unitCount=3, pins carry unit 1..3, warnings=[]. Not a wizard-only preview issue: grep shows no multi-unit handling anywhere in designer/library frontends (unitCount only in the symbol editor store, set to 1), so an imported multi-unit part keeps the stacked pins. S2 kept (wrong data shown and persisted without warning).",
+   "evidence": [
+    "shots/vq7/dark/003-symbol-import-opamp.png",
+    "POST /imports/kicad/inspect -> preview.unitCount=3, pins [(3,+,1),(2,-,1),(1,~,1),(5,+,2),(6,-,2),(7,~,2),(8,V+,3),(4,V-,3)], warnings=[]"
+   ]
+  }
+ },
+ {
+  "id": "Q7-004",
+  "knownRef": null,
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/007-symbol-import-garbage.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/steps/SymbolStep.tsx",
+    "line": 257,
+    "note": "inspectError rendered in right sidebar amber box"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Invalid symbol file: error shown only in far-right panel while left/centre claim nothing was imported",
+  "category": "error-handling",
+  "severity": "S3",
+  "repro": [
+   "Library → New part → Import file → choose a non-KiCad file (garbage.step)"
+  ],
+  "expected": "Inline error next to the file input (danger styling), e.g. 'garbage.step is not a KiCad symbol library (.kicad_sym)'; centre empty state consistent.",
+  "actual": "Right sidebar shows amber 'Not a valid KiCad symbol library file' (warning colour, not danger); left says 'Import a symbol file to inspect available symbols.' and canvas says 'No preview available for selected symbol.' — three contradictory messages; file name still shown twice (native input + duplicate chip).",
+  "suggestedFix": "Render inspectError under the file input in ImportModeSidebar with status-danger tokens; set the canvas emptyMessage to the error when inspectStatus==='error'; drop the duplicate filename chip.",
+  "dedupeKey": "library.wizard:symbol-import:error-placement",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced with garbage.step: right sidebar amber box 'Not a valid KiCad symbol library file' (dark bg #461901, amber not danger), left 'Import a symbol file to inspect available symbols.', canvas 'No preview available for selected symbol.', file name shown twice (native input + chip). Note the input has accept='.kicad_sym' so the OS picker filters by default, but a malformed .kicad_sym takes the same path. SymbolStep.tsx:257 renders inspectError in the right sidebar only.",
+   "evidence": [
+    "shots/vq7/dark/004-symbol-import-garbage.png"
+   ]
+  }
+ },
+ {
+  "id": "Q7-005",
+  "knownRef": null,
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/006-symbol-import-unsupported.png",
+    "shots/q7/dark/005-symbol-import-opamp.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/steps/SymbolStep.tsx",
+    "line": 222,
+    "note": "{symbol.pinCount} pins"
+   }
+  ],
+  "fixScope": "shared-package",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Symbol import copy: '(1 pins)', literal '~' pin name, duplicate warnings for one construct",
+  "category": "copy",
+  "severity": "S4",
+  "repro": [
+   "Import unsupported_construct.kicad_sym → select shows 'WEIRD (1 pins)'; warnings panel lists 2 warnings for the same future_graphic_element",
+   "Import multi_unit_opamp.kicad_sym → output pins labelled '~'"
+  ],
+  "expected": "'1 pin'; KiCad '~' (empty name) hidden; one warning per construct.",
+  "actual": "'WEIRD (1 pins)'; '~' drawn as pin name; 'Unknown graphic element …' and 'Unsupported symbol graphic … was skipped' both listed.",
+  "suggestedFix": "Pluralise pin count in SymbolStep option label; treat '~' as empty name in the symbol render model (@openpcb/rendering-core); dedupe warnings by construct in @openpcb/kicad-import.",
+  "dedupeKey": "library.wizard:symbol-import:copy",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced: unsupported_construct.kicad_sym -> option 'WEIRD (1 pins)' and two warnings for the same construct ('Unknown graphic element \"future_graphic_element\" in sub-symbol' + 'Unsupported symbol graphic ... was skipped'); multi_unit_opamp output pins draw a literal '~' name (fixture: (name \"~\") = KiCad empty name).",
+   "evidence": [
+    "shots/vq7/dark/005-symbol-import-unsupported.png",
+    "shots/vq7/dark/003-symbol-import-opamp.png"
+   ]
+  }
+ },
+ {
+  "id": "Q7-006",
+  "knownRef": "K29",
+  "area": "library.symbol-editor",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/013-rect-mid-draw-fresh.png",
+    "shots/q7/dark/014-after-esc-mid-draw.png",
+    "shots/q7/dark/012-rect-mid-draw.png"
+   ],
+   "console": [
+    "after Esc: h1='Library' (wizard gone); __qaDialogCalls.confirm unchanged"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/ImportWizardPage.tsx",
+    "line": 640,
+    "note": "window Esc binding -> handleClose() with no defaultPrevented / editor-state check"
+   },
+   {
+    "path": "node_modules/@openpcb/r3f-eda-canvas/dist/utils/keyboard-shortcuts.js",
+    "line": 29,
+    "note": "useWindowKeyboardShortcuts runs every binding regardless of event.defaultPrevented"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/editor/tools/rect-tool.ts",
+    "line": 76,
+    "note": "tool Esc already calls event.preventDefault() when cancelling a shape - the wizard just ignores it"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/editor/tools/select-tool.ts",
+    "line": 381,
+    "note": "select tool has no Esc -> clear selection"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Esc while drawing a shape also fires the wizard's Esc=close: closes the whole wizard (no confirm) or pops the discard confirm",
+  "category": "keyboard",
+  "severity": "S2",
+  "repro": [
+   "Library → New part → Draw symbol",
+   "Press R, click once on the canvas, move the mouse (rubber-band rect visible)",
+   "Press Esc",
+   "Variant: draw something, select it with V, press Esc to deselect → discard-wizard confirm appears instead"
+  ],
+  "expected": "Esc cancels only the in-progress rectangle; wizard stays open. A second Esc (idle tool) may offer to leave.",
+  "actual": "Fresh wizard (nothing committed yet): the whole wizard closes immediately and returns to the Library list — no confirm. With committed work (or a stale symbol file), the same Esc opens the 'Close the wizard? Unsaved changes will be lost.' native confirm (spy count 1→2); pressing Enter/OK loses the part. Both window keydown listeners (wizard useWindowKeyboardShortcuts + editor useToolDispatch) handle the same Esc. Same with an idle Select tool and a selection: Esc does not clear the selection (select-tool has no Esc handling) — it only opens the wizard 'Close the wizard?' confirm (spy confirm 3→4).",
+  "suggestedFix": "In ImportWizardPage's Esc binding return early when event.defaultPrevented (child editor listeners register first, so the rect/line/arc/pad tools' preventDefault already marks the event), and add Esc=clear-selection (with preventDefault) to both select tools; only then treat Esc as 'leave wizard' (with the in-app confirm from Q7-001).",
+  "dedupeKey": "library.wizard:esc:closes-mid-draw",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced both paths. Fresh wizard: Draw symbol, R, click, move (rubber-band visible), Esc -> h1 'Library', spy confirm count unchanged (wizard closed silently). With one committed rect: same Esc -> native 'Close the wizard?' confirm. With Select tool and the rect selected: Esc -> confirm again and the selection is still there after dismissing. rect-tool already preventDefaults Esc; the wizard binding just doesn't check it.",
+   "evidence": [
+    "shots/vq7/dark/006-rect-mid-draw-fresh.png",
+    "shots/vq7/dark/008-rect-mid-draw-with-work.png",
+    "shots/vq7/dark/010-select-after-esc.png",
+    "after fresh Esc: h1='Library', confirm count 2->2"
+   ]
+  }
+ },
+ {
+  "id": "Q7-007",
+  "knownRef": null,
+  "area": "library.import",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "console": [
+    "[ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ /api/modules/library/imports/kicad/inspect"
+   ],
+   "network": [
+    "POST /api/modules/library/imports/kicad/inspect → 500"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/backend/routes.ts",
+    "line": 1428,
+    "note": "POST /imports/kicad/inspect returns success(buildInspectResponse(body)) with no parse-error mapping -> plain Error -> 500"
+   }
+  ],
+  "fixScope": "backend-needed",
+  "estimate": "XS",
+  "status": "confirmed",
+  "title": "Inspect endpoint returns HTTP 500 Internal Server Error for an invalid user file",
+  "category": "error-handling",
+  "severity": "S3",
+  "repro": [
+   "Library → New part → Import file → choose garbage.step (not a .kicad_sym)",
+   "Or: curl -X POST :3200/api/modules/library/imports/kicad/inspect with symbolLibrary.content='this is not a STEP file'"
+  ],
+  "expected": "4xx (422/400 ValidationError problem+json) — bad user input is not a server fault; no console error.",
+  "actual": "500 {type: .../internal-error, title:'Internal Server Error', detail:'Not a valid KiCad symbol library file'}; browser console logs 'Failed to load resource: 500 (Internal Server Error) … /imports/kicad/inspect'. Also pollutes /api/diagnostics error buffer.",
+  "suggestedFix": "Wrap buildInspectResponse (and commit routes) parse failures in ValidationError (422) in routes.ts, or have @openpcb/kicad-parsers throw a typed KicadParseError the route maps to 4xx.",
+  "dedupeKey": "library.import:inspect:500-on-bad-file",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced by curl: POST :3200/api/modules/library/imports/kicad/inspect with content 'this is not a STEP file' -> HTTP 500 problem+json type internal-error, detail 'Not a valid KiCad symbol library file'; browser console logs the 500 for the same UI action.",
+   "evidence": [
+    "curl -> HTTP 500 {\"type\":\"https://openpcb.dev/problems/internal-error\",\"title\":\"Internal Server Error\",\"detail\":\"Not a valid KiCad symbol library file\"}",
+    "console: [ERROR] Failed to load resource: 500 ... /api/modules/library/imports/kicad/inspect"
+   ]
+  }
+ },
+ {
+  "id": "Q7-008",
+  "knownRef": null,
+  "area": "library.symbol-editor",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/025-text-editor.png"
+   ],
+   "console": [
+    "window.__txtLog = [added, blur→BODY, removed] within 1 ms; activeElement after click = BODY"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/editor/tools/text-tool.ts",
+    "line": 26,
+    "note": "beginTextEdit on pointerdown without preventDefault"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/editor/TextEditorOverlay.tsx",
+    "line": 36,
+    "note": "focus() in effect then onBlur={commit}"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/footprint-editor/tools/text-tool.ts",
+    "line": 22,
+    "note": "same pattern in the footprint editor"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Text tool unusable in both symbol and footprint editors: the inline input opens and is blurred/removed within the same click",
+  "category": "bug",
+  "severity": "S2",
+  "repro": [
+   "Library → New part → Draw symbol",
+   "Press T (Text tool active in toolbar)",
+   "Click anywhere on the canvas (mouse down + up)"
+  ],
+  "expected": "Floating 'Type text…' input appears at the click point with focus; Enter commits a text label.",
+  "actual": "MutationObserver log on click with T active: ['added Type text…', 'blur -> activeElement BODY', 'removed'] - the editor input mounts, loses focus to <body> from the same pointer event and onBlur commits the empty string, so it closes before any typing. Subsequent keystrokes go to the canvas shortcuts (typing 'Hello' switched tools). Same in the footprint editor (FootprintTextEditorOverlay): added -> blur -> removed. No text label can be created in either editor.",
+  "suggestedFix": "In text-tool onPointerDown call event.nativeEvent.preventDefault() (or open the editor on pointerup), and/or defer focus with requestAnimationFrame; ignore a blur that happens within the opening click. Same check for FootprintTextEditorOverlay.",
+  "dedupeKey": "library.symbol-editor:text-tool:blur-on-open",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced in the symbol editor and additionally in the footprint editor (q7 had only suggested checking it). Graphics count stays unchanged after click + typing.",
+   "evidence": [
+    "shots/vq7/dark/011-text-tool-click.png",
+    "shots/vq7/dark/035-fp-text-tool.png",
+    "symbol: [\"added Type text…\",\"blur to null active=BODY\",\"removed\"]",
+    "footprint: [\"added Type text…\",\"blur active=BODY\",\"removed\"]"
+   ]
+  }
+ },
+ {
+  "id": "Q7-009",
+  "knownRef": null,
+  "area": "library.symbol-editor",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/017-pin-dup-after-delete.png",
+    "shots/q7/dark/016-pin-dup-number.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/editor/tools/pin-tool.ts",
+    "line": 21,
+    "note": "pinCounter = state.pins.length + 1"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/editor/PinPropertyPanel.tsx",
+    "line": 101,
+    "note": "number onBlur commits without uniqueness check"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Pin tool auto-numbering reuses an existing number after a pin is deleted (duplicate pin numbers, no validation)",
+  "category": "data",
+  "severity": "S2",
+  "repro": [
+   "Draw symbol → P, click 4 times (pins 1,2,3,4)",
+   "Delete pin 2 (trash icon in Pins panel)",
+   "Press V then P, click once on the canvas"
+  ],
+  "expected": "New pin gets next free number (5); duplicate/empty pin numbers are flagged and block Next/Import.",
+  "actual": "Pins panel reads 1,3,4,4 — the new pin is numbered 4 again (counter = pins.length+1). Typing '1' into pin 2's # field is also accepted silently (two pin 1s, screenshot 016). Nothing warns and Next stays enabled; pin→pad mapping becomes ambiguous.",
+  "suggestedFix": "Compute next pin number as max(parseInt(numbers))+1 at each placement (pasteInternal already has this helper — reuse it); validate uniqueness/non-empty in PinPropertyPanel (inline danger text) and gate canProceed on it in ImportWizardPage.",
+  "dedupeKey": "library.symbol-editor:pin-numbering:duplicates",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced: P x4 -> pins 1,2,3,4; delete pin 2; V then P, click -> Pins panel '1,3,4,4'. Committed a part with those pins (QA-q7-vq7-drawn, id 4a1b93b7): detail API stores pins [1,3,4,4] - duplicates are persisted, backend does not reject them either. pin-tool.ts:21 pinCounter = pins.length + 1 while useSymbolEditorStore.ts:624 already has a max+1 helper for paste.",
+   "evidence": [
+    "shots/vq7/dark/012-pin-dup-after-delete.png",
+    "GET /components/4a1b93b7…/detail -> symbol.preview.pins [(1,1),(3,3),(4,4),(4,4)]"
+   ]
+  }
+ },
+ {
+  "id": "Q7-010",
+  "knownRef": null,
+  "area": "library.symbol-editor",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/018-pin4-selected.png",
+    "shots/q7/dark/022-duplicate.png",
+    "shots/q7/dark/031-drag-guides.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/editor/SelectionOverlay.tsx",
+    "line": 9,
+    "note": "SELECTION_COLOR = '#f472b6' // pink-400; pin = small diamond"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/footprint-editor/FootprintSelectionOverlay.tsx",
+    "line": 9,
+    "note": "same"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Selection highlight in symbol/footprint editors is raw pink-400 and a selected pin is almost invisible",
+  "category": "visual",
+  "severity": "S3",
+  "repro": [
+   "Draw symbol with a pin",
+   "Select tool V → click the pin's connection dot"
+  ],
+  "expected": "Selected pin clearly highlighted (whole pin line + dot) in the token selection colour (--selection), like the designer canvases.",
+  "actual": "Only a ~0.3 mm diamond outline in #f472b6 around the pin dot, hidden under the dot (61 px of #bdb8d5 in a 160×45 crop vs 0 when unselected). Rect/circle selection uses the same off-token pink box. The only reliable cue is the grey border on the pin row in the sidebar.",
+  "suggestedFix": "Use the canvas selection token from @openpcb/r3f-eda-canvas theme (same as schematic) and draw pins' full segment + dot in the highlight colour (thicker line) instead of a diamond.",
+  "dedupeKey": "library.symbol-editor:selection:pink-invisible",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced: selected rect outline is pink (1-px AA pixels #aa658c/#5f3c50 from #f472b6); selected pin shows only a tiny pink diamond hidden under the pin dot (10 pinkish px in a 280x60 crop). SELECTION_COLOR = '#f472b6' is defined in-repo (SelectionOverlay.tsx:9, FootprintSelectionOverlay.tsx:9), so this is not the package-owned canvas palette that PLAN §0 excludes. Overlaps the 'pink' item in Q7-023 but the near-invisible pin selection is a separate functional problem.",
+   "evidence": [
+    "shots/vq7/dark/010-select-after-esc.png",
+    "shots/vq7/dark/013-pin-selected-crop.png"
+   ]
+  }
+ },
+ {
+  "id": "Q7-011",
+  "knownRef": null,
+  "area": "library.symbol-editor",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/029-arc-start-end-bulge-preview.png",
+    "shots/q7/dark/030-arc-start-end-bulge-committed.png",
+    "shots/q7/dark/027-arc3-preview.png",
+    "shots/q7/dark/028-arc3-committed.png",
+    "shots/q7/dark/025-text-editor.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/editor/tools/arc-tool.ts",
+    "line": 26,
+    "note": "start → mid → end; preview arc3 rendered as polyline by PreviewGraphicOverlay"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/editor/PreviewGraphicOverlay.tsx",
+    "line": 1,
+    "note": "arc3 preview"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "M",
+  "status": "confirmed",
+  "title": "Arc tool: 2nd click is an on-arc point (undocumented), preview is a straight polyline, some inputs commit a degenerate stub",
+  "category": "bug",
+  "severity": "S3",
+  "repro": [
+   "Draw symbol → A",
+   "Click start, click end, move to the bulge point: preview shows a two-segment polyline",
+   "Click the bulge → a 270° major arc is committed (screenshots 029/030)",
+   "Variant: start (600,700) → (700,700) → (650,660) commits a short straight stub (024/025)"
+  ],
+  "expected": "Arc preview shows the actual arc; interaction follows KiCad (centre→start→end) or start→end→bulge with a status hint.",
+  "actual": "Preview never shows a curve (chevron start–mid–cursor); the committed shape differs from what was previewed; a mid point outside the start–end span yields a major arc or a stub.",
+  "suggestedFix": "Render arc3 previews through the same arc tessellation as committed graphics (PreviewGraphicOverlay); switch interaction to start→end→bulge (derive mid from bulge) and show a hint strip ('Click start · click end · move to set bulge').",
+  "dedupeKey": "library.symbol-editor:arc-tool:preview-semantics",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced: A, click (850,250), click (1000,250), move to (925,200): preview is a straight start->mid->cursor chevron; clicking commits a ~270 degree major arc because the 2nd click is treated as the on-arc MID point. PreviewGraphicOverlay.tsx:66-74 renders arc3 as a 2-segment polyline ('Approximate arc with line segments'). No hint explains the click order.",
+   "evidence": [
+    "shots/vq7/dark/015-016-arc-compare.png",
+    "shots/vq7/dark/015-arc-preview.png",
+    "shots/vq7/dark/016-arc-committed.png"
+   ]
+  }
+ },
+ {
+  "id": "Q7-012",
+  "knownRef": null,
+  "area": "library.symbol-editor",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/015-draw-rect-2pins.png",
+    "shots/q7/dark/016-pin-dup-number.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/editor/tools/pin-tool.ts",
+    "line": 46,
+    "note": "preview = circle radius 0.2"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/editor/use-editor-tool.ts",
+    "line": 19,
+    "note": "r → rect even while pin tool active"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Pin tool gives no orientation preview (dot only); default 180° makes left-side pins inside-out",
+  "category": "bug",
+  "severity": "S3",
+  "repro": [
+   "Draw symbol → R → draw a body rectangle",
+   "P → hover: only a small dot follows the cursor",
+   "Click on the rectangle's left edge"
+  ],
+  "expected": "Ghost of the full pin (line + name/number) in the orientation it will be placed; R/Space rotates the pin before placing (KiCad), or orientation inferred from the side of the body.",
+  "actual": "Pin line extends outward from the click with connection dot on the body outline and the pin name drawn outside ('VIN' left of the pin, numbers inside the body) — screenshot 016. Pressing R while placing switches to the Rectangle tool instead of rotating the pin; the only way is the 'Next pin defaults' select in the right panel.",
+  "suggestedFix": "Preview the pin as a ghost PreviewGraphic line of pinDefaults.lengthMm/rotation; in the pin tool treat R as 'rotate next pin' (update pinDefaults.rotationDeg) before tool-switch shortcuts.",
+  "dedupeKey": "library.symbol-editor:pin-tool:no-orientation-preview",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Code + visual: pin-tool.ts:53-57 preview is a 0.2 mm solid dot; default rotation 180 degrees puts the connection dot at the click point with the line extending left, so clicking on a body's left edge yields an inside-out pin (screenshot 012 shows pins with the dot on the click point). use-editor-tool.ts:101-111 only rotates on R when the Select tool has a selection; otherwise R maps to the Rect tool (TOOL_SHORTCUTS). S3 kept; the 'inside-out' part is a consequence of the missing orientation ghost rather than a wrong default.",
+   "evidence": [
+    "shots/vq7/dark/012-pin-dup-after-delete.png"
+   ]
+  }
+ },
+ {
+  "id": "Q7-013",
+  "knownRef": null,
+  "area": "library.footprint-editor",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/046-preset-sot23-B.png",
+    "shots/q7/dark/047-preset-SOT-23-5.png",
+    "shots/q7/dark/047-preset-SOT-223.png",
+    "shots/q7/dark/047-preset-SOT-323.png",
+    "shots/q7/light/021-preset-qfn16.png"
+   ],
+   "console": [
+    "node generateFootprint('qfn','QFN-16','nominal'): pad-1 center(-1.05,0.75) 0.9×0.25; pad-17 center(0,0) 1.7×1.7"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "node_modules/@openpcb/rendering-core/dist/ipc7351b/family-presets.js",
+    "line": 74,
+    "note": "pinCount: 4, // SOT-23 has 3 pins but uses 4-pin dual-row layout (1 empty) — the 'empty' pad is never removed; SOT-23-5 pinCount 6; SOT-223/SOT-323 pinCount 4"
+   },
+   {
+    "path": "node_modules/@openpcb/rendering-core/dist/ipc7351b/generate-footprint.js",
+    "line": 11,
+    "note": "QFN perimeter pad placement ignores EP clearance (no pad-to-EP gap check)"
+   }
+  ],
+  "fixScope": "shared-package",
+  "estimate": "M",
+  "status": "confirmed",
+  "title": "IPC preset generator emits wrong land patterns: every SOT size has the wrong pad count/layout and QFN exposed pad overlaps (shorts) all signal pads",
+  "category": "data",
+  "severity": "S1",
+  "repro": [
+   "Library → New part → (any symbol) → Next → Footprints → Preset",
+   "Package family SOT → Size 'SOT-23 — 3 pins, 0.95 mm pitch' → Density B → Generate footprint",
+   "Repeat for SOT-23-5, SOT-223, SOT-323",
+   "Also: Preset → QFN → QFN-16 → B → Generate footprint (Pads 17, EP covers the pin rows)"
+  ],
+  "expected": "SOT-23: 3 pads (1,2 on one side at 1.9 mm pitch, 3 centred opposite); SOT-23-5: 5 pads (3+2); SOT-223: 3 small pads + large tab (pad 4); SOT-323: 3 pads — per IPC-7351B / KiCad Package_TO_SOT_SMD.",
+  "actual": "Generated Footprint panel: SOT-23 'Pads 4' laid out 2×2 (pads 1,2 left at 0.95 mm, 3,4 right); SOT-23-5 'Pads 6' (SOT-23-6 layout); SOT-323 'Pads 4'; SOT-223 four equal 2×2 pads, no tab. The size card itself says '3 pins'. Committing yields a footprint whose pad positions/numbers do not match the real package — boards built with it are unassemblable, and nothing warns. QFN is also broken: QFN-16 (3×3, 0.5 pitch) → perimeter pads centred at ±1.05 mm, 0.9 mm long (inner edge 0.60 mm from centre) while EP pad 17 is 1.7×1.7 (edge 0.85 mm) — the EP overlaps every signal pad by 0.25 mm, i.e. all 16 pins shorted to the thermal pad; the preview's even-odd fill draws the overlaps as dark notches (light/021). Node dump of generateFootprint('qfn','QFN-16','nominal') and ('sot','SOT-23','nominal') confirms: SOT-23 pads 1(-1.2,0.475) 2(-1.2,-0.475) 3(1.2,-0.475) 4(1.2,0.475). Worth auditing the whole family table: SOIC-8 nominal yields pads centred at x=±3.0 mm, 1.2×0.46 mm, vs KiCad SOIC-8_3.9x4.9mm_P1.27mm ±2.475 mm, 1.95×0.6 mm — pad narrower than the JEDEC max lead width (0.51 mm) and no heel fillet; needs verification against IPC-7351B with /eda-standards.",
+  "suggestedFix": "In shared/rendering-core ipc7351b add a dedicated SOT generator (per-side pin lists + optional tab) or depopulate positions (SOT-23: keep 1,3 left→1,2 and centre right→3; SOT-23-5: drop pin 5 position; SOT-223: 3 pads + tab 4). Add golden tests against KiCad Package_TO_SOT_SMD; until fixed hide the SOT family in FootprintPresetPicker.",
+  "dedupeKey": "library.footprint-editor:preset:sot-wrong-land-pattern",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced in UI (SOT-23 card '3 pins' -> Generated Footprint 'Pads 4', 2x2 layout) and in node against the installed @openpcb/rendering-core 0.1.2: SOT-23 pads 1(-1.2,0.475) 2(-1.2,-0.475) 3(1.2,-0.475) 4(1.2,0.475) (pins 1-2 at 0.95 mm instead of 1.9 mm; extra pad 4); SOT-23-5 -> 6 pads; SOT-223 -> 4 equal pads, no tab; SOT-323 -> 4 pads. QFN-16: perimeter pads 0.90x0.25 centred at ±1.05 (inner edge 0.60 mm) vs EP 17 1.70x1.70 (edge 0.85) -> 0.25 mm overlap on all 16 pads; the light preview shows the overlap as merged copper. family-presets.js:74 comment admits the SOT-23 'empty' 4th position. SOIC-8 nominal pads at ±3.0, 1.2x0.46 (narrower than JEDEC max lead width). S1 kept: the generator persists electrically wrong/shorted land patterns into the library and on to PCB/Gerber with no warning.",
+   "evidence": [
+    "shots/vq7/dark/019-preset-sot23-B.png",
+    "shots/vq7/light/008-preset-qfn16.png",
+    "node generateFootprint('sot','SOT-23','nominal') -> 4 pads; ('qfn','QFN-16','nominal') -> pad1 (-1.05,0.75) 0.90x0.25, pad17 (0,0) 1.70x1.70"
+   ]
+  }
+ },
+ {
+  "id": "Q7-014",
+  "knownRef": null,
+  "area": "library.footprint-editor",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/048-preset-stale.png"
+   ],
+   "console": [
+    "eval: 'SOT-323 pads=4 tags=ipc-nominal pressed=SOT…,C (Least)High-density'"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/useImportWizardStore.ts",
+    "line": 247,
+    "note": "setPresetSize / setPresetDensity (248) don't clear generatedFootprint; only setPresetFamily (245) does"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/ImportWizardPage.tsx",
+    "line": 605,
+    "note": "canProceed ignores footprintSource==='preset' && !generatedFootprint"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Preset size/density changes don't regenerate: UI shows SOT-323 + 'C (Least)' pressed while the footprint to be saved is still SOT-23 nominal",
+  "category": "bug",
+  "severity": "S3",
+  "repro": [
+   "Footprints → Preset → SOT → SOT-323 → Generate footprint (tags show ipc-nominal)",
+   "Click density 'C (Least)'",
+   "Observe Generated Footprint panel/tags; click Next"
+  ],
+  "expected": "Changing family/size/density regenerates (or clears) the generated footprint so preview and saved data match the pressed options.",
+  "actual": "After generating SOT-23 B, clicking 'C (Least)' leaves tags 'ipc-nominal' and the preview unchanged; clicking the SOT-323 size card also leaves 'Generated Footprint: SOT-23, Pads 4'. Next stays enabled and would commit the stale footprint. Only a family change clears it (setPresetFamily). Next is also enabled in Preset mode before anything is generated (the part is then saved with no footprint).",
+  "suggestedFix": "Auto-generate on every family/size/density change (drop the Generate button) or clear generatedFootprint in setPresetDensity/setPresetSize; block Next (with hint) when footprintSource is preset/import/draw but nothing is generated/selected/drawn.",
+  "dedupeKey": "library.footprint-editor:preset:stale-density",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced and broadened: size change is stale too (q7 only reported density). The details panel does show the stale name, so S3 kept.",
+   "evidence": [
+    "shots/vq7/dark/020-preset-stale.png",
+    "eval: Generated 'SOT-23 … Pads 4 … ipc-nominal' with pressed=[SOT, C (Least)] and SOT-323 card selected, Next disabled=false"
+   ]
+  }
+ },
+ {
+  "id": "Q7-015",
+  "knownRef": null,
+  "area": "library.footprint-editor",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/051-footprint-2pads.png",
+    "shots/q7/dark/054-footprint-zoomed.png",
+    "shots/q7/dark/059-pad-drill-oversize.png",
+    "shots/q7/light/020-footprint-draw.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/footprint-editor/PadPropertyPanel.tsx",
+    "line": 110,
+    "note": "no positionMm inputs"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/footprint-editor/useFootprintEditorStore.ts",
+    "line": 236,
+    "note": "gridSizeMm: 0.635 fixed"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/footprint-editor/FootprintEditorToolbar.tsx",
+    "line": 1,
+    "note": "no fit/zoom controls"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "M",
+  "status": "confirmed",
+  "title": "Footprint editor cannot place pads precisely: no X/Y fields, fixed 0.635 mm grid, no zoom-to-fit",
+  "category": "bug",
+  "severity": "S2",
+  "repro": [
+   "Footprints → Draw → D (Pad) → click twice",
+   "Look at the Pads panel (right)",
+   "Try to put pads at a 0.5/0.65/0.8/1.0 mm pitch; zoom in, then try to get back to the pads"
+  ],
+  "expected": "Pad properties include Position X/Y (mm), grid size selectable (0.05/0.1/0.25/0.5/1.27 mm…), and a Fit/Zoom-to-fit control (toolbar + key) like the designer toolbars.",
+  "actual": "Pad row has only #, Shape, W, H, Rot, Layer, Drill — no position. Grid is hard-coded 0.635 mm (setGridSizeMm has no UI), so metric pitches are unreachable except by free placement. No Fit/zoom buttons in either editor toolbar; after zooming in the pads were off-screen with no way back except blind wheel-out (054). Drill 2 mm on a 1.6 mm pad is accepted (only an amber 'Annular ring −0.20mm' note) and the pad renders invisible. Default editor zoom (DEFAULT_PCB_ZOOM = 8 px/mm) renders a 1.6 mm pad as ~13 px, the pad number as a 1-px speck and the '1.60 × 1.60' dimension label ~5 px tall (unreadable) — every new footprint starts zoomed far out with no fit command.",
+  "suggestedFix": "Add X/Y (mm) inputs to PadRow (commitPatch positionMm), a grid-size select next to Grid in FootprintEditorToolbar/EditorToolbar, a 'Zoom to fit' button (+ F/Home key) using the canvas fit helper, and block drill ≥ min(W,H).",
+  "dedupeKey": "library.footprint-editor:pad-precision",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced: pad rows expose #, Shape, W, H, Rot, Layer, Drill only (no X/Y); setGridSizeMm exists in both editor stores but no UI calls it (grid fixed 0.635 mm footprint / symbol default); no fit/zoom control in either editor toolbar; 1.6 mm pads render ~13 px at DEFAULT_PCB_ZOOM. Drill 2 mm on a 1.6 mm pad: only an amber 'Annular ring -0.20mm < 0.15mm minimum' note, layer silently becomes '*.Cu (TH)' and the pad disappears from the canvas.",
+   "evidence": [
+    "shots/vq7/dark/022-footprint-2pads.png",
+    "shots/vq7/dark/036-pad-drill-oversize.png",
+    "shots/vq7/dark/037-1100-footprint-draw.png"
+   ]
+  }
+ },
+ {
+  "id": "Q7-016",
+  "knownRef": null,
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/072-model-garbage-step.png",
+    "shots/q7/dark/088-detail-scrolled.png",
+    "shots/q7/dark/071-model-minimal-step.png",
+    "shots/q7/dark/094-metadata-import-path.png",
+    "shots/q7/dark/095-detail-R0603.png"
+   ],
+   "console": [
+    "[LOG] **** ERR StepFile : Undefined Parsing: Line 2: Incorrect syntax: unexpected TYPE, expecting STEP    ****"
+   ],
+   "network": [
+    "GET /components/ab68b38d…/detail → footprint.model=null, modelStatus=null, modelConversion=null"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/three-d/model-conversion.ts",
+    "line": 69,
+    "note": "validateStepUploadFile checks only extension + size"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/ImportWizardPage.tsx",
+    "line": 496,
+    "note": "upload .catch sets modelConversionProgress('failed') AFTER store.reset()/onClose() at :536-539 -> leaks into the next wizard session"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/steps/ModelStep.tsx",
+    "line": 85,
+    "note": "(size/1024/1024).toFixed(2) MB"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Garbage STEP is accepted with a green 'will be converted' message and then fails silently after import",
+  "category": "error-handling",
+  "severity": "S2",
+  "repro": [
+   "Wizard → 3D Model → Select STEP model → garbage.step ('this is not a STEP file')",
+   "Observe green box 'This model will be converted and attached to the imported footprint.'",
+   "Finish Metadata → Import component",
+   "Open the new part's detail page"
+  ],
+  "expected": "Validate the STEP header (ISO-10303-21) on selection and show an error; if conversion fails after import, surface it (notice / detail page 3D card 'Conversion failed — re-upload').",
+  "actual": "Only extension/size are checked; wizard closes on success (store reset) so the conversion status footer is never shown; console logs '**** ERR StepFile : Undefined Parsing: Line 2: Incorrect syntax…'; detail page 3D card just shows 'Upload STEP' as if nothing was attempted. Size row shows '0.00 MB' for a 59-byte/746-byte file. Worse: the background failure lands in the NEXT wizard session — after the import closed the wizard, opening New part → Import file + minimal.step → Metadata already shows the footer 'OCCT could not read the STEP file' (jargon) before anything was converted (screenshot 094). minimal.step (header-valid but no solid geometry) also ends with no model: detail API footprint.model=null/modelStatus=null and the 3D card shows only 'Upload STEP' (095) — no failed state is persisted anywhere.",
+  "suggestedFix": "Sniff the first bytes for 'ISO-10303-21' in validateStepUploadFile; route conversion progress/failure into the Library NoticeViewport after the wizard closes and persist a failed status the detail 3D card renders; format sizes with B/KB/MB.",
+  "dedupeKey": "library.wizard:step:garbage-silent-fail",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced: garbage.step (59 B) selected -> 'Size 0.00 MB' + green 'This model will be converted…' box; Import succeeded, wizard closed with no notice; console '**** ERR StepFile : Undefined Parsing: Line 2 …'; detail API for QA-q7-vq7-drawn has no model/modelStatus fields at all. Opening New part again (dark and light) shows the stale footer 'OCCT could not read the STEP file' on Metadata before anything was selected. minimal.step (light, QA-q7-vq7-light-QFN16) likewise ended with no model and the same stale footer.",
+   "evidence": [
+    "shots/vq7/dark/024-model-garbage-step.png",
+    "shots/vq7/dark/029-next-session-stale-occt.png",
+    "shots/vq7/light/009-model-selected.png",
+    "console: [LOG] **** ERR StepFile : Undefined Parsing: Line 2: Incorrect syntax: unexpected TYPE, expecting STEP"
+   ]
+  }
+ },
+ {
+  "id": "Q7-017",
+  "knownRef": null,
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/082-after-import.png",
+    "shots/q7/dark/083-metadata-stale-error.png",
+    "shots/q7/dark/080-metadata.png"
+   ],
+   "network": [
+    "POST /api/modules/library/imports/drawn → 400 (validation)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/steps/MetadataStep.tsx",
+    "line": 201,
+    "note": "count-only 'Pin/pad count mismatch' warning"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/ImportWizardPage.tsx",
+    "line": 750,
+    "note": "commitError rendered on Metadata; never cleared by goToStep/goNext (useImportWizardStore.ts:254-260)"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "M",
+  "status": "confirmed",
+  "title": "Pin/pad mismatch is a soft warning in the wizard but a hard 400 on Import; no pin↔pad mapping UI; error names internal 'U'/'FP'",
+  "category": "error-handling",
+  "severity": "S2",
+  "repro": [
+   "Draw symbol with pins 1,3,4; draw footprint with pads 1,2",
+   "Metadata shows amber 'Pin/pad count mismatch: 3 pins vs 2 pads. Auto-mapping by number may leave some unconnected.'",
+   "Click Import component"
+  ],
+  "expected": "Mismatch detected by number (not count) at the Footprints step, blocking with a pin-map editor; the message names the user's symbol/footprint.",
+  "actual": "POST /imports/drawn → 400 'Symbol \"U\" has pin numbers not present in footprint \"FP\": [3, 4]. Available pad numbers: [1, 2].' shown in a red bottom strip. The warning promised the import would go through. After fixing the footprint and returning to Metadata, the stale red error is still shown until the next Import. The metadata step also shows '2 parser warnings / 2 footprint' left over from footprints imported earlier but no longer used (source switched to Draw).",
+  "suggestedFix": "Compute missing pin numbers vs pad numbers client-side (same rule as backend) and block Next on the Footprints step with a clear list + a pin-map table; clear commitError in goToStep; only show inspect warnings for the active footprintSource; use componentName/footprintName in backend messages.",
+  "dedupeKey": "library.wizard:metadata:pin-pad-mismatch",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced: pins 1,3,4,4 vs pads 1,2 -> amber 'Pin/pad count mismatch: 4 pins vs 2 pads. Auto-mapping by number may leave some unconnected.' then Import -> POST /imports/drawn 400 'Symbol \"U\" has pin numbers not present in footprint \"FP\": [3, 4, 4]. Available pad numbers: [1, 2].' After adding pads 3,4 and returning to Metadata the red error was still shown.",
+   "evidence": [
+    "shots/vq7/dark/025-metadata.png",
+    "shots/vq7/dark/026-import-400.png",
+    "shots/vq7/dark/027-metadata-stale-error.png",
+    "POST /api/modules/library/imports/drawn -> 400"
+   ]
+  }
+ },
+ {
+  "id": "Q7-018",
+  "knownRef": null,
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "console": [
+    "after Enter #1: 'BODY W=1.2'; after Enter #2: h2='3D STEP model'"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/ImportWizardPage.tsx",
+    "line": 644,
+    "note": "window Enter → handleNext"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/footprint-editor/PadPropertyPanel.tsx",
+    "line": 175,
+    "note": "Enter → blur"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "status": "confirmed",
+  "title": "Enter in a property field commits, a second Enter silently advances the wizard step",
+  "category": "keyboard",
+  "severity": "S3",
+  "repro": [
+   "Footprints → Draw → place a pad",
+   "Click the pad's W (mm) field, type 1.2, press Enter (field blurs, focus → body)",
+   "Press Enter again"
+  ],
+  "expected": "Enter commits the field and keeps focus in the panel; wizard advance only via explicit Next (or Cmd/Ctrl+Enter).",
+  "actual": "Second Enter jumps to '3D STEP model' step (eval: activeElement BODY → h2='3D STEP model'). Same with the Pin panel and after drawing on the canvas; a stray Enter while editing moves the user off the editor.",
+  "suggestedFix": "Bind wizard advance to Mod+Enter (or only when focus is on the wizard chrome), and keep focus on the input after Enter commit instead of blurring to body.",
+  "dedupeKey": "library.wizard:enter:advances-step",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced: pad W field, typed 1.2, Enter -> activeElement BODY (still on Footprints); second Enter -> h2 '3D STEP model'. ImportWizardPage.tsx:644 window Enter binding -> handleNext with ignoreEditableTarget only.",
+   "evidence": [
+    "eval after Enter #1: 'BODY step:Drawing Summary'; after Enter #2: 'BODY headings:3D STEP model'",
+    "shots/vq7/dark/023-after-second-enter.png"
+   ]
+  }
+ },
+ {
+  "id": "Q7-019",
+  "knownRef": "K06",
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/090-return-after-rail.png",
+    "shots/q7/dark/091-reopen-wizard-stale.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 184,
+    "note": "wizardOpen is local state, lost on unmount while zustand stores persist"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/ImportWizardPage.tsx",
+    "line": 567,
+    "note": "reset only in handleClose/success"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Leaving the wizard via the rail has no unsaved-work guard; 'New part' later silently resumes the stale draft",
+  "category": "bug",
+  "severity": "S3",
+  "repro": [
+   "Library → New part → Import file → simple_resistor.kicad_sym",
+   "Click Home in the rail (no prompt)",
+   "Click Library → the list is shown (wizard gone)",
+   "Click New part"
+  ],
+  "expected": "Rail navigation away from a dirty wizard asks to keep/discard (in-app dialog), or the wizard stays open when returning to Library; 'New part' starts clean or offers 'Resume draft'.",
+  "actual": "No confirm on rail navigation (spy confirm count unchanged). Returning to Library shows the list; New part reopens with the previous symbol (R, 2 pins) while the native file input reads 'No file chosen' next to the stale 'simple_resistor.kicad_sym' chip. A page reload would lose it (only beforeunload guard when a symbol file exists).",
+  "suggestedFix": "Lift wizardOpen into useImportWizardStore (so returning to Library restores the wizard) and register a navigation guard with the shell for dirty wizard state (in-app dialog); replace the native file input with a kit button + filename chip so the UI can't disagree.",
+  "dedupeKey": "library.wizard:rail-leave:no-guard-stale-resume",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced: wizard with simple_resistor imported -> rail Home (spy confirm unchanged 6->6) -> Library shows the list -> New part reopens directly on the Metadata step of the stale draft (with the stale OCCT footer from the previous import), native file input empty. Space.tsx:184 wizardOpen is local useState while the zustand stores persist.",
+   "evidence": [
+    "shots/vq7/dark/030-reopen-wizard-stale.png"
+   ]
+  }
+ },
+ {
+  "id": "Q7-020",
+  "knownRef": null,
+  "area": "library.detail",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/095-detail-R0603.png",
+    "shots/q7/dark/086-detail-new-part.png"
+   ],
+   "network": [
+    "GET /components?limit=100 → QA-q7-drawn-garbage3d padCount=4"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/backend/import/commit-kicad.ts",
+    "line": 220,
+    "note": "tags = dedupe([...userTags, ...footprintTags, …]) - heuristic footprint tags are always merged even when the user edited tags"
+   },
+   {
+    "path": "src/modules/library/frontend/components/LibraryTable.tsx",
+    "line": 225,
+    "note": "PINS column renders component.padCount"
+   }
+  ],
+  "fixScope": "backend-needed",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Imported part gets wrong auto tags / package from the footprint (R symbol tagged 'capacitor', package '1608' vs '0603')",
+  "category": "data",
+  "severity": "S3",
+  "repro": [
+   "New part → Import file simple_resistor.kicad_sym (R) → Footprints Import C_0603_1608Metric.kicad_mod",
+   "Metadata: type your own tag 'qa-q7' → Import",
+   "Open the part detail"
+  ],
+  "expected": "Only the user's tags when they edited Tags (tagsDirty), or clearly marked suggested tags; package shown consistently (0603 / 1608Metric).",
+  "actual": "Detail tags: qa-q7, capacitor, smd, 0603, 1608 — a resistor labelled 'capacitor' because the footprint name starts with C_. Wizard said Package code 0603; detail says Package 1608 and '1608 pin map'. Library table 'PINS' column shows padCount (drawn part: 4 'pins' for a 3-pin symbol).",
+  "suggestedFix": "Don't merge footprint-heuristic tags when the user edited tags (or show them as removable suggestions in Metadata); use one package label (imperial with metric in parentheses) across wizard/detail; rename the table column to 'Pads' or show symbol pin count.",
+  "dedupeKey": "library.detail:imported-part:wrong-auto-tags",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Verified via API on q7's part QA-q7-R0603-import (R symbol + C_0603 footprint): tags ['qa-q7','capacitor','smd','0603','1608'] - user tag plus footprint heuristics ('capacitor' from the C_ prefix). Code confirms unconditional merge. The 'Pins column shows padCount' sub-point is a Run-2 design decision (PLAN Run 2: 'mountType/padCount on the list DTO … Mount/Pins columns'), so only the tag/package parts are defects; S3 kept.",
+   "evidence": [
+    "GET /components/ab68b38d…/detail -> tags ['qa-q7','capacitor','smd','0603','1608'], footprint.packageCode {imperial:'0603', metric:'1608'}",
+    "shots/q7/dark/095-detail-R0603.png"
+   ]
+  }
+ },
+ {
+  "id": "Q7-021",
+  "knownRef": null,
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/062-fp-work-before-esc.png"
+   ],
+   "console": [
+    "after Esc: h1='Library', __qaDialogCalls.confirm=5 (unchanged)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/ImportWizardPage.tsx",
+    "line": 571,
+    "note": "hasWork = symbolFile || modelFile || drawn symbol graphics/pins"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/ImportWizardPage.tsx",
+    "line": 136,
+    "note": "readyForAdvancedSteps true for any draw-mode symbol"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "status": "confirmed",
+  "title": "Esc discards footprint/preset/metadata work without any confirm (dirty check only looks at symbol file, STEP file and drawn symbol)",
+  "category": "data",
+  "severity": "S2",
+  "repro": [
+   "Library → New part → Draw symbol (draw nothing) → Next (allowed with 0 pins)",
+   "Footprints → Draw → D → place 3 pads → V",
+   "Press Esc"
+  ],
+  "expected": "Any user work (drawn/imported/preset footprint, metadata edits) triggers the discard confirmation.",
+  "actual": "Wizard closes immediately back to the Library list, spy confirm count unchanged (5→5); the 3 pads (Drawing Summary 3/0) are gone — store reset. hasWork ignores footprintFiles, generatedFootprint, footprint editor pads/graphics, componentName/description/tags. Related: Next is enabled on the Symbol step with an empty drawn symbol even though the panel says 'Add at least one pin before proceeding.'",
+  "suggestedFix": "Compute hasWork from all stores: footprintFiles.length, generatedFootprint, useFootprintEditorStore pads/graphics/labels, metadata dirty flags; require ≥1 pin for draw-mode canProceed on the Symbol step.",
+  "dedupeKey": "library.wizard:close:dirty-check-incomplete",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced: Draw symbol (0 pins; Next enabled although the panel says 'Add at least one pin before proceeding.') -> Footprints Draw -> 3 pads -> Esc: wizard closed, spy confirm 7->7, pads gone. Also reproduced with two imported .kicad_mod files + idle Text tool: Esc closed the wizard silently. hasWork (ImportWizardPage.tsx:571) ignores footprintFiles, generatedFootprint, footprint editor state and metadata.",
+   "evidence": [
+    "shots/vq7/dark/031-fp-work-before-esc.png",
+    "after Esc: h1='Library', confirm count 7 (unchanged)"
+   ]
+  }
+ },
+ {
+  "id": "Q7-022",
+  "knownRef": null,
+  "area": "library.footprint-editor",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/042-footprint-import-cpelec.png",
+    "shots/q7/dark/041-footprint-import-c0603.png",
+    "shots/q7/light/021-preset-qfn16.png"
+   ],
+   "network": [
+    "GET /components/ab68b38d…/detail → footprint.preview.labels REF** at {x:0,y:-1.43} (F.SilkS)",
+    "GET /components/ccf704c1…/detail → drawn pad 1 centerMm {x:-7.62,y:22.225} (placed at top)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "node_modules/@openpcb/kicad-import/dist/build-preview-models.js",
+    "line": 121,
+    "note": "footprint geometry copied without y negation"
+   },
+   {
+    "path": "../CoreLibrary/footprints/package/sot-23.fp.json",
+    "line": 1,
+    "note": "normalized + raw pads keep KiCad y (pad 1 y=-0.95, REF** y=-2.4)"
+   },
+   {
+    "path": "src/modules/designer/backend/export/gerber/arcs.ts",
+    "line": 7,
+    "note": "'The writer emits y unflipped'"
+   }
+  ],
+  "fixScope": "shared-package",
+  "estimate": "M",
+  "status": "confirmed",
+  "title": "KiCad-derived footprints (wizard imports AND CoreLibrary) keep KiCad's Y-down coordinates in OpenPCB's Y-up world: previews, PCB and Gerber get a mirror-image land pattern (SOT-23 pad 1 bottom-left)",
+  "category": "data",
+  "severity": "S1",
+  "repro": [
+   "New part → Footprints → Import CP_Elec_6.3x5.4_Nichicon.kicad_mod (and C_0603_1608Metric.kicad_mod)",
+   "Compare with KiCad: REF** at (0,-4.35) and the '+' polarity mark at (-4.04,-1.85) are ABOVE the pads in KiCad (Y-down)",
+   "Draw a pad at the top of the Draw canvas and read its stored y"
+  ],
+  "expected": "One coordinate convention: .kicad_mod y is negated on import (as drawn/IPC-generated footprints are Y-up), so the preview matches KiCad and pin-1/polarity marks land on the correct side.",
+  "actual": "Wizard preview of CP_Elec_6.3x5.4_Nichicon shows REF** and the '+' mark BELOW the pads (KiCad file: REF** at (0,-4.35), '+' at y≈-1.85, i.e. above in KiCad's Y-down system); C_0603 REF** below / value above (KLC puts REF above, value below). The same raw coordinates reach the PCB: on QA-q7-rotate (stack B) the CoreLibrary SOT-23 placement (rotation 0, not mirrored, F.Cu) has pads 1(-0.9375,-0.95) 2(-0.9375,+0.95) 3(0.9375,0) and the PCB top view draws pad 1 bottom-left / pad 2 top-left (cursor readout Y -2.944 at pad 1 vs -1.042 at pad 2, world is Y-up). That order (1->2->3 clockwise) is the mirror of KiCad's SOT-23 (pad 1 top-left, counter-clockwise), which cannot be produced by rotation. The Gerber writer emits y unflipped (export/gerber/arcs.ts:7), so exported copper carries the mirrored pattern: for the NPN SOT-23 EBC, E and B pads are swapped on the fabricated board. Drawn and IPC-generated footprints use Y-up (QFN pin 1 at (-1.05,+0.75), counter-clockwise), so the two footprint populations disagree.",
+  "suggestedFix": "Pick one convention (Y-up, matching drawn/IPC footprints, board and Gerber) and negate y (and mirror arc sweep/rotation angles) for all .kicad_mod-derived geometry at import time in @openpcb/kicad-import and in the CoreLibrary pack step; add golden tests (CP_Elec '+' mark top-left, SOT-23 pad 1 top-left, SOIC-8 counter-clockwise numbering) and a data migration for already-imported footprints and placed designs. Needs PCB/export owner sign-off before release.",
+  "dedupeKey": "library.import:kicad-mod:y-axis-mirrored",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Confirmed in the wizard preview and extended to the PCB: q7 asked for PCB/Gerber verification, which I did on q7's own design QA-q7-rotate (CoreLibrary SOT-23, projection pads + on-canvas cursor readout) and in the Gerber writer source. Severity raised S2 -> S1: every asymmetric KiCad-derived footprint, including the default CoreLibrary, is placed and exported as its mirror image (wrong pinout on real boards).",
+   "evidence": [
+    "shots/vq7/dark/034-fp-import-cpelec.png",
+    "shots/vq7/dark/033-fp-import-c0603.png",
+    "shots/vq7/light/005-pcb-sot23-zoom.png",
+    "shots/vq7/light/008-preset-qfn16.png",
+    "GET /designs/f2a044b0…/projection/pcb -> Q1 rotationDeg 0, mirrored false, layer F.Cu, pads 1(-0.9375,-0.95) 2(-0.9375,0.95) 3(0.9375,0)",
+    "cursor readout: pad 2 (screen y 335) Y=-1.042, pad 1 (screen y 655) Y=-2.944"
+   ]
+  }
+ },
+ {
+  "id": "Q7-023",
+  "knownRef": "K45",
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/040-footprint-step.png",
+    "shots/q7/dark/050-footprint-draw-empty.png",
+    "shots/q7/light/020-footprint-draw.png",
+    "shots/q7/light/031-model-selected.png",
+    "shots/q7/dark/006-symbol-import-unsupported.png",
+    "shots/q7/light/060-layers-fcu-hidden.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/q7/dark/040-footprint-step.png",
+     "x": 380,
+     "y": 21,
+     "hex": "#00bc7d",
+     "nearestToken": "--status-success",
+     "deltaE": 17.3
+    },
+    {
+     "file": "shots/q7/dark/006-symbol-import-unsupported.png",
+     "x": 1165,
+     "y": 75,
+     "hex": "#461901",
+     "nearestToken": "--status-warning-soft@app",
+     "deltaE": 23.9
+    },
+    {
+     "file": "shots/q7/light/020-footprint-draw.png",
+     "x": 119,
+     "y": 357,
+     "hex": "#4098ff",
+     "nearestToken": "--status-info",
+     "deltaE": 31.5
+    },
+    {
+     "file": "shots/q7/dark/016-pin-dup-number.png",
+     "x": 285,
+     "y": 291,
+     "hex": "#99c8ff",
+     "nearestToken": "--status-info",
+     "deltaE": 12.2
+    }
+   ],
+   "census": "census/q7-wizard-footprint-draw-light-1440.json"
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/editor/EditorToolbar.tsx",
+    "line": 102,
+    "note": "rounded-lg border shadow-sm backdrop-blur pill; h-7 w-7 buttons"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/WizardProgressBar.tsx",
+    "line": 31,
+    "note": "bg-emerald-500 / bg-violet-600"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/footprint-editor/LayerPanel.tsx",
+    "line": 1,
+    "note": "native checkboxes"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/ImportWizardPage.tsx",
+    "line": 662,
+    "note": "icon-only back button without aria-label"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "L",
+  "status": "confirmed",
+  "title": "Part wizard and both editors are an unmigrated surface: raw slate/violet/emerald/amber/pink palette, native file inputs/selects/checkboxes, floating blurred toolbar unlike designer toolbars",
+  "category": "consistency",
+  "severity": "S3",
+  "repro": [
+   "Open Library → New part and walk all 4 steps in dark and light"
+  ],
+  "expected": "Kit components and tokens (Toolbar 30px docked, ToolbarButton 24px with aria-pressed + focus-visible outline, Checkbox, Select, status tokens, --selection) as in the designer.",
+  "actual": "Editor toolbars are floating pills with border+shadow-sm+backdrop-blur and 28×28 buttons, active state via violet (remapped grey) border, no aria-pressed/focus-visible (focus ring is the browser default #99c8ff). Progress bar 'done' = raw emerald-500 #00bc7d (ΔE 17 from --status-success); 'current' #3a3a40 barely differs from pending #1c1c1f in dark. Tool 'hint' rings/dots raw emerald. Warning boxes raw amber (#461901 dark bg ΔE 23.9 from --status-warning-soft; #fffbeb light), 3D 'will be converted' box raw emerald-50 #ecfdf5, card shadows on 3D/Metadata cards (light: #e1e1e2→#f6f6f7 gradient under the card). Native <input type=file> 'Choose File', native selects (Pin Type/Rotation, Pad Shape/Layer, 15px toolbar layer select), 9 native checkboxes in Layers (#4098ff/#99c8ff default accent, unlabelled). Canvas bg hard-coded #131313 (token --surface-canvas-well #08090a). Back arrow button has no accessible name.",
+  "suggestedFix": "Migrate import-wizard/* to src/shared/frontend/ui (Toolbar/ToolbarButton pressable, SegmentedControl for source toggles, Checkbox, kit Select, Button primary for Next/Import, status tokens for warnings/progress); dock the editor toolbar like the designer's instead of a floating pill; aria-label='Close wizard' on the back arrow.",
+  "dedupeKey": "library.wizard:visual:unmigrated-surface",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Re-probed: progress 'done' #00bc7d (dE 17.3 from --status-success, dark) / dE 28 light; amber warning bg #461901 (dE 23.9); light checkbox #4098ff (dE 31.5); 3D 'will be converted' box emerald-50 oklch(0.979 0.021 166); ModelStep sections carry shadow-sm; Next button shadow rgba(0,0,0,.1); 9 unlabelled native checkboxes + unnamed layer <select> in the snapshot; back-arrow button has no accessible name (census nameless=1). Note: PLAN §0 scoped the import wizard to 'token re-skin only' and §9/Run-2 follow-ups list its raw amber/red/emerald pass as outstanding, so this is a known documented gap, not a regression - still valid for release readiness; S3 kept.",
+   "evidence": [
+    "shots/vq7/dark/025-metadata.png",
+    "shots/vq7/dark/022-footprint-2pads.png",
+    "shots/vq7/light/007-footprint-draw.png",
+    "shots/vq7/light/009-model-selected.png",
+    "census/vq7-wizard-symbol-draw-dark-1440.json"
+   ]
+  }
+ },
+ {
+  "id": "Q7-024",
+  "knownRef": "K36",
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/light/010-symbol-draw.png",
+    "shots/q7/light/020-footprint-draw.png"
+   ],
+   "census": "census/q7-wizard-symbol-draw-light-1440.json"
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/editor/PinPropertyPanel.tsx",
+    "line": 96,
+    "note": "text-[9px] uppercase text-slate-400"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/footprint-editor/PadPropertyPanel.tsx",
+    "line": 1,
+    "note": "text-[9px] labels"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "status": "confirmed",
+  "title": "Wizard property panels use 9px uppercase labels (pin and pad rows) — 2.1–2.3:1 contrast in light",
+  "category": "visual",
+  "severity": "S3",
+  "repro": [
+   "Draw symbol → place 2 pins (Pins panel)",
+   "Footprints → Draw → place 2 pads (Pads panel)",
+   "Run DOM census"
+  ],
+  "expected": "≥10px text (kit 10–11px caps labels) with ≥4.5:1 contrast.",
+  "actual": "Census: 10 × 9px labels in the Pins panel (#, Name, Type, Rotation, Length), 14 × 9px in the Pads panel (#, Shape, W (mm), H (mm), Rot, Layer, Drill (mm)). Light theme contrast of these labels on white: 2.11 ('TYPE'), 2.29 ('NAME'); shortcut list text 3.48. 'Next pin defaults' uses 10px. Canvas dimension labels ~5px at default zoom.",
+  "suggestedFix": "Use the kit PropertyGrid / label style (text-2xs ≥10px, --text-caps colour) in PinPropertyPanel and PadPropertyPanel.",
+  "dedupeKey": "library.wizard:pin-pad-panels:9px-labels",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Census: 20 x 9px labels for 4 pins (#, Name, Type, Rotation, Length). Light: label colour rgb(168,168,173) on #f7f7f8 = 2.21:1 (2.37:1 on white).",
+   "evidence": [
+    "census/vq7-wizard-symbol-draw-dark-1440.json",
+    "shots/vq7/light/006-symbol-draw.png"
+   ]
+  }
+ },
+ {
+  "id": "Q7-025",
+  "knownRef": "K37",
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/015-draw-rect-2pins.png",
+    "shots/q7/dark/080-metadata.png"
+   ],
+   "census": "census/q7-wizard-symbol-draw-dark-1440.json"
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/editor/PinPropertyPanel.tsx",
+    "line": 150,
+    "note": "Type select flex-1 next to fixed 72px rotation + length"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/ImportWizardPage.tsx",
+    "line": 685,
+    "note": "w-44 action area, h-8 buttons"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Wizard input heights are 15/24/28/32/36 px (kit standard 22px); pin 'Type' select truncated to 'Pa'",
+  "category": "visual",
+  "severity": "S3",
+  "repro": [
+   "Draw symbol → place a pin; Footprints → Draw; Metadata",
+   "DOM census"
+  ],
+  "expected": "Controls 22px (sm 20px), selects wide enough to show their value.",
+  "actual": "Census heights: input 32 (Reference prefix, Footprint name, Component name), input/select 24 (pin/pad rows), select 28 (Next pin defaults), select 15 (toolbar layer), symbol select 36 (h-9), tag input 15. The pin row Type select is 43px wide and shows only 'Pa' for 'Passive' at the default 264px sidebar. Header Next/Import buttons 32px and 'Import component' wraps onto two lines inside the fixed w-44 action area.",
+  "suggestedFix": "Use kit Input/Select (h-[22px]) everywhere in import-wizard; give pin rows a 2-column property grid so Type gets full width; let the header action area size to content (drop w-44) and keep 'Import' label single-line.",
+  "dedupeKey": "library.wizard:controls:heights",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Census (symbol draw): input:32 x1, input:24 x12, select:24 x8, none at 22px; pin Type select shows 'Pa'; Metadata header 'Import component' wraps onto two lines in the w-44 action area.",
+   "evidence": [
+    "census/vq7-wizard-symbol-draw-dark-1440.json",
+    "shots/vq7/dark/012-pin-dup-after-delete.png",
+    "shots/vq7/dark/025-metadata.png"
+   ]
+  }
+ },
+ {
+  "id": "Q7-026",
+  "knownRef": null,
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/101-1100-symbol-draw.png",
+    "shots/q7/dark/102-1100-footprint-draw.png",
+    "shots/q7/light/070-1100-footprint-draw.png",
+    "shots/q7/dark/050-footprint-draw-empty.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/layout/CanvasStepLayout.tsx",
+    "line": 103,
+    "note": "topContent absolutely positioned max-w-[520px] but toolbar content wider; sidebars fixed 264/296 and 330/330 defaults"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Editors don't fit at 1100×720 (and footprint toolbar already overflows at 1440): floating toolbar covers the right panel",
+  "category": "visual",
+  "severity": "S3",
+  "repro": [
+   "Resize to 1100×720 (Electron minimum)",
+   "New part → Draw symbol; then Footprints → Draw"
+  ],
+  "expected": "Toolbar fits inside the canvas (wraps/overflow menu) or sidebars collapse; nothing overlaps panel content.",
+  "actual": "Symbol draw: canvas 350–800 px but toolbar spans 360–860, covering the 'Drawing Summary' heading ('ing Summary'). Footprint draw: canvas ~350 px wide (two 330 px sidebars), toolbar 425–1040 covers the 'PADS (2)' header and first row of the Pads panel. At 1440 the footprint toolbar already ends at x=1128 past the canvas edge (1105) into the right sidebar. The canvas at 350 px is barely usable.",
+  "suggestedFix": "Dock the toolbar in-flow at the top of the canvas column with overflow-x hidden + overflow menu (or wrap), and make the side panels collapsible / narrower below 1280px.",
+  "dedupeKey": "library.wizard:layout:toolbar-overflow-1100",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced at 1100x720: symbol draw toolbar 360-860 px over a canvas 349-799, covering the 'Drawing Summary' heading; footprint draw toolbar 426-1042 over a 415-765 canvas, covering the 'PADS (2)' header. At 1440 the footprint toolbar still ends past the canvas (~1119 vs 1108). Severity lowered S2 -> S3: the covered area is headings/borders, the pad and pin inputs stay reachable - a layout defect, not a broken feature.",
+   "evidence": [
+    "shots/vq7/dark/017-1100-symbol-draw.png",
+    "shots/vq7/dark/037-1100-footprint-draw.png",
+    "shots/vq7/dark/022-footprint-2pads.png"
+   ]
+  }
+ },
+ {
+  "id": "Q7-027",
+  "knownRef": null,
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/084-after-import-ok.png",
+    "shots/q7/light/050-after-import-list.png",
+    "shots/q7/light/051-search-q7.png"
+   ],
+   "console": [
+    "rows=60, contains QA-q7 = false; search 'QA-q7' → 3 rows"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/ImportWizardPage.tsx",
+    "line": 532,
+    "note": "onImported() only bumps refreshTick; onClose()"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 598,
+    "note": "onImported → setRefreshTick only"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Successful 'Import component' gives no feedback and doesn't reveal the new part (not even listed when the library has >60 parts)",
+  "category": "bug",
+  "severity": "S3",
+  "repro": [
+   "Complete the wizard → Import component",
+   "Observe the Library list after the wizard closes (light run: library has 70 parts)"
+  ],
+  "expected": "Success notice ('QA-q7-… added to Local library' with Open), the new part selected in the list/preview or its detail page opened.",
+  "actual": "Wizard just disappears; no notice (no role=status/alert), previous selection (74HC00) stays in the preview pane. With 70 parts the list shows '60 of 70' and the new 'QA-q7-light-QFN16-preset' is not among the 60 rows (only found via search) — users can think the import failed.",
+  "suggestedFix": "Pass result.componentId to onImported; in LibrarySpace set a success notice via NoticeViewport and setSelectedComponentId/setDetailComponentId(newId); ensure the list query includes it (depends on K07 paging).",
+  "dedupeKey": "library.wizard:import-success:no-feedback",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced: after 'Import component' the wizard closes with no [role=status]/[role=alert] notice; library header '67 parts', list '60 of 67' with 60 rows and the new QA-q7-vq7-drawn not among them (K07 limit=60 makes it invisible). Space.tsx:600 onImported only bumps refreshTick.",
+   "evidence": [
+    "shots/vq7/dark/028-after-import-ok.png",
+    "eval: '67 parts · 3 sources | rows=60 | hasNew=false | 60 of 67'"
+   ]
+  }
+ },
+ {
+  "id": "Q7-028",
+  "knownRef": null,
+  "area": "library.browse",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "console": [
+    "[363901ms] TypeError: Cannot read properties of null (reading 'addEventListener') at Object.connect (chunk-3VGA43YQ.js:10469) at onCreated (…:10693)",
+    "[363904ms] same"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "node_modules/@react-three/fiber/dist/react-three-fiber.esm.js",
+    "line": 86,
+    "note": "Canvas onCreated calls state.events.connect(divRef.current) - divRef is null when the Canvas unmounted before creation finished (fast wizard -> list/preview canvas swap)"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "R3F 'Cannot read properties of null (reading addEventListener)' thrown when the wizard closes after import",
+  "category": "console",
+  "severity": "S3",
+  "repro": [
+   "Light theme, Library → New part → Draw symbol → Footprints Preset QFN-16 → 3D minimal.step → Metadata name → Import component",
+   "Watch console"
+  ],
+  "expected": "No uncaught errors.",
+  "actual": "Two uncaught 'TypeError: Cannot read properties of null (reading 'addEventListener') at Object.connect … at onCreated' (R3F events.connect on a canvas whose DOM target is gone) at the moment the wizard unmounted and the list/preview canvases mounted (t=363.9 s). UI kept working.",
+  "suggestedFix": "Avoid mounting/unmounting preview EdaCanvases in the same tick as the wizard teardown (key the preview pane on a settled selection or defer with startTransition), and/or upgrade @react-three/fiber past the guard-less connect; wrap preview canvases in an error boundary (K01).",
+  "dedupeKey": "library.browse:r3f:addEventListener-null",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Intermittent. My own light import (drawn + QFN-16 preset + minimal.step) produced no error, but the identical TypeError stack (Object.connect <- onCreated) appears three times in stack-B console logs: q7's session at 84.9 s and 363.9 s and another stack-B session at 593.6 s. Stack shows R3F's internal Canvas onCreated, not EdaCanvas.js:64 as cited, so codeRef corrected. S3 kept (uncaught error, UI keeps working).",
+   "evidence": [
+    ".playwright-cli/console-2026-09-25T10-45-20-604Z.log (L6, L17)",
+    ".playwright-cli/console-2026-09-25T12-11-59-223Z.log (593600ms)"
+   ]
+  }
+ },
+ {
+  "id": "Q7-029",
+  "knownRef": null,
+  "area": "library.footprint-editor",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/042-footprint-import-cpelec.png",
+    "shots/q7/dark/044-footprint-variant2.png",
+    "shots/q7/dark/092-fp-import-empty-placeholder-copy.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/steps/FootprintStep.tsx",
+    "line": 1,
+    "note": "setFootprintFiles replaces array; variant label from packageCode/default"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Footprint import: a second import replaces the first, variant naming inconsistent, garbled placeholder copy",
+  "category": "copy",
+  "severity": "S3",
+  "repro": [
+   "Footprints → Import .kicad_mod → C_0603 → then Import .kicad_mod again → CP_Elec",
+   "Multi-select both files in one dialog",
+   "Look at Package Variants and the empty-state text"
+  ],
+  "expected": "'Add footprint…' appends variants (with remove ×); each variant labelled by its footprint name; clear empty-state sentence.",
+  "actual": "Second import silently drops C_0603 (only CP_Elec remains). With both selected at once, variants read 'default ★' (C_0603) and 'CP_Elec_6.3x5.4_Nichicon'; CP_Elec 'Package code: default'. Right panel before import: 'No footprint selected. Import will use visible placeholder No footprint yet.' (two sentences run together). Every KiCad footprint shows a warning '3D model reference … was not found in the import payload' without saying it is harmless or how to attach one.",
+  "suggestedFix": "Append on subsequent imports (dedupe by name) with per-file remove; label variants by footprint name with the package code as secondary text; fix the placeholder copy; soften the missing-3D warning to info with a pointer to the 3D Model step.",
+  "dedupeKey": "library.footprint-editor:import:replace-and-naming",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced: importing C_0603 then CP_Elec via two picks leaves only CP_Elec (setFootprintFiles replaces the array, FootprintStep.tsx:166); CP_Elec variant labelled 'default ★' with 'Package code default'; every KiCad footprint shows the amber '3D model reference … was not found in the import payload' warning. Placeholder copy at FootprintStep.tsx:363 reads 'No footprint selected. Import will use visible placeholder No footprint yet.' (bold span, no punctuation).",
+   "evidence": [
+    "shots/vq7/dark/033-fp-import-c0603.png",
+    "shots/vq7/dark/034-fp-import-cpelec.png"
+   ]
+  }
+ },
+ {
+  "id": "Q7-030",
+  "knownRef": null,
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/080-metadata.png",
+    "shots/q7/dark/086-detail-new-part.png"
+   ],
+   "network": [
+    "GET /components → QA-q7-drawn-garbage3d manufacturer=null, manufacturerPartNumber=null, subcategory=null"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/steps/MetadataStep.tsx",
+    "line": 1,
+    "note": "name/description/tags only"
+   }
+  ],
+  "fixScope": "backend-needed",
+  "estimate": "M",
+  "status": "confirmed",
+  "title": "Metadata step lacks core part fields (value, MPN, manufacturer, datasheet); reference prefix only editable for drawn symbols",
+  "category": "bug",
+  "severity": "S3",
+  "repro": [
+   "Complete Symbol (Import file) → … → Metadata"
+  ],
+  "expected": "Metadata offers Reference prefix, Value, Manufacturer, MPN, Datasheet URL, Family/category (the Library facets and BOM rely on these), plus the tags.",
+  "actual": "Only Component name, Description, Tags. Imported symbols can't change their reference prefix anywhere in the wizard (it's shown read-only in Symbol Details), and every wizard-created part lands with Family '—', MPN/manufacturer null (API) — it then shows as '—' in Library Family/Package columns and the BOM 'Missing MPN' filter.",
+  "suggestedFix": "Add Reference prefix (prefilled), Value, Manufacturer, MPN, Datasheet, Family select to MetadataStep and pass them through the three commit endpoints.",
+  "dedupeKey": "library.wizard:metadata:missing-fields",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Metadata step shows only Component name, Description, Tags; commit bodies pass only name/description/tags (ImportWizardPage.tsx:366-370); detail API of the new part: manufacturer/manufacturerPartNumber/subcategory/datasheetUrl all null. Feature gap rather than regression; S3 kept.",
+   "evidence": [
+    "shots/vq7/dark/025-metadata.png",
+    "GET /components/4a1b93b7…/detail -> manufacturer=null, manufacturerPartNumber=null, subcategory=null, datasheetUrl=null"
+   ]
+  }
+ },
+ {
+  "id": "Q7-031",
+  "knownRef": null,
+  "area": "library.symbol-editor",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/002-symbol-import-resistor.png",
+    "shots/q7/dark/041-footprint-import-c0603.png",
+    "shots/q7/dark/093-chip0603-B.png",
+    "shots/q7/dark/046-preset-sot23-B.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "node_modules/@openpcb/rendering-core/dist/symbol-preview-builder.js",
+    "line": 1,
+    "note": "pin label placement"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/steps/FootprintStep.tsx",
+    "line": 219,
+    "note": "fitToGeometryOnly excludes text"
+   }
+  ],
+  "fixScope": "shared-package",
+  "estimate": "M",
+  "status": "confirmed",
+  "title": "Symbol previews overprint pin names/numbers on the pin line and don't rotate labels for vertical pins; fit ignores text (REF** clipped/under toolbar)",
+  "category": "visual",
+  "severity": "S3",
+  "repro": [
+   "Import simple_resistor.kicad_sym → preview",
+   "Footprints → Import C_0603 or Preset → Generate → look at REF**"
+  ],
+  "expected": "KiCad-like pin text: number above the pin line, name inside the body offset by pin_names offset, rotated 90° for vertical pins; zoom-to-fit includes reference/value text with margin and clears the floating toolbar.",
+  "actual": "Resistor: pin name '1'/'2' drawn on top of the vertical pin line and the number drawn over the connection dot (two '1's stacked), unrotated. Footprint previews: 'REF**' 1 mm text rendered huge and clipped at the canvas edge (C_0603) or hidden behind the Grid toolbar (0603/SOT/QFN presets).",
+  "suggestedFix": "In rendering-core place pin numbers/names per KiCad rules (offset + rotation for 90/270° pins); in the wizard previews fit to geometry+text with top padding ≥ toolbar height.",
+  "dedupeKey": "library.wizard:preview:pin-text-overlap-fit",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced: simple_resistor preview draws pin name '1' on the vertical pin line plus number '1' over the connection dot (stacked, unrotated); C_0603 import preview renders 1 mm REF** huge and clipped at the canvas bottom; SOT-23 preset REF** sits under the Grid toolbar. FootprintStep passes fitToGeometryOnly (line 219).",
+   "evidence": [
+    "shots/vq7/dark/001-symbol-import-resistor.png",
+    "shots/vq7/dark/033-fp-import-c0603.png",
+    "shots/vq7/dark/019-preset-sot23-B.png"
+   ]
+  }
+ },
+ {
+  "id": "Q7-032",
+  "knownRef": null,
+  "area": "library.symbol-editor",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "console": [
+    "after Ctrl+Y pins unchanged '1,2,3,4'; Remove → activeElement BODY; Drill Tab → activeElement BODY"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "node_modules/@openpcb/r3f-eda-canvas/dist/utils/keyboard-shortcuts.js",
+    "line": 14,
+    "note": "isRedoShortcut only Mod+Shift+Z"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/editor/EditorToolbar.tsx",
+    "line": 136,
+    "note": "toggle buttons without aria-pressed"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Editor keyboard/a11y gaps: Ctrl+Y redo missing, toggles lack aria-pressed, focus dropped to <body> after Remove / field commit, Esc doesn't deselect",
+  "category": "keyboard",
+  "severity": "S4",
+  "repro": [
+   "Draw symbol: Cmd+Z then Ctrl+Y (no redo; Cmd+Shift+Z works)",
+   "Inspect Grid / Alignment guides / Show dimensions buttons (no aria-pressed)",
+   "3D step: click Remove (focus → BODY); Pad panel: edit Drill then Tab (focus → BODY)"
+  ],
+  "expected": "Same redo bindings as PCB (Ctrl+Y), toggle state exposed, focus kept on a sensible element.",
+  "actual": "Ctrl+Y does nothing; toggles expose state only by colour; focus lost after DOM re-render/unmount, so keyboard users restart from the top of the page.",
+  "suggestedFix": "Accept Ctrl+Y in isRedoShortcut; use kit ToolbarButton pressable; move focus to the Select button after Remove and keep focus in the row after commits.",
+  "dedupeKey": "library.symbol-editor:a11y-keyboard-gaps",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Partially confirmed: Ctrl+Y and Cmd+Y do nothing (Graphics 1 -> 1) while Cmd+Shift+Z redoes (1 -> 2); PCB supports Ctrl+Y (PcbCanvas.tsx:4941-4961). Grid / Alignment guides / Show dimensions buttons expose no pressed state in the a11y snapshot. 3D 'Remove' -> activeElement BODY. Refuted sub-point: Tab after editing Drill kept focus on the next INPUT in my run (not BODY); focus loss after Enter is covered by Q7-018. 'Esc doesn't deselect' duplicates Q7-006. S4 kept.",
+   "evidence": [
+    "Ctrl+Y: 'Graphics 1' unchanged; Meta+Shift+Z: 'Graphics 2'",
+    "Remove -> activeElement BODY; Drill + Tab -> activeElement INPUT"
+   ]
+  }
+ },
+ {
+  "id": "Q7-033",
+  "knownRef": null,
+  "area": "cross-cutting",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "console": [
+    "[WARNING] THREE.THREE.Clock: This module has been deprecated. Please use THREE.Timer instead.",
+    "[LOG] THREE.WebGLRenderer: Context Lost.",
+    "[ERROR] Failed to load resource: 404 … /favicon.ico"
+   ]
+  },
+  "codeRefs": [],
+  "fixScope": "shared-package",
+  "estimate": "XS",
+  "status": "confirmed",
+  "title": "Console noise: THREE.Clock deprecation + 'WebGLRenderer: Context Lost' logged on every preview canvas mount/unmount; favicon 404",
+  "category": "console",
+  "severity": "S4",
+  "repro": [
+   "Open Library, open/close the wizard, switch wizard steps"
+  ],
+  "expected": "Clean console.",
+  "actual": "Each canvas mount logs '[WARNING] THREE.THREE.Clock: This module has been deprecated. Please use THREE.Timer instead.' (×2) and unmount logs 'THREE.WebGLRenderer: Context Lost.' (×2) — 42 warnings in one wizard session; '/favicon.ico 404'.",
+  "suggestedFix": "Upgrade @react-three/fiber (uses THREE.Timer) or silence via THREE.Clock shim; ship a favicon in src/core/frontend/public.",
+  "dedupeKey": "cross-cutting:console:three-clock-context-lost",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "This vq7-light session alone logged 15 'THREE.THREE.Clock: This module has been deprecated' warnings and 13 'THREE.WebGLRenderer: Context Lost.' logs across wizard/library canvas mounts; favicon.ico 404 on load (also recorded as Q1-025 by another agent). S4.",
+   "evidence": [
+    "console: [WARNING] THREE.THREE.Clock … x15; [LOG] THREE.WebGLRenderer: Context Lost. x13; [ERROR] 404 /favicon.ico"
+   ]
+  }
+ },
+ {
+  "id": "Q7-034",
+  "knownRef": "K28",
+  "area": "designer.schematic",
+  "stack": "B",
+  "designId": "QA-q7-rotate (stack B)",
+  "themes": [
+   "light",
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/light/080-schematic-npn-0.png",
+    "shots/q7/light/081-schematic-npn-R.png",
+    "shots/q7/dark/018-pin4-selected.png",
+    "shots/q7/dark/019-pin4-after-R.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/SchematicCanvas.tsx",
+    "line": 2657,
+    "note": "label 'Rotate 90° clockwise' for rotationDeg + 90 (also :2815)"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/editor/EditorToolbar.tsx",
+    "line": 112,
+    "note": "'Rotate selection 90° CCW (R)' for rotateSelection(90)"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "status": "confirmed",
+  "title": "Schematic labels R as 'Rotate 90° clockwise' but R rotates counter-clockwise (symbol/footprint editors correctly say CCW)",
+  "category": "copy",
+  "severity": "S3",
+  "repro": [
+   "Stack B: new design QA-q7-rotate → Place component → NPN Transistor SOT-23 EBC (base pin 2 on the LEFT)",
+   "Select Q1, press R",
+   "Compare: Library → New part → Draw symbol → place pin (180°, pointing left) → select → R"
+  ],
+  "expected": "One direction convention with matching labels everywhere (KiCad: R = rotate CCW).",
+  "actual": "Schematic: base pin moves left → bottom and collector top → left (9 o'clock → 6 o'clock = counter-clockwise), inspector Rotation 0 → 90, yet the part context menu reads 'Rotate 90° clockwise (R)' / 'counter-clockwise (Shift+R)'. Symbol editor: R turns a left-pointing pin (180°) to pointing down (270°) — also CCW — and its toolbar says 'Rotate selection 90° CCW (R)', 'CW (Shift+R)'. Both rotate +90°, only the schematic label is wrong.",
+  "suggestedFix": "Change SchematicCanvas labels (2657/2680/2815/2837) to 'Rotate 90° counter-clockwise (R)' / 'clockwise (Shift+R)' (or flip the math if CW is intended — then flip the editors too).",
+  "dedupeKey": "designer.schematic:rotate:label-direction",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Reproduced on q7's design QA-q7-rotate (light): Q1 at rotation 90 (base pin bottom, C left) -> R -> rotation 180 with base pin at the right and C at the bottom (6->3 and 9->6 o'clock = counter-clockwise), while the part context menu reads 'Rotate 90° clockwise R' / 'counter-clockwise Shift+R' (SchematicCanvas.tsx:2657/2680/2815/2837 label +90 as clockwise). Symbol editor: selected 180° pin -> R -> 270° (pointing down) = CCW, labelled 'Rotate selection 90° CCW (R)' - consistent. Rotation restored to 90 with Shift+R afterwards.",
+   "evidence": [
+    "shots/vq7/light/001-rotate-design.png",
+    "shots/vq7/light/002-rotate-after-R.png",
+    "shots/vq7/light/003-rotate-ctx-menu.png",
+    "shots/vq7/dark/014-pin-after-R-crop.png"
+   ]
+  }
+ },
+ {
+  "id": "Q7-035",
+  "knownRef": null,
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/light/031-model-selected.png",
+    "shots/q7/dark/070-model-step-empty.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/steps/ModelStep.tsx",
+    "line": 1,
+    "note": "file picker only"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "L",
+  "status": "confirmed",
+  "title": "3D Model step has no 3D preview, placement or orientation controls — model is attached blind",
+  "category": "bug",
+  "severity": "S3",
+  "repro": [
+   "Wizard → 3D Model → Select STEP model → minimal.step"
+  ],
+  "expected": "Preview of the STEP body over the footprint with offset/rotation/scale (KiCad 3D model settings) before committing.",
+  "actual": "Only File name + Size ('0.00 MB') and a green 'will be converted' note; conversion happens after import, so orientation/offset errors can't be seen until the detail page or the Designer 3D view.",
+  "suggestedFix": "Convert client-side on selection (occt-import-js worker already exists) and render a small R3F preview with the footprint outline plus offset/rotation inputs saved into the model metadata.",
+  "dedupeKey": "library.wizard:3d-step:no-preview",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "3D step shows only File/Size ('0.00 MB') and the green 'will be converted' note; no preview, offset, rotation or scale controls (ModelStep.tsx). Conversion happens only after import, and failures are silent (Q7-016). Feature gap, S3 kept because a mis-oriented user STEP has no in-wizard correction path.",
+   "evidence": [
+    "shots/vq7/light/009-model-selected.png"
+   ]
+  }
+ },
+ {
+  "id": "Q7-036",
+  "knownRef": null,
+  "area": "library.wizard",
+  "stack": "B",
+  "designId": null,
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q7/dark/015-draw-rect-2pins.png",
+    "shots/q7/dark/051-footprint-2pads.png",
+    "shots/q7/dark/045-footprint-preset.png",
+    "shots/q7/dark/040-footprint-step.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/import-wizard/steps/FootprintStep.tsx",
+    "line": 1,
+    "note": "CanvasStepLayout default widths 280/320 → 330"
+   },
+   {
+    "path": "src/modules/library/frontend/import-wizard/layout/CanvasStepLayout.tsx",
+    "line": 103,
+    "note": "topContent w-full max-w-[520px] + inline-flex mx-auto → not centred"
+   }
+  ],
+  "fixScope": "frontend",
+  "estimate": "S",
+  "status": "confirmed",
+  "title": "Wizard steps are laid out inconsistently (section header styles, sidebar widths, which side holds the pin/pad list, toolbar off-centre)",
+  "category": "consistency",
+  "severity": "S4",
+  "repro": [
+   "Walk Symbol (Import/Draw) and Footprints (Import/Preset/Draw) steps"
+  ],
+  "expected": "Same panel grammar on both canvas steps (kit PanelSectionHeader caps, same sidebar widths, element list on the same side, centred toolbar).",
+  "actual": "Symbol step sections use tracked caps ('IMPORT', 'PROPERTIES', 'PINS (2)'), Footprint Import/Preset use title-case h2 ('Import Footprints', 'Package Family', 'Size', 'Density Level') while Footprint Draw uses caps again; sidebars 264/296 px vs 330/330 px; pins list is in the LEFT sidebar, pads list in the RIGHT; in import mode the small Grid/Zoom toolbar sits left of centre (x 496–663 on a canvas centred at 745; 512–700 vs 760). 'Zoom: scroll wheel' is the only navigation hint (no pan hint).",
+  "suggestedFix": "Use PanelSectionHeader everywhere, one width pair for both steps, put the element list (pins/pads) on the same side, and centre the toolbar with flex justify-center.",
+  "dedupeKey": "library.wizard:layout:inconsistent-steps",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq7",
+   "reason": "Screenshots confirm: symbol step caps section labels (IMPORT, PROPERTIES, PINS) vs footprint Import/Preset title-case h2 ('Import Footprints', 'Package Family', 'Size', 'Density Level'); left sidebar ~265 px (symbol) vs ~330 px (footprint); pins list in the left sidebar, pads list in the right; import-mode toolbar at x 496-663 on a canvas centred at ~742. S4.",
+   "evidence": [
+    "shots/vq7/dark/012-pin-dup-after-delete.png",
+    "shots/vq7/dark/022-footprint-2pads.png",
+    "shots/vq7/dark/020-preset-stale.png",
+    "shots/vq7/dark/004-symbol-import-garbage.png"
+   ]
+  }
+ }
+]

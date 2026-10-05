@@ -1,0 +1,718 @@
+{
+  "summary": "Fix wave A: kit+tokens foundation (F0a) in parallel with designer backend (DB) and library backend (LB); each implement -> adversarial review -> fix loop",
+  "agentCount": 12,
+  "logs": [
+    "F0a: review round 1 requested changes (3 blocking)",
+    "DB: review round 1 requested changes (1 blocking)",
+    "F0a: review round 2 requested changes (3 blocking)"
+  ],
+  "result": [
+    {
+      "owner": "F0a",
+      "verdict": "changes",
+      "blocking": 1,
+      "files": [
+        "src/core/frontend/src/index.css",
+        "src/core/frontend/src/components/ui/dialog.tsx",
+        "src/core/frontend/src/ui-discipline.test.ts",
+        "src/core/frontend/src/ui-discipline.baseline.json",
+        "docs/design/design-tokens.md",
+        "docs/qa/2026-09-ui-qa/fix/contracts/F0a.md",
+        "src/shared/frontend/http/problem.ts",
+        "src/shared/frontend/http/problem.test.ts",
+        "src/shared/frontend/keyboard/shortcut-guard.ts",
+        "src/shared/frontend/keyboard/shortcut-guard.test.ts",
+        "src/shared/frontend/keyboard/use-global-shortcut.ts",
+        "src/shared/frontend/ui/index.ts",
+        "src/shared/frontend/ui/badge.tsx",
+        "src/shared/frontend/ui/banner.tsx",
+        "src/shared/frontend/ui/dialog.tsx",
+        "src/shared/frontend/ui/dialog-host.tsx",
+        "src/shared/frontend/ui/dialog-host-store.ts",
+        "src/shared/frontend/ui/dialog-host-store.test.ts",
+        "src/shared/frontend/ui/empty-state.tsx",
+        "src/shared/frontend/ui/error-boundary.tsx",
+        "src/shared/frontend/ui/field.tsx",
+        "src/shared/frontend/ui/focus.ts",
+        "src/shared/frontend/ui/input.tsx",
+        "src/shared/frontend/ui/kbd.tsx",
+        "src/shared/frontend/ui/kit-a11y.test.tsx",
+        "src/shared/frontend/ui/number-input.tsx",
+        "src/shared/frontend/ui/number-value.ts",
+        "src/shared/frontend/ui/number-value.test.ts",
+        "src/shared/frontend/ui/radio-group.tsx",
+        "src/shared/frontend/ui/roving.ts",
+        "src/shared/frontend/ui/roving.test.ts",
+        "src/shared/frontend/ui/select.tsx",
+        "src/shared/frontend/ui/shortcut.ts",
+        "src/shared/frontend/ui/shortcut.test.ts",
+        "src/shared/frontend/ui/spinner.tsx",
+        "src/shared/frontend/ui/switch.tsx",
+        "src/shared/frontend/ui/toast.tsx",
+        "src/shared/frontend/ui/toast-store.ts",
+        "src/shared/frontend/ui/toast-store.test.ts",
+        "src/shared/frontend/ui/tokens-css.test.ts",
+        "src/shared/frontend/ui/button.tsx",
+        "src/shared/frontend/ui/canvas-zoom-cluster.tsx",
+        "src/shared/frontend/ui/checkbox.tsx",
+        "src/shared/frontend/ui/chip.tsx",
+        "src/shared/frontend/ui/context-menu.tsx",
+        "src/shared/frontend/ui/data-table.tsx",
+        "src/shared/frontend/ui/dock-tabs.tsx",
+        "src/shared/frontend/ui/dropdown-menu.tsx",
+        "src/shared/frontend/ui/icon-button.tsx",
+        "src/shared/frontend/ui/panel-section-header.tsx",
+        "src/shared/frontend/ui/search-field.tsx",
+        "src/shared/frontend/ui/segmented-control.tsx",
+        "src/shared/frontend/ui/status-bar.tsx",
+        "src/shared/frontend/ui/tabs.tsx",
+        "src/shared/frontend/ui/textarea.tsx",
+        "src/shared/frontend/ui/toolbar.tsx",
+        "src/shared/frontend/ui/tooltip.tsx"
+      ],
+      "done": [
+        "T-002",
+        "T-004",
+        "T-175",
+        "T-284"
+      ],
+      "partial": [
+        {
+          "tid": "T-006",
+          "why": "F0a side done: problem.ts (describeError/isRetryableError/apiErrorFromResponse/CLOUD_UNREACHABLE_TYPE) + kit Banner/toast with actions. No repro site uses it yet, and none of those sites is in another owner's brief. They are handed off via crossOwner to L1, D3b, D1 (x2), D4, A1, DB, LB and W4."
+        },
+        {
+          "tid": "T-007",
+          "why": "Kit controls get FOCUS_RING, and a global :focus-visible base rule replaces the UA ring. Non-kit controls in other owners' files still set outline-none with no ring; the global rule cannot reach them: C1 Home (HomeSidebar/DesignCard), L1, D4, D3a, C2, A2. Handed off via crossOwner."
+        },
+        {
+          "tid": "T-008",
+          "why": "Only the shared .row-actions class (index.css) is F0a's. OutlineRow.tsx:159 (D2, the root cause), DesignerDrcView.tsx:430 (D3b) and DesignTabs.tsx:267 (D1) are in no brief, so they go via crossOwner. A1 T-350 and K1 T-376 cover their own sites."
+        },
+        {
+          "tid": "T-014",
+          "why": "The kit Dialog recipe, confirmDialog/promptDialog/DialogHost and the dialog.tsx shim are done. Nothing mounts DialogHost, so the promises never settle until F0b mounts it (crossOwner). The power-port picker (LabelPicker) and Cmd+K palette (D2) are in no D2 entry (crossOwner). Rules/Export (D3b T-150) and Home delete (C1 T-030) are covered."
+        },
+        {
+          "tid": "T-016",
+          "why": "--radius: 2px flattens every bare `rounded` (tested). Assistant bubbles and pills are covered by T-348 (A1/A2/A3). The Settings rounded-full non-status pills (LibrariesPanel:384/:475, AssistantPanel DEFAULT/LOCAL Pill) are in no brief and go to C2 via crossOwner."
+        },
+        {
+          "tid": "T-017",
+          "why": "Badge/Banner on status tokens are done. C2 T-062/T-075 cover the notes, read-only and Caution. Still uncovered and handed off via crossOwner: the 'Up to date' pill (C2), source-badge unification (L1; T-266 covers only the size) and the BOM warning note (D4)."
+        },
+        {
+          "tid": "T-018",
+          "why": "DockTabs now has roving tabindex, arrow keys and idPrefix/aria-controls. D1 T-087 covers the design tabs and the view tablist name. Uncovered: the PCB layer strip and Layers panel roving (D3a), and DesignerRightDock wiring idPrefix/dockTabPanelProps (D1). Both handed off via crossOwner."
+        },
+        {
+          "tid": "T-022",
+          "why": "Kit EmptyState is done. C1 T-047, L1 T-259, D1 T-085 and A1 T-336 cover their sites. OutlineEmptyState (D2) and PageEditor 'No page selected' (K1) are uncovered and go via crossOwner."
+        },
+        {
+          "tid": "T-264",
+          "why": "The @source for @openpcb/r3f-eda-canvas/dist in index.css makes the package overlay classes generate. The LibraryPreviewPane bare 'Internal error' with no Retry is in no L1 entry (crossOwner). The package itself should drop its slate classes and the #131313 default; that is shared-repo work with no owner (follow-up)."
+        }
+      ],
+      "skipped": [],
+      "crossOwner": [
+        {
+          "to": "F0b",
+          "tid": "T-014/T-004",
+          "need": "Mount <DialogHost/> and <Toaster/> once near the app root (App.tsx/AppShell.tsx, next to the T-003 ErrorBoundary). dialog-host-store only queues, so without the host every confirmDialog/promptDialog promise never settles (only a dev warning shows)."
+        },
+        {
+          "to": "L1",
+          "tid": "T-006",
+          "need": "CloudLibrarySyncButton.tsx:58: keep the button label. `throw await apiErrorFromResponse(res)` and show describeError(err, 'sync the library', { service: 'OpenPCB Cloud' }) in a tooltip or notice, with Retry when isRetryableError(err)."
+        },
+        {
+          "to": "D3b",
+          "tid": "T-006",
+          "need": "PcbAutorouteDialog.tsx:137/304 and PcbAutoplaceDialog.tsx:193: the error phase renders <Banner tone='danger'>{describeError(e, 'auto-route the board', { service: 'OpenPCB Cloud' })}</Banner> plus a Retry (re-submit) when isRetryableError(e). Auto-place also needs a footer."
+        },
+        {
+          "to": "D1",
+          "tid": "T-006",
+          "need": "CloudSyncBadge.tsx:83: send the toast text through describeError(err, 'sync to cloud', { service: 'OpenPCB Cloud' }). T-388 covers the badge state, not this toast."
+        },
+        {
+          "to": "D1",
+          "tid": "T-006",
+          "need": "api.ts:88-96, 191, 671-679, 735: `throw await apiErrorFromResponse(res)` instead of new Error(problem.detail ?? 'HTTP n'), so status, problem type and code reach describeError and isRetryableError. This is needed for the Retry decision."
+        },
+        {
+          "to": "D4",
+          "tid": "T-006",
+          "need": "CloudDesignBrowser.tsx:70/92/215 ('Failed to fetch'): setError/notify with describeError(err, 'load cloud designs', { service: 'OpenPCB Cloud' }) plus Retry."
+        },
+        {
+          "to": "A1",
+          "tid": "T-006",
+          "need": "Assistant Space.tsx:487 'Assistant paused before completing.' is shown for a FAILED run. Say it failed and give the reason via describeError(…, { service: 'OpenPCB Cloud' })."
+        },
+        {
+          "to": "DB",
+          "tid": "T-006",
+          "need": "backend/autoroute/client.ts:34/48/61 and autoplace/client.ts:34/48/61: catch fetch connect failures and timeouts and throw new AppError(<safe detail>, 503, \"Can't reach OpenPCB Cloud\", 'https://openpcb.dev/problems/cloud-unreachable'), with AppError from src/core/contracts/errors. Modules cannot import the brief's src/core/backend/http/cloud-fetch.ts."
+        },
+        {
+          "to": "LB",
+          "tid": "T-006",
+          "need": "library/backend/cloud-sync.ts:66/110/167/182/192: apply the same 503 cloud-unreachable AppError mapping to fetch rejections, so this path no longer returns a generic 500."
+        },
+        {
+          "to": "W4",
+          "tid": "T-006",
+          "need": "assistant/backend/cloud/cloud-context.ts:50 is unowned. Apply the same 503 cloud-unreachable mapping instead of embedding raw 'Unable to connect…' in the message. If a shared cloud-fetch helper is wanted, it must live in src/core/contracts (importable by modules), not src/core/backend/http."
+        },
+        {
+          "to": "D2",
+          "tid": "T-008",
+          "need": "OutlineRow.tsx:159: replace `opacity-0 … group-hover:opacity-100` with the `row-actions` class, with the row as the `group`, so Actions shows on keyboard focus."
+        },
+        {
+          "to": "D3b",
+          "tid": "T-008",
+          "need": "DesignerDrcView.tsx:430 'Waive (accept)': replace opacity-0 group-hover:opacity-100 with `row-actions` inside the violation row's `group`."
+        },
+        {
+          "to": "D1",
+          "tid": "T-008",
+          "need": "DesignTabs.tsx:267: the inactive-tab close X `opacity-0 group-hover:opacity-80` becomes `row-actions`, with the tab as the `group`."
+        },
+        {
+          "to": "C1",
+          "tid": "T-007",
+          "need": "HomeSidebar.tsx:58 and :91, DesignCard.tsx:114 and :180: replace outline-none with FOCUS_RING (@shared/frontend/ui). The global :focus-visible rule cannot reach elements that set outline-none."
+        },
+        {
+          "to": "L1",
+          "tid": "T-007",
+          "need": "Add FOCUS_RING at: LibraryCard.tsx:72 (focus-visible:border-selection on a borderless button is invisible), FacetSidebar.tsx:186, ActiveFilterChips.tsx:69/82, TagChip.tsx:46/66, TagFilterChips.tsx:61, CloudLibrarySyncButton.tsx:110/123, PreviewModal.tsx:46, ComponentDetailPage.tsx:550/612, ThreeDComponentPreview.tsx:147 (FOCUS_RING_OUTSET)."
+        },
+        {
+          "to": "D4",
+          "tid": "T-007",
+          "need": "DesignerBomView.tsx:355/371/655/662: buttons with outline-none get FOCUS_RING. DesignerBomView.tsx:451 and Board3DOverlay.tsx:222: native selects become the kit Select."
+        },
+        {
+          "to": "D3a",
+          "tid": "T-007",
+          "need": "PcbTopToolbar.tsx:67 (select) becomes the kit Select. PcbTopToolbar.tsx:491/596 and PcbLayerTabStrip.tsx:97 (outline-none buttons) get FOCUS_RING."
+        },
+        {
+          "to": "C2",
+          "tid": "T-007",
+          "need": "AssistantPanel.tsx:951/974: the hand-rolled input/select with outline-none and no ring become the kit Input/Select (FIELD_FOCUS)."
+        },
+        {
+          "to": "A2",
+          "tid": "T-007",
+          "need": "ModelSelectorPill.tsx:144/181/193/205: the hand-rolled fields with outline-none become the kit Input/Select."
+        },
+        {
+          "to": "D2",
+          "tid": "T-014",
+          "need": "LabelPicker.tsx:40 (power-port picker) and ComponentCommandPalette.tsx:288 move to the kit Dialog/DialogContent recipe (surface-panel, shadow-dialog) with focus trap and focus returned to the trigger. D3b T-150 names these files but does not own them."
+        },
+        {
+          "to": "C2",
+          "tid": "T-016/T-017",
+          "need": "LibrariesPanel.tsx:384 core/user rounded-full pill becomes <Badge tone='outline' caps>. LibrariesPanel.tsx:475 'Up to date' (text-selection rounded-full) becomes <Badge tone='success'>. AssistantPanel.tsx:586/591 DEFAULT/LOCAL Pill (non-status) becomes Badge. No rounded-full outside status dots."
+        },
+        {
+          "to": "L1",
+          "tid": "T-017",
+          "need": "Use one source badge, <Badge tone='outline' caps>, for LibraryTable.tsx:227, LibraryPreviewPane.tsx:95 and the ComponentDetailPage header 'CORE' (T-266 covers only the 9.5px size)."
+        },
+        {
+          "to": "D4",
+          "tid": "T-017",
+          "need": "DesignerBomView.tsx:778 row warning note (10px, radius 0, no icon) becomes <Banner tone='warning' compact>."
+        },
+        {
+          "to": "D3a",
+          "tid": "T-018",
+          "need": "PcbLayerTabStrip.tsx:71-97: roving tabindex + ArrowLeft/Right/Home/End (nextRovingIndex from @shared/frontend/ui). PcbLayersPanel: one Tab stop with arrows between rows; eye/opacity reachable by arrow or shortcut instead of ~40 Tab stops."
+        },
+        {
+          "to": "D1",
+          "tid": "T-018",
+          "need": "DesignerRightDock.tsx: pass DockTabs idPrefix (e.g. 'dock') and spread dockTabPanelProps('dock', active) on the panel so aria-controls resolves. T-087 already covers the design tabs and the view tablist name."
+        },
+        {
+          "to": "D2",
+          "tid": "T-022",
+          "need": "OutlinePanel/OutlineEmptyState.tsx: replace the left-aligned title + 3 stacked full-width buttons with the kit EmptyState (align='start', size='sm', actions)."
+        },
+        {
+          "to": "K1",
+          "tid": "T-022",
+          "need": "PageEditor.tsx:215: the 'No page selected' bordered card becomes the kit EmptyState with one 'New page' action."
+        },
+        {
+          "to": "L1",
+          "tid": "T-264",
+          "need": "LibraryPreviewPane detail-error branch (~:138): replace the bare 'Internal error' line with describeError(err, 'load the preview') plus Retry (EmptyState well or Banner)."
+        }
+      ],
+      "checks": {
+        "typecheckFrontend": "pass: `npm run typecheck:frontend` (tsc --noEmit --project tsconfig.json) exited with no errors",
+        "modulesTscOwnFiles": "clean: 0 errors in src/shared/frontend/{ui,http,keyboard}, src/core/frontend/src/components/ui and ui-discipline. The 32 output lines are all in assistant backend/frontend (assistant-service, run-service, provider-store, remote-tool, copilot-client, proposal-apply-service, openpcb-provider-factory, DesignerChatDock, Space.tsx) and library/backend/sync/opclib-importer.ts, which are other owners' files.",
+        "tests": "`npx vitest run --config src/core/frontend/vitest.config.ts src/shared/frontend/ui src/shared/frontend/http src/shared/frontend/keyboard src/core/frontend/src/ui-discipline.test.ts`: 11 files, 101 tests passed. tokens-css.test.ts is 18/18, including 3 new contrast tests."
+      },
+      "notes": "All three blocking items are fixed in how the report classifies and hands off work. The code is unchanged from last round except one new test.\n\n1. **Reclassification.** I grepped every repro and code site named in each of my 13 entries against the other owners' briefs (fix/owners/*.md, excluding F0a.md). T-006 and T-008 move to partial, as the review asked. I applied the same rule to the other entries: T-007, T-014, T-016, T-017, T-018, T-022 and T-264 are now partial too, because each has sites that are in no other brief.\n   - Still done: T-002 (the guard's adopters each have their own entry: D3a T-133, C1 T-033, C2 T-065, L2 T-309, D2 T-125).\n   - Still done: T-004 (the primitives exist; mounting them is F0b's hand-off).\n   - Still done: T-175 (token fix, now tested: the lowest ratio is 4.53:1).\n   - Still done: T-284 (F0a side only; L1 leads).\n\n2. **crossOwner.** Filed as the review listed: F0b (mount DialogHost + Toaster), C1 (Home focus sites), and D2 / D3b / D1 (the three T-008 sites). Also filed for T-006: L1, D3b, D1 (the CloudSyncBadge toast, plus api.ts so errors keep their status and problem type), D4 (CloudDesignBrowser), A1 (the 'paused' copy), DB, LB and W4. Every other site I found for the remaining partial entries is filed too.\n\n3. **Contract file.** contracts/F0a.md now ends with an 'Adoption hand-offs' table listing every site, its owner and the exact kit call to use. Sites already covered by another owner's entry are listed separately for reference. The header note about mounting was corrected: without DialogHost the dialog promises never settle.\n\n4. **New test.** tokens-css.test.ts gets 3 contrast regression tests for T-175 and T-284, parsed from the real index.css.\n\n**Deviation from the brief:** it proposes a backend helper at src/core/backend/http/cloud-fetch.ts, but module backends cannot import src/core/backend/* (layer rule). I gave DB and LB the equivalent that works from modules: `new AppError(detail, 503, \"Can't reach OpenPCB Cloud\", 'https://openpcb.dev/problems/cloud-unreachable')` from src/core/contracts/errors. The frontend CLOUD_UNREACHABLE_TYPE uses the same string.\n\n**Follow-ups:** the @openpcb/r3f-eda-canvas package still uses slate classes and a #131313 preview default. That is shared-repo work with no owner in this pass. Assistant backend files are unowned and currently routed to W4.\n\n**Why this is correct:** every site outside F0a's files is either filed as crossOwner (each with the exact kit API from contracts/F0a.md) or named in another owner's own entry, so none is left unassigned. The contrast claim in the contract ('text-status-* on bg-status-*-soft is AA') is now enforced by a test over every chrome surface in both themes.\n\nNo git operations were run, per protocol. I updated the memory note ui-kit-foundation-f0a.md with the rule for when a cross-owner entry counts as done, and the AppError 503 pattern.",
+      "reviewNotes": [
+        "problem.ts:137-144 apiErrorFromResponse(res, fallbackMessage): when the body has no detail or title, it rebuilds the ApiError from status and requestId only, losing code and type. A {ok:false, code:'REVISION_CONFLICT'} body therefore stops mapping to the design-conflict copy. The fallback title is also ignored for 404/409/413/5xx because reasonForStatus never reads title there. The existing test only asserts .title. Keep code/type on that path.",
+        "toast.tsx:42-46: each toast card is inserted as an already-filled role=status/aria-live region, which many screen readers do not announce; a persistent live region would be reliable. Also, while a Radix modal Dialog is open, hideOthers sets aria-hidden on the Toaster, and clicking a toast counts as an outside pointerdown, which dismisses the dialog (a pending confirmDialog resolves false).",
+        "shortcut-guard.ts:109-118 isModalOpen ignores only [hidden] ancestors. An aria-modal element that stays mounted but is hidden with CSS (display:none / .hidden) would block every global shortcut app-wide. SearchField already handles this case with getClientRects; the guard could do the same.",
+        "dialog-host.tsx:71,100,118 promptDialog: if defaultValue fails validate, OK starts disabled. Enter then does nothing (implicit submission is blocked by the disabled default button) and no error is shown until the user types.",
+        "Z-order deviates from KIT_SPEC. The spec says menus 50 < dialogs 60; the implementation has dialogs z-50 < menus z-60 (index.css comment, design-tokens.md §8, contract). This is arguably the better choice (a menu inside a dialog stays visible) and it is documented, but the lead should confirm it.",
+        "SearchField: aria-label is optional with a placeholder fallback, where the spec says 'required'. The deprecated shortcutHint still renders a hint even when the key is not wired, where the spec says render only if wired. Callers still pass shortcutHint='/' at HomeScreen.tsx:415 (C1) and library Space.tsx:619 (L1); they should switch to shortcut='/'.",
+        "Light --status-danger was darkened to #a3301f for T-175. Danger-coloured text or icons drawn directly on the always-dark canvas well in light theme drop from about 3.9:1 to about 2.9:1. Status copy over wells should use well tokens or Banner floating; worth one line in design-tokens.md.",
+        "isSafeDetail's /\\bat .+:\\d+/ rejects legitimate details such as 'Clearance at U1:3', which then fall back to generic copy. AbortSignal.timeout errors (DOMException TimeoutError, 'signal timed out') are shown verbatim and isRetryableError returns false for them.",
+        "tokens-css.test.ts strips the @source lines, so nothing tests the new T-264 @source path. I checked by hand that node_modules/@openpcb/r3f-eda-canvas/dist exists and contains the overlay classes.",
+        "Style: several functions exceed the protocol's ~50-line guideline: the NumberInput render (~125 lines), SearchField (~65), DockTabs (~85) and SegmentedControl (~80).",
+        "The 'partial' entries (T-006, T-007, T-008, T-014, T-016, T-017, T-018, T-022, T-264) are correctly done on F0a's side: problem.ts plus the Banner/toast Retry path, FOCUS_RING plus the global :focus-visible rule, .row-actions, kit Dialog plus confirm/prompt, --radius 2px plus Badge, Banner/Badge, DockTabs/SegmentedControl roving plus idPrefix/aria-controls, EmptyState, and @source. The contract's hand-off table covers the sites outside F0a's map.",
+        "docs/qa/2026-09-ui-qa/fix/contracts/F0a.md is outside the F0a ownership map. It is a coordination doc and DB.md/LB.md sit beside it, so it is probably orchestrator-sanctioned; not listed as a violation."
+      ]
+    },
+    {
+      "owner": "DB",
+      "verdict": "approve",
+      "blocking": 0,
+      "files": [
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/migrations/0019_bom_override_part_binding.sql (new this round: rebuilds designer_bom_overrides with part_id, binds existing rows to the part carrying their refdes, unique(design_id,part_id) + partial unique(design_id,refdes) WHERE part_id IS NULL)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/schema.ts (this round: bomOverrides.partId + the two new indexes mirrored)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/bom-overrides.ts (this round: upsert resolves the URL refdes to its schematic part and updates the part's bound row, adopting an unbound row if there is one; list reports each bound row's current reference)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/export/bom/writer.ts (this round: overrideLookup matches bound overrides by partId only, unbound ones by refdes, and a bound override always wins; earlier: partId pairing)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/export/pnp/writer.ts (this round: DNP exclusion keyed by placementId, not refdes)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/sdks/designer/types.ts (this round: BomOverride.partId: string | null, additive)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/backend/tests/designer-refdes-sync.test.ts (this round: override-follows-rename/undo/redo/reused-refdes regression)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/backend/tests/designer-bom-override-migration.test.ts (new: 0019 backfill + index semantics through the real migrator)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/backend/tests/designer-export.test.ts (this round: partId on override fixtures + a bound-vs-unbound writer unit test)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/contracts/DB.md (T-217 section: overrides are bound to the part, and the PATCH response carries partId)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/command-executor.ts (earlier rounds)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/commands/batch.ts (earlier rounds)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/routes.ts (earlier rounds)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/pcb/pcb-store.ts (earlier rounds)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/projection-world.ts (earlier rounds)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/store.ts (earlier rounds)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/sdk.ts (earlier rounds)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/cloud-sync.ts (earlier rounds)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/export/index.ts (earlier rounds)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/export/gerber/job-file.ts (earlier rounds)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/import/kicad-project/{inspect,commit,errors}.ts (earlier rounds)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/sdks/designer/{index,pcb-helpers}.ts (earlier rounds)",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/backend/tests/{designer-batch-commands,designer-export-naming,designer-kicad-project-errors,designer-net-class-management,designer-net-labels,designer-trace-via-edit,designer-pcb-view-state,designer-pcb-zones-http}.test.ts + helpers/designer-runtime.ts (earlier rounds)"
+      ],
+      "done": [
+        "T-217",
+        "T-096",
+        "T-097",
+        "T-162",
+        "T-164",
+        "T-174",
+        "T-251"
+      ],
+      "partial": [],
+      "skipped": [],
+      "crossOwner": [
+        {
+          "to": "D4",
+          "tid": "T-217",
+          "need": "No change required. PATCH /bom/refs/:refdes is unchanged: keep sending the BOM row's current refs[].refdes. The response `override` gains an additive `partId: string | null` field. Documented in docs/qa/2026-09-ui-qa/fix/contracts/DB.md."
+        }
+      ],
+      "checks": {
+        "typecheckFrontend": "pass (npm run typecheck:frontend: tsc --noEmit clean)",
+        "modulesTscOwnFiles": "clean. The tsc -p tsconfig.modules.json error set, with line/column positions stripped, has no entries outside docs/qa/2026-09-ui-qa/data/gates/baseline-modules-set.txt. tsc -p src/core/backend/tsconfig.json (includes tests) reports no errors under designer/sdks-designer/designer tests; the remaining errors are all in assistant/library files (contracts drift, other owners).",
+        "tests": "cd src/core/backend && bun test designer: 552 pass, 0 fail (55 files). Full bun test: 3114 pass, 8 skip, 27 fail = the 22 known environment failures (library .opclib bootstrap/facets/preview SVG/sources/tags + the assistant cloud credential test) + 5 tasks-runtime tests. Those 5 pass when run alone (bun test tests/tasks-runtime.test.ts: 5 pass), a known flake in full runs. npm run gen: no diff under generated/. npm run gen:contracts:check: 13 generated contract files up to date."
+      },
+      "notes": "Blocking review item fixed: BOM overrides now follow the part (T-217).\n\nRoot cause: overrides were keyed only by refdes. Re-keying them in the update_part_properties handler cannot work, because undo/redo replay ECS patches (replaceSchematicProjection) past every handler. So each override row is now bound to the schematic part id, which is also the placement's partId and is kept across undo/redo.\n\n- **Migration 0019** rebuilds `designer_bom_overrides`, following the assistant 0005 table-rebuild precedent. The old inline `unique(design_id, refdes)` had to go: a renamed part's row keeps its old refdes, and another part may now carry it. The rebuilt table adds `part_id`, which is backfilled from `designer_schematic_parts` by (design_id, reference). New indexes: `unique(design_id, part_id)`, and `unique(design_id, refdes) WHERE part_id IS NULL`.\n- **Upsert**: resolves the URL refdes to the part carrying it now. It updates that part's bound row, or adopts an unbound row under that refdes, or inserts a new one. A refdes that no schematic part carries (a PCB-only placement) keeps an unbound row matched by refdes, as before.\n- **Writer**: matches a bound override by partId only, so a stale refdes can never land on another part. An unbound override matches by refdes and never beats a bound one.\n- **PnP**: excludes DNP parts by placementId.\n\nReviewer's probe, now a test: DNP+LCSC on C1, rename to C77 → pnp.csv = [C2] and the C77 BOM row has dnp=true and keeps its LCSC. Undo → excluded under C1. Redo → excluded under C77. Then C2 is renamed to the freed C1: it does not inherit the override, a new PATCH on C1 binds to C2 with no UNIQUE collision, and C77 keeps its data.\n\nKnown, acceptable leftover: a legacy row the migration could not bind still matches by refdes, which is the old behaviour. A deleted part's bound row stays in the table so undoing the delete brings it back; it never applies to any other part.\n\nThe running bun --watch backends will apply 0019 to their databases on restart. Memory note designer-batch-derived-refs.md is updated: the stale \"overrides keyed by refdes\" line is replaced with the part_id binding facts.",
+      "reviewNotes": [
+        "T-217 migration (0019_bom_override_part_binding.sql:52-57): the backfill binds a row only when a schematic part carries its refdes at upgrade time. Designs that already hit the T-217 bug can have an override (often DNP) written on the phantom stale-placement line, e.g. 'R1' after R1 was renamed to R7. That row stays unbound, so it no longer reaches the physical part: R7 goes back into pnp.csv, where the old code excluded it through the stale placement ref. It can also be inherited silently by a future part that gets auto-annotated 'R1'. Suggestion: fall back to the stale placement's reference (json_extract of the designer_pcb_entities placement payload's reference/partId) before leaving a row unbound.",
+        "0019 copies rows into a table with a FOREIGN KEY on designer_design_heads while foreign keys are ON. A legacy override row whose design is gone would abort the migration, and the backend would then fail to start. store.ts:515 deletes overrides on design delete and the FK cascades, so this is unlikely. A `where o.design_id in (select id from designer_design_heads)` guard would make it bulletproof.",
+        "bom-overrides.ts: a bound row whose part is permanently deleted is never cleaned up. It stays inert in the BOM and is listed by listBomOverrides under its old refdes. That is harmless because no consumer keys overrides by refdes any more, but the rows pile up.",
+        "bom-overrides.ts:42-60: PATCH /bom/refs/:refdes with a reference nobody carries (e.g. a BOM view that has not refreshed after a rename) returns 200 and writes an inert unbound row (partId null), so the user's edit silently goes nowhere. Before this change that was only possible for truly unknown refs. Consider a 404/409 when the refdes matches neither a schematic part nor a placement.",
+        "T-162: boards imported before this change can carry duplicate net-class ids. Saving the Design rules dialog on them is now refused outright ('duplicate id') and nothing self-heals it. The contract documents this, but such a board cannot save any rule edit until a duplicate row is removed. commit.ts uniqueId fixes new imports only.",
+        "T-164: the brief suggested appending a short id when two designs' names collide. The contract drops that, so two designs with the same name export identically named bundles. The approved scope (named after the design name) is met.",
+        "pcb-helpers.ts:31 has literal combining characters in the regex /[̀-ͯ]/. They are correct (U+0300–U+036F), but an escaped form (̀-ͯ) would be readable and editor-safe.",
+        "Batch (commands/batch.ts): dataset capture tags a batch as opKinds {batch_commands:1}, so per-step pcb_* capture semantics are lost for batched PCB edits. This does not matter for current callers because autolayout apply is not batchable."
+      ]
+    },
+    {
+      "owner": "LB",
+      "verdict": "approve",
+      "blocking": 0,
+      "files": [
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/library/backend/component-filter.ts",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/library/backend/queries.ts",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/library/backend/routes.ts",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/library/backend/tag-bucketing.ts",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/library/backend/import/inspect-kicad.ts",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/library/backend/sync/source-ids.ts",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/library/backend/sync/opclib-importer.ts",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/library/backend/sync/install-source.ts",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/library/backend/migrations/0011_untrusted_core_sources.sql",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/sdks/library/types.ts",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/sdks/library/index.ts",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/backend/tests/library-sources-routes.test.ts",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/backend/tests/library-component-filter.test.ts",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/backend/tests/library-clone.test.ts",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/backend/tests/library-inspect-invalid-file.test.ts",
+        "/Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/contracts/LB.md"
+      ],
+      "done": [
+        "T-256",
+        "T-253",
+        "T-270",
+        "T-049",
+        "T-055",
+        "T-251"
+      ],
+      "partial": [],
+      "skipped": [],
+      "crossOwner": [
+        {
+          "to": "L1",
+          "tid": "T-256",
+          "need": "Page the table/grid using GET /components?offset=&limit= (max 200). Response data is now {components,total,offset,limit}. Use total for the header count and the 'n of total' strip, load more until offset>=total, and make Select All either say it covers loaded rows only or fetch every page first. Replace Space.tsx limit=60. See contracts/LB.md."
+        },
+        {
+          "to": "L1",
+          "tid": "T-253",
+          "need": "The facet mount keys are now canonical smd/tht/mixed (they were the raw through_hole). The list and the facets now share one predicate, so list.total === facets.total. Humanise the mount labels in the UI if wanted. Free text no longer searches the source id."
+        },
+        {
+          "to": "L1",
+          "tid": "T-270",
+          "need": "Each clone now owns its footprint ids, so STEP upload to the copy's effectiveSelectedId works as-is. canUploadStep can stay !isBuiltin. Optionally show the Details 'Source' row from the new component.origin (a copy has origin.componentId !== id). The backend guard text now says 'Duplicate to edit'."
+        },
+        {
+          "to": "C2",
+          "tid": "T-055",
+          "need": "LibrariesPanel: render Remove only when the new source.isRemovable is true (false for openpcb.core and user.local). DELETE on a protected source now returns 409 problem+json (type library-source-protected). Show it through describeError."
+        },
+        {
+          "to": "C2",
+          "tid": "T-049",
+          "need": "An installed pack is never kind 'core' now: a missing or spoofed kind is stored as 'team', removable and not read-only. POST /sources/install with the reserved id openpcb.core or user.local returns 409 (type library-source-reserved). Surface that error."
+        },
+        {
+          "to": "L1",
+          "tid": "T-251",
+          "need": "POST /imports/kicad/inspect now answers 400 problem+json (type validation, with the parser reason in detail) for invalid files. Show it through describeError. The designer kicad-project side belongs to DB."
+        }
+      ],
+      "checks": {
+        "typecheckFrontend": "pass (npm run typecheck:frontend: tsc exited clean)",
+        "modulesTscOwnFiles": "clean. The only library hits are the four baseline opclib-importer.ts errors (OpclibComponentEntry subcategory/datasheet/keywords), which appear in baseline-modules-set.txt. Line numbers moved by one because of a new import. Root `npx tsc -b` shows no errors in the new test files.",
+        "tests": "`cd src/core/backend && bun test library`: 102 pass / 21 fail. Before my changes it was 80 pass / 21 fail, and the 21 failures are the identical set (diffed): the known CoreLibrary dev-pack environment failures. Every library test file also passes when run on its own with OPENPCB_BUNDLED_LIBRARY_PATH=resources/core-library/openpcb-core-library-0.1.0-beta.2.opclib, except `library-opclib-bootstrap > re-bootstrap is idempotent`. That test fails only in a multi-test run, because the file's own afterEach deletes the env var; it passes alone with -t. `bun test assistant-library assistant-compile kicad`: 64 pass / 0 fail. `npm run gen`: no change to generated files."
+      },
+      "notes": "All six LB entries are fixed at their root. Backend work is done; the frontend owners still have their parts (see crossOwner). Nothing was committed.\n\n**What changed, by entry**\n- **T-253 (list and facets disagree):**\n  - New module `backend/component-filter.ts` is the one predicate for both GET /components and GET /facets.\n  - Free-text search covers name, description and tags. The source id is no longer searched.\n  - Mount is canonicalised to smd/tht/mixed. It comes from the default footprint's mountType plus any mount tags. MOUNT_TAGS now also accepts through_hole, thru_hole, pth and mixed.\n  - System tags filter the same way in both endpoints.\n  - Checked against the committed core pack: all=17/17, q=passive 3/3, q=R 17/17, tags=smd 13/13, tht 4/4, through_hole 4/4, ic+smd 4/4 (list/facets).\n- **T-256 (list truncated at 60):**\n  - GET /components takes `offset`. The response is `{components, total, offset, limit}`; `data.components` is unchanged, so existing readers keep working.\n  - Max page size went from 100 to 200. A negative or non-numeric offset returns 400.\n  - Order is stable: exact name, then name prefix, then name contains, then other matches; ties by name, then id. Searching R puts a part named R first.\n  - The SDK `searchComponents` signature is unchanged. It now wraps the new `searchComponentsPage`.\n- **T-270 (Duplicate to edit):**\n  - `cloneComponent` runs in one transaction. It copies every footprint-option row (label, default flag, order, pin map) and the metadata columns: manufacturer, MPN, LCSC, supplier, subcategory, datasheet URL, keywords.\n  - It deep-copies each footprint row and its 3D-model row into user.local under new ids. The GLB/STEP files are content-addressed and ref-counted, so sharing them is safe. The copy therefore owns its footprints and STEP upload works.\n  - `deleteComponents` now also collects and orphan-checks option footprints, so deleting a copy removes its private footprints.\n  - A new optional field, `LibraryComponent.origin`, lets the frontend show the Source row.\n  - Guard messages now say \"Duplicate to edit\" instead of \"Duplicate to my library\".\n- **T-049 (no-kind pack became read-only core):**\n  - The stored kind comes from `sync/source-ids.ts`: 'core' only for the id openpcb.core; a declared 'user' stays; anything else becomes 'team'. isReadOnly follows that.\n  - Migration 0011 repairs existing bad rows.\n- **T-055 (user.local removable):** `deleteSource` now refuses openpcb.core and user.local by id with 409 problem+json (type library-source-protected). Source rows gain `isRemovable`.\n- **T-251 (500 on invalid files):** the inspect-kicad shim maps the parsers' plain Error (not subclasses such as TypeError) to ImportValidationError, so the endpoint returns 400 problem+json instead of 500. The shim is also used by the commit and zip import paths; only the inspect path is covered by a test.\n\n**Where I departed from the brief**\n- (a) A pack with a missing or 'core' kind becomes 'team', not 'third-party': the @openpcb/opclib-pack kind union is core|user|team, and the brief's detail text says 'team'.\n- (b) The core delete refusal changed from 400 to 409, so core and user.local share one protected-source problem type. I updated the existing test.\n- (c) Added: POST /sources/install now refuses the reserved ids openpcb.core and user.local with 409. Otherwise a user pack with either id would become unremovable, and the user.local case would wipe the user's parts through reconcileSourceRows.\n- (d) The clone copies footprints but keeps the symbol shared. Nothing edits symbols in place, so a copy is not needed for the approved scope.\n\n**Accident, cleaned up:** I ran `npm run sdk:generate`. Its scripts:build step fails with TS6059 but still wrote 165 untracked .js files next to .ts sources under src/. All were timestamped by that run, all had a .ts sibling, and none were tracked. I deleted them, so the tree is back to its prior state. `npm run gen` itself is safe. I recorded this in agent memory.\n\n**Follow-ups I noticed but did not fix**\n- `importOpclib` still throws plain Error for signature and asset failures, which gives 500 on /sources/install.\n- `deleteSource` answers 'source not found' as 400; it should be 404.\n- List and facets parse every footprint's dataJson on every request. That is fine at the current library size; `json_extract` could replace it later.\n- `deleteComponents` never deletes GLB files on disk; only the model rows cascade.\n- A clone keeps the 'core' tag, because only builtin/system tags are stripped.\n- In a full `bun test` run, `library-opclib-bootstrap.test.ts` deletes OPENPCB_BUNDLED_LIBRARY_PATH in its afterEach.",
+      "reviewNotes": [
+        "T-270, migration path: duplicates made before this change are not repaired. They still share core footprints and lack the extra footprint options, pin maps and metadata. STEP upload on them still fails with 'Cannot update built-in components (…). Use \"Duplicate to edit\"…' while the user is on a duplicate (assertFootprintNotBuiltinComponent, queries.ts:1410). A one-off repair, or forking the footprint on write for non-builtin callers, would remove that dead end for existing user DBs.",
+        "T-270: the copy still shares its symbol. For a duplicate of an installed pack part, deleteSource (queries.ts, `txDb.delete(symbols).where(eq(symbols.sourceId, sourceId))`) removes the pack's symbols without checking references. Removing the pack then leaves the copy in user.local with a dangling symbolId (components.symbol_id has no FK). This existed before; the fix narrowed it by making footprints private but did not close it.",
+        "T-049, trust boundary: the reserved-id guard lives only in installOpclibFromBytes (install-source.ts). cloud-sync.ts pullCustomLibrary calls importOpclib directly with requireSignature:false, so a cloud-served pack with id openpcb.core would still get kind core and isBuiltin=1. Separately, the importer updates components by entity id and sets sourceId/isBuiltin from the pack (opclib-importer.ts ~750). A foreign pack whose component ids collide with openpcb.core.* can take over core rows, and removing that pack later deletes them. Both existed before and are outside the brief, but they are next to its 'only the bundled core can be core' goal.",
+        "Perf: GET /components now loads every component and JSON-parses every default footprint's dataJson on each request (about 2.2 MB of footprint JSON for 227 components in the dev DB). GET /facets already did this, so each search keystroke now pays for it twice. Before, the unfiltered list was limited in SQL. Fine at current library sizes; worth caching mountType if user libraries grow into the thousands.",
+        "parseOffset (routes.ts:1149) uses parseInt, so '10abc' is accepted as 10 and '1.5' as 1. The contract says non-numeric input gives 400; only fully non-numeric or negative values do.",
+        "translatePackageError (import/inspect-kicad.ts) now maps every plain `Error` from @openpcb/kicad-import to 400. That is right for parser rejects, but an internal invariant failure thrown as a plain Error in the package would also be reported as a user-input 400 instead of a 500.",
+        "New sync/source-ids.ts does not consolidate existing duplicates: bootstrap.ts:17 still has its own USER_LOCAL_SOURCE_ID, core-library-updates.ts:14 its own CORE_SOURCE_ID, and opclib-importer.ts keeps the literal 'openpcb.core' at :193, :290, :707.",
+        "cloneComponent (queries.ts ~1449-1532) is about 80 lines, above the protocol's under-50 guideline. Most of it is one insert values object, so this is minor.",
+        "Existing test-infrastructure problems, unrelated to LB but relevant to the orchestrator's gate run: (a) CoreLibrary/dist/openpcb-core-library-0.0.0-dev.opclib has more than 500 ZIP entries, so the bundled core fails to load in default test runs; (b) batch `bun test library-` has cross-file env leakage (OPENPCB_BUNDLED_LIBRARY_PATH reset by afterEach), which causes 16-18 failures that pass per file."
+      ]
+    }
+  ],
+  "workflowProgress": [
+    {
+      "type": "workflow_phase",
+      "index": 1,
+      "title": "Implement"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 2,
+      "title": "Review"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 1,
+      "label": "impl:F0a",
+      "phaseIndex": 1,
+      "phaseTitle": "Implement",
+      "agentId": "a414f628f66b083dc",
+      "agentType": "impl-critical",
+      "model": "claude-opus-5-5",
+      "state": "done",
+      "startedAt": 1790372582060,
+      "queuedAt": 1790372582049,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "F0a",
+      "promptPreview": "You are implementer F0a in the OpenPCB UI QA hardening pass. Read /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/FIX_PROTOCOL.md (binding rules, ownership map, report format), /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/KIT_SPEC.md, and your brief /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/owners/F0a.md (every approved …",
+      "promptFramed": true,
+      "lastProgressAt": 1790374725730,
+      "tokens": 426568,
+      "toolCalls": 185,
+      "durationMs": 2143669,
+      "resultPreview": "{\"owner\":\"F0a\",\"files\":[\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/frontend/src/index.css\",\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/frontend/src/components/ui/dialog.tsx\",\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/frontend/src/ui-discipline.test.ts\",\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/frontend/src/ui-discipline.baseline.json\",\"/Users/andrejv…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 2,
+      "label": "impl:DB",
+      "phaseIndex": 1,
+      "phaseTitle": "Implement",
+      "agentId": "a5e4f4d834de61420",
+      "agentType": "impl-critical",
+      "model": "claude-opus-5-5",
+      "state": "done",
+      "startedAt": 1790372582060,
+      "queuedAt": 1790372582049,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "DB",
+      "promptPreview": "You are implementer DB in the OpenPCB UI QA hardening pass. Read /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/FIX_PROTOCOL.md (binding rules, ownership map, report format), /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/KIT_SPEC.md, and your brief /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/owners/DB.md (every approved en…",
+      "promptFramed": true,
+      "lastProgressAt": 1790374718190,
+      "tokens": 507913,
+      "toolCalls": 247,
+      "durationMs": 2134830,
+      "resultPreview": "{\"owner\":\"DB\",\"files\":[\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/commands/batch.ts (new: batch_commands runner inside a savepoint, isBatchableCommandType, commandTouchesPcb)\",\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/command-executor.ts (batch branch; pcb_update_trace / pcb_update_via handlers; shared viaSizeError + resolveUpdatedVi…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 3,
+      "label": "impl:LB",
+      "phaseIndex": 1,
+      "phaseTitle": "Implement",
+      "agentId": "a2ea387ea0798264c",
+      "agentType": "impl-careful",
+      "model": "claude-opus-5-5",
+      "state": "done",
+      "startedAt": 1790372582060,
+      "queuedAt": 1790372582049,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "LB",
+      "promptPreview": "You are implementer LB in the OpenPCB UI QA hardening pass. Read /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/FIX_PROTOCOL.md (binding rules, ownership map, report format), /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/KIT_SPEC.md, and your brief /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/owners/LB.md (every approved en…",
+      "promptFramed": true,
+      "lastProgressAt": 1790373666342,
+      "tokens": 319507,
+      "toolCalls": 138,
+      "durationMs": 1084281,
+      "resultPreview": "{\"owner\":\"LB\",\"files\":[\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/library/backend/component-filter.ts\",\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/library/backend/queries.ts\",\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/library/backend/routes.ts\",\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/library/backend/tag-bucketing.ts\",\"/Users/andrejvysny…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 4,
+      "label": "review:LB:1",
+      "phaseIndex": 2,
+      "phaseTitle": "Review",
+      "agentId": "a94618110c72b5644",
+      "agentType": "reviewer-critical",
+      "model": "claude-opus-5-5",
+      "state": "done",
+      "startedAt": 1790373667723,
+      "queuedAt": 1790373667695,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "approve",
+      "promptPreview": "You are the adversarial code reviewer for implementer LB (OpenPCB UI QA hardening pass). Read /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/FIX_PROTOCOL.md, /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/KIT_SPEC.md and the brief /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/owners/LB.md. The implementer's report: {\"owner\":\"…",
+      "promptFramed": true,
+      "lastProgressAt": 1790374300950,
+      "tokens": 186334,
+      "toolCalls": 86,
+      "durationMs": 633225,
+      "resultPreview": "{\"verdict\":\"approve\",\"blocking\":[],\"checksRun\":\"Reviewed the git diff of every LB-owned path: library backend (queries.ts, routes.ts, tag-bucketing.ts, import/inspect-kicad.ts, sync/{opclib-importer,install-source}.ts), the new component-filter.ts, sync/source-ids.ts and migrations/0011_untrusted_core_sources.sql, sdks/library/{types,index}.ts, and the tests library-sources-routes (modified) plus …"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 5,
+      "label": "review:DB:1",
+      "phaseIndex": 2,
+      "phaseTitle": "Review",
+      "agentId": "aa91e0d8fb1c85482",
+      "agentType": "reviewer-critical",
+      "model": "claude-opus-5-5",
+      "state": "done",
+      "startedAt": 1790374719942,
+      "queuedAt": 1790374719941,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "changes",
+      "promptPreview": "You are the adversarial code reviewer for implementer DB (OpenPCB UI QA hardening pass). Read /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/FIX_PROTOCOL.md, /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/KIT_SPEC.md and the brief /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/owners/DB.md. The implementer's report: {\"owner\":\"…",
+      "promptFramed": true,
+      "lastProgressAt": 1790375488586,
+      "tokens": 236208,
+      "toolCalls": 98,
+      "durationMs": 768644,
+      "resultPreview": "{\"verdict\":\"changes\",\"blocking\":[{\"file\":\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/export/bom/writer.ts\",\"line\":198,\"issue\":\"T-217 is only partly fixed. BOM overrides (DNP, MPN, LCSC, supplier, price, notes) are stored by refdes (bom-overrides.ts; PATCH /bom/refs/:refdes) and are still looked up by the schematic refdes (writer.ts:195/198, pnp/writer.ts:56). A renam…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 6,
+      "label": "review:F0a:1",
+      "phaseIndex": 2,
+      "phaseTitle": "Review",
+      "agentId": "a3c756853a2661c90",
+      "agentType": "reviewer-critical",
+      "model": "claude-opus-5-5",
+      "state": "done",
+      "startedAt": 1790374731680,
+      "queuedAt": 1790374731677,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "changes",
+      "promptPreview": "You are the adversarial code reviewer for implementer F0a (OpenPCB UI QA hardening pass). Read /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/FIX_PROTOCOL.md, /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/KIT_SPEC.md and the brief /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/owners/F0a.md. The implementer's report: {\"owner\"…",
+      "promptFramed": true,
+      "lastProgressAt": 1790375474555,
+      "tokens": 234294,
+      "toolCalls": 88,
+      "durationMs": 742875,
+      "resultPreview": "{\"verdict\":\"changes\",\"blocking\":[{\"file\":\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/shared/frontend/ui/shortcut.ts\",\"line\":150,\"issue\":\"T-002. `keyMatches` always falls back to `event.code`, not just for the macOS Option case its comment describes. On QWERTZ (Slovak/German) and AZERTY layouts, two physical keys then match one letter shortcut. I ran the probe with bun: `QWERTZ Ctrl+y (code K…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 7,
+      "label": "fix:F0a:1",
+      "phaseIndex": 2,
+      "phaseTitle": "Review",
+      "agentId": "a637c85ed3722c91c",
+      "agentType": "impl-critical",
+      "model": "claude-opus-5-5",
+      "state": "done",
+      "startedAt": 1790375475677,
+      "queuedAt": 1790375475672,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "F0a",
+      "promptPreview": "You are implementer F0a in the OpenPCB UI QA hardening pass. Read /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/FIX_PROTOCOL.md (binding rules, ownership map, report format), /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/KIT_SPEC.md, and your brief /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/owners/F0a.md (every approved …",
+      "promptFramed": true,
+      "lastProgressAt": 1790376060205,
+      "tokens": 176352,
+      "toolCalls": 56,
+      "durationMs": 584527,
+      "resultPreview": "{\"owner\":\"F0a\",\"files\":[\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/shared/frontend/ui/shortcut.ts\",\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/shared/frontend/ui/shortcut.test.ts\",\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/shared/frontend/http/problem.ts\",\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/shared/frontend/http/problem.test.ts\",\"/Users/andrejvysny/workspace/openpc…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 8,
+      "label": "fix:DB:1",
+      "phaseIndex": 2,
+      "phaseTitle": "Review",
+      "agentId": "a7c5afc0b3dcd3ac2",
+      "agentType": "impl-critical",
+      "model": "claude-opus-5-5",
+      "state": "done",
+      "startedAt": 1790375489623,
+      "queuedAt": 1790375489619,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "DB",
+      "promptPreview": "You are implementer DB in the OpenPCB UI QA hardening pass. Read /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/FIX_PROTOCOL.md (binding rules, ownership map, report format), /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/KIT_SPEC.md, and your brief /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/owners/DB.md (every approved en…",
+      "promptFramed": true,
+      "lastProgressAt": 1790376172168,
+      "tokens": 183833,
+      "toolCalls": 72,
+      "durationMs": 682545,
+      "resultPreview": "{\"owner\":\"DB\",\"files\":[\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/designer/backend/migrations/0019_bom_override_part_binding.sql (new this round: rebuilds designer_bom_overrides with part_id, binds existing rows to the part carrying their refdes, unique(design_id,part_id) + partial unique(design_id,refdes) WHERE part_id IS NULL)\",\"/Users/andrejvysny/workspace/openpcb/OpenPCB/src/mod…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 9,
+      "label": "review:F0a:2",
+      "phaseIndex": 2,
+      "phaseTitle": "Review",
+      "agentId": "af5f6cff236c27156",
+      "agentType": "reviewer-critical",
+      "model": "claude-opus-5-5",
+      "state": "done",
+      "startedAt": 1790376061735,
+      "queuedAt": 1790376061732,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "changes",
+      "promptPreview": "You are the adversarial code reviewer for implementer F0a (OpenPCB UI QA hardening pass). Read /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/FIX_PROTOCOL.md, /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/KIT_SPEC.md and the brief /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/owners/F0a.md. The implementer's report: {\"owner\"…",
+      "promptFramed": true,
+      "lastProgressAt": 1790376868274,
+      "tokens": 267284,
+      "toolCalls": 84,
+      "durationMs": 806539,
+      "resultPreview": "{\"verdict\":\"changes\",\"blocking\":[{\"issue\":\"T-006 is reported as done with `crossOwner: []`, but the repro the brief names is still broken. The helper exists; the places that show the raw errors are other owners' files. None of those places is in any other owner's brief (checked with grep across owners/*.md, including W4). Nothing in the tree uses the helper yet: grep for describeError / CLOUD_UNRE…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 10,
+      "label": "review:DB:2",
+      "phaseIndex": 2,
+      "phaseTitle": "Review",
+      "agentId": "ac5678799534fd112",
+      "agentType": "reviewer-critical",
+      "model": "claude-opus-5-5",
+      "state": "done",
+      "startedAt": 1790376173242,
+      "queuedAt": 1790376173237,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "approve",
+      "promptPreview": "You are the adversarial code reviewer for implementer DB (OpenPCB UI QA hardening pass). Read /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/FIX_PROTOCOL.md, /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/KIT_SPEC.md and the brief /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/owners/DB.md. The implementer's report: {\"owner\":\"…",
+      "promptFramed": true,
+      "lastProgressAt": 1790377162105,
+      "tokens": 209625,
+      "toolCalls": 82,
+      "durationMs": 988863,
+      "resultPreview": "{\"verdict\":\"approve\",\"blocking\":[],\"checksRun\":\"cd src/core/backend && bun test tests/designer-refdes-sync.test.ts tests/designer-bom-override-migration.test.ts tests/designer-export.test.ts → \\\"85 pass, 0 fail, 353 expect() calls, Ran 85 tests across 3 files\\\". The migrator log shows 0019_bom_override_part_binding.sql applied (designer count 20).\\nbun test designer- → \\\"552 pass, 0 fail, Ran 552 …"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 11,
+      "label": "fix:F0a:2",
+      "phaseIndex": 2,
+      "phaseTitle": "Review",
+      "agentId": "af6141c9e2d239b60",
+      "agentType": "impl-critical",
+      "model": "claude-opus-5-5",
+      "state": "done",
+      "startedAt": 1790376869462,
+      "queuedAt": 1790376869456,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "F0a",
+      "promptPreview": "You are implementer F0a in the OpenPCB UI QA hardening pass. Read /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/FIX_PROTOCOL.md (binding rules, ownership map, report format), /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/KIT_SPEC.md, and your brief /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/owners/F0a.md (every approved …",
+      "promptFramed": true,
+      "lastProgressAt": 1790377431002,
+      "tokens": 224526,
+      "toolCalls": 66,
+      "durationMs": 561540,
+      "resultPreview": "{\"owner\":\"F0a\",\"files\":[\"src/core/frontend/src/index.css\",\"src/core/frontend/src/components/ui/dialog.tsx\",\"src/core/frontend/src/ui-discipline.test.ts\",\"src/core/frontend/src/ui-discipline.baseline.json\",\"docs/design/design-tokens.md\",\"docs/qa/2026-09-ui-qa/fix/contracts/F0a.md\",\"src/shared/frontend/http/problem.ts\",\"src/shared/frontend/http/problem.test.ts\",\"src/shared/frontend/keyboard/shortcut…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 12,
+      "label": "review:F0a:3",
+      "phaseIndex": 2,
+      "phaseTitle": "Review",
+      "agentId": "acd5f664cffeed405",
+      "agentType": "reviewer-critical",
+      "model": "claude-opus-5-5",
+      "state": "done",
+      "startedAt": 1790377432336,
+      "queuedAt": 1790377432329,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "changes",
+      "promptPreview": "You are the adversarial code reviewer for implementer F0a (OpenPCB UI QA hardening pass). Read /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/FIX_PROTOCOL.md, /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/KIT_SPEC.md and the brief /Users/andrejvysny/workspace/openpcb/OpenPCB/docs/qa/2026-09-ui-qa/fix/owners/F0a.md. The implementer's report: {\"owner\"…",
+      "promptFramed": true,
+      "lastProgressAt": 1790378304345,
+      "tokens": 266194,
+      "toolCalls": 83,
+      "durationMs": 872008,
+      "resultPreview": "{\"verdict\":\"changes\",\"blocking\":[{\"file\":\"src/shared/frontend/ui/dialog.tsx\",\"line\":52,\"issue\":\"NumberInput's promised 'Esc reverts' does not work inside the kit Dialog. Esc on a dirty NumberInput closes the whole dialog and the draft is never reverted. Cause: Radix DismissableLayer listens for Escape on the document in the capture phase, so it runs before NumberInput's React onKeyDown (number-inp…"
+    }
+  ],
+  "totalTokens": 3238638,
+  "totalToolCalls": 1285
+}

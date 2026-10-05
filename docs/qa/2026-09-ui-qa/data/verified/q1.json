@@ -1,0 +1,1707 @@
+[
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": "5464e17b / e154d769 (QA-q1-*)",
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/home/DesignCard.tsx",
+    "line": 134,
+    "note": "Archive onSelect e.preventDefault() keeps Radix menu open"
+   },
+   {
+    "path": "src/core/frontend/src/screens/home/DesignCard.tsx",
+    "line": 151,
+    "note": "Delete onSelect e.preventDefault() keeps menu open (modal) behind the delete modal"
+   },
+   {
+    "path": "src/core/frontend/src/screens/home/DesignDetailPanel.tsx",
+    "line": 50,
+    "note": "detail panel ActionsMenu persists across selection changes, so an open menu re-targets the new selectedDesign"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/dark/001-delete-modal-menu-open.png",
+    "shots/vq1/dark/002-after-first-cancel-click.png",
+    "shots/vq1/dark/006-archive-menu-stays-retargets.png",
+    "shots/q1/dark/025-delete-modal.png",
+    "shots/q1/dark/026-after-first-click-cancel.png",
+    "shots/q1/dark/028-grid-delete-modal.png",
+    "shots/q1/dark/038-detail-archive-menu-stays.png"
+   ],
+   "console": [],
+   "dom": [
+    "after menuitem Delete: document.body style='pointer-events: none;', modal computed pointer-events none, activeElement = [role=menuitem] 'Delete', role=button[name=Cancel] not in a11y tree (aria-hidden)",
+    "after detail Archive: menuOpen=true, detail header now 'QA-Q3-sandbox', menu items Rename/Duplicate/Export…/Archive/Delete"
+   ]
+  },
+  "id": "Q1-001",
+  "area": "home",
+  "title": "Design 'More actions' menu stays open after Archive/Delete: delete modal is inert on first click and the menu re-targets the next design",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home, List view, click row 'QA-q1-alpha' (own design) so it shows in the detail panel",
+   "Click the detail panel '…' (More actions) → Delete",
+   "Observe the Delete Design modal opens but the dropdown menu is still open underneath the overlay (Delete item highlighted); body has pointer-events:none and the modal is aria-hidden",
+   "Click 'Cancel' (or 'Delete') once: nothing happens except the menu closing; a 2nd click is needed",
+   "Keyboard: focus stays inside the (hidden) menu, Tab does not reach the modal buttons; Esc #1 only closes the menu",
+   "Separately: select 'QA-q1-LONG…' → detail '…' → Archive. The design is archived, the selection jumps to the next row (another agent's 'QA-Q3-sandbox') and the SAME menu stays open, now bound to that other design (Archive/Delete would act on it)",
+   "Same behaviour from grid-card '…' menu (Delete) — first click on modal Delete only dismisses the menu"
+  ],
+  "expected": "Choosing Archive or Delete closes the menu; the confirmation modal is immediately interactive and focused; a menu never silently re-targets a different design.",
+  "actual": "Menu stays open (onSelect calls e.preventDefault()). Delete modal needs two clicks, is unreachable by keyboard while the menu is open, and after Archive the still-open menu now targets the next selected design (risk of archiving/deleting the wrong design).",
+  "suggestedFix": "DesignCard.tsx ActionsMenu: drop e.preventDefault() from both onSelect handlers (lines 134-137, 151-154) so Radix closes the menu; defer onDelete() to the menu's onCloseAutoFocus (or setTimeout 0) so focus can move into the modal. In DesignDetailPanel.tsx:50 render <ActionsMenu key={design.id} …> so a menu can never outlive the design it was opened for.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "home:actions-menu:stays-open-after-select",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced on stack A (own QA-q1-vq1-a): detail '…' → Delete leaves the Radix menu open over the modal; body pointer-events:none, modal overlay aria-hidden=true, activeElement = menuitem 'Delete'. First click on modal Cancel only closed the menu (menu:false, modal:true), second click closed the modal. Tab x3 stayed on the menuitem; Esc #1 closed only the menu. Detail '…' → Archive on QA-q1-vq1-a: menu stayed open (items Rename/Duplicate/Export…/Archive/Delete) while the detail header switched to another design (QA-q1-vq1-stray-n) → the open menu now targets a different design. Root cause DesignCard.tsx:134-137/151-154 e.preventDefault() in onSelect. Not intentional (no PLAN decision); S2 kept (wrong-target risk + keyboard dead end).",
+   "evidence": [
+    "shots/vq1/dark/001-delete-modal-menu-open.png",
+    "shots/vq1/dark/002-after-first-cancel-click.png",
+    "shots/vq1/dark/006-archive-menu-stays-retargets.png"
+   ]
+  }
+ },
+ {
+  "knownRef": "K26",
+  "stack": "A",
+  "designId": "5464e17b (QA-q1-alpha), 82773719 (QA-q1-stray, created by the N leak)",
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 58,
+    "note": "hand-rolled overlay div, no role/aria-modal/Esc/focus management"
+   },
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 64,
+    "note": "icon-only close button without aria-label"
+   },
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 264,
+    "note": "window keydown handler (Enter/N) not gated on deletingDesign"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/dark/003-delete-modal.png",
+    "shots/vq1/dark/001-delete-modal-menu-open.png",
+    "shots/q1/dark/025-delete-modal.png",
+    "shots/q1/dark/027-modal-before-N.png"
+   ],
+   "dom": [
+    "modal wrapper role=null, inner role=null, no aria-modal; buttons: [{name:''},{Cancel},{Delete}]",
+    "Tab log inside modal: ['BUTTON'(unnamed X),'Cancel','Delete','Home','Designer']",
+    "Esc → modal:true (still open)",
+    "Enter on body → title 'QA-q1-alpha — OpenPCB', modal:false",
+    "N with modal open → new tab design-tab-82773719… 'Untitled Design r0'"
+   ]
+  },
+  "id": "Q1-002",
+  "area": "home",
+  "title": "Delete Design modal: no dialog role, Esc does nothing, no focus trap, unlabelled close X, and global N/Enter hotkeys fire behind it",
+  "category": "a11y",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home → select own design 'QA-q1-alpha' → detail '…' → Delete (press Esc once to dismiss the lingering menu, see Q1-001)",
+   "Inspect modal: wrapper has no role=dialog/aria-modal/aria-labelledby; close X button has no aria-label/title",
+   "Press Esc → modal stays open",
+   "Press Tab repeatedly → focus goes X → Cancel → Delete → Home rail → Designer rail … (escapes the modal)",
+   "Blur to body and press Enter → the selected design opens in Designer and the modal vanishes",
+   "Re-open modal, focus on the '…' trigger behind it, press N → a brand-new 'Untitled Design' is created and opened (had to rename it QA-q1-stray and delete it)"
+  ],
+  "expected": "Modal is a proper dialog (role=dialog, aria-modal, labelled by its title), focus moves into it and is trapped, Esc cancels, the X has an accessible name, and page hotkeys (N / Enter / '/') are suppressed while it is open.",
+  "actual": "None of these hold. Esc ignored; Tab leaves the modal; Enter behind the modal opens a design; N behind the modal silently creates a new design and navigates away.",
+  "suggestedFix": "HomeScreen.tsx:46-100: rebuild DeleteConfirmationModal on @radix-ui/react-dialog (already a dependency; kit/Settings dialogs use it): role=dialog + aria-modal + aria-labelledby title, focus trap, initial focus on Cancel, Esc = cancel (blocked while deleting), focus returns to trigger; add aria-label='Close' to the X (line 64). In the keydown handler (:265) early-return when deletingDesign !== null (add to deps).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "home:delete-modal:a11y-hotkeys",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced: modal wrapper/inner have role=null, aria-modal=null; buttons [{name:''},Cancel,Delete] (X unlabelled). Esc leaves the modal open. Tab goes X → Cancel → Delete → BODY → rail 'Home' (no trap, no initial focus). With focus blurred to body, Enter opened the selected design (title 'QA-q1-vq1-a — OpenPCB') and the modal vanished. With focus on the '…' trigger behind the modal, pressing 'n' created and opened a new design (designs 20 → 21, id 031125da, renamed QA-q1-vq1-stray and deleted). HomeScreen.tsx:58-71 hand-rolled overlay; keydown handler :264-303 never checks deletingDesign. Matches K26. S2 kept: hotkeys behind a destructive-confirm modal create persisted designs / navigate away.",
+   "evidence": [
+    "shots/vq1/dark/003-delete-modal.png",
+    "shots/vq1/dark/001-delete-modal-menu-open.png"
+   ]
+  }
+ },
+ {
+  "knownRef": "K32",
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 138,
+    "note": "raw `HTTP ${status}` message"
+   },
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 350,
+    "note": "visible.length===0 renders emptyState even when error is set"
+   },
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 489,
+    "note": "error strip: no role=alert, no Retry/dismiss"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/dark/007-load-error-500.png",
+    "shots/q1/light/063-load-error-500.png",
+    "shots/q1/dark/032-load-error-500.png",
+    "shots/q1/dark/033-create-error-500.png"
+   ],
+   "network": [
+    "GET /api/modules/designer/designs → 500 (injected)",
+    "POST /api/modules/designer/designs → 500 (injected)"
+   ],
+   "dom": [
+    "error strip role=null aria-live=null buttons=0"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/q1/dark/032-load-error-500.png",
+     "x": 400,
+     "y": 47,
+     "hex": "#261817",
+     "nearestToken": "--status-danger-soft@app",
+     "deltaE": 0.6
+    },
+    {
+     "file": "shots/q1/light/063-load-error-500.png",
+     "x": 400,
+     "y": 47,
+     "hex": "#ecdcdb",
+     "nearestToken": "--status-danger-soft@app",
+     "deltaE": 0.7
+    },
+    {
+     "file": "shots/vq1/dark/007-load-error-500.png",
+     "x": 400,
+     "y": 47,
+     "hex": "#261817",
+     "nearestToken": "--status-danger-soft@app",
+     "deltaE": 0.6
+    }
+   ]
+  },
+  "id": "Q1-003",
+  "area": "home",
+  "title": "Designs load failure shows 'No designs yet — Create your first design' under a raw 'HTTP 500' strip with no Retry",
+  "category": "error-handling",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home (stack A), playwright: route \"**/api/modules/designer/designs\" --status 500 (problem+json)",
+   "Reload",
+   "Observe the page",
+   "Click 'New design' (POST also 500)"
+  ],
+  "expected": "A load-error state that says designs could not be loaded (human wording), with a Retry button, and no claim that the user has no designs; counts/sidebar not presenting 0 as fact.",
+  "actual": "Red strip 'Failed to load designs: HTTP 500' (raw status, no role=alert, no retry/dismiss) + the first-run empty state 'No designs yet / Create your first design to get started / New design', header '0 local', All 0 — while the user actually has 18 designs. Create failure similarly surfaces 'Failed to create design: HTTP 500'. Only recovery is a full app reload.",
+  "suggestedFix": "HomeScreen.tsx: before the `visible.length === 0` branch (:350) add `else if (error && designs.length === 0)` rendering an error state ('Couldn't load your designs', problem-details `title` when present, Button 'Retry' → fetchDesigns()); parse application/problem+json in fetchDesigns/handleCreateDesign/handleDeleteDesign instead of `HTTP ${status}` (:138,:184,:207); give the strip (:489) role='alert' and a dismiss button.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "home:load-error:empty-state-shown",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced with route 500 (problem+json) on GET /api/modules/designer/designs + reload: strip text 'Failed to load designs: HTTP 500' (role=null, 0 buttons), below it 'No designs yet / Create your first design to get started / New design', header '0 local', status 'designs 0' — while the DB has 18+ designs; sidebar still shows 'Archived 1' from localStorage. Strip bg #261817 = --status-danger-soft (ΔE 0.6) — on token. Unrouted afterwards. HomeScreen.tsx:137-139 raw status, :350 emptyState chosen whenever visible.length===0 regardless of error, :489-493 strip without role/retry. Also K40 instance. S2 kept (misleading 'no designs' claim, only recovery is reload).",
+   "evidence": [
+    "shots/vq1/dark/007-load-error-500.png",
+    "shots/q1/light/063-load-error-500.png"
+   ]
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": "26f807ad (QA-q1-meta), 10f73c81 (QA-q1-menu-n) — both created by the bug",
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 296,
+    "note": "N branch lacks modifier check and the onControl/menu guard used for Enter"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/dark/005-n-in-sort-menu-created.png",
+    "shots/q1/dark/039-n-in-sort-menu-created.png"
+   ],
+   "dom": [
+    "after 'n' in sort menu: title 'Untitled Design — OpenPCB', new tab design-tab-10f73c81…",
+    "after Cmd+Shift+N on Home: new tab design-tab-26f807ad… 'Untitled Design r0'"
+   ]
+  },
+  "id": "Q1-004",
+  "area": "home",
+  "title": "Home 'N' hotkey creates a design from inside open menus and with any modifier (Cmd+Shift+N, sort-menu typeahead)",
+  "category": "keyboard",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home, click the sort button 'Modified' to open the sort menu",
+   "Press 'n' (standard menu typeahead to jump to 'Name')",
+   "→ menu closes, a new 'Untitled Design' is created in the DB and the app navigates to Designer",
+   "Back on Home with nothing focused, press Cmd+Shift+N (or Ctrl+N / Alt+N) → also creates a new design"
+  ],
+  "expected": "N only fires when no modifier is held and focus is not in a menu/listbox/dialog; menu typeahead works ('n' focuses 'Name').",
+  "actual": "The window keydown handler checks only e.key==='n'|'N' and input/textarea targets — it ignores metaKey/ctrlKey/altKey and role=menuitem/menu focus, so every such key press silently creates a persisted design (two stray designs created during this test).",
+  "suggestedFix": "HomeScreen.tsx:296: `if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;` before the N branch and apply the onControl guard extended with \"[role='menu'], [role='listbox'], [role='dialog']\" so menu typeahead and focused controls never create designs.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "home:hotkey-n:fires-in-menus-and-with-modifiers",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced: with the sort menu open (focus role=menu), pressing 'n' closed the menu and created+opened a new design (count 20 → 21). With nothing focused, Ctrl+N also created one (21 → 22). Both strays were mine (renamed QA-q1-vq1-stray-n, deleted). Electron main (electron/src/main) sets no application menu/accelerators, so Cmd/Ctrl+N reach the renderer in the desktop app too. HomeScreen.tsx:296 checks only key + input/textarea target, no modifier or menu guard (the Enter branch's onControl guard at :288 is not applied). S3 kept.",
+   "evidence": [
+    "shots/vq1/dark/005-n-in-sort-menu-created.png"
+   ]
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/home/DesignListRow.tsx",
+    "line": 7,
+    "note": "DESIGN_LIST_COLS = '220px 1fr 70px 90px 110px 24px' — 1fr has no minimum"
+   },
+   {
+    "path": "src/core/frontend/src/screens/home/DesignDetailPanel.tsx",
+    "line": 39,
+    "note": "fixed 300px detail panel + 200px sidebar + 80px rail leave ~520px"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/dark/008-home-list-1100.png",
+    "shots/q1/dark/043-home-list-1100.png",
+    "shots/q1/dark/044-home-grid-1100.png"
+   ],
+   "dom": [
+    "listW 520, cols '220px 0px 70px 90px 110px 24px', name cell left 518 width 0, star button left 820 right 844 (pane right edge 800)"
+   ]
+  },
+  "id": "Q1-005",
+  "area": "home",
+  "title": "At the 1100×720 minimum window the Home list collapses the Name column to 0px and clips the star column — design names are invisible",
+  "category": "visual",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1100x720"
+  ],
+  "repro": [
+   "Home, List view (default)",
+   "Resize window to 1100×720 (Electron minimum)",
+   "Look at the design rows"
+  ],
+  "expected": "Name stays visible (it is the primary column); fixed columns shrink/hide (e.g. drop the 220px preview or the detail panel) before Name.",
+  "actual": "grid-template-columns resolves to '220px 0px 70px 90px 110px 24px': list pane is 520px wide, Name cell is 0px (header 'NAME' overlaps 'REV'), and the star cell starts at x=820 beyond the pane edge (800) so stars are clipped. Rows show only thumbnail/rev/DRC/modified, so users cannot tell designs apart (many are 'Empty design'). Grid view is fine at the same size.",
+  "suggestedFix": "DesignListRow.tsx:7: DESIGN_LIST_COLS = 'minmax(96px,220px) minmax(160px,1fr) 56px 90px 90px 24px' (thumbnail wrapper at :36 must then use w-full instead of w-[220px]); and/or hide DesignDetailPanel (w-[300px], DesignDetailPanel.tsx:32/39) below ~1280px viewport via a container/media query.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "home:list:name-column-collapses-1100",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced at 1100×720 (= Electron minWidth/minHeight, electron/src/main/index.ts:133-134): row grid-template-columns resolves to '220px 0px 70px 90px 110px 24px', list pane 520px wide (right edge 800), Name cell width 0, star cell at x=820 (outside the pane, clipped). Screenshot shows only thumbnails/rev/DRC/modified — no names; header 'NAME' collides with 'REV'. Not an artefact (layout is theme/stack independent). S2 kept: primary identifying column invisible at the minimum supported window.",
+   "evidence": [
+    "shots/vq1/dark/008-home-list-1100.png"
+   ]
+  }
+ },
+ {
+  "knownRef": "K33",
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/AppShell.tsx",
+    "line": 36,
+    "note": "capture-phase contextmenu preventDefault on document for ALL targets"
+   },
+   {
+    "path": "src/core/frontend/src/AppShell.tsx",
+    "line": 63,
+    "note": "shell-wide onContextMenu opens app menu even over inputs"
+   },
+   {
+    "path": "src/core/frontend/src/AppShell.tsx",
+    "line": 77,
+    "note": "shortcut: 'Ctrl+,' hardcoded"
+   },
+   {
+    "path": "src/core/frontend/src/components/AppContextMenu.tsx",
+    "line": 119,
+    "note": "menu autofocus; no focus restore on close"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/dark/009-ctx-in-search-input.png",
+    "shots/q1/dark/006-ctx-search-input.png",
+    "shots/q1/dark/005-ctx-empty.png"
+   ],
+   "dom": [
+    "menu scope 'app', text 'OpenPCB\\nSettings\\nCtrl+,' in both cases",
+    "after right-click: input focused=false; after Esc activeElement=BODY"
+   ]
+  },
+  "id": "Q1-006",
+  "area": "shell",
+  "title": "Right-click anywhere (incl. text inputs) shows only an 'OpenPCB › Settings' menu — no Cut/Copy/Paste, steals focus, shortcut label says Ctrl+, on macOS",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home: type 'LED' in 'Search designs', select the text",
+   "Right-click inside the search input",
+   "Observe the menu; press Esc",
+   "Right-click on empty sidebar area (180,500) for comparison"
+  ],
+  "expected": "Inside editable fields the native (or an equivalent Cut/Copy/Paste/Select all) menu appears; the app menu appears only on non-editable chrome; shortcut shown per platform (⌘, on macOS); focus returns to the input after Esc.",
+  "actual": "Both places show the same custom menu with title 'OpenPCB' and a single item 'Settings  Ctrl+,'. No clipboard actions in inputs (a capture-phase listener preventDefaults every native contextmenu). Opening the menu moves focus from the input to the menu; after Esc focus lands on <body>, not back on the input (selection lost). Label hardcodes 'Ctrl+,' although the handler also accepts ⌘ and this is a macOS-first desktop app.",
+  "suggestedFix": "AppShell.tsx:63: when (event.target as Element).closest('input, textarea, [contenteditable=\"true\"]') open an 'edit' scope menu with Cut/Copy/Paste/Select all (document.execCommand or an Electron IPC to webContents.cut/copy/paste) instead of the app menu — letting the native menu through (:36) only helps the browser, Electron shows nothing. Render the shortcut via a platform helper (⌘, on macOS). AppContextMenu closeMenu: restore focus to the previously focused element.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "shell:context-menu:replaces-native-in-inputs",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced: right-click inside the Home search input (text 'LED' selected) opened data-testid=app-context-menu scope 'app' with 'OpenPCB / Settings / Ctrl+,' only; focus moved to the menu DIV and after Esc landed on BODY (not the input). AppShell.tsx:35-47 capture-phase preventDefault on every contextmenu + :63-84 shell-wide menu. Refutation attempt: in Electron a native menu would not appear anyway — electron/src has no 'context-menu' handler — so the desktop app has no Cut/Copy/Paste on right-click at all; the finding stands for Electron too. Shortcut label hardcoded 'Ctrl+,' (useSettingsHotkeys accepts ⌘ too). K33 confirmed, S3.",
+   "evidence": [
+    "shots/vq1/dark/009-ctx-in-search-input.png"
+   ]
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/components/AppContextMenu.tsx",
+    "line": 155,
+    "note": "bg-surface-panel, py-1.5; items px-3 py-1.5 text-sm"
+   },
+   {
+    "path": "src/shared/frontend/ui/dropdown-menu.tsx",
+    "line": 46,
+    "note": "kit: bg-menu-bg border-menu-border; items h-[22px] text-xs"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/dark/010-ctx-empty.png",
+    "shots/vq1/dark/011-sort-menu.png",
+    "shots/q1/dark/005-ctx-empty.png",
+    "shots/q1/dark/009-sort-menu.png"
+   ],
+   "dom": [
+    "app-context-menu {radius 3px, bg rgb(17,17,19), itemH 28, itemFs 12px}",
+    "kit [role=menu] {radius 3px, bg rgb(28,28,31), itemH 22, itemFs 11px}"
+   ]
+  },
+  "id": "Q1-007",
+  "area": "shell",
+  "title": "App context menu is styled unlike every kit menu (panel bg, 28px rows, 12px text vs menu-bg, 22px rows, 11px)",
+  "category": "consistency",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home: right-click empty area → app context menu",
+   "Then click the sort button 'Modified' → kit dropdown menu",
+   "Compare computed styles"
+  ],
+  "expected": "All menus share the kit menu tokens: bg --menu-bg, border --menu-border, 22px items, 11px text, --menu-highlight hover.",
+  "actual": "App context menu (also used by schematic/PCB canvas menus via data-scope): bg rgb(17,17,19)=--surface-panel, item height 28px, font 12px, title 11px, hover bg-surface-hover. Kit dropdown: bg rgb(28,28,31)=--menu-bg, item 22px, font 11px. The two menu families look different side by side.",
+  "suggestedFix": "AppContextMenu.tsx:155: 'bg-menu-bg border-menu-border p-1' ; items (:193) 'h-[22px] px-2 text-xs rounded-control' with focused/hover 'bg-menu-highlight text-text-strong', shortcut 'text-2xs text-text-tertiary', title/group label like DropdownMenuLabel; set ITEM_HEIGHT (:6) to 22 and PADDING_Y to 4.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "shell:context-menu:off-kit-styling",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced (dark): app context menu bg rgb(17,17,19) (--surface-panel), border rgb(30,30,33), item 28px / 12px text; kit sort dropdown bg rgb(28,28,31) (--menu-bg), border rgb(35,35,38), item 22px / 11px. AppContextMenu.tsx:155 and :193 vs dropdown-menu.tsx:46/68. Also ITEM_HEIGHT=32 (AppContextMenu.tsx:6) no longer matches the real 28px rows, so bottom-edge clamping is off. S3 kept.",
+   "evidence": [
+    "shots/vq1/dark/010-ctx-empty.png",
+    "shots/vq1/dark/011-sort-menu.png"
+   ]
+  }
+ },
+ {
+  "knownRef": "K25",
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 379,
+    "note": "hardcoded <span>Modified ▾</span>"
+   },
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 237,
+    "note": "fixed sort directions"
+   },
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 460,
+    "note": "DropdownMenuItem without checked indicator (use DropdownMenuRadioItem)"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/dark/012-sort-name-header.png",
+    "shots/q1/dark/010-sort-name.png",
+    "shots/q1/dark/009-sort-menu.png"
+   ],
+   "dom": [
+    "sort=Name: header 'PREVIEW NAME REV DRC MODIFIED ▾', rows ['555 Timer LED Blinker','DRC Demo',…]",
+    "header cells: SPAN, cursor auto, role null, aria-sort null"
+   ]
+  },
+  "id": "Q1-008",
+  "area": "home",
+  "title": "List header always shows 'Modified ▾' regardless of sort; headers are not clickable and sort direction cannot be changed",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home, List view",
+   "Sort button 'Modified' → choose 'Name' (rows re-order alphabetically)",
+   "Read the column header row",
+   "Choose 'Created' → header unchanged; click any header cell"
+  ],
+  "expected": "The sort indicator moves to the active column (Name ▲ / Created ▼), headers are clickable (aria-sort) and toggle direction; 'Created' has a visible column or the indicator sits on the subtitle.",
+  "actual": "Header text stays 'MODIFIED ▾' for Name and Created sorts (rows are sorted correctly). Header cells are plain <span>s (cursor auto, no role/aria-sort), so clicking does nothing. Name is always A→Z, dates always newest first — no way to reverse. The sort menu itself shows no check mark on the current option (only a slightly brighter text).",
+  "suggestedFix": "HomeScreen.tsx:374-381: render Name/Modified header cells as buttons with aria-sort that set sort (+ a direction state used in the comparator at :237) and show ▲/▼ only on the active column (for 'created' show 'Created ▾' in the date slot); :458-468 use DropdownMenuRadioGroup/RadioItem so the current sort is checked.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "home:list-header:sort-indicator-static",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced: sort → Name re-orders rows alphabetically ('555 Timer LED Blinker','DRC Demo',…) while the header still reads 'PREVIEW NAME REV DRC MODIFIED ▾'; header cells are SPAN, role=null, cursor auto. Sort menu items are plain menuitem with no aria-checked. HomeScreen.tsx:379 hardcoded label, :237-241 fixed directions, :460 DropdownMenuItem. K25 confirmed, S3.",
+   "evidence": [
+    "shots/vq1/dark/012-sort-name-header.png"
+   ]
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": "5464e17b (QA-q1-alpha)",
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 313,
+    "note": "starred: userState.starredCount / archived: archivedCount = raw Set.size"
+   },
+   {
+    "path": "src/core/frontend/src/screens/home/useDesignUserState.ts",
+    "line": 71,
+    "note": "counts are localStorage set sizes, never intersected with loaded designs or pruned on delete"
+   },
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 406,
+    "note": "header uses designs.length (includes archived)"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/dark/013-starred-count-vs-list.png",
+    "shots/vq1/dark/007-load-error-500.png",
+    "shots/q1/dark/018-after-archive.png",
+    "shots/q1/dark/034-empty-state.png",
+    "shots/q1/dark/032-load-error-500.png",
+    "shots/q1/dark/043-home-list-1100.png",
+    "shots/q1/light/062-starred-count-after-delete.png"
+   ],
+   "dom": [
+    "counts ['All designs15','Recent3','Starred1','Archived1'] while Starred list rows = []"
+   ]
+  },
+  "id": "Q1-009",
+  "area": "home",
+  "title": "Home counts disagree with the lists: Starred/Archived include archived & deleted designs, header 'N local' includes archived",
+  "category": "data",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home: star own design QA-q1-alpha (Starred 1 ✓)",
+   "Grid → its '…' → Archive",
+   "Click 'Starred' filter",
+   "Also: with the designs API mocked to return [] (or failing with 500), the sidebar still shows 'Starred 1'",
+   "Light session: star QA-q1-alpha, then delete it → sidebar still 'Starred 1', list empty; localStorage openpcb.home.starred still holds 5464e17b…"
+  ],
+  "expected": "Each filter count equals the number of rows that filter shows (starred ∩ active designs; archived ∩ existing designs).",
+  "actual": "Starred shows '1' but the Starred list is empty ('No matching designs') because the only starred design is archived; on an empty/failed design list 'Starred 1' persists; deleted designs stay in openpcb.home.starred/archived forever and keep inflating counts. Header reads '20 local' while 'All designs' shows 19 (one archived) — two different totals on one screen.",
+  "suggestedFix": "HomeScreen.tsx:305-316: starred = active.filter(d => userState.isStarred(d.id)).length; archived = designs.filter(d => userState.isArchived(d.id)).length; header (:406) show the same active count or 'N local · M archived'; after a successful DELETE (:209) remove the id from both sets (add a forget(id) to useDesignUserState).",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "home:sidebar:counts-include-archived-deleted",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced: archived own QA-q1-vq1-a, starred it from the Archived filter → sidebar 'Starred 1' but the Starred filter shows 'No matching designs'; header '22 local' vs 'All designs 21'. With the list API failing (Q1-003 repro) the sidebar still showed 'Archived 1' with 0 designs. HomeScreen.tsx:313-314 use raw Set sizes from useDesignUserState.ts:71-72; nothing prunes deleted ids. S3 kept (count badge only, lists themselves are correct).",
+   "evidence": [
+    "shots/vq1/dark/013-starred-count-vs-list.png",
+    "shots/vq1/dark/007-load-error-500.png"
+   ]
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 117,
+    "note": "filter/sort/view are plain useState"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q1/dark/011-grid.png",
+    "shots/q1/dark/012-after-reload.png"
+   ],
+   "dom": [
+    "after reload: View List:true Grid:false; sort 'Modified'",
+    "after Library→Home: View List:true, filters All designs:true"
+   ]
+  },
+  "id": "Q1-010",
+  "area": "home",
+  "title": "Home view (List/Grid), sort and filter reset on every reload and every time you leave Home",
+  "category": "bug",
+  "severity": "S4",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home: switch to Grid, sort by Created, pick filter 'Starred'",
+   "Reload the app → List / Modified / All designs again",
+   "Or: set Grid + Starred, click rail 'Library', then rail 'Home' → back to List / All designs"
+  ],
+  "expected": "The chosen view mode (and ideally sort + filter) persist per user across navigation and restarts, like the designer dock/tab state does (openpcb:designer:dock-*).",
+  "actual": "All three are component useState in HomeScreen, which unmounts on navigation; nothing is written to storage (localStorage only holds theme + starred/archived).",
+  "suggestedFix": "HomeScreen.tsx:117-119: back view/sort/filter with a small try/catch localStorage hook (keys openpcb.home.view / .sort / .filter), mirroring openpcb.library.view in the Library space.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "home:prefs:view-sort-filter-not-persisted",
+  "originalSeverity": "S3",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced: set Grid + sort Name + filter Starred, rail Library → Home: back to List / Modified / All designs. localStorage keys hold only theme, starred/archived, designer and library keys (openpcb.library.view exists — Library persists its view per D11, Home does not). HomeScreen.tsx:116-119 plain useState. Severity recalibrated S3 → S4: no data/function impact, preference polish (the sibling-screen inconsistency with Library is noted).",
+   "evidence": []
+  }
+ },
+ {
+  "knownRef": "K35",
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/home/DesignListRow.tsx",
+    "line": 28,
+    "note": "TableRow with onClick/onDoubleClick only"
+   },
+   {
+    "path": "src/core/frontend/src/screens/home/DesignCard.tsx",
+    "line": 195,
+    "note": "card is a <div onClick> — not focusable"
+   },
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 264,
+    "note": "keydown handler has no Arrow handling"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q1/dark/021-tab-focus.png",
+    "shots/q1/dark/020-row-select.png"
+   ],
+   "dom": [
+    "Tab log: ['Star','Star','Star','Star','Star','Open','More actions','Home','Designer','Library','Docs','Assistant','Report a bug…','Settings','Search designs','List','Grid','Import KiCad…','Modified','New designN','All designs16','Recent4','Starred1','Archived0','Unstar','Star',…]",
+    "rows: tabindex null, role null, aria-selected null",
+    "ArrowDown: detail still 'GUIDE-VALIDATE'"
+   ]
+  },
+  "id": "Q1-011",
+  "area": "home",
+  "title": "Home design list and grid cards are not keyboard operable (rows/cards unreachable by Tab, no arrow-key selection)",
+  "category": "keyboard",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home, List view; click in empty space then press Tab ~30×, logging document.activeElement",
+   "Try ArrowDown/ArrowUp to move the selected row",
+   "Switch to Grid and Tab again"
+  ],
+  "expected": "Rows are focusable (roving tabindex, role=row/option with aria-selected) so arrows move selection, Enter opens, Delete prompts; grid cards are focusable buttons/links that open with Enter/Space.",
+  "actual": "Tab order: Star ×N → Open → More actions → rail → search → view/import/sort/new → filters → Star… — rows and cards never receive focus (no tabindex/role/aria-selected). ArrowDown does nothing (selection unchanged). The only keyboard path to a design is 'Enter opens selected', where the selection is the implicit first row, so a keyboard user can open only the top design. Grid cards are clickable <div>s with no keyboard handler.",
+  "suggestedFix": "Make the list container role=listbox aria-label='Designs'; DesignListRow → role=option aria-selected tabIndex={selected?0:-1}; handle ArrowUp/Down/Home/End (move selectedId + scrollIntoView), Enter open, Delete → setDeletingDesign. DesignCard: role=button tabIndex=0 with Enter/Space → onOpen (or select, see Q1-018).",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "home:list:rows-not-keyboard-reachable",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced: all 21 list rows tabIndex -1, role null, aria-selected null; ArrowDown ×2 with nothing focused left the detail panel on the same design; grid cards are DIV tabIndex -1 role null. Only keyboard path is Enter on the implicit first/selected row. DesignListRow.tsx:28-35, DesignCard.tsx:195-197, keydown handler HomeScreen.tsx:264 has no arrow handling. K35 confirmed, S3.",
+   "evidence": []
+  }
+ },
+ {
+  "knownRef": "K34",
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/home/HomeSidebar.tsx",
+    "line": 91,
+    "note": "filter buttons outline-none, no focus-visible style"
+   },
+   {
+    "path": "src/core/frontend/src/screens/home/DesignCard.tsx",
+    "line": 180,
+    "note": "StarButton outline-none"
+   },
+   {
+    "path": "src/core/frontend/src/screens/home/DesignCard.tsx",
+    "line": 114,
+    "note": "More actions trigger outline-none"
+   },
+   {
+    "path": "src/shared/frontend/ui/segmented-control.tsx",
+    "line": 58,
+    "note": "option buttons outline-none with no focus-visible replacement (K34)"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/dark/014-focus-on-recent-filter.png",
+    "shots/q1/dark/022-focus-on-filter-or-button.png",
+    "shots/q1/light/054-focus-on-recent-filter.png",
+    "shots/q1/light/053-focus-on-import-kicad.png"
+   ],
+   "dom": [
+    "{n:'Star', fv:true, outline:'none', shadow:'none', bg transparent}",
+    "{n:'More actions', fv:true, outline:'none', shadow:'none'}",
+    "{n:'List', fv:true, outline:'none', shadow:'none'}",
+    "'Starred1' focused: outline none, shadow none"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/vq1/dark/014-focus-on-recent-filter.png",
+     "x": 150,
+     "y": 74,
+     "hex": "#111113",
+     "nearestToken": "--surface-panel",
+     "deltaE": 0.0
+    },
+    {
+     "file": "shots/vq1/dark/014-focus-on-recent-filter.png",
+     "x": 150,
+     "y": 98,
+     "hex": "#111113",
+     "nearestToken": "--surface-panel",
+     "deltaE": 0.0
+    }
+   ]
+  },
+  "id": "Q1-012",
+  "area": "home",
+  "title": "No visible keyboard focus on Home filter buttons, star toggles, '…' More-actions triggers and the List/Grid segmented control",
+  "category": "a11y",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home; Tab through the page",
+   "Watch the focused element for each stop (filters, Star, More actions, List/Grid)"
+  ],
+  "expected": "Every focus stop shows a clear focus-visible indicator (e.g. 1px --selection ring/border like kit Button).",
+  "actual": "Computed style at :focus-visible for Star, More actions, All/Recent/Starred/Archived filters, List and Grid: outline none, box-shadow none, no background change → focus is invisible (compare Import KiCad… which gets a cyan border, and rail items which fall back to the browser outline).",
+  "suggestedFix": "Add the kit focus ring used by Button/IconButton (focus-visible:ring-1 ring-selection ring-inset) to HomeSidebar.tsx:91 filter buttons, DesignCard.tsx:180 StarButton, :113-114 ActionsMenu trigger and segmented-control.tsx:58 options; rail buttons (LeftSidebar.tsx:15) should use the same instead of the UA outline.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "home:focus-visible:missing",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced by keyboard Tab from the search field: List, Grid, all four filter buttons and every Star report :focus-visible with outline none / box-shadow none; pixel probe of the focused 'Recent' row (#111113 at left/top/mid) is identical to the unfocused 'Starred' row → no visible indicator. Import KiCad…/Modified/New design do get a cyan ring (kit Button), so the gap is Home-local buttons + SegmentedControl. K34 confirmed (partial scope as q1 reported), S3.",
+   "evidence": [
+    "shots/vq1/dark/014-focus-on-recent-filter.png"
+   ]
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/home/DesignCard.tsx",
+    "line": 183,
+    "note": "unstarred: text-border-control"
+   },
+   {
+    "path": "src/core/frontend/src/screens/home/HomeSidebar.tsx",
+    "line": 98,
+    "note": "counts text-text-disabled"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/dark/015-home-list.png",
+    "shots/vq1/light/001-home-list.png",
+    "shots/q1/dark/001-home-list.png",
+    "shots/q1/light/050-home-list.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/q1/dark/001-home-list.png",
+     "x": 1109,
+     "y": 86,
+     "hex": "#2a2a2e",
+     "nearestToken": "--border-control",
+     "deltaE": 0
+    },
+    {
+     "file": "shots/q1/dark/001-home-list.png",
+     "x": 1110,
+     "y": 90,
+     "hex": "#28282d",
+     "nearestToken": "--surface-selected",
+     "deltaE": 1.0
+    },
+    {
+     "file": "shots/q1/light/050-home-list.png",
+     "x": 1109,
+     "y": 150,
+     "hex": "#cfcfd4",
+     "nearestToken": "--border-control",
+     "deltaE": 0
+    },
+    {
+     "file": "shots/q1/light/050-home-list.png",
+     "x": 1109,
+     "y": 86,
+     "hex": "#cfcfd4",
+     "nearestToken": "--border-control",
+     "deltaE": 0
+    }
+   ]
+  },
+  "id": "Q1-013",
+  "area": "home",
+  "title": "Unstarred star icon is nearly invisible (1.05–1.4:1) and filter counts are low-contrast (2.2–2.5:1)",
+  "category": "a11y",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home, List view",
+   "Look at the star column on normal rows and on the selected row",
+   "Look at the counts next to All designs / Recent / Starred / Archived"
+  ],
+  "expected": "Interactive icons ≥3:1 against their background (WCAG 1.4.11), text ≥4.5:1 (counts are informational text).",
+  "actual": "Unstarred star stroke uses --border-control: dark #2a2a2e on row #0c0c0d = 1.37:1 and on the selected row #26262b = 1.05:1 (invisible); light #cfcfd4 on #f2f2f3 = 1.39:1, on selected #e2e2e5 = 1.2:1. The star is the only star affordance in List view, so starring is effectively undiscoverable on the selected row. Filter counts use --text-disabled: dark #55555a on #111113 = 2.54:1, light #a8a8ae on #f7f7f8 = 2.21:1.",
+  "suggestedFix": "DesignCard.tsx:183 unstarred 'text-text-tertiary hover:text-text-secondary' (≥3:1 on selected rows); HomeSidebar.tsx:98 counts 'text-text-tertiary'.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "home:star-and-counts:low-contrast",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Pixel-verified. Dark: unstarred star on a normal row — darkest antialiased stroke #232326 on #0c0c0d; on the selected row the 12px icon box is #26262b bg with stroke pixels #27272c–#29292d (visually absent). Light: normal row stroke ≤#e1e1e3 on #f2f2f3, selected row ≤#dbdbdf on #e6e6e9. Token-level ratios: --border-control on row 1.37:1 (dark) / 1.39:1 (light), on selected 1.05:1 / 1.2:1; counts --text-disabled 2.54:1 (dark) / 2.21:1 (light). DesignCard.tsx:183, HomeSidebar.tsx:98. S3 kept.",
+   "evidence": [
+    "shots/vq1/dark/015-home-list.png",
+    "shots/vq1/light/001-home-list.png"
+   ]
+  }
+ },
+ {
+  "knownRef": "K43",
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/home/DesignCard.tsx",
+    "line": 122,
+    "note": "stale comment + disabled items"
+   },
+   {
+    "path": "src/shared/frontend/ui/dropdown-menu.tsx",
+    "line": 71,
+    "note": "data-[disabled]:pointer-events-none kills the title tooltip"
+   },
+   {
+    "path": "src/modules/designer/backend/routes.ts",
+    "line": 3002,
+    "note": "router.patch('/designs/:designId') rename exists"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/dark/019-detail-menu-stubs.png",
+    "shots/q1/dark/017-card-menu.png",
+    "shots/q1/dark/024-detail-menu.png"
+   ],
+   "dom": [
+    "menuitems Rename/Duplicate/Export…: title 'Coming soon', pointer-events none, aria-disabled true"
+   ],
+   "network": [
+    "PATCH /api/modules/designer/designs/5464e17b… (tab rename) → 200, name 'QA-q1-alpha'"
+   ]
+  },
+  "id": "Q1-014",
+  "area": "home",
+  "title": "Card/detail 'More actions' shows Rename, Duplicate, Export… permanently disabled; the 'Coming soon' tooltip can never appear and Rename/Export already exist elsewhere",
+  "category": "stub",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home → Grid → any card '…' (or detail panel '…')",
+   "Hover 'Rename' / 'Duplicate' / 'Export…'"
+  ],
+  "expected": "Either working actions (Rename via the existing PATCH /designs/:id used by the designer tab rename; Export… opening the designer export dialog) or the items hidden until implemented.",
+  "actual": "Three greyed-out items at the top of every menu. They carry title='Coming soon' but the kit sets pointer-events:none on disabled items, so no tooltip ever shows — users see unexplained dead items. The source comment claims 'No backend endpoint yet', but PATCH /api/modules/designer/designs/:designId exists (designer tab double-click rename works; verified by renaming QA-q1-alpha) and the export endpoints exist. Home offers no rename path at all.",
+  "suggestedFix": "DesignCard.tsx:122-131: remove Duplicate (no backend) and Export… (or route to navigateToModule('designer', id, {action:'export'}) if the designer handles it); implement Rename as inline edit calling PATCH /api/modules/designer/designs/:id then fetchDesigns(). Never ship disabled 'Coming soon' items (D6).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "home:actions-menu:coming-soon-stubs",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced: detail/card '…' menu items Rename/Duplicate/Export… have aria-disabled=true, title='Coming soon', computed pointer-events none (kit dropdown-menu.tsx:71), so the tooltip can never show. PATCH /designs/:designId exists (routes.ts:3002). This also contradicts PLAN D6 ('No disabled placeholders') and K43. S3 kept.",
+   "evidence": [
+    "shots/vq1/dark/019-detail-menu-stubs.png"
+   ]
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/components/LeftSidebar.tsx",
+    "line": 15,
+    "note": "active w-16 vs inactive w-[72px]"
+   },
+   {
+    "path": "src/core/frontend/src/components/LeftSidebar.tsx",
+    "line": 115,
+    "note": "module buttons use native title"
+   },
+   {
+    "path": "src/core/frontend/src/components/LeftSidebar.tsx",
+    "line": 153,
+    "note": "Settings button: no Tooltip"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q1/dark/002-rail-settings-hover.png",
+    "shots/q1/dark/003-rail-bug-hover.png",
+    "shots/q1/dark/004-rail-local-hover.png"
+   ],
+   "dom": [
+    "hover Settings → tooltips []",
+    "hover bug → ['Report a bug or request a feature']",
+    "rail: Home{title:null,w:64,ariaCurrent:null}, Designer{title:'Designer',w:72}, Settings{title:null}"
+   ]
+  },
+  "id": "Q1-015",
+  "area": "shell",
+  "title": "Left rail inconsistencies: Settings has no tooltip, Home has none while module items get native title tooltips, active item is narrower (64px vs 72px), no aria-current on active item",
+  "category": "consistency",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Hover the Settings gear (icon-only) for >1s",
+   "Hover Home, then Designer",
+   "Hover the bug-report and 'local only' glyphs",
+   "Inspect rail button widths / aria-current"
+  ],
+  "expected": "Icon-only rail items (Settings, bug, local) all show the same kit Tooltip; labelled items need none (or all use the kit tooltip); active item is marked aria-current='page' and highlight geometry is consistent.",
+  "actual": "Settings gear: no tooltip and no title (only aria-label). Report-bug and Local-only use the kit Tooltip. Designer/Library/Docs/Assistant use the native browser title tooltip (redundant with their visible label, inconsistent look); Home has no title. Active item width 64px vs inactive 72px (highlight looks inset). Only Settings sets aria-current; the active Home/module button does not.",
+  "suggestedFix": "LeftSidebar.tsx: wrap Settings in <Tooltip label='Settings (⌘,)' side='right'>; drop title= on labelled module buttons (:115); add aria-current={active ? 'page' : undefined} to Home (:93) and module buttons (:112); use one width in navButtonClass (:15).",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "shell:rail:tooltip-active-inconsistent",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Verified: hovering Settings produced no [role=tooltip] (bug link does: 'Report a bug or request a feature'); LeftSidebar.tsx:153-165 Settings has only aria-label; module buttons use native title (:115), Home has none; navButtonClass (:15) w-16 active vs w-[72px] inactive; aria-current only on Settings (:156). S3 kept (icon-only control without visible label/tooltip).",
+   "evidence": []
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 438,
+    "note": "navigateToModule('designer', undefined, {action:'import-kicad'})"
+   },
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 955,
+    "note": "opens wizard on params.action; cancel never navigates back"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/dark/016-import-kicad-from-home.png",
+    "shots/q1/dark/031-import-kicad.png"
+   ],
+   "dom": [
+    "dialog aria-modal true, label 'Import KiCad project', activeElement BODY",
+    "after Esc: dialog false, active rail 'Designer', title 'QA-q1-alpha — OpenPCB'"
+   ]
+  },
+  "id": "Q1-016",
+  "area": "home",
+  "title": "'Import KiCad…' on Home dumps the user into Designer; cancelling the wizard does not return to Home and focus is not moved into the dialog",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home → click 'Import KiCad…'",
+   "Observe the app switched to the Designer space (last open design tab shown behind the dialog); activeElement is <body>",
+   "Press Esc (or Cancel)"
+  ],
+  "expected": "The import wizard opens over Home (or returns to Home on cancel); initial focus goes to 'Choose ZIP…'.",
+  "actual": "Route changes to Designer; the wizard (role=dialog 'Import KiCad project') opens over whatever design tab was last active; focus stays on body; after Esc the user is left in Designer on that design instead of back on Home.",
+  "suggestedFix": "Pass params {action:'import-kicad', from:'home'} (HomeScreen.tsx:439); in designer Space.tsx:955 remember it and on wizard cancel call navigateHome() (import success stays in Designer). Autofocus 'Choose ZIP…' when the wizard opens.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "home:import-kicad:cancel-lands-in-designer",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced: Home 'Import KiCad…' switches the rail to Designer (title = last design tab), dialog 'Import KiCad project' aria-modal=true opens with activeElement BODY; Esc closes it and leaves the user in Designer on that design. Routing to the designer wizard is intentional (PLAN Run 2 c616767 'nav params → designer wizard'), but no return path exists: Space.tsx:955-957 only opens the wizard, nothing records the origin. Not an environment artefact. S3 kept.",
+   "evidence": [
+    "shots/vq1/dark/016-import-kicad-from-home.png"
+   ]
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "rejected",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/home/SchematicThumbnail.tsx",
+    "line": 14,
+    "note": "BG '#131313', WIRE '#94a3b8', SYMBOL_STROKE '#e2e8f0', SYMBOL_FILL '#111111' hard-coded"
+   },
+   {
+    "path": "src/core/frontend/src/screens/home/DesignListRow.tsx",
+    "line": 36,
+    "note": "thumbnail wrapper bg-surface-canvas-well (#08090a) around a #131313 svg"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/light/001-home-list.png",
+    "shots/q1/light/050-home-list.png",
+    "shots/q1/light/052-home-grid.png",
+    "shots/q1/light/051-schematic-light-vs-thumb.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/q1/light/050-home-list.png",
+     "x": 400,
+     "y": 110,
+     "hex": "#131313",
+     "nearestToken": "--text-strong",
+     "deltaE": 2.0
+    },
+    {
+     "file": "shots/q1/light/051-schematic-light-vs-thumb.png",
+     "x": 700,
+     "y": 500,
+     "hex": "#f0f4fb",
+     "nearestToken": "--surface-app",
+     "deltaE": 3.4
+    },
+    {
+     "file": "shots/vq1/light/001-home-list.png",
+     "x": 400,
+     "y": 100,
+     "hex": "#131313",
+     "nearestToken": "--text-strong",
+     "deltaE": 2.0
+    }
+   ],
+   "dom": [
+    "detail thumbnail pixel histogram: #131313 46775, #94a3b8 291, #e2e8f0 114"
+   ]
+  },
+  "id": "Q1-017",
+  "area": "home",
+  "title": "Design thumbnails are hard-coded dark slate art (#131313 bg, slate-400 wires) that ignore theme and tokens — and don't match the light schematic",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "light",
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Set theme Light",
+   "Home List/Grid and detail panel",
+   "Open a design (e.g. LED Indicators 5V, read-only) and compare the schematic canvas"
+  ],
+  "expected": "Thumbnails use theme tokens (canvas-well / schematic palette per theme, neutral greys, no blue/slate cast) and look like the schematic the user will open.",
+  "actual": "In light theme every row/card/detail shows a black #131313 box inside a #08090a well (two different near-blacks), wires #94a3b8 (Tailwind slate-400, ΔE 11 from any token) and symbols #e2e8f0 (slate-200) — a blue cast banned by the neutral spec. The light schematic editor itself renders on a light canvas (#f0f4fb), so the preview misrepresents the design; the grid in light theme reads as a wall of black rectangles.",
+  "suggestedFix": "Drive SchematicThumbnail colours from CSS vars (fill='var(--surface-canvas-well)' / a --schematic-wire / --schematic-symbol token pair per theme) and match the schematic canvas palette; drop the inner #131313 rect or make it the same token as the well.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "home:thumbnail:hardcoded-slate-dark",
+  "verification": {
+   "verdict": "rejected",
+   "by": "vq1",
+   "reason": "Intentional per PLAN, not a redesign defect: (1) D1 defines --surface-canvas-well = #08090a in BOTH themes and the T6 run-log entry says 'card preview SVG pinned to theme=dark (wells are always dark)' — the dark thumbnails in light theme are the decided look; (2) the hex values are an exact mirror of the canvas package palette (node_modules/@openpcb/r3f-eda-canvas/dist/theme/canvasTheme.js:30-55: SCHEMATIC_DARK.background #131313, wireColor #94a3b8, PREVIEW_DARK.symbolStroke #e2e8f0, symbolFill #111111), and the canvas palette is an explicit non-goal (§0) with a §9 follow-up — so the thumbnail matches the dark schematic editor by design; (3) the #08090a well is fully covered by the SVG's #131313 background (probe at 400,100 = #131313), so no visible 'two near-blacks'. Residual note for the §9 canvas-palette follow-up: SchematicThumbnail.tsx:14-17 constants must be updated together with SCHEMATIC_DARK/PREVIEW_DARK.",
+   "evidence": [
+    "shots/vq1/light/001-home-list.png"
+   ]
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 357,
+    "note": "DesignCard gets onOpen only, no selected/onSelect"
+   },
+   {
+    "path": "src/core/frontend/src/screens/home/DesignCard.tsx",
+    "line": 196,
+    "note": "onClick={onOpen}"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/dark/017-grid-detail-no-selection.png",
+    "shots/q1/dark/011-grid.png",
+    "shots/q1/light/052-home-grid.png"
+   ]
+  },
+  "id": "Q1-018",
+  "area": "home",
+  "title": "Grid view has no selection, yet the detail panel keeps showing a hidden 'selected' design (first row) that Enter will open",
+  "category": "consistency",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home → Grid",
+   "Note the right detail panel shows e.g. 'LED Indicators 5V' but no card is highlighted",
+   "Single-click a card → it opens the designer immediately (no selection step)",
+   "Back on Home Grid, press Enter with nothing focused → opens the invisible selected design"
+  ],
+  "expected": "Grid behaves like List: click selects (highlighted card, detail panel follows), double-click/Enter opens — or the detail panel is hidden in Grid.",
+  "actual": "Card click = open; no card has a selected state; the detail panel and Enter act on an invisible selection carried over from List (defaults to the first item).",
+  "suggestedFix": "Pass selected/onSelect into DesignCard (click selects with bg-surface-selected + inset selection bar like TableRow, double-click/Enter opens) — or hide DesignDetailPanel when view==='grid'.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "home:grid:no-selection-detail-mismatch",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced: Grid view shows the detail panel for 'QA-q1-vq1-stray-n' while no card carries a selected state (0 [data-selected]); card click = open (DesignCard.tsx:196), HomeScreen.tsx:357-366 passes no selected/onSelect; Enter acts on that invisible selection (handler :291). Click-to-open on cards predates the redesign (D13 'Grid view keeps restyled DesignCard'), but the 300px detail panel beside the grid is new and now disagrees with it. S3 kept.",
+   "evidence": [
+    "shots/vq1/dark/017-grid-detail-no-selection.png"
+   ]
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/components/LeftSidebar.tsx",
+    "line": 32,
+    "note": "localOnly = !cloudEnabled || !session; same copy for both"
+   },
+   {
+    "path": "src/core/frontend/src/screens/home/HomeSidebar.tsx",
+    "line": 33,
+    "note": "footer 'Local'"
+   },
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 527,
+    "note": "status bar 'Local'"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q1/dark/004-rail-local-hover.png",
+    "shots/q1/dark/001-home-list.png"
+   ]
+  },
+  "id": "Q1-019",
+  "area": "shell",
+  "title": "Rail 'local' glyph says 'Local only — not signed in' even when cloud is disabled and sign-in is impossible",
+  "category": "copy",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack A (cloud off): Home",
+   "Hover the rail cloud-off glyph; read the Home sidebar footer and the status bar right segment; open a design and hover the header 'Local' chip"
+  ],
+  "expected": "One consistent state label; when cloud is disabled/unavailable, don't imply the user can sign in.",
+  "actual": "Rail tooltip 'Local only — not signed in', sidebar footer 'Local', status bar 'Local', designer chip 'Local' (title 'Not signed in — local only'). With cloud off there is nowhere to sign in, so 'not signed in' is misleading; the same fact is repeated 3× on one screen.",
+  "suggestedFix": "LeftSidebar.tsx:131-141: when !cloudEnabled use label 'Local only' (no sign-in wording); keep 'Local only — not signed in' for cloud-enabled-but-signed-out. Revisit the triple indicator with design (D13) separately.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "shell:local-indicator:duplicate-misleading",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Partially refuted: three 'Local' markers are per D13 (sidebar footer + 22px footer 'Local') plus the Run-2 rail glyph, so the duplication is a design decision. What stands: with cloud off (stack A, readCloudConfig disabled) the rail glyph tooltip/aria-label reads 'Local only — not signed in' because LeftSidebar.tsx:32 uses `!cloudEnabled || !session`, implying a sign-in that does not exist; HomeSidebar's SyncFooter correctly degrades to 'Local'. S4 kept, scope narrowed to the wording.",
+   "evidence": [
+    "shots/q1/dark/004-rail-local-hover.png"
+   ]
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 209,
+    "note": "delete success path: no notice"
+   },
+   {
+    "path": "src/core/frontend/src/screens/home/useDesignUserState.ts",
+    "line": 58,
+    "note": "toggleArchive: no notice/undo"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q1/dark/018-after-archive.png",
+    "shots/q1/light/056-after-delete.png"
+   ],
+   "dom": [
+    "after delete: toast [], selected 'Dual LED Blinker' (top row)"
+   ]
+  },
+  "id": "Q1-020",
+  "area": "home",
+  "title": "Archive, unarchive and delete give no feedback and no undo",
+  "category": "error-handling",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home: archive a design from '…' → it silently vanishes from the list",
+   "Delete a design → modal closes, row vanishes, selection jumps to the top row"
+  ],
+  "expected": "A brief status/toast ('Archived QA-q1-alpha · Undo', 'Deleted QA-q1-menu-n') with role=status so the action is confirmed (and archive is reversible in place).",
+  "actual": "No toast/status/aria-live output at all (queried [role=status],[role=alert],[aria-live] → []); archived designs just disappear, which reads like data loss; after delete the selection jumps to the first row instead of the neighbour.",
+  "suggestedFix": "Add a kit notice (role=status) on archive/unarchive ('Archived X · Undo' → toggleArchive) and delete ('Deleted X'); after removal select the next neighbour instead of visible[0] (HomeScreen.tsx:246-252).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "home:actions:no-feedback",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Verified: after deleting own QA-q1-vq1-stray via the modal, [role=status],[role=alert],[aria-live] → []; selection jumped to QA-q1-vq1-b (top row). Archive silently removes the row. HomeScreen.tsx:209-210, useDesignUserState.ts:58-64. S4 kept.",
+   "evidence": []
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": "82773719 (QA-q1-stray)",
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 510,
+    "note": "pruneMissing runs once after designs load; active-tab fetches are not gated on it"
+   },
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 198,
+    "note": "delete success path"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/dark/004-designer-after-delete.png",
+    "shots/q1/dark/030-designer-after-delete.png"
+   ],
+   "console": [
+    "404 /api/modules/designer/active-design",
+    "404 /api/modules/designer/designs/82773719-…/projection/schematic",
+    "404 …/history?sessionId=designer-ui-session",
+    "404 …/comments?surface=schematic"
+   ]
+  },
+  "id": "Q1-021",
+  "area": "home",
+  "title": "Deleting a design that is open in a Designer tab fires 404s for it when Designer is reopened",
+  "category": "console",
+  "severity": "S4",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Open own design QA-q1-stray in Designer (tab stays open)",
+   "Home → its '…' → Delete → Delete",
+   "Click rail 'Designer'"
+  ],
+  "expected": "Home delete closes/prunes the tab immediately; no requests for the deleted id.",
+  "actual": "Tab is pruned eventually, but first 4 requests for the deleted design 404 (console errors): PUT active-design, GET …/projection/schematic, …/history, …/comments.",
+  "suggestedFix": "In designer Space.tsx gate the active design's projection/history/comments fetches and the active-design PUT until the first designs load + pruneMissing (designsLoadedRef, :510-519) has run, or treat a 404 on projection as 'design gone → closeTab'. Do not import the designer tabs store from core HomeScreen (layer rule).",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "home:delete:open-tab-404s",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced: own design QA-q1-vq1-stray open in a Designer tab, deleted from Home, then rail Designer → 4 console errors: 404 PUT /active-design, 404 …/031125da…/projection/schematic, …/history?sessionId=designer-ui-session, …/comments?surface=schematic; tab then pruned (title fell back to QA-q1-vq1-a). Cause: Space.tsx:510-519 prunes tabs only after the design list loads, but the active-tab fetches start earlier. Note q1's suggested fix (HomeScreen touching the designer tabs store) would violate the core→module layering rule. S4 kept.",
+   "evidence": [
+    "shots/vq1/dark/004-designer-after-delete.png"
+   ]
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/components/ThemeToggle.tsx",
+    "line": 38,
+    "note": "plain buttons, no aria-pressed; two-line System label"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/vq1/dark/018-settings-theme-system.png",
+    "shots/q1/light/041-settings-light.png",
+    "shots/q1/light/042-settings-system.png",
+    "shots/q1/dark/040-settings-general.png"
+   ],
+   "dom": [
+    "pressed: ['Light:null','Dark:null','System:null']",
+    "group rect height 35 (Light) vs 53 (System)"
+   ]
+  },
+  "id": "Q1-022",
+  "area": "settings",
+  "title": "Theme toggle (Settings › General › Appearance) is a hand-rolled control: no aria-pressed, 35px tall, grows to 53px when 'System' is active",
+  "category": "consistency",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Settings → General → Appearance",
+   "Click Light, then System, inspect the control box and a11y tree"
+  ],
+  "expected": "Kit SegmentedControl (22px, role=group, aria-pressed options) with the resolved mode shown without changing height.",
+  "actual": "Buttons expose no pressed state (snapshot shows Light/Dark/System without [pressed]); control is 35px tall (kit standard 22px) and jumps to 53px when System shows its second line 'Light', shifting the card below by 18px. Functionally theme switching and persistence across reload work (localStorage 'theme', html class).",
+  "suggestedFix": "ThemeToggle.tsx: add aria-pressed={isActive} (:38) as a minimum; ideally swap to kit SegmentedControl and show the resolved mode inline ('System · Light') instead of the second line (:52-56).",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "settings:theme-toggle:off-kit",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Reproduced in Settings › General: Light/Dark/System buttons aria-pressed=null; group 35px tall, 53px with System active (second line 'Light'). PLAN D3 deliberately left ThemeToggle untouched (Settings = token re-skin only, §0), so the off-kit look is out of the redesign's scope — but the missing pressed state and the height jump are real release-polish issues. S4 kept, fixScope noted.",
+   "evidence": [
+    "shots/vq1/dark/018-settings-theme-system.png"
+   ]
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": "e154d769 (QA-q1-LONG…, 120 chars, deleted after test)",
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/home/DesignListRow.tsx",
+    "line": 40,
+    "note": "name div without title"
+   },
+   {
+    "path": "src/core/frontend/src/screens/home/DesignCard.tsx",
+    "line": 204,
+    "note": "h3 without title"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q1/dark/036-long-name-list.png",
+    "shots/q1/dark/037-long-name-grid.png",
+    "shots/q1/dark/035-long-name-designer-tab.png",
+    "shots/q1/light/057-delete-modal-long-name.png"
+   ],
+   "dom": [
+    "list name DIV sw 712 cw 286 title null",
+    "grid h3 sw 712 cw 231 title null",
+    "detail span title = full name"
+   ]
+  },
+  "id": "Q1-023",
+  "area": "home",
+  "title": "Long design names can't be read in full on Home (no tooltip in list/grid, detail panel only truncates)",
+  "category": "visual",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "repro": [
+   "Create a design and rename it (designer tab) to a 120-char name",
+   "Home List, Grid and detail panel; hover the names"
+  ],
+  "expected": "Truncated names reveal the full text (title/tooltip) everywhere; detail panel shows the full name wrapped in its body.",
+  "actual": "Truncation itself is clean (ellipsis in list 286px, grid 231px, detail header, designer tab), but list rows and grid cards have no title/tooltip; only the detail header has title=. Delete modal wraps the full name correctly.",
+  "suggestedFix": "Add title={design.name} at DesignListRow.tsx:40 and DesignCard.tsx:204.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "home:names:no-full-name-tooltip",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Code-verified (S4): DesignListRow.tsx:40 name div and DesignCard.tsx:204 h3 have no title; only DesignDetailPanel.tsx:43 sets title. q1's 120-char repro screenshots show clean ellipsis without a way to read the full name. S4 kept.",
+   "evidence": [
+    "shots/q1/dark/036-long-name-list.png",
+    "shots/q1/dark/037-long-name-grid.png"
+   ]
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 318,
+    "note": "emptyState: single New design button"
+   },
+   {
+    "path": "src/core/frontend/src/screens/home/DesignDetailPanel.tsx",
+    "line": 30,
+    "note": "'Select a design' placeholder"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q1/dark/034-empty-state.png",
+    "shots/q1/dark/008-search-noresults.png"
+   ]
+  },
+  "id": "Q1-024",
+  "area": "home",
+  "title": "Empty/first-run Home offers only 'New design' (no Import KiCad…), keeps a 300px 'Select a design' panel and 'Enter to open' hint; no-results state has no 'Clear search'",
+  "category": "copy",
+  "severity": "S4",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Mock GET designs → {ok:true,data:{designs:[]}} and reload",
+   "Separately search 'zzqx'"
+  ],
+  "expected": "First-run state offers both primary entry points (New design / Import KiCad project…); the empty detail panel is hidden or explains itself; the no-results state offers 'Clear search'.",
+  "actual": "Only 'New design'; right panel says 'Select a design' although there is nothing to select; status bar still 'Enter to open · N new'; 'No matching designs — Try a different filter or search term' with no clear action.",
+  "suggestedFix": "HomeScreen.tsx emptyState: add outline 'Import KiCad project…' next to New design when designs.length===0, and a 'Clear search' button (setQuery('')) when query is set; hide DesignDetailPanel when visible.length===0.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "home:empty-state:thin",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Code-verified (S4): emptyState (HomeScreen.tsx:318-341) offers only 'New design' although Import KiCad… exists in the header (D6/D13 entry point); no 'Clear search' when query is set; DesignDetailPanel.tsx:30-35 shows 'Select a design' with nothing selectable; footer hint (:525) static. S4 kept.",
+   "evidence": [
+    "shots/q1/dark/034-empty-state.png",
+    "shots/q1/dark/008-search-noresults.png"
+   ]
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/index.html",
+    "line": 6,
+    "note": "no <link rel=icon>"
+   }
+  ],
+  "evidence": {
+   "console": [
+    "[ERROR] Failed to load resource: 404 @ http://127.0.0.1:1520/favicon.ico"
+   ],
+   "screenshots": []
+  },
+  "id": "Q1-025",
+  "area": "shell",
+  "title": "No favicon: /favicon.ico 404 on every load (tab shows the generic icon)",
+  "category": "console",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Open http://127.0.0.1:1520 and read the console"
+  ],
+  "expected": "index.html links an app icon.",
+  "actual": "[ERROR] Failed to load resource: 404 /favicon.ico; index.html has no <link rel=icon>.",
+  "suggestedFix": "Add src/core/frontend/public/favicon.svg (electron/openpcb_icon.svg already exists) and <link rel=\"icon\" href=\"/favicon.svg\"> in index.html:6.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "shell:favicon:404",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Verified in this session's console log: [ERROR] 404 http://127.0.0.1:1520/favicon.ico; src/core/frontend/index.html has no <link rel=icon> and there is no public/ dir. Browser/dev-only visibility (Electron shows no tab favicon), per protocol recorded once as S4.",
+   "evidence": []
+  }
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/AppShell.tsx",
+    "line": 63,
+    "note": "single shell-level onContextMenu"
+   },
+   {
+    "path": "src/core/frontend/src/screens/home/DesignListRow.tsx",
+    "line": 28,
+    "note": "no onContextMenu"
+   }
+  ],
+  "evidence": {
+   "screenshots": [
+    "shots/q1/light/060-ctx-menu-light.png"
+   ],
+   "dom": [
+    "row right-click → 'OpenPCB\\nSettings\\nCtrl+,'"
+   ]
+  },
+  "id": "Q1-026",
+  "area": "home",
+  "title": "Right-clicking a design row/card shows the generic 'OpenPCB › Settings' menu instead of design actions",
+  "category": "consistency",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Home List: right-click a design row (700,150)",
+   "Grid: right-click a card"
+  ],
+  "expected": "A design context menu (Open, Star/Unstar, Archive, Delete…) as in KiCad/Altium project managers — right-click is the primary way pros act on list items.",
+  "actual": "The app-wide menu with a single 'Settings' item appears; per-design actions are only reachable via the 22px '…' in the grid card footer or the detail panel header (list rows have no '…'). The detail panel also has no star toggle (Starred Yes/No is read-only text).",
+  "suggestedFix": "DesignListRow.tsx:28 / DesignCard.tsx:195: onContextMenu → e.preventDefault(); e.stopPropagation(); select row; openContextMenu({scope:'home', groups:[Open, Star/Unstar, Archive/Unarchive, Delete…]}).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "home:row:no-context-menu",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq1",
+   "reason": "Code-verified + q1 evidence: DesignListRow/DesignCard have no onContextMenu, so the AppShell handler (AppShell.tsx:63-84) shows the generic 'OpenPCB › Settings' menu on a design row; list rows have no '…' either. Distinct from Q1-006 (inputs/clipboard) though both live in the same AppShell handler. S4 kept.",
+   "evidence": [
+    "shots/q1/light/060-ctx-menu-light.png"
+   ]
+  }
+ }
+]

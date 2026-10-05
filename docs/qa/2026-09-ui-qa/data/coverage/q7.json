@@ -1,0 +1,37 @@
+{"agent":"q7",
+ "checklist":[
+  {"item":"Wizard open/close, progress bar clicks (disabled until symbol ready, jump to any step once ready), Back/Next","dark":"tested","light":"tested","viewports":["1440x900","1100x720"]},
+  {"item":"Enter = Next (incl. after field commit), Esc = close (clean / dirty / from file input / mid-draw / with selection)","dark":"tested","light":"n/a","viewports":["1440x900"]},
+  {"item":"Symbol Import: simple_resistor, multi_unit_opamp, unsupported_construct, non-KiCad file (garbage.step) error UX","dark":"tested","light":"tested","viewports":["1440x900"]},
+  {"item":"Draw symbol tools V/L/R/C/A/P/T, previews, grid snapping","dark":"tested","light":"tested","viewports":["1440x900"]},
+  {"item":"Pin property panel edits (#, name, type, rotation, length, delete), Next pin defaults","dark":"tested","light":"tested","viewports":["1440x900"]},
+  {"item":"Rotate R / Shift+R + labels (K28) incl. schematic comparison on own design QA-q7-rotate","dark":"tested","light":"tested","viewports":["1440x900"]},
+  {"item":"Undo/redo (Cmd+Z, Ctrl+Z, Cmd+Shift+Z, Ctrl+Y), Cmd+A/C/V/D, Delete/Backspace","dark":"tested","light":"n/a","viewports":["1440x900"]},
+  {"item":"Alignment guides Shift+G toggle + drag guides","dark":"tested","light":"n/a","viewports":["1440x900"]},
+  {"item":"Grid toggle (symbol import/draw, footprint import/draw)","dark":"tested","light":"tested","viewports":["1440x900"]},
+  {"item":"Footprint Preset picker: Chip 0603 A/B/C, SOT-23/-5/223/323, QFN-16, density change staleness; node dump of generator","dark":"tested","light":"tested","viewports":["1440x900"]},
+  {"item":"Footprint Import single + sequential + multiple (DataTransfer) C_0603 + CP_Elec, variant selection","dark":"tested","light":"n/a","viewports":["1440x900"]},
+  {"item":"Footprint Draw: pad tool D, pad panel inputs/selects (invalid W, drill>pad), layer panel visibility + active layer, Show dimensions","dark":"tested","light":"tested","viewports":["1440x900","1100x720"]},
+  {"item":"3D Model: minimal.step, garbage.step, Remove, post-import status on detail page","dark":"tested","light":"tested","viewports":["1440x900"]},
+  {"item":"Metadata: name, description, tags (Enter/comma/Tab), warnings, pin/pad mismatch, commit errors","dark":"tested","light":"tested","viewports":["1440x900","1100x720"]},
+  {"item":"Import component (drawn+drawn+STEP, KiCad sym+KiCad mod+STEP, drawn+preset QFN) → list → detail page","dark":"tested","light":"tested","viewports":["1440x900"]},
+  {"item":"Leave wizard with unsaved work via rail / back arrow / header Back (K06)","dark":"tested","light":"n/a","viewports":["1440x900"]},
+  {"item":"Visual: K36 tiny text, K37 input heights, K45 raw colours/native controls, toolbar vs designer kit toolbar, pixel probes","dark":"tested","light":"tested","viewports":["1440x900"]},
+  {"item":"1100x720 layout (symbol draw, footprint draw/preset, metadata)","dark":"tested","light":"tested","viewports":["1100x720"]},
+  {"item":"Console errors/warnings during flows","dark":"tested","light":"tested","viewports":["1440x900"]}
+ ],
+ "known":[
+  {"ref":"K06","status":"confirmed","evidence":"window.confirm 'Close the wizard? Unsaved changes will be lost.' on Esc/back arrow (spy count, blocked playwright until dialog-dismiss); no guard at all on rail navigation (Q7-001, Q7-019)"},
+  {"ref":"K29","status":"confirmed","evidence":"Esc mid-rect closes the whole wizard when nothing committed (shots/q7/dark/013,014); with work it pops the discard confirm; Esc with selection also triggers close (Q7-006)"},
+  {"ref":"K28","status":"confirmed","evidence":"Editors: R = +90 = CCW on screen, labelled CCW (consistent). Schematic: R = +90 = CCW on screen (base pin left→bottom) but labelled 'Rotate 90° clockwise' (shots/q7/light/080,081) (Q7-034)"},
+  {"ref":"K36","status":"confirmed","evidence":"census: 10×9px labels in Pins panel, 14×9px in Pads panel; light contrast 2.1–2.3:1 (Q7-024)"},
+  {"ref":"K37","status":"confirmed","evidence":"census heights input 32/24/15, select 24/28/15/36 in wizard; none 22px (Q7-025)"},
+  {"ref":"K45","status":"confirmed","evidence":"raw emerald/amber/pink/violet(remapped) classes, native file input/selects/checkboxes, floating blurred toolbar; probes #00bc7d ΔE17, #461901 ΔE24, #4098ff ΔE31 (Q7-023)"}
+ ],
+ "untested":[
+  {"item":"Grid rendering on a real GPU","reason":"GridShader produced zero pixels in headless Chromium WebGL2 for every wizard canvas; cannot rule out a headless-only artefact (flagged in Q7-002)"},
+  {"item":"Whether KiCad-imported footprints are also mirrored on the PCB / Gerber output","reason":"outside wizard charter; only library previews + stored coordinates verified (Q7-022) — needs PCB/import owner"},
+  {"item":"Committing the multi-unit LM358 import and placing it","reason":"time; preview-level issue recorded (Q7-003)"},
+  {"item":"Keyboard-only walk through the whole wizard (Tab order across canvas steps)","reason":"time; focus-loss spots recorded in Q7-032"}
+ ],
+ "notes":"Stack B artefacts created by q7: parts QA-q7-drawn-garbage3d, QA-q7-R0603-import, QA-q7-light-QFN16-preset (Local library); design QA-q7-rotate (1 NPN part). playwright-cli note: negative wheel deltas need `mousewheel -- 0 -250` (otherwise parsed as flags and silently dropped)."}

@@ -1,0 +1,392 @@
+{
+ "agent": "f1b",
+ "designs": {
+  "QA-f1b-stress": "cc5a12b9 rev695 (150 placements, 60 wires, 21 traces, outline 178.9×115.9, Group 1 + Power assignment)",
+  "QA-f1b-long": "43a2da78 rev22 (long value/MPN/mfr/datasheet, refdes R123456789, 80-char net label + portal, 150-char F.SilkS text, B.Cu + F.Cu zones, 120-char name)",
+  "QA-f1b-empty": "2964a68a rev0",
+  "QA-f1b-bomgroup": "89009c50 rev5",
+  "QA-f1b-netid": "0d2709d2 rev10",
+  "QA-f1b-tracenet": "38bbcc7f rev12 (routed trace orphaned by schematic move; R2 flipped to bottom)",
+  "c2c58a19 Dual LED Blinker": "read-only, rev540 unchanged (export GET/POST only via UI download earlier)"
+ },
+ "seed": "QA-f1b-stress seeded via API (f1b/seed.py): 150 place_part + 60 create_wire + outline + ~20 pcb_add_trace; per-command 3–40 ms, growing with design size (seed-result.json)",
+ "checklist": [
+  {
+   "item": "Seed QA-f1b-stress through backend 3100 (≥150 place_part, ~60 create_wire, outline, ~20 traces)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "n/a"
+   ],
+   "notes": "f1b/seed.py, seed-result.json"
+  },
+  {
+   "item": "Time to first render per view on 150 parts",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "open design → schematic ready 476 ms; view switch ready: PCB 152 ms, 3D 100 ms (+540 ms long tasks while models load), BOM 136 ms, DRC 269 ms (784 violations), Schem 200 ms"
+  },
+  {
+   "item": "FPS: schematic wheel/pan/part drag (150 parts)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "wheel 59 fps, pan 59 fps, drag 56 fps, 0 long tasks"
+  },
+  {
+   "item": "FPS: PCB wheel/pan/drag (150 parts, 784 DRC markers)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "wheel 56 fps; pan 27 fps with markers / 44 fps without; drag 60 fps; 51k markers → F1B-004"
+  },
+  {
+   "item": "FPS: 3D orbit/zoom",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "150 parts orbit 18–19 fps, wheel 14 fps (F1B-026); 5 parts 60 fps"
+  },
+  {
+   "item": "Box-select all → Delete → count Undo steps (Q3-011 at scale)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "F1B-011 (150 undo steps, 17 s), F1B-012"
+  },
+  {
+   "item": "Outline with 150 rows: scroll, filter, sort, dblclick frame",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "filter typing 'Generic' 576 ms, 0 long tasks; REF column truncation F1B-029"
+  },
+  {
+   "item": "PCB: ratsnest, Fit board, Fit to parts, drag, Layers/Components panel",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ],
+   "notes": "F1B-001, F1B-002, F1B-010"
+  },
+  {
+   "item": "DRC run time + hundreds/thousands of violations (scroll, click-to-frame, severity toggles)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "784-violation run from DRC view 651 ms; 51k violations hang F1B-003; marker cost F1B-004; stock-footprint silk noise F1B-009"
+  },
+  {
+   "item": "ERC dock with many violations",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "96 violations render instantly; schematic camera reset found (F1B-035)"
+  },
+  {
+   "item": "BOM 150 lines: select all, bulk DNP, Export CSV, search latency",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ],
+   "notes": "search 'Zener' 510 ms, 0 long tasks; F1B-005, F1B-016, F1B-028 (Export hidden at 1100)"
+  },
+  {
+   "item": "Input latency >1 s / UI freezes",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "none in inputs; freezes only in DRC list (F1B-003) and marker hover (F1B-004)"
+  },
+  {
+   "item": "Long text: 200-char Value, 120-char MPN/Manufacturer, 300-char Datasheet URL, refdes R123456789, 80-char net label, 120-char design name, long PCB overlay text (K02 prompt accepted)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ],
+   "notes": "inspector OK (ellipsis); resistor Value rejects free text; F1B-019, F1B-020, F1B-021, F1B-029, F1B-030, F1B-031, F1B-032"
+  },
+  {
+   "item": "Long text: Outline columns, canvas overlap, BOM table+inspector, PCB Components panel, DRC messages, 3D refdes, Export-dialog warning list, status bar, Home",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ],
+   "notes": "BOM designators/MPN truncate cleanly; DRC full view shows full names, dock truncates; export warnings OK; status bar F1B-020; 3D refdes shows stale R1 (F1B-019)"
+  },
+  {
+   "item": "60-char net class name",
+   "dark": "blocked",
+   "light": "blocked",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "classes cannot be added/renamed (F1B-007); tested a 60-char length-group name instead → Tune HUD F1B-034"
+  },
+  {
+   "item": "Export content audit: Gerber layer set/names",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "n/a"
+   ],
+   "notes": "stress/dual/empty/long: F_Cu,B_Cu,F_Mask,B_Mask,F_Paste,B_Paste,F_Silkscreen,B_Silkscreen,Edge_Cuts + .gbrjob with correct X2 FileFunctions; mask Negative polarity (intended)"
+  },
+  {
+   "item": "Export content audit: Excellon vs vias+THT",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "n/a"
+   ],
+   "notes": "Dual LED: PTH 11 hits = 9 vias (T1 0.4) + 2 J1 THT (T2 1.0); NPTH 1 = 1 free hole (2.0). Stress: PTH 30 = 15 headers × 2, 0 vias. Match."
+  },
+  {
+   "item": "Export content audit: PnP rows/side/rotation/units",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "n/a"
+   ],
+   "notes": "SMD-only by design: stress 135 = 150 − 15 THT headers, dual 10 = 11 − J1; Layer Top/Bottom correct after flip; rotation = placement + JLC offset DB (SOIC/SOT-23 +270); mm without unit suffix; empty Val for no-value parts (F1B-016); refdes mismatch after rename F1B-019"
+  },
+  {
+   "item": "Export content audit: BOM CSV grouping vs BOM view",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "n/a"
+   ],
+   "notes": "stress 150 lines = view; dual 9 lines/11 parts; mis-grouping of value-less parts F1B-005; DNP disagreement F1B-016"
+  },
+  {
+   "item": "Export with no parts / no outline on fresh QA-f1b design",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "no parts → F1B-015; no outline unreachable (every design gets a default 50×30 outline, no clear-outline command; preflight has a 'no outline' warning)"
+  },
+  {
+   "item": "Export naming / 4-layer option",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ],
+   "notes": "F1B-014, F1B-017 (K30)"
+  },
+  {
+   "item": "Net classes: add class, assign nets, Save, route width chip",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "route chip shows class width (Power 0.6 → 'W 0.600 mm'); no add/delete/via fields F1B-007; picker scaling F1B-008"
+  },
+  {
+   "item": "Net classes: invalid values (0, negative, >1 mm clearance, 999)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "F1B-006"
+  },
+  {
+   "item": "Length group → Tune (U) target prefill",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ],
+   "notes": "prefilled from group ('≈16.32 / 30.00 mm', target: 'Group 1'); HUD contrast F1B-022; wrap F1B-034; canvas jump F1B-033"
+  },
+  {
+   "item": "Net classes / groups reload persistence",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "Power 0.6 + Group 1 absolute 30 ±0.5 survive reload (light 032); but assignments/copper orphaned by schematic moves F1B-013 (S1)"
+  },
+  {
+   "item": "Design rules dialog at 1100x720",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1100x720"
+   ],
+   "notes": "F1B-008, F1B-018"
+  },
+  {
+   "item": "Light probes: Tune HUD",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "F1B-022"
+  },
+  {
+   "item": "Light probes: Measure (M) readout",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "label glyphs #aad1ff/#ecffff on B.Cu pour #2667dc ≈3.1:1; off-token cyan already Q4-034 — no new finding"
+  },
+  {
+   "item": "Light probes: overlap picker (Alt+click)",
+   "dark": "blocked",
+   "light": "blocked",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "Alt+click never adds the 'Disambiguation chooser' listbox (MutationObserver saw 0 insertions on stacked parts and on zone+text); covered by Q4-016"
+  },
+  {
+   "item": "Light probes: copper-fill rows in Layers panel",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "opacity slider = --selection #0891b2 (ΔE 0); '100%' readout --text-disabled; pad-connection select crushed to 8 px = Q4-012; swatches F1B-025"
+  },
+  {
+   "item": "Light probes: PCB comment thread popup",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "F1B-023"
+  },
+  {
+   "item": "Light probes: schematic Outline Actions menu, BOM Export ▾ menu",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "F1B-024"
+  },
+  {
+   "item": "Light probes: DRC marker tooltip",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "F1B-021"
+  },
+  {
+   "item": "3D with long text / board silkscreen",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "overlay text missing F1B-031; FPS/Zoom placeholders F1B-027"
+  },
+  {
+   "item": "Console during stress (WebGL context lost, long tasks, errors)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "0 errors; warnings = THREE.Clock deprecation ×13, PCFSoftShadowMap ×7 (Q5-018); 'THREE.WebGLRenderer: Context Lost' logged on every 3D/preview unmount (Q7-033); long tasks only in the flows cited in F1B-003/004/026"
+  }
+ ],
+ "known": [
+  {
+   "ref": "K30",
+   "status": "confirmed",
+   "evidence": "F1B-017: 'Include inner copper layers' enabled+checked on 2-layer boards, ZIP identical either way"
+  },
+  {
+   "ref": "K02",
+   "status": "confirmed",
+   "evidence": "PCB Text tool asked for the long overlay text through window.prompt (accepted with dialog-accept) on QA-f1b-long; primary finding owned by the PCB agent"
+  },
+  {
+   "ref": "K43",
+   "status": "partial",
+   "evidence": "adds 3D 'FPS —'/'Zoom —' placeholders (F1B-027); inspector 'Per-instance override coming soon' seen"
+  },
+  {
+   "ref": "Q3-011",
+   "status": "confirmed",
+   "evidence": "at 150 parts: non-atomic delete + 150 undo steps (F1B-011)"
+  },
+  {
+   "ref": "Q4-016",
+   "status": "confirmed",
+   "evidence": "overlap picker never observed in DOM on Alt+click (dark+light)"
+  },
+  {
+   "ref": "Q4-025",
+   "status": "confirmed",
+   "evidence": "layer-tab clicks bump revision (tracenet 6→7→8) and Cmd+Z twice leaves traces/layer unchanged while revision rises to 10"
+  },
+  {
+   "ref": "Q5-023",
+   "status": "confirmed",
+   "evidence": "Fit schematic cannot fit a natively created 150-part sheet either (zoom floor 10 %, parts cut at both sides; shots 003/100)"
+  },
+  {
+   "ref": "Q3-004",
+   "status": "partial",
+   "evidence": "same default-camera symptom recurs on every Schem↔PCB round-trip, filed as F1B-035"
+  }
+ ],
+ "untested": [
+  {
+   "item": "3D perf on non-Apple GPU",
+   "reason": "only headless Chromium on Apple M4 Pro (ANGLE Metal) available"
+  },
+  {
+   "item": "Bottom-side PnP rotation convention vs JLCPCB 3D preview",
+   "reason": "needs the fab's viewer; file shows Rotation 90 / Layer Bottom for a flipped 90° part"
+  },
+  {
+   "item": "Custom… trace width prompt (K03) with net classes",
+   "reason": "owned by the PCB agent; not repeated"
+  }
+ ]
+}

@@ -1,0 +1,1047 @@
+[2m[WebServer] [22m
+[2m[WebServer] [22m> openpcb@0.1.1-beta dev:backend
+[2m[WebServer] [22m> cd src/core/backend && PORT=3000 NODE_ENV=development bun --watch main.ts
+[2m[WebServer] [22m
+[2m[WebServer] [22m{"level":"info","ts":"2026-09-25T10:13:58.385Z","message":"applied migrations","source":"knowledge","meta":{"count":1,"names":["0000_init.sql"]}}
+[2m[WebServer] [22m{"level":"info","ts":"2026-09-25T10:13:58.386Z","message":"knowledge activated","source":"knowledge","meta":{"tablePrefix":"knowledge_"}}
+[2m[WebServer] [22m{"level":"info","ts":"2026-09-25T10:13:58.391Z","message":"applied migrations","source":"library","meta":{"count":12,"names":["0000_init.sql","0001_builtin_flag.sql","0002_component_footprints.sql","0002_footprint_3d_models.sql","0003_footprint_models_status_index.sql","0004_component_footprint_pinmap.sql","0005_library_sources.sql","0006_legacy_builtin_id_migration.sql","0007_preview_svg_cache.sql","0008_component_sourcing.sql","0009_cloud_sync.sql","0010_component_metadata.sql"]}}
+[2m[WebServer] [22m{"level":"info","ts":"2026-09-25T10:13:58.394Z","message":"core-library: importing bundled package from /Users/andrejvysny/workspace/openpcb/OpenPCB/resources/core-library/openpcb-core-library-0.1.0-beta.1.opclib","source":"library"}
+[2m[WebServer] [22m{"level":"warn","ts":"2026-09-25T10:13:58.407Z","message":"core-library: importing without valid signature (reason=no-signature, source=openpcb.core@0.1.0-beta.1); set OPENPCB_REQUIRE_SIGNED_OPCLIB=1 to enforce","source":"library"}
+[2m[WebServer] [22m{"level":"info","ts":"2026-09-25T10:13:58.431Z","message":"core-library: imported openpcb.core@0.1.0-beta.1 (symbols=15+0 footprints=36+0 components=17+0 variants=42+0)","source":"library"}
+[2m[WebServer] [22m{"level":"info","ts":"2026-09-25T10:13:58.433Z","message":"core-library: watching bundled package directory /Users/andrejvysny/workspace/openpcb/OpenPCB/resources/core-library","source":"library"}
+[2m[WebServer] [22m{"level":"info","ts":"2026-09-25T10:13:58.434Z","message":"library activated","source":"library","meta":{"tablePrefix":"library_","coreAlreadyInstalled":false,"bundledPath":"/Users/andrejvysny/workspace/openpcb/OpenPCB/resources/core-library/openpcb-core-library-0.1.0-beta.1.opclib","coreImported":{"version":"0.1.0-beta.1","symbols":15,"footprints":36,"components":17,"variants":42,"modelsWritten":36,"modelsDeduped":0},"rebuiltSymbols":0,"rebuildMs":1}}
+[2m[WebServer] [22m{"level":"info","ts":"2026-09-25T10:13:58.437Z","message":"applied migrations","source":"tasks","meta":{"count":1,"names":["0000_init.sql"]}}
+[2m[WebServer] [22m{"level":"info","ts":"2026-09-25T10:13:58.437Z","message":"tasks activated","source":"tasks","meta":{"tablePrefix":"tasks_"}}
+[2m[WebServer] [22m{"level":"info","ts":"2026-09-25T10:13:58.445Z","message":"applied migrations","source":"assistant","meta":{"count":15,"names":["0000_init.sql","0001_provider_settings.sql","0002_v1_ai.sql","0003_write_proposals.sql","0004_enable_safe_write_tools.sql","0005_remove_write_tools_beta.sql","0006_message_order.sql","0007_generic_write_proposals.sql","0008_remove_builtin_openai_compatible.sql","0009_build_intent.sql","0010_write_proposal_action_id.sql","0011_tool_calling_override.sql","0012_mentions.sql","0013_cloud_proposals.sql","0014_mcp_settings.sql"]}}
+[2m[WebServer] [22m{"level":"info","ts":"2026-09-25T10:13:58.446Z","message":"assistant activated","source":"assistant","meta":{"tablePrefix":"assistant_"}}
+[2m[WebServer] [22m{"level":"info","ts":"2026-09-25T10:13:58.453Z","message":"applied migrations","source":"designer","meta":{"count":19,"names":["0000_init.sql","0002_breaking_normalized_schematic.sql","0003_session_histories.sql","0004_pcb_foundation.sql","0005_pcb_traces.sql","0006_schematic_primitives.sql","0007_part_properties.sql","0008_pcb_free_entities.sql","0009_legacy_builtin_id_rewrite.sql","0009_pcb_zones_and_outline.sql","0010_cloud_link.sql","0011_bom_overrides.sql","0012_schematic_preview.sql","0013_drc_results.sql","0014_canvas_comments.sql","0015_comment_reactions.sql","0016_wire_route_status.sql","0017_dataset_capture.sql","0018_pcb_zone_v2_keepouts.sql"]}}
+[2m[WebServer] [22m{"level":"info","ts":"2026-09-25T10:13:58.453Z","message":"designer activated","source":"designer","meta":{"tablePrefix":"designer_"}}
+[2m[WebServer] [22m{"serverPort":3000,"startupContractVersion":1,"startupLicenseState":"active","startupLicenseCode":"CORE_BACKEND","loadedModules":["assistant","designer","knowledge","library","tasks"]}
+[2m[WebServer] [22m[core-backend] listening on http://127.0.0.1:3000
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=49b175f0-e947-4c34-a4c1-2548c6a19029
+
+Running 46 tests using 7 workers
+
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.r-0603 200 1ms id=06fa5900-943b-4797-b69b-89859545ece8
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.c-disc-d5-p5 200 1ms id=193db1e4-bfc1-4f02-b752-720c6257696f
+  -   7 [chromium] › tests/e2e/footprint-import-bbox.spec.ts:100:3 › bbox is tight after KiCad import — QFN40P700X700X90-57N
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.package.sot-23 200 0ms id=581ca732-bd6e-4f32-ae5b-daa049240d33
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.package.soic-8-3-9x4-9mm-p1-27mm 200 1ms id=e850468b-dfd3-4a8c-8220-b0dab6a5b954
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.connector.pin-header-2x03-p2-54mm-vertical 200 1ms id=65d0fd50-c09d-4c48-8d64-d4817ef7bab2
+  ✓   4 [chromium] › tests/e2e/builtin-footprints.spec.ts:67:3 › builtin footprints — API › representative CoreLibrary footprint ids resolve with expected pad counts (33ms)
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.r-axial-din0207-p7-62 200 0ms id=2d01a06c-e8ad-427a-8939-622d320b0d4e
+[2m[WebServer] [22m[core-backend] POST /api/modules/library/imports/kicad/zip 201 10ms id=3c30b2af-1eff-44fe-8164-06b985191ea6
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.c-disc-d5-p5 200 0ms id=2ff49281-d69c-403c-b083-943b5258fd49
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/components/a5311734-29ab-4d5c-b204-6ccfc0b144de/detail 200 2ms id=81906e58-177b-4538-b829-2f7499f7f358
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.connector.pin-header-1x02-p2-54mm-vertical 200 0ms id=adf245dd-dbe8-459d-9561-1a25f03e57cd
+  ✓   9 [chromium] › tests/e2e/builtin-footprints.spec.ts:85:3 › builtin footprints — API › THT footprints expose drilled circular pads on *.Cu (17ms)
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/components/openpcb.core.passive.resistor/detail 200 1ms id=2ebfb16b-bd71-40ac-9196-7424097323e2
+  ✓   8 [chromium] › tests/e2e/footprint-import-bbox.spec.ts:100:3 › bbox is tight after KiCad import — SOIC127P599X175-8N (40ms)
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/components/openpcb.core.passive.capacitor/detail 200 2ms id=77227652-bbff-4123-b2c1-1bbc82cb8b37
+  ✓  10 [chromium] › tests/e2e/builtin-footprints.spec.ts:118:3 › builtin footprints — API › CoreLibrary resistor + capacitor default to 0603 footprints (9ms)
+[2m[WebServer] [22m[core-backend] POST /api/modules/library/imports/kicad/zip 201 5ms id=77e8a150-01be-459e-a8be-4baaadf04d07
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/components/ae402e1e-a8b9-4118-ae03-0dc54df6e0ca/detail 200 0ms id=114da7ac-d36f-4ac4-ace7-8921e82c302b
+  ✓  11 [chromium] › tests/e2e/footprint-import-bbox.spec.ts:100:3 › bbox is tight after KiCad import — DIP794W45P254L1969H508Q14 (27ms)
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=8a7e7aaf-e017-4650-8393-37a8261e089a
+[2m[WebServer] [22m[core-backend] POST /api/modules/library/imports/kicad/zip 201 5ms id=ea278c89-1288-4809-9573-858aca0c263e
+[2m[WebServer] [22m[core-backend] POST /api/modules/library/imports/kicad/zip 200 3ms id=b44ecbdd-ecab-4dd7-862c-f6f0ad57d5c0
+[2m[WebServer] [22m[0m[31m[core-backend] POST /api/modules/library/footprints/4d3b3cdb-95f1-4ba1-abfd-7c664eb5a98c/model 500 [0m[1m107 |[0m       deduped: [0m[33mtrue[0m,
+[2m[WebServer] [22m[0m[1m108 |[0m     }[0m[2m;[0m
+[2m[WebServer] [22m[0m[1m109 |[0m   }
+[2m[WebServer] [22m[0m[1m110 |[0m 
+[2m[WebServer] [22m[0m[1m111 |[0m   [0m[35mawait[0m mkdir(path[0m[3m[1m.dirname[0m(absolutePath), { recursive: [0m[33mtrue[0m })[0m[2m;[0m
+[2m[WebServer] [22m[0m[1m112 |[0m   [0m[35mawait[0m writeFile(absolutePath, bytes, { flag: [0m[32m"wx"[0m })[0m[2m;[0m
+[2m[WebServer] [22m              [31m[1m^[0m
+[2m[WebServer] [22m[0m[31mEEXIST[0m[2m:[0m [1mfile already exists, open '/tmp/models/glb/e0aaca4cdc20d929e3e92e8d165943235f05086faa244096449d578e48e55090.glb'[0m
+[2m[WebServer] [22m    path[0m[2m:[0m [0m[32m"/tmp/models/glb/e0aaca4cdc20d929e3e92e8d165943235f05086faa244096449d578e48e55090.glb"[0m[0m[2m,[0m
+[2m[WebServer] [22m syscall[0m[2m:[0m [0m[32m"open"[0m[0m[2m,[0m
+[2m[WebServer] [22m   errno[0m[2m:[0m [0m[33m-17[0m[0m[2m,[0m
+[2m[WebServer] [22m    code[0m[2m:[0m [32m"EEXIST"[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[0m      [2mat [0m[0m[1m[3masync writeAsset[0m[2m ([0m[0m[36m/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/library/backend/services/footprint-model-store.ts[0m[2m:[0m[33m112[0m[2m:[33m9[0m[2m)[0m
+[2m[WebServer] [22m[0m      [2mat [0m[0m[2masync <anonymous>[0m[2m ([0m[0m[36m/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/library/backend/routes.ts[0m[2m:[0m[33m1609[0m[2m:[33m23[0m[2m)[0m
+[2m[WebServer] [22m[0m      [2mat [0m[0m[1m[3masync dispatch[0m[2m ([0m[0m[36m[2m/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/backend/[0m[36mrouter/module-router.ts[0m[2m:[0m[33m60[0m[2m:[33m32[0m[2m)[0m
+[2m[WebServer] [22m[0m      [2mat [0m[0m[2masync <anonymous>[0m[2m ([0m[0m[36m[2m/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/backend/[0m[36mmiddleware/error-middleware.ts[0m[2m:[0m[33m33[0m[2m:[33m20[0m[2m)[0m
+[2m[WebServer] [22m[0m      [2mat [0m[0m[2masync <anonymous>[0m[2m ([0m[0m[36m[2m/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/backend/[0m[36mmiddleware/cors-middleware.ts[0m[2m:[0m[33m33[0m[2m:[33m28[0m[2m)[0m
+[2m[WebServer] [22m[0m      [2mat [0m[0m[2masync <anonymous>[0m[2m ([0m[0m[36m[2m/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/backend/[0m[36mmiddleware/request-logging-middleware.ts[0m[2m:[0m[33m5[0m[2m:[33m26[0m[2m)[0m
+[2m[WebServer] [22m[0m      [2mat [0m[0m[2masync <anonymous>[0m[2m ([0m[0m[36m[2m/Users/andrejvysny/workspace/openpcb/OpenPCB/src/core/backend/[0m[36mmiddleware/request-id-middleware.ts[0m[2m:[0m[33m4[0m[2m:[33m26[0m[2m)[0m
+[2m[WebServer] [22m[0m
+[2m[WebServer] [22m[core-backend] POST /api/modules/library/footprints/4d3b3cdb-95f1-4ba1-abfd-7c664eb5a98c/model 500 6ms id=e728b568-2dd7-46d8-8d58-b3fabaad2e84
+[2m[WebServer] [22m[0m[31m[core-backend] POST /api/modules/library/footprints/4d3b3cdb-95f1-4ba1-abfd-7c664eb5a98c/model 400 [0m[1m1618 |[0m         existingModel?.sourceStepSha256 === body.sourceStepSha256 &&
+[2m[WebServer] [22m[0m[1m1619 |[0m         existingModel.sourceStepPath
+[2m[WebServer] [22m[0m[1m1620 |[0m           ? existingModel
+[2m[WebServer] [22m[0m[1m1621 |[0m           : [0m[33mnull[0m[0m[2m;[0m
+[2m[WebServer] [22m[0m[1m1622 |[0m       [0m[35mif[0m (!source && body.sourceStepSha256 && !preservedSource) {
+[2m[WebServer] [22m[0m[1m1623 |[0m         [0m[35mthrow[0m [0m[35mnew[0m [0m[1mValidationError[0m(
+[2m[WebServer] [22m                     [31m[1m^[0m
+[2m[WebServer] [22m[0m[31mValidationError[0m[2m:[0m [1msourceStepSha256 requires a matching stored sourceStep[0m
+[2m[WebServer] [22m  status[0m[2m:[0m [0m[33m400[0m[0m[2m,[0m
+[2m[WebServer] [22m   title[0m[2m:[0m [0m[32m"Bad Request"[0m[0m[2m,[0m
+[2m[WebServer] [22m    type[0m[2m:[0m [0m[32m"https://openpcb.dev/problems/validation"[0m[0m[2m,[0m
+[2m[WebServer] [22m  extras[0m[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+[2m[WebServer] [22m headers[0m[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[0m      [2mat [0m[0m[2m<anonymous>[0m[2m ([0m[0m[36m/Users/andrejvysny/workspace/openpcb/OpenPCB/src/modules/library/backend/routes.ts[0m[2m:[0m[33m1623[0m[2m:[33m15[0m[2m)[0m
+[2m[WebServer] [22m[0m
+[2m[WebServer] [22m[core-backend] POST /api/modules/library/footprints/4d3b3cdb-95f1-4ba1-abfd-7c664eb5a98c/model 400 10ms id=75b3d840-d3f2-4a2f-8aa4-7131f7230a24
+  ✘   3 [chromium] › tests/e2e/3d-preview.spec.ts:220:1 › Library imports KiCad ZIP and renders component 3D preview (377ms)
+  ✘   2 [chromium] › tests/e2e/designer-3d.spec.ts:245:1 › Designer PCB 3D view renders imported component board geometry (378ms)
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=c2a9e69a-e69b-4e0b-8f04-d71a926495de
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=3235ee27-65e0-4f85-8cee-2aa8bb273d1d
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=447e6db0-413c-4151-9dc8-46f8b95fa11e
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 1ms id=3e97cbe7-6dd3-4669-8fca-8192598ae59c
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=dfd95485-cac6-4344-ac7e-8b57e9618319
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=ca8b2881-37dd-475b-acd7-6e54a7e070bb
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=656a748b-4f87-4c84-ae17-0952effcdbfc
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=488c6cc8-bf11-4786-87b0-3cd0118a21f8
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=53bc0513-ae4f-4a38-b75f-22e3607f6025
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=7fa9be2a-5ec9-43dc-8197-499b6054c47d
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=8daaa0d7-9869-42ed-9c44-3f1729bc9bd6
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=969f7c8c-e3eb-4801-a47e-a4fd012ff435
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=2cbe184f-eab1-45cd-813a-0d1e786d595d
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=c0a40c64-e844-4399-8416-7a9292196bbe
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=72b97a07-af17-4082-a49b-a1a970e10423
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 3ms id=1c720dc8-5542-476b-808b-57cefec2954d
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=7e3c2a21-9b7f-4bd0-bf73-0a9b37cd9921
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 0ms id=b27abe17-077a-4a0d-8844-595a44905d0d
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=a34bd3ed-5590-4ad5-a13d-0c6287c38d48
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=4ac58337-ee00-46d0-ae2e-be01e225f7c7
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=b5c932b8-1d11-48d8-905d-316d422a139e
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=a8b852b8-8546-4d65-a33d-cbcdb650afd9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 4ms id=f5e37553-04c8-4158-813d-9fb5f0bd2181
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=57d470ed-393d-40a4-9499-b09416a78869
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 2ms id=826beb0b-c288-42d8-9ffc-d6437d7f4ae4
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=53572ede-cdbd-4564-8fb7-bd61f3ad8f0b
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=144531b8-c5d3-4a73-a2c3-685cfa5907e0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=cecb6969-ba2f-43ed-9d85-2d7a547987d3
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=cd7ec89b-043d-41cb-874f-4cfeba6db340
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/facets 200 8ms id=8bff37a4-c08a-42ea-b043-d6400e84c40a
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/components 200 9ms id=69c8002c-8273-40e1-8fa2-539dc76cee76
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/core-library/status 200 41ms id=c1e07df4-1dd2-4bb3-a40e-10961bd4d8e0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 3ms id=87876aa5-a683-4ecc-bcee-58a0b7507f95
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 25ms id=afc748d8-efdb-47eb-8c7d-2fdea972808f
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=1c7f0b69-c76c-4060-831d-2646c3f09ccb
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/5e9bbf49-7376-4c9e-8138-3a8f80cd2394/projection/schematic 200 26ms id=2815b9d1-e68b-4b48-8b86-b9e96e37fbe0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/5e9bbf49-7376-4c9e-8138-3a8f80cd2394/history 200 19ms id=0dcdbbb0-33d9-4924-b5d5-23fb0ac5c0d9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/5e9bbf49-7376-4c9e-8138-3a8f80cd2394/comments 200 2ms id=4e51b078-75c3-4d83-b15c-fceeed701b65
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/components/openpcb.core.ic.74hc00-soic-14/detail 200 3ms id=f7608708-00e0-4cbd-886f-3217c37abdf8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 11ms id=80f4cb70-c875-43a9-8245-f6b5bcb7b521
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=bff34e5b-2783-4155-b6fb-925e7c4dc98e
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=3350b54b-d36d-40d2-a1ac-ff5151ad778b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=c603a05b-2da8-4e72-989f-a28159dd8c34
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 4ms id=adc1fea3-6260-44a8-a87e-481288c5357d
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=db763fd6-e8c3-4f2d-8ee5-09821143343b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/91cf5829-0b27-4e8b-a537-461c97710397/projection/schematic 200 18ms id=24614c43-8a33-4ae0-b7f8-311fc0272110
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/91cf5829-0b27-4e8b-a537-461c97710397/history 200 3ms id=d48b516b-d8f8-4744-a516-85779b097f23
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/91cf5829-0b27-4e8b-a537-461c97710397/comments 200 0ms id=bf3943b0-ef07-466d-8406-2ee946e719c3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=346d7a05-438f-4160-a034-bd6b4d4a97e5
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 6ms id=b550ef39-ed22-4706-887d-da5c482881d7
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=a59cb7e0-e259-4619-9d36-6d81a742de50
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/projection/schematic 200 3ms id=3e2bb27a-0875-46ae-a36b-a35787d0de41
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/history 200 1ms id=df457fe1-8d8c-4705-81dd-2555f0ebb6ae
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/comments 200 1ms id=b310e362-127f-4dec-9bc9-9429898d4c5d
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=e3516278-3b2f-4633-8863-6db5494d250a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/5e9bbf49-7376-4c9e-8138-3a8f80cd2394/projection/schematic 200 0ms id=ffbbad11-3b85-4f9d-a06b-58c185797df7
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/5e9bbf49-7376-4c9e-8138-3a8f80cd2394/history 200 0ms id=41eb9f95-5f55-4be7-87a6-b3f99656e866
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/5e9bbf49-7376-4c9e-8138-3a8f80cd2394/comments 200 0ms id=ba37d976-7e7e-440e-b56a-8bcafdc450d0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/5e9bbf49-7376-4c9e-8138-3a8f80cd2394/projection/pcb 200 10ms id=ae99836e-ae71-4ad4-8b0b-a9529e88fce6
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/5e9bbf49-7376-4c9e-8138-3a8f80cd2394/history 200 0ms id=e42aee0b-d43e-4577-b12e-5922610e90ea
+  ✓   1 [chromium] › tests/e2e/browser-smoke.spec.ts:3:1 › boots browser app, loads modules, and opens designer (3.2s)
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=e5c54d87-f4ee-4f53-a7ba-c3c4cbf137b2
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/91cf5829-0b27-4e8b-a537-461c97710397/projection/pcb 200 2ms id=d1bf162e-f31c-4055-96c0-eb5733d93b75
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/91cf5829-0b27-4e8b-a537-461c97710397/history 200 1ms id=8a812119-3fbc-4c54-9001-ed9ecc636cd0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/91cf5829-0b27-4e8b-a537-461c97710397/drc 200 1ms id=7ed66260-b8cc-43f4-8268-819c5dc85252
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/91cf5829-0b27-4e8b-a537-461c97710397/projection/schematic 200 1ms id=51e63959-2f4f-4740-942f-955f5563b6dd
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/91cf5829-0b27-4e8b-a537-461c97710397/history 200 4ms id=08648f14-e01f-406d-92f4-2b5570181aae
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=b6975a4f-2ccb-4ed6-8d4d-b5126c44da5a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/5e9bbf49-7376-4c9e-8138-3a8f80cd2394/drc 200 1ms id=03ce148a-dc89-42a5-863d-501fff1147a1
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/5e9bbf49-7376-4c9e-8138-3a8f80cd2394/comments 200 0ms id=37aca97a-a9aa-4ca0-9231-3dbbfa5f21a1
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/projection/pcb 200 3ms id=e2b4a104-96cf-47d5-bbd2-e8dd3c8d4348
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/history 200 2ms id=2a76587e-81a1-4f5d-b483-dee26cd2f9e5
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/drc 200 0ms id=ba939fa1-6f8b-45d7-ae2e-aa4f9027298b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/projection/schematic 200 3ms id=f2d083c0-41c4-4c8a-a42c-827903c067b1
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/history 200 2ms id=9557e2ac-410f-4052-9ea8-45c9a966250f
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/91cf5829-0b27-4e8b-a537-461c97710397/comments 200 0ms id=2f1a2acf-4312-49c1-a5a1-a8b64c8cd41c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/comments 200 1ms id=c6aaa6e6-2826-4732-898c-bb9c4fd7ebcd
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 2ms id=382317a6-7795-44aa-b3e9-5c37fd8c102d
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 3ms id=19cbbdd6-cad5-44f3-92af-a947dba6392c
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=1710dac9-1ca8-46f9-9175-4aace656c22c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/8956e0b3-4020-4c63-91f2-532e8c7fe35d/projection/schematic 200 1ms id=da787c8d-5c3a-4c66-8d46-c527284c9ced
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/8956e0b3-4020-4c63-91f2-532e8c7fe35d/history 200 2ms id=24062a71-35da-4805-ba66-7a08757d31bb
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/8956e0b3-4020-4c63-91f2-532e8c7fe35d/comments 200 0ms id=8f8c7c80-8968-4f10-858f-086aec856b60
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=cdf27667-bc76-4707-96e6-0548f83e7476
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/8956e0b3-4020-4c63-91f2-532e8c7fe35d/projection/schematic 200 1ms id=a5137b99-c0cc-4d8d-b5ce-5b2f72edc0d6
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/8956e0b3-4020-4c63-91f2-532e8c7fe35d/history 200 3ms id=f2248459-c09c-4c38-b6bb-159cb124ecc4
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/8956e0b3-4020-4c63-91f2-532e8c7fe35d/comments 200 0ms id=b6a1dfa0-f757-4225-a456-a85d3bdfae2f
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=d808b962-32fa-45f2-974c-8c7072905c1b
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=0178f730-be11-42fb-b807-5d6e06f4bb99
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=b0c807e3-72b1-49bc-9950-11fac8f34891
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=29fed2d9-2d1e-41d1-ae72-d52e2ce3a7fa
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 2ms id=57e75754-2dcd-4d7d-ad45-6ba3adf2de38
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=9236782e-c733-44a5-af4d-d7137a9943b2
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/644478e8-dd0a-4473-9fbd-d30495ad2151/projection/schematic 200 1ms id=1167561c-c129-4bb1-bbbf-1544f9398dd7
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/644478e8-dd0a-4473-9fbd-d30495ad2151/history 200 1ms id=b8bccd78-b552-4ff4-9159-d251606334f8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/644478e8-dd0a-4473-9fbd-d30495ad2151/comments 200 0ms id=034d3640-a1e9-444d-94b0-ec988acaa21d
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 0ms id=857dd504-6f03-4806-850d-9c047b4e894d
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=501bff38-bbe6-4028-9a81-7f3497aaf3d6
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/644478e8-dd0a-4473-9fbd-d30495ad2151/projection/schematic 200 0ms id=096e7305-76a4-415c-9875-f53c98796003
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/644478e8-dd0a-4473-9fbd-d30495ad2151/history 200 1ms id=7279f0b4-0f7d-435d-89f9-faffabd2bbcd
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/644478e8-dd0a-4473-9fbd-d30495ad2151/comments 200 9ms id=812f4167-8140-4e3f-9fa9-25da83a6e47e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=008a4d1f-8fa0-4ece-95b1-ac83a8a9c437
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 2ms id=712349ab-f123-40ad-a85d-3cd84eee5cd3
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=ac6e0f69-ee04-4e3b-8fd1-dd447a6ba6aa
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6f333ca6-1dbb-4253-a909-0541abc26f86/projection/schematic 200 0ms id=d37f095c-86e0-43e4-8c50-52f16965016d
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6f333ca6-1dbb-4253-a909-0541abc26f86/history 200 0ms id=af749175-4dcb-461f-b26a-dba5101b3a79
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6f333ca6-1dbb-4253-a909-0541abc26f86/comments 200 0ms id=51b2f25c-1d12-4af0-b351-fe214ad2b6e5
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=dadf9713-7b8e-4de2-9378-d2164e9a0aff
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6f333ca6-1dbb-4253-a909-0541abc26f86/projection/schematic 200 1ms id=39f758f1-2f15-4c72-b00b-a5ebadb9d412
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6f333ca6-1dbb-4253-a909-0541abc26f86/history 200 0ms id=354c7ead-ff60-470c-aa39-98d1235948b3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6f333ca6-1dbb-4253-a909-0541abc26f86/comments 200 0ms id=9513fea0-3edc-476b-a680-9ff6da770228
+  ✓  12 [chromium] › tests/e2e/builtin-footprints.spec.ts:129:3 › builtin footprints — Library UI › Library palette renders common CoreLibrary component cards (4.5s)
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=77d57d94-2dcd-4a44-a3d1-6cc643c53fd5
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=5f316c66-1af9-4d38-a155-108fd29d1b61
+  ✓   6 [chromium] › tests/e2e/pcb-autolayout.spec.ts:166:1 › signed out: Auto Layout is offered, explains itself, and issues NO request (4.7s)
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=a53ca857-3d81-4a68-9e78-4fa4f2636a8c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/8956e0b3-4020-4c63-91f2-532e8c7fe35d/projection/pcb 200 2ms id=5a0a4a22-f397-42a9-8a44-d7f70998d860
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/8956e0b3-4020-4c63-91f2-532e8c7fe35d/history 200 2ms id=6827d4aa-f4d6-428b-97a0-118283bbdbdf
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/8956e0b3-4020-4c63-91f2-532e8c7fe35d/drc 200 0ms id=a6967200-077b-4297-ad50-65e85c162ae0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/8956e0b3-4020-4c63-91f2-532e8c7fe35d/comments 200 0ms id=9e9226ac-626b-4178-bb35-2ff6260c62cf
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=49c1e045-21e4-46a4-b6ed-8ab24880de43
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=4a431e5b-c139-4294-879b-52e669d34787
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 3ms id=579425cc-d0d6-4fc7-97d9-dfd56272c1be
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=8712c82f-e569-430b-af2d-61c32d83183e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/644478e8-dd0a-4473-9fbd-d30495ad2151/projection/pcb 200 3ms id=98013a0b-bdbd-4ef4-98ed-4374dd7dc795
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/644478e8-dd0a-4473-9fbd-d30495ad2151/history 200 1ms id=d21da00a-2546-4f45-b900-ba76e3bd6a1b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/644478e8-dd0a-4473-9fbd-d30495ad2151/drc 200 0ms id=b76b021c-ee64-43f4-803c-1278f5cc923d
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/644478e8-dd0a-4473-9fbd-d30495ad2151/comments 200 0ms id=327bf4d4-60e9-455a-9444-ff795173c76a
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/facets 200 1ms id=161e06a1-a0dd-4839-9597-f06bc4e4f89a
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/components 200 3ms id=d42f6a3a-8076-4af1-a893-acb0fe833beb
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/core-library/status 200 14ms id=0a6e29bf-4875-414f-935a-b9dc713427a4
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/components/openpcb.core.ic.74hc00-soic-14/detail 200 1ms id=f13f11e5-525e-4bb7-ad2c-1ffe762f305e
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/commands 200 17ms id=ef04e9e7-9fe6-4c14-8678-5e3061410e1b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/projection/pcb 200 2ms id=3ec4adce-a4ac-431a-bfd3-2917cc98e847
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/5e9bbf49-7376-4c9e-8138-3a8f80cd2394/commands 200 9ms id=8519b9e4-047e-48f9-b390-8df4caf885c7
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/history 200 3ms id=4815fa10-e426-4dff-88b2-54ce18d126a3
+  ✓  16 [chromium] › tests/e2e/browser-smoke.spec.ts:29:1 › creates a design from home and renders schematic shell (2.2s)
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/5e9bbf49-7376-4c9e-8138-3a8f80cd2394/projection/pcb 200 2ms id=ac191c6c-4593-4e99-8ea0-989ff59fb6cb
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/components/openpcb.core.passive.resistor/detail 200 3ms id=ef5d2ee5-49df-49c5-89f3-91fcec9a6717
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/tags 200 1ms id=c490d31a-defb-4156-ba42-51693e756fd9
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/components/openpcb.core.passive.resistor/detail 200 1ms id=d34852d9-a13f-41fd-b2c2-3ff37a0597a0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 3ms id=6c9f4143-1b58-46f9-bce8-cd5e3838424c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 3ms id=6a974f0f-8e19-4bd6-b203-c2425d53c0df
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=e2c7de02-27c3-4f34-8640-0fe973c777e0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/63d7a459-dc1d-43cd-920a-9be9ebe15418/projection/schematic 200 2ms id=42f176ab-e076-49e2-9f6e-448e92cc16bd
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/63d7a459-dc1d-43cd-920a-9be9ebe15418/history 200 1ms id=5d4454f1-c408-4106-b206-03404781e751
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/63d7a459-dc1d-43cd-920a-9be9ebe15418/comments 200 0ms id=0afa0deb-63cc-4540-91f2-2ac5a204cf2a
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.r-0402/preview.svg 200 2ms id=72d24a9e-f23f-4ecd-852c-1da46c69d806
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.r-0603/preview.svg 200 0ms id=dc77a022-f159-4ab9-bffe-b18f257c441a
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.r-0805/preview.svg 200 1ms id=0afe055a-2aa2-49b2-9d9e-9636179aaf00
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.r-1206/preview.svg 200 1ms id=596d93d6-d6c1-4510-85f6-7e17ee5c40c0
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.r-1210/preview.svg 200 0ms id=1085bf34-e71e-4af3-9bfb-f0f454ef3ebe
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.r-2512/preview.svg 200 0ms id=ae54fcf1-c7e2-48a2-99fb-8a2d6077c22a
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.r-0603/model/meta 200 3ms id=bcc3c1e0-f766-48f1-9a1a-e9ab4c42e618
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.r-axial-din0207-p7-62/preview.svg 200 1ms id=6257b402-c5af-4c0a-b02f-eaccfead312e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/5e9bbf49-7376-4c9e-8138-3a8f80cd2394/history 200 1ms id=240b36ca-4eed-4db9-bf82-ce22959a63eb
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.r-axial-din0207-p10-16/preview.svg 200 1ms id=0ccde188-f286-4d8e-93fd-4c8da3c4bf45
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.r-axial-din0309-p12-70/preview.svg 200 0ms id=811c5591-728b-4be1-9be0-8dff6d39a0cd
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 3ms id=eeb297d7-6feb-484f-960e-0511234bf6d1
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/63d7a459-dc1d-43cd-920a-9be9ebe15418/projection/schematic 200 2ms id=31a5ae38-4d70-421b-8251-c9551de014e1
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/63d7a459-dc1d-43cd-920a-9be9ebe15418/history 200 1ms id=3d5e9127-b4b3-4cc7-8931-822c0e20902e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/63d7a459-dc1d-43cd-920a-9be9ebe15418/comments 200 0ms id=f576cebe-6d42-4072-b629-5829274e5d6c
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/imports/dxf/inspect 200 1ms id=46c24379-9413-415b-b47d-14a810c1a92e
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/8956e0b3-4020-4c63-91f2-532e8c7fe35d/commands 200 6ms id=93a0cdd4-a553-429a-b6c5-cb12b3259672
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/644478e8-dd0a-4473-9fbd-d30495ad2151/commands 200 3ms id=348f043f-ec30-4c81-b69d-efd9d00b08d4
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/8956e0b3-4020-4c63-91f2-532e8c7fe35d/projection/pcb 200 1ms id=1c90de06-47e3-4e4c-b16c-3e75e807b6da
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/644478e8-dd0a-4473-9fbd-d30495ad2151/projection/pcb 200 1ms id=3de8dac8-a5dc-49a9-a439-91abc4094843
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=97b69062-0a2a-4413-b4aa-fa8500492a2d
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=21835f95-9aac-4d3a-acc9-4d83b5226897
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/8956e0b3-4020-4c63-91f2-532e8c7fe35d/history 200 1ms id=30c43db3-5a45-4c9d-9b1f-817aac0c19d3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=4c54046a-a723-4363-b91d-39a6ce0af881
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/644478e8-dd0a-4473-9fbd-d30495ad2151/history 200 1ms id=f7e9a39e-63bc-4248-af30-4d0b3fe5f7b4
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=ebf564de-ed99-49ef-86f3-75be405e3675
+  ✓  15 [chromium] › tests/e2e/pcb-dxf-import.spec.ts:13:1 › imports a board outline from a DXF file (4.8s)
+  ✓  14 [chromium] › tests/e2e/pcb-layer-flip.spec.ts:65:1 › active layer switch does not flip the view (4.9s)
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/projection/pcb 200 5ms id=a6c8a7ab-5b1e-4b94-ab9a-2242aa8b7436
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=41a6b8d1-28c0-401d-9158-cdf574351493
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=3cdc6f3d-70b4-4dae-aaa5-031359683e0c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=3fa03e83-98ac-4a04-85db-037e7b4a162f
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=b00d2e54-caa2-4e1a-a047-6ab5c1acce26
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=bb5b907b-c609-4c47-beee-eb524dd4395c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=81923346-43c1-4f6b-bbbd-a6f82ab9aa5d
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 0ms id=dfdbb361-81e0-4410-8f4e-976a832e1f28
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 3ms id=3968cd5e-b989-4e2a-9138-5bdeb50559a0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 6ms id=80208f2c-1857-426e-bccc-435b28ce778e
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=f82e3fec-add7-4b79-a1ee-114123b03401
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/projection/schematic 200 0ms id=f14c5082-6792-4ecf-9161-5ee1b07bd8c2
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/history 200 1ms id=da8185b8-967f-487f-aa54-557e0b4f1988
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/comments 200 0ms id=ddb772f8-025e-4673-99f0-824a23f07187
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=84a06dae-f9f1-4bbe-8232-9de792bb9689
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=aa02e419-e247-4435-acae-98c816a0377b
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 2ms id=4a42bbc1-5461-46d0-b1c1-60f1b762effa
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=21cc2084-940a-4d22-92bd-a5c6eb83d246
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/projection/schematic 200 2ms id=6d85a960-4d85-4b93-9c0c-c0374fa87f1a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/history 200 1ms id=5f914bb5-f441-4d7d-b879-dc8af92dfbc4
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/comments 200 1ms id=87c101fc-7737-427e-b239-9e180ab0a934
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=acd7e92c-982a-4ec1-ac4e-138b3fad754a
+  ✓   5 [chromium] › tests/e2e/pcb-board-shape.spec.ts:8:1 › draws a custom board outline via the Board Shape tool (6.6s)
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 2ms id=ebf142f6-6063-4584-9e82-fe8511ea4a9f
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 4ms id=32c6b2e3-a6a9-455c-bad0-aca86a31811c
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=27479c63-05e2-4959-a6a1-f2ccbd61f2b3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/b5b7cd2c-a4ea-4622-a288-c6a7758be6de/projection/schematic 200 2ms id=d6dde24d-db13-41ee-84d5-72f2ca190f45
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/b5b7cd2c-a4ea-4622-a288-c6a7758be6de/history 200 1ms id=133ad39e-a26f-4a9f-9412-fd04a141fadd
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/b5b7cd2c-a4ea-4622-a288-c6a7758be6de/comments 200 0ms id=b9b27ecc-241b-4063-8e0d-0f2f47ec444b
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=b14ba1cc-a7ad-4539-a2a7-ef99e6676bfb
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/b5b7cd2c-a4ea-4622-a288-c6a7758be6de/projection/schematic 200 1ms id=9895f697-010c-4347-abb5-602160ee2a64
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/b5b7cd2c-a4ea-4622-a288-c6a7758be6de/history 200 0ms id=96423bd1-beba-4072-9655-a3bb5914c4a9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/b5b7cd2c-a4ea-4622-a288-c6a7758be6de/comments 200 0ms id=d54f27bb-bb00-4ff0-b764-0672bc764972
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=b96d32a9-e14a-4450-81c8-ff5adc1f782e
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=cb3ddc9f-a0b9-4373-994c-e17ad7b4e2ce
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=56db315b-4d66-491b-96da-0ca14f0e4774
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/commands 200 8ms id=29b26331-21c1-4f12-a1ae-b28faf6c1b8c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/projection/pcb 200 2ms id=a6844d5c-e504-4130-aad9-ffcd1f36ffb7
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/projection/pcb 200 1ms id=abd828d9-3f31-4d3f-8513-e812d7b87871
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=c61d313a-6e4e-4eef-aee4-a1e18001a6a6
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=b3ca3bfe-3a78-4cf6-8726-266ac05f142d
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 1ms id=1b4ff483-d01d-4061-be95-3db4d9f5ab33
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=2b39549e-4b12-4826-9f29-b2c8cc4898b9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9d0bb7e0-f3a7-4d4d-bbfe-5038490756d9/projection/schematic 200 1ms id=188b9a8e-7805-431f-9eaf-3975e4857233
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9d0bb7e0-f3a7-4d4d-bbfe-5038490756d9/history 200 0ms id=7070927c-ed90-46e7-bfa2-86128644b380
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9d0bb7e0-f3a7-4d4d-bbfe-5038490756d9/comments 200 1ms id=3be81512-62c8-4eb7-84bc-aca41d0f0b9b
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 5ms id=a621d3eb-3313-43fe-ae05-29d21d49b10c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/history 200 1ms id=e0f7fd10-633e-4052-88f2-3dde730ce730
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9d0bb7e0-f3a7-4d4d-bbfe-5038490756d9/projection/schematic 200 1ms id=3e394136-7546-43a7-bc23-374f350897dd
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9d0bb7e0-f3a7-4d4d-bbfe-5038490756d9/history 200 1ms id=a8a53296-49f1-4c15-a8a6-24e9b0d03048
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9d0bb7e0-f3a7-4d4d-bbfe-5038490756d9/comments 200 0ms id=4e57a765-be54-4960-a71a-e7c5b2110e8b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9d0bb7e0-f3a7-4d4d-bbfe-5038490756d9/projection/pcb 200 6ms id=6ee8902e-13dc-4c6b-9362-5146f84e9ce9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9d0bb7e0-f3a7-4d4d-bbfe-5038490756d9/history 200 1ms id=5b12e798-fedf-49d2-b6c9-eb709b4bfc17
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9d0bb7e0-f3a7-4d4d-bbfe-5038490756d9/drc 200 2ms id=9b2abc6a-f011-4d4a-b36e-92faa5a8705e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9d0bb7e0-f3a7-4d4d-bbfe-5038490756d9/comments 200 0ms id=e7b4023c-3ce1-4b93-9175-f4e038109d21
+  ✓  17 [chromium] › tests/e2e/builtin-footprints.spec.ts:148:3 › builtin footprints — Library UI › Resistor detail page shows the 9-variant footprint list with default flagged (2.7s)
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/9d0bb7e0-f3a7-4d4d-bbfe-5038490756d9/commands 200 5ms id=fdbbf2c8-6251-4e07-8327-60e7c29fb096
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/63d7a459-dc1d-43cd-920a-9be9ebe15418/projection/pcb 200 2ms id=6b3ac827-8d46-4cd2-b946-55c898e0f08a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/63d7a459-dc1d-43cd-920a-9be9ebe15418/history 200 1ms id=1ac19456-c1f3-4265-9f84-3b5c18354c07
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/63d7a459-dc1d-43cd-920a-9be9ebe15418/drc 200 0ms id=1c4a2e7a-503f-45e4-b041-96b7bc19c0f8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/63d7a459-dc1d-43cd-920a-9be9ebe15418/comments 200 0ms id=5c42dd9c-98cd-4968-9c08-97eb8e256c6a
+  ✓  18 [chromium] › tests/e2e/pcb-autolayout.spec.ts:190:1 › Route Board and Auto Place remain separate entry points (2.6s)
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/projection/pcb 200 1ms id=d80009c2-b407-4a73-80a8-546ebe267cec
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/drc 200 0ms id=f7abfe90-ad86-42da-8c8a-d8a08a7c9a8c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=1dde6f23-a475-4f12-8493-7ab5ff923ea6
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 2ms id=2ae2e4ad-16ad-4b81-a376-5f012b60d082
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=710b74fe-9bb3-4bed-a27c-9890a9128cfc
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/279698ae-1115-4fc9-b683-9fc31bdab27a/projection/schematic 200 1ms id=a301fe83-6183-4bf8-8744-e185b5b1573b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/279698ae-1115-4fc9-b683-9fc31bdab27a/history 200 1ms id=884cc0b9-fb4b-4ab6-8d58-72f4edfdb7cc
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/279698ae-1115-4fc9-b683-9fc31bdab27a/comments 200 0ms id=c5ab97ad-e929-4bce-90be-122c1ee12ae0
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=af3b5313-7dda-45ce-b43e-162bc6e3b33d
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=caf6e166-4bb2-424d-befc-90b696450837
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=adaf9ef8-cbc8-4713-8036-5c80a7c8caae
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 2ms id=d5c63d09-e4be-4ec7-83fa-96b091699fd6
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/279698ae-1115-4fc9-b683-9fc31bdab27a/projection/schematic 200 3ms id=18473f44-304d-4742-86f7-ee550dc20f72
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/279698ae-1115-4fc9-b683-9fc31bdab27a/history 200 1ms id=d96b1c8e-2ac9-4b88-b242-69e87b1a8ae1
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/279698ae-1115-4fc9-b683-9fc31bdab27a/comments 200 0ms id=d7ed3788-5ba4-49e3-a9ad-cf86f53049fe
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/drc/runs 202 4ms id=da825f3e-6c6c-46a0-acc3-0829ca5240fa
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/drc/runs/63067509-e61f-41fc-8133-cb044f779efe/stream 200 1ms id=15c0dd00-75df-4380-8204-2b76226f43c2
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/drc 200 0ms id=f5074524-703d-43ef-ba8c-3c39f33cb7df
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=b094ea88-1982-49b2-8abc-6c075a4bdff2
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=406c4d2a-c1e0-4cea-abad-9046a7899fc9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=3d0420a7-1ed9-4c19-b3a9-b2e56f3bc058
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=f6f41826-5bfd-4213-82d9-91d368677157
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/facets 200 4ms id=d524f3a0-d067-411a-8cac-600377537296
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/components 200 9ms id=95da5d1e-6688-4ffb-9114-4b3eb633249e
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/core-library/status 200 28ms id=1702cb50-9199-4c07-99ff-9c1bdabaf557
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/components/openpcb.core.ic.74hc00-soic-14/detail 200 1ms id=933813d7-c04f-4c93-9719-d652933678a8
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/components/openpcb.core.passive.capacitor/detail 200 2ms id=e2c01b6d-c0df-4f9a-8350-110306c27fda
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/components/openpcb.core.passive.capacitor/detail 200 1ms id=4acf4269-5cd0-460f-a095-af87515a3468
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/tags 200 1ms id=98f73c31-2b03-4680-b4fe-870a9954c6d0
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.c-0402/preview.svg 200 0ms id=20538100-f580-452d-bad1-430fdc81cc48
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.c-0603/preview.svg 200 0ms id=f3ec27dd-bf3d-4cc5-899d-9b2f033f67a5
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.c-0805/preview.svg 200 0ms id=baf76540-0c7a-4493-b699-0fa8c1012667
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.c-1206/preview.svg 200 0ms id=8e69d0b8-0f2e-4981-a333-96d6b73b31fd
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.c-1210/preview.svg 200 0ms id=aa61cc8f-b934-4356-935e-4fc2cf3315c0
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.c-disc-d3-p2-5/preview.svg 200 0ms id=308bd98b-cccb-4cb2-b2a4-e1ddac211ebc
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.c-0603/model/meta 200 1ms id=7572dfaa-0d90-4f50-b2ec-06925b698585
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.c-disc-d5-p5/preview.svg 200 0ms id=24f0c3fe-66c5-409d-9744-7fe3800187f8
+[2m[WebServer] [22m[core-backend] GET /api/modules/library/footprints/openpcb.core.footprint.passive.c-disc-d7-5-p5/preview.svg 200 0ms id=f2d69099-31b7-4272-a192-1d67e1d0576c
+  ✓  23 [chromium] › tests/e2e/builtin-footprints.spec.ts:178:3 › builtin footprints — Library UI › Capacitor detail page shows the 8-variant footprint list (913ms)
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=0c13749d-7d05-4300-b6fd-fb3fdc3a858c
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/ab66f098-293c-4c7f-bcca-e8b52b564f00/commands 200 4ms id=1a2966f9-eb05-462e-9c3f-ba1300609c4c
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/ab66f098-293c-4c7f-bcca-e8b52b564f00/commands 200 2ms id=d140caf5-aa4f-4a55-8c6a-d67238b0f4f8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ab66f098-293c-4c7f-bcca-e8b52b564f00/projection/pcb 200 3ms id=975684f6-72aa-461a-a1e4-f8acef5484c2
+  ✓  25 [chromium] › tests/e2e/builtin-footprints.spec.ts:277:3 › builtin footprints — Designer placement round-trip › places generic Resistor + Capacitor and finds them with default footprints in PCB projection (22ms)
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/projection/pcb 200 1ms id=eac1670f-9f19-49b5-86a0-b868c9d27edf
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/history 200 1ms id=35f89ede-71ff-4f71-a5b7-445a7c992a5d
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/drc 200 0ms id=29c4b104-76cd-468b-9a33-4b67a2a486d7
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/comments 200 0ms id=e90b3a03-67a3-4324-836f-9e4846566ed3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 4ms id=f3a4b3e8-0303-4471-bcd9-689952ddbf28
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 3ms id=646ae2b1-4aaf-498b-91ee-2c86151f21f5
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=7cb5f84e-1c82-43af-bf7a-127a48d1804c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/aa5ffa65-f8bb-4486-91b3-6414cafcbf19/projection/schematic 200 1ms id=b778e3aa-4e42-4a3f-9974-5e34c270e412
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/aa5ffa65-f8bb-4486-91b3-6414cafcbf19/history 200 1ms id=6b117bf1-a1e1-49eb-a874-03d2e49140d5
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/aa5ffa65-f8bb-4486-91b3-6414cafcbf19/comments 200 1ms id=b0519b29-b7e2-47eb-984c-cf1c83333ad5
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=846dc633-cc84-44fa-8d9f-1c8986648616
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/aa5ffa65-f8bb-4486-91b3-6414cafcbf19/projection/schematic 200 1ms id=a2952b46-4699-4932-83b6-af6692ab6d72
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/aa5ffa65-f8bb-4486-91b3-6414cafcbf19/history 200 1ms id=b1a39645-5860-491e-83a9-8048b4fb42e1
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/aa5ffa65-f8bb-4486-91b3-6414cafcbf19/comments 200 1ms id=5c136e85-d439-4293-b03a-eb8218b07539
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/commands 200 15ms id=e26c9462-7dc7-4feb-8cd5-d7d0262c0413
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/projection/pcb 200 1ms id=6904cc47-e3db-47cc-a60b-ee76bc6dae76
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/history 200 0ms id=8a7a5415-7e80-4a1e-b89b-3ad15526c964
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=8e387c2f-90cf-4e1c-8dc8-4db2f9958909
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=9af847b7-15b8-4087-b416-1a9b69d66316
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 3ms id=b5de21ac-19c1-4321-a921-677d5cfb9b13
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/9d0bb7e0-f3a7-4d4d-bbfe-5038490756d9/commands 200 1ms id=03c4a97f-b31a-483a-b4bf-65b68cdf69e1
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/b5b7cd2c-a4ea-4622-a288-c6a7758be6de/projection/pcb 200 1ms id=4d4fdf76-990e-4af5-9ae3-f5777261f4a4
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/b5b7cd2c-a4ea-4622-a288-c6a7758be6de/history 200 0ms id=eec3dcb7-50a4-49ae-aec0-a26a4394a4e5
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/b5b7cd2c-a4ea-4622-a288-c6a7758be6de/drc 200 0ms id=19ac32bc-2eb0-4933-a1e2-ce918bd79978
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/b5b7cd2c-a4ea-4622-a288-c6a7758be6de/comments 200 0ms id=6187a880-f2c7-4bfd-91b4-0995e61554e6
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9d0bb7e0-f3a7-4d4d-bbfe-5038490756d9/projection/pcb 200 3ms id=b78d1592-90d2-4fde-b36e-d304c8d73172
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/projection/pcb 200 2ms id=b0e8726d-730e-4a37-9820-598430445771
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9d0bb7e0-f3a7-4d4d-bbfe-5038490756d9/history 200 1ms id=173cb98c-ed30-4102-b7ae-8cf6ce3eb6dd
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/279698ae-1115-4fc9-b683-9fc31bdab27a/projection/pcb 200 2ms id=35e16640-fa47-420f-9128-5971ab02e6d5
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/279698ae-1115-4fc9-b683-9fc31bdab27a/history 200 0ms id=5057f2c2-4703-44c5-a88a-c8a1643682f2
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/279698ae-1115-4fc9-b683-9fc31bdab27a/drc 200 0ms id=62becb8f-5da5-4b47-80a2-e0772555c065
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/279698ae-1115-4fc9-b683-9fc31bdab27a/comments 200 1ms id=c26f53df-39d4-4c85-a709-85c6bc98aecd
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4cc98e58-0731-4b55-9ffb-4bcfcfd05c40/projection/pcb 200 0ms id=ba9468e1-1fbb-4734-8f6f-f3022537c1d8
+  ✓  13 [chromium] › tests/e2e/pcb-drc.spec.ts:69:3 › pcb batch DRC run › runs DRC from the dock, lists the keepout violation, then goes stale (8.9s)
+  ✓  20 [chromium] › tests/e2e/pcb-layer-flip.spec.ts:77:1 › Shift+F flips view and syncs active layer to the visible side (3.0s)
+  ✓  21 [chromium] › tests/e2e/pcb-routing.spec.ts:12:1 › Route tool toggles via R key and toolbar button (3.1s)
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/commands 200 3ms id=b904c11d-ff1b-4089-be7d-5842c4cea12e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/projection/pcb 200 1ms id=2f94cd6c-40e0-4d04-b66e-808c4701d898
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/history 200 1ms id=9e1591c7-29f9-461d-aa63-23522d8fa630
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=697c5fca-98d1-4c4a-a3ac-cc07bb894859
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=00e5441e-db0b-4558-8278-ca73248db04c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/projection/pcb 200 1ms id=cbd6aae7-8c62-446e-a4e7-e78b0916c0fb
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=1c32ab59-a814-4c78-8ba6-35b936f15d30
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=3064594d-b977-436e-a571-0a8d4fe62596
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=0413439c-42b6-41e7-bc77-f4953b3bfa67
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=b55afaba-af23-4cbd-97b2-82ed55cfdadc
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=5db3ce5b-e921-421d-9399-79f1d68356f8
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=6f642a3f-2a22-47fd-9019-629c572d2af1
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=3bfbc29c-d9ed-44f0-a7fa-91bdb361aed8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=b0fbd06f-ba04-49e9-adc5-dfca31363c78
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=bd145b13-0059-4c49-b683-29a0d0339a45
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=ea2b18bd-d635-43ce-9a86-7e0c285856fb
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=ee7a0aa0-d404-4290-a661-f5def2833f93
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=07ad32c7-8cd5-465b-89dc-a1e7b99e4950
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 6ms id=d0c7d892-a704-443d-b7f7-b1d0db334cae
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=e76e3b9f-00a9-423d-8f94-a753d5b25007
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/aa5ffa65-f8bb-4486-91b3-6414cafcbf19/projection/pcb 200 4ms id=cb7f83fe-b835-4daa-9997-babb9dfadd33
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/aa5ffa65-f8bb-4486-91b3-6414cafcbf19/history 200 1ms id=96a6cd4d-e027-452f-b542-9e82205bc554
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/aa5ffa65-f8bb-4486-91b3-6414cafcbf19/drc 200 1ms id=8da98e15-695c-4c16-8ec3-5b8de645af6c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/aa5ffa65-f8bb-4486-91b3-6414cafcbf19/comments 200 0ms id=947d6e8b-b8c0-49ae-b4fd-78ea45b12dfe
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 4ms id=1a7e6c6e-04ff-4afd-8d80-e8ac950811e4
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 4ms id=43cd0e7d-5f63-4611-a928-e6ced00028ee
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=450f60ab-fe04-4b34-ba5f-524822246045
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/projection/schematic 200 2ms id=d85198ab-4f1f-4001-b78d-c75613eb6b26
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/history 200 0ms id=48f761c3-f810-4b87-918a-fc767dbf0ef6
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/comments 200 0ms id=33919fc2-9fc0-4490-89a6-2c39e5357cbb
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 2ms id=5add31db-1650-4b45-9eae-628f1312033b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/projection/schematic 200 1ms id=f5dfea71-89a3-4150-8760-759c76890782
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/history 200 1ms id=e59f5385-1f3d-4503-9769-d4382c13e689
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/comments 200 0ms id=84846ac7-4b2e-4122-83ff-e57b89c2cf94
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=d6876c29-25d8-44e8-a6ed-3fcefc2f69d0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 2ms id=8bc16480-6562-4235-a0ed-db01bc1a6a52
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=35615eae-556a-454e-9d1b-0332b186fae4
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ec7d7a7b-2116-4dbf-b244-6a03a5e63b54/projection/schematic 200 1ms id=5e0a5af8-6ab6-4702-8fa3-1f36a9347e31
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ec7d7a7b-2116-4dbf-b244-6a03a5e63b54/history 200 0ms id=7aa4e426-086c-48fd-928a-7616613b8986
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ec7d7a7b-2116-4dbf-b244-6a03a5e63b54/comments 200 0ms id=7a55168e-c2a8-4170-b33c-20b29a660b66
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=81d03577-6b3f-42eb-9b81-8c110f6fa0f4
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 3ms id=5bd1c1bf-93cf-4df3-8590-13be2fd63574
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=3c47880e-33c0-453e-9d1c-2fb890cd2c88
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/f341658f-04b6-40b7-825a-3004a7767a83/projection/schematic 200 0ms id=8583bb1e-d38d-4712-ab7c-5000ef1f8cc2
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/f341658f-04b6-40b7-825a-3004a7767a83/history 200 0ms id=7d57d402-4962-416e-9149-82d261859f23
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/f341658f-04b6-40b7-825a-3004a7767a83/comments 200 0ms id=43f09223-28c2-4f4e-983f-3af6fefc0539
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 3ms id=53ba88e1-d6a7-4135-99ba-f2dbbe69a4b8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ec7d7a7b-2116-4dbf-b244-6a03a5e63b54/projection/schematic 200 1ms id=98bd7942-66b7-4c45-85a4-98f4627f2b2b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ec7d7a7b-2116-4dbf-b244-6a03a5e63b54/history 200 0ms id=6f44361e-2bd0-47cc-a7cf-3a1cf5cedff3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ec7d7a7b-2116-4dbf-b244-6a03a5e63b54/comments 200 0ms id=20f8a987-3d9a-4099-b3a7-83f021d7331d
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=130f4574-f405-4faa-87df-a4b680d20b0a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=2a86d2a9-5e5d-488f-bb13-7e049a9d14e8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/f341658f-04b6-40b7-825a-3004a7767a83/projection/schematic 200 1ms id=8b51301b-89dc-44cc-a5a2-d61760832e6f
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 2ms id=7b49ba43-4b73-425d-9ed3-e74384221fa9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/f341658f-04b6-40b7-825a-3004a7767a83/history 200 1ms id=7018d685-35d9-4356-8a3c-b009cf839096
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=9294476a-1b6b-4e61-8413-4ecfa049950e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/f341658f-04b6-40b7-825a-3004a7767a83/comments 200 1ms id=6db8b53c-1fa0-453c-8888-8130c784c8d9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/821fcb28-d788-4b57-95db-9d66afff8efa/projection/schematic 200 0ms id=b01b092d-a4d6-4964-9b9f-f93a127494d7
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/821fcb28-d788-4b57-95db-9d66afff8efa/history 200 0ms id=eebf1291-8ba5-4d67-bb87-278df2d3ae78
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/821fcb28-d788-4b57-95db-9d66afff8efa/comments 200 1ms id=bf2bf905-2f82-40ed-bc40-91b7f11d3bee
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ec7d7a7b-2116-4dbf-b244-6a03a5e63b54/projection/pcb 200 1ms id=61ecf900-966e-4d7d-82a0-b88371390d44
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ec7d7a7b-2116-4dbf-b244-6a03a5e63b54/history 200 1ms id=eaa93c97-fed9-45ac-8af3-f240f0b1a159
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ec7d7a7b-2116-4dbf-b244-6a03a5e63b54/drc 200 0ms id=4978028b-6adf-49e6-be64-2b949e32bcc6
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ec7d7a7b-2116-4dbf-b244-6a03a5e63b54/comments 200 0ms id=6b72fc94-dccb-406d-b531-9e1d115e4ecf
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 2ms id=d56ee4d1-e4c7-48cf-be6d-c6a1945b9419
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/821fcb28-d788-4b57-95db-9d66afff8efa/projection/schematic 200 0ms id=48081d3d-36b0-4f38-9bba-36b1f78dfd1b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/821fcb28-d788-4b57-95db-9d66afff8efa/history 200 1ms id=f8fcf503-d88f-4b81-b87e-dae29b60b5a9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/821fcb28-d788-4b57-95db-9d66afff8efa/comments 200 0ms id=0b418756-f7c2-45b8-a97e-89f16b405aa5
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/f341658f-04b6-40b7-825a-3004a7767a83/projection/pcb 200 2ms id=9da99936-32be-4ca2-96be-01e96d8a5122
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/f341658f-04b6-40b7-825a-3004a7767a83/history 200 1ms id=3332be94-2e15-4e0a-97f9-db482f1762b8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/f341658f-04b6-40b7-825a-3004a7767a83/drc 200 0ms id=8796bd6f-b296-4e7a-a810-e89c251676a6
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/f341658f-04b6-40b7-825a-3004a7767a83/comments 200 1ms id=fec7bcd3-b9bc-410d-bb19-733172f8d00f
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/821fcb28-d788-4b57-95db-9d66afff8efa/projection/pcb 200 2ms id=b9477531-48aa-4f7d-890b-05cde0de5a4e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/821fcb28-d788-4b57-95db-9d66afff8efa/history 200 0ms id=df4cb5ff-11d4-4277-9dc0-779b6c2dae2e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/821fcb28-d788-4b57-95db-9d66afff8efa/drc 200 0ms id=1e63fec8-89ee-425b-97b3-ffc43b21a5c8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/821fcb28-d788-4b57-95db-9d66afff8efa/comments 200 0ms id=470930c8-d0eb-4387-a286-6049d6d70a8f
+  -  24 [chromium] › tests/e2e/pcb-autolayout.spec.ts:198:1 › golden flow: run → candidates → preview → apply
+  ✓  29 [chromium] › tests/e2e/pcb-routing.spec.ts:52:1 › Tune tool toggles via U key (pcb.lengthTuning) (1.5s)
+  -  31 [chromium] › tests/e2e/pcb-routing.spec.ts:98:6 › Bundle tool toggles via toolbar button (pcb.bundleRouting)
+[2m[WebServer] [22m[core-backend] POST /api/modules/library/imports/drawn 201 1ms id=8c9866ed-ebc5-4884-8d06-bc3e9249bb7d
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=6b1d80ab-194e-4f53-852d-96106e74fdd3
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/9c20ec21-3542-41c0-ac1d-d8e75eb45511/commands 200 2ms id=90a43a90-b14d-4b81-94d5-bbcd500358f0
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/9c20ec21-3542-41c0-ac1d-d8e75eb45511/commands 200 4ms id=75314618-5743-45f7-9d27-bcce144b6575
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9c20ec21-3542-41c0-ac1d-d8e75eb45511/projection/schematic 200 0ms id=77a0828c-0a27-48a4-b75c-ad4ec2eb417d
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/9c20ec21-3542-41c0-ac1d-d8e75eb45511/commands 200 3ms id=732f3ba7-ed7d-4c32-adfb-c99e8d9dd22c
+  ✓  22 [chromium] › tests/e2e/pcb-board-shape.spec.ts:49:1 › shows a live typed-dimension readout while sketching (4.0s)
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=9c82275b-535c-42cb-bc57-aa4ac41c328f
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=c664995d-f4fa-4f3c-aad6-94bb4e2ab8f5
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=2a863557-6895-4a85-8fc5-d376b604d512
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=4dc2ee0d-9d54-45d9-804c-ddc4b8ba4cea
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=5c049f04-4283-448d-afde-4b13012532db
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=d1448676-354c-4201-bc5c-c56fa5761cb4
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=ff75d11e-41e0-4338-907d-330ef3b4a44d
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=d4448730-413f-4a46-be83-39e69713c529
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=abb686bc-e768-460e-80a1-1da08056ff88
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=65ad4bde-616a-4dd2-895e-b8b06a587977
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 2ms id=fdc5c12d-a9c2-4967-a84c-2fe6fbd6593d
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/commands 200 6ms id=668c2724-7b26-4812-9815-6ae59ccbc447
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/projection/pcb 200 2ms id=f8483e5f-dfbd-4799-95d9-3f570c15a09b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/history 200 1ms id=bab3fd05-2a45-4880-a8f2-b7297821126a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=01583521-6606-43bf-a495-e72d50995f5e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 1ms id=26938b9d-be7b-403b-a3cf-f3bcc3daea71
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=aa81c24f-ead5-4ffb-ba04-d3a711973e9b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/1eabe2c1-43c3-4918-b303-f08639bd8f8d/projection/schematic 200 1ms id=f870029f-c0d5-4cb5-b097-5605612c59b8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/1eabe2c1-43c3-4918-b303-f08639bd8f8d/history 200 0ms id=d3d15f13-854d-4836-8f9e-70b605ad076f
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/1eabe2c1-43c3-4918-b303-f08639bd8f8d/comments 200 1ms id=9285c0f5-e720-43b1-bdc0-03c7461f43fb
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=469e3d1f-6512-4ccc-aa89-aa97c5c407b3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/1eabe2c1-43c3-4918-b303-f08639bd8f8d/projection/schematic 200 1ms id=f9e2adab-a1aa-4729-a0b0-fc1482baea6c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/1eabe2c1-43c3-4918-b303-f08639bd8f8d/history 200 1ms id=691901a7-4df9-46d0-bd3f-fc41974a8701
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/1eabe2c1-43c3-4918-b303-f08639bd8f8d/comments 200 1ms id=f4e6e52e-1a20-490d-8255-858ac7092a96
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=894367a5-58ef-4c5c-88bd-afda6a4fe849
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 1ms id=22a3229f-d5d9-4d9d-88c4-060242ca9c93
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=64c0a13a-70c2-4372-b423-b342df1bd7a4
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/fb65bd0a-cc99-4741-ae61-dbc43149bdaf/projection/schematic 200 1ms id=481a8879-ec3e-4af3-a07e-23580b2bd810
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/fb65bd0a-cc99-4741-ae61-dbc43149bdaf/history 200 0ms id=b79dc191-3cb5-4709-9524-038f7e8d063c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/fb65bd0a-cc99-4741-ae61-dbc43149bdaf/comments 200 1ms id=495d9c99-7568-44fd-9193-09b5c16632b3
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=ae614ae8-128b-44e2-b318-ae69ac17b069
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/fb65bd0a-cc99-4741-ae61-dbc43149bdaf/projection/schematic 200 1ms id=e2e8b5d1-1d0c-4586-97a9-926e02eb6359
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/fb65bd0a-cc99-4741-ae61-dbc43149bdaf/history 200 0ms id=ccd1ebd3-0aa0-4e52-93a3-aeed1ad043b9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/fb65bd0a-cc99-4741-ae61-dbc43149bdaf/comments 200 1ms id=4d1d89cf-9e10-4cbb-8057-d30802eb9389
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/projection/pcb 200 1ms id=2375c9a1-b642-4e93-9d09-ab8209997b28
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/projection/pcb 200 2ms id=6b3310f5-85fa-403a-ba30-f2c21859ddee
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/history 200 0ms id=5b0a9179-ef65-4059-8d0e-52e33dcf4784
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/drc 200 1ms id=3244d6d1-95d0-4915-9cc1-8b23ecfee9a7
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/comments 200 0ms id=53d9ca04-4b58-428c-8458-a255d51815e3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/fb65bd0a-cc99-4741-ae61-dbc43149bdaf/projection/pcb 200 2ms id=a7220119-7d0f-4172-a1c8-6a8d0250fbe4
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/fb65bd0a-cc99-4741-ae61-dbc43149bdaf/history 200 1ms id=bcc520db-f281-4205-aa59-ff48f76883cf
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/fb65bd0a-cc99-4741-ae61-dbc43149bdaf/drc 200 0ms id=ad3f22e4-f856-4ec1-919f-268064177826
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/fb65bd0a-cc99-4741-ae61-dbc43149bdaf/comments 200 1ms id=e6288e37-9f2b-4186-82cf-ff0d9ba3b461
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=2a75a260-515a-48b8-b622-196ef776b699
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 1ms id=dbe8425b-4a96-4ace-89ad-c1b3c4177a4a
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=6f804450-00ce-4e66-b672-b744ac56fc52
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9c20ec21-3542-41c0-ac1d-d8e75eb45511/projection/schematic 200 1ms id=72f0198f-d27d-4391-bb55-1ce434801224
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9c20ec21-3542-41c0-ac1d-d8e75eb45511/history 200 0ms id=2a5986de-5c32-4185-b489-fe606095a06e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9c20ec21-3542-41c0-ac1d-d8e75eb45511/comments 200 1ms id=c2132ab8-16b2-4041-96d3-3371224a1a73
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/ec7d7a7b-2116-4dbf-b244-6a03a5e63b54/commands 200 3ms id=b662dd76-d47e-4d38-ac79-a064459ab042
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=a05fb8cc-b3ef-4f87-8e4c-099649c1ae7d
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9c20ec21-3542-41c0-ac1d-d8e75eb45511/projection/schematic 200 1ms id=09caaa93-508d-4326-9dd6-c70d12d5c676
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9c20ec21-3542-41c0-ac1d-d8e75eb45511/history 200 1ms id=831905b4-a76b-47b3-8e25-cf6a8b969f8b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9c20ec21-3542-41c0-ac1d-d8e75eb45511/comments 200 0ms id=8231cd66-d805-48b4-bd26-c108910d862e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ec7d7a7b-2116-4dbf-b244-6a03a5e63b54/projection/pcb 200 1ms id=f03ed073-8968-4d23-a263-7d2c41bf7738
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ec7d7a7b-2116-4dbf-b244-6a03a5e63b54/history 200 2ms id=5870fb85-fe1e-478f-8844-6162de9ffabc
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/projection/pcb 200 2ms id=ffa08e60-d9f7-4062-b640-e61764da0f31
+  ✓  27 [chromium] › tests/e2e/pcb-layer-flip.spec.ts:91:1 › T and B keys switch active layer, view stays put (3.3s)
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/commands 200 8ms id=0b60245c-0285-4d08-9baa-c5abdc28540f
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/projection/pcb 200 2ms id=1a80cdb2-4f34-4ac1-ab3c-d3b716eb0fb1
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/history 200 1ms id=72a64ee9-38f0-4909-af90-598e3b35fade
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/e05bb9fd-61c9-4b85-a505-922625af2126/projection/pcb 200 1ms id=305d0a39-a57a-40e6-9fec-e36a49d52a3b
+  ✘  26 [chromium] › tests/e2e/builtin-footprints.spec.ts:311:3 › builtin footprints — Designer canvas smoke › New design loads PCB canvas without console errors (4.0s)
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=5858a429-427a-4558-a66f-def50b9c9dbc
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=0501426f-1dbf-4308-97dd-62b2aca23561
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=de647eba-48aa-4efa-be41-84901bf8485f
+  ✓  19 [chromium] › tests/e2e/pcb-live-parity.spec.ts:78:3 › pcb live-parity gate › a route blocked by the live gate is refused at commit and commits with the override (7.0s)
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/commands 200 3ms id=a6123b04-d775-4ecf-9d3d-3b59ab1c1cf9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/projection/pcb 200 2ms id=6e1d7f75-50f3-47e1-947d-c78ecc74af0a
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=3c823984-513d-48e1-871c-3bc232159b18
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=f213604c-be8f-46af-9aa4-03f606984429
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=380e87d1-1467-43e3-974a-221a94daafaf
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/history 200 1ms id=8902a4c9-c98e-4b32-a5e6-bfc76aaa1781
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=9eb7f77f-5b45-47c3-ade9-4ea3b9ae033a
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=19ef6b19-1802-4c27-a253-092d51ecb5e3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=960e6b54-7ee3-48df-a97b-8387bb9e7d3c
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=4cdebe52-bc19-40dc-b0a5-3908d52ef393
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 2ms id=9e7cf0f9-ec35-427d-b514-e4761b823424
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/1eabe2c1-43c3-4918-b303-f08639bd8f8d/projection/pcb 200 3ms id=d0bb7cfa-5986-46ea-8cf1-ee2302f4c5ee
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/1eabe2c1-43c3-4918-b303-f08639bd8f8d/history 200 0ms id=1e17d470-fc28-49d1-9434-1789edeed06b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/1eabe2c1-43c3-4918-b303-f08639bd8f8d/drc 200 1ms id=f45adfcf-c7e5-49a6-9bb6-e13f28eb2de8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/1eabe2c1-43c3-4918-b303-f08639bd8f8d/comments 200 0ms id=6c844c77-6ea3-4adf-bcbd-ce0acb667c05
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=fc9da840-cb4c-46ed-9719-47ee0b5c1c73
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 2ms id=5bb43ad3-9c1d-40f4-a1ba-492e2b020f03
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=e82ab3e7-4be7-4ab3-95bc-b6a85e566916
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7d79bc44-87b8-4978-9103-43e3137c7395/projection/schematic 200 0ms id=189cbbcd-d980-48a1-985a-e87059db406a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7d79bc44-87b8-4978-9103-43e3137c7395/history 200 1ms id=79533b05-8f05-434f-b365-af665d45c4f7
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7d79bc44-87b8-4978-9103-43e3137c7395/comments 200 0ms id=4d7aec09-f900-45b0-a29b-89151810dea6
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=fec57f56-dcfc-4180-b5db-e2a81030d435
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7d79bc44-87b8-4978-9103-43e3137c7395/projection/schematic 200 1ms id=aa6c5fa1-3b67-4ae3-b84a-269a398e5fb4
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7d79bc44-87b8-4978-9103-43e3137c7395/history 200 1ms id=fca86140-cd3e-40fa-8f3a-7193bc77a0d8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7d79bc44-87b8-4978-9103-43e3137c7395/comments 200 1ms id=281ef901-de70-46a1-a93d-474bac947333
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=14890b5d-8310-42c2-86e2-a3c45a066bb9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 2ms id=43b09291-6340-4523-8102-4e2b817ab121
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=303be0d8-769e-4c5f-9b57-0cf9e88b8491
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/projection/pcb 200 5ms id=e66ba877-7ab3-440e-90c7-11b7d0f4dbf0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/projection/schematic 200 1ms id=16e19fa0-9e90-4647-b2ea-af9adc414ef8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/history 200 1ms id=2b8573f4-876d-40bb-9dc2-5953f5ca09ab
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/comments 200 1ms id=5b951e41-95f3-4b27-9632-8dfb223a04d2
+  -  30 [chromium] › tests/e2e/pcb-autolayout.spec.ts:239:1 › an unsupported service explains itself instead of spinning
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=1878b0a3-3f40-47f4-8d8c-bcdd9e582900
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/projection/schematic 200 1ms id=c919d90b-2dc2-4340-bea1-bf0172234423
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/history 200 0ms id=eece52b4-779b-4a2d-bf0d-68982c94ba16
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/comments 200 0ms id=416f4491-ddb6-475f-ab06-e9ca2c8c3b27
+  ✓  33 [chromium] › tests/e2e/pcb-board-shape.spec.ts:76:1 › Board Shape tool toggles via toolbar button and O key (2.7s)
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=52d466b6-201d-4357-91ae-c8d3845b5d74
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=b6512e98-1b7e-4c21-a712-73eb68620bfb
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=1fc4f084-8815-4ee4-88d3-e2348f5b58f3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7d79bc44-87b8-4978-9103-43e3137c7395/projection/pcb 200 1ms id=c533dbfc-2e83-4bce-87d1-9d2697151974
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7d79bc44-87b8-4978-9103-43e3137c7395/history 200 0ms id=042d0180-35e7-45eb-931d-2c177ea777ca
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7d79bc44-87b8-4978-9103-43e3137c7395/drc 200 0ms id=ff5f3024-8436-470e-a85c-db8130fab9d1
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7d79bc44-87b8-4978-9103-43e3137c7395/comments 200 1ms id=f01c7907-8525-4e06-8ecc-864b23955555
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=c5ca5f9d-9b9a-421d-b81b-f2ba95fe5faa
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 1ms id=6558dad0-79f9-41af-a552-f2e4c79b2448
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=9b7c3ab0-cce3-4c76-929c-e693a88b90c5
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/projection/schematic 200 1ms id=b4ecdf3e-a30c-46df-a2a0-b0a49651e4ac
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/history 200 0ms id=7a2a26bc-492d-492c-9123-f8db9c52eed8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/comments 200 0ms id=3abe0634-7c07-48f5-98f3-b8568c83b5bc
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/projection/pcb 200 1ms id=c8522dda-5f98-4512-83b0-ac160533191a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/history 200 0ms id=6880cea8-2491-4b57-8cb4-74f765018e2e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/drc 200 0ms id=41c1ba4a-d546-4e22-9e0a-158c194d23ea
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/comments 200 0ms id=81808a8b-6cbb-4e6b-a8ed-b6bbbd814e9e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/projection/pcb 200 1ms id=9f161c92-92f6-435b-bba0-b62fbaa8c804
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/history 200 0ms id=18ee86a6-27ef-445e-978d-344afddebff9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/drc 200 1ms id=68025a39-c73b-40fa-b67a-0ba0aab7d8d2
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/comments 200 0ms id=2fb57f5c-b911-4bc3-a28d-c0693c834ca9
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/7d79bc44-87b8-4978-9103-43e3137c7395/commands 200 3ms id=453ad51e-2825-40c4-aa4c-7d4ab981f864
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2bb84227-452b-452e-ad88-7113187d8032/projection/pcb 200 1ms id=333b4662-43c3-4d90-a750-084649ce6bd8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7d79bc44-87b8-4978-9103-43e3137c7395/projection/pcb 200 1ms id=d64b6c23-c7f8-49e0-8960-57ec66035bc2
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/7d79bc44-87b8-4978-9103-43e3137c7395/commands 200 2ms id=5785f7e0-5339-4738-9381-a36d20afde4b
+  ✓  28 [chromium] › tests/e2e/pcb-zones.spec.ts:52:3 › pcb zones and keepouts › draws a zone via the Add dropdown and it survives a reload (5.3s)
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7d79bc44-87b8-4978-9103-43e3137c7395/history 200 1ms id=49944120-29b2-4645-be11-51dc56c514f0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7d79bc44-87b8-4978-9103-43e3137c7395/projection/pcb 200 1ms id=5234f4fb-38e2-4cc6-ab53-ea77abe41d09
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/commands 200 2ms id=860ccccf-7c3f-4de7-a45c-614a6d496d7f
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components/7172c673-ab42-4454-b3bf-b15cb087df8a/placement 200 2ms id=1c64432a-cdc5-4d60-96ce-1d97d8af6aee
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/projection/pcb 200 1ms id=fd0f4e63-f57f-4599-b767-fa8c363315cc
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/projection/pcb 200 1ms id=0923c8ca-0127-451f-8f9a-8abc44d69a8b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/history 200 0ms id=bbbdc73b-bccb-46d9-94e3-c1a22530249d
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=db0f3862-6864-43c4-a4c8-9d47f9adc1fd
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=fd4be2f0-0f06-4acc-b741-19324cfa6c8a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 3ms id=a16f9475-4c14-4e6e-b42b-85961f980682
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=298ee0f9-2b63-40e2-8f7d-5bdfed73840c
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=cd812c0a-df94-42df-8c46-a68b41759295
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=5da2e056-78ed-4c17-bcab-b4921ed9633f
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=0be7da48-826b-487d-a418-caa0d0617a63
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7d79bc44-87b8-4978-9103-43e3137c7395/projection/pcb 200 2ms id=62ec3417-874a-4909-9278-01b83efb97a8
+  ✓  34 [chromium] › tests/e2e/pcb-layer-flip.spec.ts:102:1 › viewSide persists across reload (2.5s)
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=b336d54d-2ccf-4007-b505-fd567be737b6
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=c8170e36-ea6d-4240-97c5-900170a17b50
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=8d284130-dd0a-4396-94ff-7c911beebc2f
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/commands 200 2ms id=e8c8440c-f4e7-4a39-9535-7edfa8c70c74
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/projection/pcb 200 0ms id=cdb4a43c-c745-485d-9405-95d338c0ede0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=6bcb6ca9-2b4c-4932-a7e4-f266860a82ea
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 1ms id=1d6882e4-4ee1-44de-a41b-120338812154
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=506c26c6-0626-4c80-9107-90b32ee24afd
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3f46d72d-03ac-442b-99c7-4228a19b3e05/projection/schematic 200 1ms id=bf5f71b5-b0fd-406d-aa3c-ae8194772417
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3f46d72d-03ac-442b-99c7-4228a19b3e05/history 200 0ms id=eb697496-cb55-42df-95ce-c72008b3dabd
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3f46d72d-03ac-442b-99c7-4228a19b3e05/comments 200 0ms id=fbae1412-0893-4f67-b621-4d09406e26bf
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/history 200 2ms id=d1119df0-a224-4032-af27-2d1ad87f723d
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=c6c00089-4f68-414c-bd23-6a4f935fc9bc
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3f46d72d-03ac-442b-99c7-4228a19b3e05/projection/schematic 200 1ms id=372e0756-d1dd-4025-92c2-b93cad190fef
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3f46d72d-03ac-442b-99c7-4228a19b3e05/history 200 0ms id=8e4cb7e6-e8c2-4658-a562-7149978a33de
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3f46d72d-03ac-442b-99c7-4228a19b3e05/comments 200 0ms id=9abefc4c-71ca-478b-8283-5c93eed1f017
+[2m[WebServer] [22m[core-backend] GET /api/health 200 1ms id=0a5772a7-8421-4145-a555-10889d24e9b0
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=a23d8870-6d62-4a9c-86a4-4367f3605e6c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=dddc27f5-0712-4afc-af99-e0cc73518677
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=8fb2ee09-3167-4f87-b096-2ff2619666df
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/projection/pcb 200 2ms id=69aa5850-094e-4ad8-b33e-163125bac16d
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/9c20ec21-3542-41c0-ac1d-d8e75eb45511/commands 200 3ms id=aca6b8cc-4a52-4ea0-9e20-abc1f1a903c4
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=c6659c8b-0d55-40d7-95e1-ea5d15afffbb
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 3ms id=1c15fca1-6355-46d6-9bd1-2960324f9c29
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=3756e2a9-f3f2-47f5-a90a-008d74eb5b29
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/a98e4812-e829-496d-a349-892c427e083e/projection/schematic 200 0ms id=42c9d469-65b4-40db-9acd-f8296fd58a6b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/a98e4812-e829-496d-a349-892c427e083e/history 200 1ms id=d8b4e504-d858-477a-a4f9-c68292a27b65
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/a98e4812-e829-496d-a349-892c427e083e/comments 200 0ms id=b3fef43f-1ebb-4446-b3d0-061eecfb26b9
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=00d96657-5036-465b-bf4c-c85672591e4b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3f46d72d-03ac-442b-99c7-4228a19b3e05/projection/pcb 200 1ms id=983a76aa-e6be-447e-a657-a6ae2f406698
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3f46d72d-03ac-442b-99c7-4228a19b3e05/history 200 0ms id=e1d38674-0fa2-4dbf-b29b-f8acaf57df37
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3f46d72d-03ac-442b-99c7-4228a19b3e05/drc 200 0ms id=16072c64-d9ad-41e2-a707-764dccd51a88
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3f46d72d-03ac-442b-99c7-4228a19b3e05/comments 200 0ms id=171adf34-e5eb-4409-8efc-d2d30db8de0a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/a98e4812-e829-496d-a349-892c427e083e/projection/schematic 200 0ms id=4c3373bb-0be7-4d35-890a-6fce553a0bf1
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/a98e4812-e829-496d-a349-892c427e083e/history 200 1ms id=b77f42e8-8899-4e6e-8264-ce348f28432e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/a98e4812-e829-496d-a349-892c427e083e/comments 200 0ms id=a7109200-7572-4136-a0b4-de41893518f5
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9c20ec21-3542-41c0-ac1d-d8e75eb45511/projection/schematic 200 0ms id=f059d951-1fed-4d76-a5ae-a4d65184efa8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/9c20ec21-3542-41c0-ac1d-d8e75eb45511/history 200 1ms id=17d1874b-7e6d-4baa-85e1-751c6fd4039c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/381d4749-fbea-4e84-bb8b-ff927d058b0c/projection/pcb 200 1ms id=8f2caf88-3dd5-4997-b3d0-77d366518b8d
+  ✓  35 [chromium] › tests/e2e/pcb-live-parity.spec.ts:130:3 › pcb live-parity gate › a route into a free NPTH hole is flagged and blocked at commit (3.5s)
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/a98e4812-e829-496d-a349-892c427e083e/projection/pcb 200 2ms id=051b03b3-f839-4dfb-be72-10a5badb5047
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/a98e4812-e829-496d-a349-892c427e083e/history 200 0ms id=bb968e06-37d0-48b2-bd2b-07caee449b88
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/a98e4812-e829-496d-a349-892c427e083e/drc 200 0ms id=3fdad451-981d-4a52-a864-0e02953b76d3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/a98e4812-e829-496d-a349-892c427e083e/comments 200 0ms id=5c66f251-e836-4d44-a396-bfe24c001e76
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/3f46d72d-03ac-442b-99c7-4228a19b3e05/commands 200 2ms id=48f3bea6-176b-4dd5-9101-76c4b1109de0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3f46d72d-03ac-442b-99c7-4228a19b3e05/projection/pcb 200 0ms id=76160326-9d9f-431c-a34a-0a29b8807603
+  ✓  37 [chromium] › tests/e2e/pcb-layer-flip.spec.ts:118:1 › "Flip part" is disabled when no placement is selected (1.6s)
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3f46d72d-03ac-442b-99c7-4228a19b3e05/history 200 0ms id=0b3a879d-452b-4581-8f38-7802ea2d624a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3f46d72d-03ac-442b-99c7-4228a19b3e05/projection/pcb 200 1ms id=a7e6bf66-9da0-48f9-a0d4-630dc7353588
+  ✓  36 [chromium] › tests/e2e/pcb-zones.spec.ts:89:3 › pcb zones and keepouts › draws a keepout via the K hotkey with all restrictions forbidden (2.1s)
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=7d587511-a9d6-415d-890f-7cbbbecae29f
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=02738fd8-f928-4638-8451-031f248d74ad
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=0ea09c15-8c35-4580-b286-85e612fc63a6
+  ✓  32 [chromium] › tests/e2e/schematic-move.spec.ts:366:1 › dragging a part keeps it (and wires) at the drop position with no snap-back flash (6.0s)
+[2m[WebServer] [22m[core-backend] POST /api/modules/library/imports/drawn 201 0ms id=e43b4387-61ce-4ed3-88a8-3865898ca074
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 0ms id=8820e657-96fd-4f46-b2e0-8ef8cea54b36
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/7fb2510d-7da2-4849-a3a4-a668e30f4d53/commands 200 1ms id=d1529990-5e9f-49fb-b5d9-7d54b0d7377c
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/7fb2510d-7da2-4849-a3a4-a668e30f4d53/commands 200 1ms id=21245f5e-2718-44dd-8921-bb094bd95ea9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7fb2510d-7da2-4849-a3a4-a668e30f4d53/projection/schematic 200 0ms id=c1dc12da-d57c-4ff4-b62b-4bf5a16cd5e7
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/7fb2510d-7da2-4849-a3a4-a668e30f4d53/commands 200 2ms id=e9c4bc22-de0d-4d66-90c5-4087e2fafbf8
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=5334bb7a-b8f5-4081-8fda-b4f4653a5c4c
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=3935c12b-416b-462d-9635-b3ef805b3448
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=b7026a47-deac-44e4-878d-6b538dd41bcb
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=90ab5078-d86c-401a-a975-46dd0414759b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=43147848-903d-4b32-8386-4518061bc7b3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 2ms id=5bcd93b7-8b50-4e13-9932-ca37c6de431f
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=db8f07eb-c85c-4447-a0b3-5e6f46a5b7ac
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/041edf99-2bd8-4782-b2b0-0d0405900379/projection/schematic 200 0ms id=b78ceaf8-c0e1-4bfc-b853-202dfc5a1f1a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/041edf99-2bd8-4782-b2b0-0d0405900379/history 200 0ms id=17f23bab-ea01-4a0f-a5cc-43b1f7f19de4
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/041edf99-2bd8-4782-b2b0-0d0405900379/comments 200 0ms id=56a50f1d-5737-4918-83bf-48dfd2fcd6f5
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=b69cc384-209d-4c75-a57c-4fccbd0cf10c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/041edf99-2bd8-4782-b2b0-0d0405900379/projection/schematic 200 1ms id=ba079405-97ea-4898-886c-6342263d4369
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/041edf99-2bd8-4782-b2b0-0d0405900379/history 200 0ms id=9a158aa0-03a1-4d48-aa48-97253223e389
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/041edf99-2bd8-4782-b2b0-0d0405900379/comments 200 0ms id=3845c9d8-883d-46b1-9f50-80ceced7b819
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=c27efa8f-4b15-45b1-8575-5424ad7b2e88
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 2ms id=294c44b4-c291-4f4b-b93b-435fe20425d5
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=0aa3480a-5765-4804-accf-cc92eee49811
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7fb2510d-7da2-4849-a3a4-a668e30f4d53/projection/schematic 200 1ms id=95bfaff3-4ae2-4e31-a4ec-11b1d9f1efbd
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7fb2510d-7da2-4849-a3a4-a668e30f4d53/history 200 0ms id=73c2461c-1cf4-4567-a140-a156cfe87584
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7fb2510d-7da2-4849-a3a4-a668e30f4d53/comments 200 0ms id=54da16b6-04b6-4f7a-b288-9b0c2bacac63
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=c5a15475-c999-4673-a3f6-11e73187fb18
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7fb2510d-7da2-4849-a3a4-a668e30f4d53/projection/schematic 200 1ms id=701b1b4d-334f-462f-972b-3adc784e7e48
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7fb2510d-7da2-4849-a3a4-a668e30f4d53/history 200 0ms id=90219628-94fb-4c26-8e6d-8661a3a9c286
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/7fb2510d-7da2-4849-a3a4-a668e30f4d53/comments 200 0ms id=df222394-7a41-41e9-be19-140710c18113
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/041edf99-2bd8-4782-b2b0-0d0405900379/projection/pcb 200 1ms id=1b93aeec-245c-4117-be1a-0ed87679390a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/041edf99-2bd8-4782-b2b0-0d0405900379/history 200 0ms id=5e228f36-1494-428c-ba24-9b24858a3dfe
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/041edf99-2bd8-4782-b2b0-0d0405900379/drc 200 0ms id=a5ef974d-2491-45c5-8120-ef1a1530a056
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/041edf99-2bd8-4782-b2b0-0d0405900379/comments 200 0ms id=b363c3a2-325e-4d6d-a95b-60a504df7bfa
+  ✓  38 [chromium] › tests/e2e/pcb-zones.spec.ts:128:3 › pcb zones and keepouts › an invalid (self-crossing) ring keeps the sketch open (2.2s)
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=90ef1be3-16c3-4ae0-8ab6-c8b9095423f1
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=736a48ab-c9c5-46bd-85f1-6341e20d24c5
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=3e14ae1a-c802-44f3-a207-6d035408629a
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 0ms id=abd39fa9-9bce-4c09-a28b-e1fcbf7083dc
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components/8bcb999b-6afa-477c-848d-0a455b2fb513/placement 200 1ms id=0a3e435a-08e8-44f7-b285-ddb06c60034a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=bcb2b841-2a24-4212-834c-9a467f45ad49
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 1ms id=8a227279-7899-4f37-b4b1-5788ee491d2b
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=eea9e83a-5878-4197-b4b1-20da8ad43604
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/projection/schematic 200 0ms id=721c39cf-3436-4f36-8c5d-e1d21376e7d4
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/history 200 0ms id=7d8b87fc-2eef-4beb-8023-cc18aef473f4
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/comments 200 0ms id=38ed9135-698d-4654-b039-c6ecdc3ce562
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=33c6839e-f90a-4794-9383-4e9b78c97b9d
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/projection/schematic 200 0ms id=c704018a-8e59-4410-8866-8d46f61eadf0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/history 200 0ms id=f2ca5369-fc4b-485c-9bfd-eb581d496ce3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/comments 200 0ms id=3ab41c2e-a1fd-4073-874d-16903f94ff44
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/projection/pcb 200 2ms id=3c953a89-2bd0-4dda-aec0-a2e79380e562
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/history 200 0ms id=f7faa6ec-cca4-4561-8438-b768910d6087
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/drc 200 0ms id=06af646f-217c-4a1a-8c25-c4cb3f476ca1
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/comments 200 0ms id=efdaddea-0807-4aaf-b661-03c50d524752
+  ✓  39 [chromium] › tests/e2e/schematic-move.spec.ts:405:1 › a plain click selects the part without moving it (3.3s)
+[2m[WebServer] [22m[core-backend] POST /api/modules/library/imports/drawn 201 0ms id=90bdbcd1-9c8b-47c6-9dad-3d6b0809d639
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 0ms id=079d106e-cf2e-4cb5-8a8c-39a29c7036b0
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/64e14aa0-ce6b-48cf-8d9c-9d0a864e03af/commands 200 2ms id=7d9134dd-dc18-4c37-8f40-7400deb9a9ea
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/64e14aa0-ce6b-48cf-8d9c-9d0a864e03af/commands 200 2ms id=e156b061-58b9-4e19-996b-6d749a1b4691
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/64e14aa0-ce6b-48cf-8d9c-9d0a864e03af/projection/schematic 200 0ms id=438187bc-b5d5-4683-b292-7c07f336bf31
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/64e14aa0-ce6b-48cf-8d9c-9d0a864e03af/commands 200 1ms id=8659e6cf-d634-47ee-975c-cf67914f54b5
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=810e1987-9515-4005-8a63-1d5d456eb512
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=8ed0ac19-e7f7-4118-8c4d-b7943777d81c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=108d8375-dd8d-4e0d-9a30-8c70fed2488d
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/commands 200 3ms id=20081a16-b98a-4b26-ae1d-d0df0d2cf1a3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/projection/pcb 200 2ms id=82549b17-2d3c-47a4-8264-baa9f8b3f6ac
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/history 200 0ms id=33b591e6-c5ac-4fcc-b06c-7c15abb0cb57
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=b3aed69e-a36a-4ded-92d0-bbab4454e2e9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 1ms id=50dd25cc-85d9-4958-826b-b940ab253c2a
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=43d44287-3cce-49d6-80b8-d50784086360
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/64e14aa0-ce6b-48cf-8d9c-9d0a864e03af/projection/schematic 200 0ms id=24118507-b18c-44b2-bedd-8de94ab3ed36
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/64e14aa0-ce6b-48cf-8d9c-9d0a864e03af/history 200 0ms id=c9d4b2ee-83d2-4ab0-9431-43c8adc36799
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/64e14aa0-ce6b-48cf-8d9c-9d0a864e03af/comments 200 1ms id=ff293a02-f659-4440-8a22-c408418412fd
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=214c2d9d-aa28-4724-8fcd-8b564b92ede3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/64e14aa0-ce6b-48cf-8d9c-9d0a864e03af/projection/schematic 200 1ms id=038dd5b9-cdeb-428e-bdb9-51a9b7538dd0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/64e14aa0-ce6b-48cf-8d9c-9d0a864e03af/history 200 0ms id=ba46ad62-4f40-4e65-8162-3ec65da5c39d
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/64e14aa0-ce6b-48cf-8d9c-9d0a864e03af/comments 200 0ms id=0d431321-e3ca-4115-ad5c-866e3409bcb6
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/commands 200 2ms id=a63b2c30-a17a-4481-9216-252f244172e3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/projection/pcb 200 1ms id=41ee913f-a9a5-4881-9727-e1249e30121d
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/history 200 1ms id=da2fc90b-9c5d-4162-8558-5fd7c25553a3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/6a956452-3555-4df7-a232-ed04082e09a2/projection/pcb 200 1ms id=86bd18cf-fdc4-431f-89a3-3a4730075dbb
+  ✓  40 [chromium] › tests/e2e/pcb-zones.spec.ts:154:3 › pcb zones and keepouts › selects a zone by its edge and deletes it (2.4s)
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=14ae1836-e24e-46c8-8961-353282cea5a2
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=55c257bf-6249-41ad-afcb-4c26a218a07a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=cfd4f80b-5313-49b4-852e-c4ac25fdc7d7
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 0ms id=fbdfdac9-7355-41ca-a6df-abf9b807cb79
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=d4cfcbd9-2a1a-4595-b76c-6f463bbf471d
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 2ms id=f619a15a-d4a8-4906-aff7-f379ed8e76c9
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=8d2b059d-8c04-4d64-968a-b2653d5f0c27
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/projection/schematic 200 1ms id=d101f8cc-a5b3-4336-9ae0-9d3724f94d51
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/history 200 0ms id=01a6c313-f183-4697-8eb7-8a1ddca9397f
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/comments 200 0ms id=59c5aa71-7a88-45b7-9fd4-3babda498f10
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=09801327-b094-430d-af66-3268f11690d6
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/projection/schematic 200 0ms id=0c08075a-f2f3-49a1-9ee8-98d83e9aebf3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/history 200 0ms id=63d0aac0-8f73-4d05-8a9f-75b0447a57c3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/comments 200 0ms id=32f9e0df-4c40-47b2-be0a-70b8c3d7b922
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/projection/pcb 200 1ms id=74630646-8b77-4448-b887-21ca5a3a6f4d
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/history 200 0ms id=f1cb22e4-0a6e-4d5c-8b0d-a519ef28cff9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/drc 200 0ms id=f68e5d72-9ec0-47c2-a82c-e4531ad3e948
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/comments 200 1ms id=9ccea21b-4498-432f-926f-ecd39155da44
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/64e14aa0-ce6b-48cf-8d9c-9d0a864e03af/projection/schematic 200 1ms id=e21e6e81-65cc-4490-9584-09fbd6fbc782
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/commands 200 2ms id=2f7f6c5f-6da7-4a99-a92d-363ef0e2ec36
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/projection/pcb 200 1ms id=9155c8f1-5622-4eb2-b51a-91aea527fabe
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/history 200 1ms id=af5b08d3-ee73-405a-98e3-1d8a982a6859
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/projection/pcb 200 1ms id=437f6365-0560-4833-bcab-64248011cee7
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/projection/pcb 200 1ms id=f0654906-8319-4f43-b867-c59b9b505b62
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/commands 200 3ms id=3325cad7-469e-4991-8333-076ef7285601
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/projection/pcb 200 1ms id=b8c1a414-d626-418b-ad5d-5fb09b0105fb
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/projection/pcb 200 1ms id=92cc8687-afe9-46f5-96f1-115a8d2f3802
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/ced57a9b-9ee6-472a-b963-58476443700c/history 200 1ms id=f62c5231-eeea-459a-a9ac-10ae27fbd73a
+  ✓  42 [chromium] › tests/e2e/pcb-zones.spec.ts:187:3 › pcb zones and keepouts › a route through a tracks keepout is flagged and blocked at commit (2.6s)
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/64e14aa0-ce6b-48cf-8d9c-9d0a864e03af/commands 200 3ms id=e431f3d0-bfbb-4dcd-9b68-936b471a5d99
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/64e14aa0-ce6b-48cf-8d9c-9d0a864e03af/projection/schematic 200 1ms id=a22e2091-cd57-4181-911d-564609115e6c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/64e14aa0-ce6b-48cf-8d9c-9d0a864e03af/projection/schematic 200 0ms id=1bac5535-1a55-4096-b130-27aac4f30c42
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/64e14aa0-ce6b-48cf-8d9c-9d0a864e03af/projection/schematic 200 1ms id=33304614-f388-4090-89c6-95b51012d315
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/64e14aa0-ce6b-48cf-8d9c-9d0a864e03af/history 200 1ms id=89cfd674-fc9b-4727-950c-3aa13642a843
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=7c3b6164-979a-43de-8b5e-33d41554be70
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=f75a4754-dace-4f2a-a0c9-0d5983f1a349
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=91aa0372-7fa3-43c0-b834-16b3a89962df
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=5e22ca4a-81a4-4184-8ffa-c3cddb785974
+  ✓  41 [chromium] › tests/e2e/schematic-move.spec.ts:436:1 › dragging a wire segment reshapes the wire while keeping its endpoints pinned (4.1s)
+[2m[WebServer] [22m[core-backend] POST /api/modules/library/imports/drawn 201 1ms id=a4451586-e2e3-4bb2-a47b-c72a2dce43f5
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=7195b117-1aa7-48b9-9fb9-549c13e19bb5
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/c58212cc-5e81-4d7f-9079-0bf5b8efe8da/commands 200 4ms id=9d3b37d9-cb16-4964-a07c-463755231f8d
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/c58212cc-5e81-4d7f-9079-0bf5b8efe8da/commands 200 2ms id=ed12a474-e6e2-4ebc-9e88-556a205d96d5
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/c58212cc-5e81-4d7f-9079-0bf5b8efe8da/projection/schematic 200 1ms id=2b2b63a7-452b-42a4-b920-944845b0e3d4
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/c58212cc-5e81-4d7f-9079-0bf5b8efe8da/commands 200 2ms id=f96b901c-5c2e-4ff7-a8fe-f60d0ba812aa
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=54615881-1a1f-4587-b5f9-68a59fb67cb0
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=8ee357d2-4f5e-48b8-ab68-de6099219151
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=e6a7bc00-634c-43c4-8a25-ea116155d5ed
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=eeeb8828-9bf1-4bf6-b304-9b070182b6d5
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 1ms id=511bf786-84db-4150-be9d-f7a157d18d1f
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=c6d52336-3eaa-4c93-af35-bb2ccfa5aae2
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/projection/schematic 200 0ms id=c427e512-274a-4ab5-844c-d865625253de
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/history 200 0ms id=38fce5c6-f6fd-4fa0-9ea4-07eb54062a70
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/comments 200 0ms id=381b76b6-30fb-4142-89d0-19c90becfdb1
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=f7d1a818-c6af-4777-9dd4-ffc44ba17564
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/projection/schematic 200 1ms id=e141c157-70c0-4732-a965-eb4d8ad465d0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/history 200 0ms id=383dca8d-bfa3-4a12-aa8a-31895c549938
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/comments 200 0ms id=3ec4b3e7-0ba2-4783-8507-d114df419a26
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/projection/pcb 200 1ms id=379d33ce-402a-47c6-adc9-1fdc75843976
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/history 200 0ms id=c54f3a4f-26fd-4548-a6b1-f4b3e8727cc2
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/drc 200 1ms id=806cc026-a730-4687-81b9-668ebdc40558
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/comments 200 0ms id=9da454a0-dbe9-42f7-881b-07fd6c4c3866
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=e9b76fc8-fe51-4b19-b605-4330b25ff293
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 1ms id=2a92a3b0-e9ad-4d7f-a9ca-f705733bff0c
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=c5f24122-29b2-43eb-ae7d-f1410e2f7daf
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/c58212cc-5e81-4d7f-9079-0bf5b8efe8da/projection/schematic 200 1ms id=6e3dd673-a503-410b-9ff5-1e730d8e809c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/c58212cc-5e81-4d7f-9079-0bf5b8efe8da/history 200 0ms id=1af93a37-97b8-4c87-81ba-bcc204a5d2e6
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/c58212cc-5e81-4d7f-9079-0bf5b8efe8da/comments 200 1ms id=b486f8c1-36fb-4808-9a0b-899a6fc361a6
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=6c344dda-2591-4b51-ade5-de0a9951c1df
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/c58212cc-5e81-4d7f-9079-0bf5b8efe8da/projection/schematic 200 1ms id=8d10651c-e32d-4057-bf83-2fbefb4f9374
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/c58212cc-5e81-4d7f-9079-0bf5b8efe8da/history 200 0ms id=69416224-4bff-4b29-b68a-67b4aa3b4c16
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/c58212cc-5e81-4d7f-9079-0bf5b8efe8da/comments 200 0ms id=44440c73-4dfd-4d3e-8f7a-32f6ac562426
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/commands 200 2ms id=d82dc3cf-9263-428d-8629-1622ba89f9b3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/projection/pcb 200 1ms id=ad68d8fb-896d-47aa-a2db-c793c10c5270
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/history 200 0ms id=059bfd08-bf05-4e19-9278-61ae49d827f8
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/projection/pcb 200 1ms id=5f48807d-5e8f-46bb-957b-ee21340e5eae
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/commands 200 2ms id=598f0ff8-666a-4fdc-b929-3dbe850b320c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/projection/pcb 200 1ms id=85868ec7-ccd4-4177-92aa-3d852a0ff928
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/projection/pcb 200 0ms id=d5d81ad8-c986-4e54-b821-2024ab1cfd68
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/history 200 0ms id=b5ecf177-2822-4b25-9dd7-aa9c0d91c30e
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/history/undo 200 3ms id=b2f9dad6-5466-4ce3-bbfa-7fecdfc3f19c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/projection/pcb 200 0ms id=07777e5b-9680-418c-b4ac-102a6e2df7f0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/projection/pcb 200 0ms id=bff11fad-d660-4bef-8580-78db935e78b4
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/4d526b0d-5a5f-4039-94c8-4b29b699be91/history 200 0ms id=599fe4de-97d9-4f60-86c8-440e65064f3e
+  ✓  43 [chromium] › tests/e2e/pcb-zones.spec.ts:241:3 › pcb zones and keepouts › the board-zone (copper fill) toggle is undoable (1.6s)
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=2e6a6557-94d7-40e4-ae45-5457ad8f68f2
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=e088df2e-15ef-4f3a-8ed8-71dd34baecc9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=9b69c370-bc58-4ee0-8449-226be0846aaa
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=221dce97-fda9-4253-b491-267b547418ad
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=0244f653-ed5f-451b-a7a1-15fb7def3fae
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 2ms id=a13555dd-ecf8-42d1-a336-36765715f1d3
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=906aefc4-a4bb-487b-8a14-7b389c667fde
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/projection/schematic 200 1ms id=09aec80b-a591-43ba-bddf-4549d2b38178
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/history 200 1ms id=24b6235f-49aa-46cc-b839-27b4651d5b67
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/comments 200 0ms id=c3802a0d-7163-4aaa-82d5-f9d458d78b4b
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 1ms id=6fe05b1f-9191-4921-b0dd-3c9d7d38d5c3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/projection/schematic 200 1ms id=5b7f4f85-89bc-4ce5-abab-b26db944b0cb
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/history 200 0ms id=552aa676-f71b-467d-9c72-1094ac0c2b7d
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/comments 200 1ms id=63da7e6d-4436-477d-9b5b-0cac66f06ff0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/projection/pcb 200 1ms id=cfd43d27-1455-49bd-beb2-c44438e04e7e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/history 200 0ms id=afa14055-6ac4-46d3-ac1c-46b47f6238b0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/drc 200 1ms id=46fdcca8-2a22-45d0-bf3d-7b72a2bd298a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/comments 200 0ms id=6d44dc96-99b7-410f-9a71-747abc8f8bd7
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components/fcbba681-0048-49e5-b30e-8a0858386c51/placement 200 1ms id=b604efd2-1ad3-4bbe-852a-306f40947ad6
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/commands 200 2ms id=98c7c190-dc32-4ca1-9639-b0b66ed7a11f
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/projection/pcb 200 1ms id=08acef32-6c28-4d86-bc31-c61f49192cda
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/history 200 0ms id=b8a0d033-97e0-4d6c-94f5-c39a0851d9e0
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/projection/pcb 200 2ms id=e39cae4d-db2b-4e3d-bc57-0964d3d6267b
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/c58212cc-5e81-4d7f-9079-0bf5b8efe8da/commands 200 2ms id=03f77128-83a7-4783-860a-496ac02eeaca
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/commands 200 2ms id=bdd5d651-350a-4b82-80c1-cd8f5e147d10
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/projection/pcb 200 1ms id=c2ee1ae1-27cc-4c77-abff-207114b07b8a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/c58212cc-5e81-4d7f-9079-0bf5b8efe8da/projection/schematic 200 0ms id=813baa43-ab83-4747-b666-fdde38c58657
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/c58212cc-5e81-4d7f-9079-0bf5b8efe8da/history 200 0ms id=3a1f6763-bcbf-4ce8-a850-29190efe2226
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/history 200 0ms id=b50c79a9-12f5-46bb-b58a-00171f2e8322
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/3fe9c96a-5d1c-42de-821f-6897cbd534d3/projection/pcb 200 1ms id=687e80ed-a0a8-4167-867e-3caadd151bac
+  ✓  45 [chromium] › tests/e2e/pcb-zones.spec.ts:287:3 › pcb zones and keepouts › Shift+Z cuts a hole in the selected zone (2.5s)
+[2m[WebServer] [22m[core-backend] GET /api/health 200 0ms id=5e8cc3b2-3b6b-47a6-a1fb-b416f27702e8
+[2m[WebServer] [22m[core-backend] GET /api/modules/registry 200 0ms id=4852cc66-9c42-44ef-8c36-611dcdaf8299
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 0ms id=6c92909b-a184-4239-8ff3-d9920458ab11
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs 201 1ms id=89a230e6-892d-4b74-ae9c-e319a2427cec
+[2m[WebServer] [22m[core-backend] POST /api/modules/designer/designs/c58212cc-5e81-4d7f-9079-0bf5b8efe8da/commands 200 2ms id=b6e9e906-104e-4d5a-a8af-7b6ae6a3399a
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/c58212cc-5e81-4d7f-9079-0bf5b8efe8da/projection/schematic 200 1ms id=8577f535-d89c-4649-9429-5aa7c60f832f
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/c58212cc-5e81-4d7f-9079-0bf5b8efe8da/history 200 0ms id=0a76b7fc-2935-4e28-96dd-2f36a8bd4f2e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs 200 1ms id=27443c81-8c19-4436-844c-5a8e36c2fac3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/library/components 200 1ms id=d7e26889-e9e0-4a0d-bc9a-7caeab9be728
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=52ceb67d-bafc-44a5-90af-68a8d8aa6893
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2972aaa7-390d-4b8d-976a-1cc344f00d2f/projection/schematic 200 1ms id=d2952eb5-6754-45c1-a17b-73349547f26e
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2972aaa7-390d-4b8d-976a-1cc344f00d2f/history 200 0ms id=92343766-1142-4c88-bd36-deeb14b9bbca
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2972aaa7-390d-4b8d-976a-1cc344f00d2f/comments 200 0ms id=2438e33c-040e-49f3-ba95-0100c44180ff
+[2m[WebServer] [22m[core-backend] PUT /api/modules/designer/active-design 200 0ms id=4855fe48-131e-471a-8c12-b601f9853fd6
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2972aaa7-390d-4b8d-976a-1cc344f00d2f/projection/schematic 200 1ms id=ad772e47-098e-4d58-b02c-8d93e6f75a0c
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2972aaa7-390d-4b8d-976a-1cc344f00d2f/history 200 0ms id=37f6f35c-6beb-4061-899e-bf5262ff62c9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2972aaa7-390d-4b8d-976a-1cc344f00d2f/comments 200 0ms id=1b7c4a8b-7080-4a07-8703-bdeffb10e1e9
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2972aaa7-390d-4b8d-976a-1cc344f00d2f/projection/pcb 200 2ms id=794f87c0-9a85-45cb-a3dc-04f60b977b1b
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2972aaa7-390d-4b8d-976a-1cc344f00d2f/history 200 0ms id=0d9cac91-7d62-4d08-bd48-c86eff47da6f
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2972aaa7-390d-4b8d-976a-1cc344f00d2f/drc 200 0ms id=09e01a37-8a96-47fb-a5db-efc0d22d3ae3
+[2m[WebServer] [22m[core-backend] GET /api/modules/designer/designs/2972aaa7-390d-4b8d-976a-1cc344f00d2f/comments 200 0ms id=ef3c3619-0609-454c-8059-a4cb1b6d0b8e
+  ✓  44 [chromium] › tests/e2e/schematic-move.spec.ts:493:1 › an immediate re-grab while the previous move is still saving stays consistent (5.3s)
+  ✓  46 [chromium] › tests/e2e/pcb-zones.spec.ts:326:3 › pcb zones and keepouts › Shift+Z with nothing selected refuses with a notice (1.5s)
+
+
+  1) [chromium] › tests/e2e/3d-preview.spec.ts:220:1 › Library imports KiCad ZIP and renders component 3D preview 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeTruthy[2m()[22m
+
+    Received: [31mfalse[39m
+
+      214 |     },
+      215 |   );
+    > 216 |   expect(uploadResponse.ok()).toBeTruthy();
+          |                               ^
+      217 |   return { componentId, footprintId };
+      218 | }
+      219 |
+        at importComponentWithReadyModel (/Users/andrejvysny/workspace/openpcb/OpenPCB/tests/e2e/3d-preview.spec.ts:216:31)
+        at /Users/andrejvysny/workspace/openpcb/OpenPCB/tests/e2e/3d-preview.spec.ts:243:27
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/3d-preview-Library-imports-e6c8a-enders-component-3D-preview-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/3d-preview-Library-imports-e6c8a-enders-component-3D-preview-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/3d-preview-Library-imports-e6c8a-enders-component-3D-preview-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/3d-preview-Library-imports-e6c8a-enders-component-3D-preview-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › tests/e2e/builtin-footprints.spec.ts:311:3 › builtin footprints — Designer canvas smoke › New design loads PCB canvas without console errors 
+
+    Error: console: Failed to load resource: net::ERR_CONNECTION_REFUSED
+    console: TypeError: Failed to fetch
+        at http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:12762:23
+        at _handleRequest2 (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:13070:20)
+        at _request (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:13060:22)
+        at SupabaseAuthClient.signInWithPassword (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:15949:21)
+        at http://127.0.0.1:1420/src/cloud/AuthProvider.tsx:68:33
+    console: Failed to load resource: net::ERR_CONNECTION_REFUSED
+    console: TypeError: Failed to fetch
+        at http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:12762:23
+        at _handleRequest2 (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:13070:20)
+        at _request (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:13060:22)
+        at SupabaseAuthClient.signUp (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:15778:21)
+        at async http://127.0.0.1:1420/src/cloud/AuthProvider.tsx:70:9
+
+    [2mexpect([22m[31mreceived[39m[2m).[22mtoEqual[2m([22m[32mexpected[39m[2m) // deep equality[22m
+
+    [32m- Expected  -  1[39m
+    [31m+ Received  + 16[39m
+
+    [32m- Array [][39m
+    [31m+ Array [[39m
+    [31m+   "console: Failed to load resource: net::ERR_CONNECTION_REFUSED",[39m
+    [31m+   "console: TypeError: Failed to fetch[39m
+    [31m+     at http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:12762:23[39m
+    [31m+     at _handleRequest2 (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:13070:20)[39m
+    [31m+     at _request (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:13060:22)[39m
+    [31m+     at SupabaseAuthClient.signInWithPassword (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:15949:21)[39m
+    [31m+     at http://127.0.0.1:1420/src/cloud/AuthProvider.tsx:68:33",[39m
+    [31m+   "console: Failed to load resource: net::ERR_CONNECTION_REFUSED",[39m
+    [31m+   "console: TypeError: Failed to fetch[39m
+    [31m+     at http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:12762:23[39m
+    [31m+     at _handleRequest2 (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:13070:20)[39m
+    [31m+     at _request (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:13060:22)[39m
+    [31m+     at SupabaseAuthClient.signUp (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:15778:21)[39m
+    [31m+     at async http://127.0.0.1:1420/src/cloud/AuthProvider.tsx:70:9",[39m
+    [31m+ ][39m
+        at http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:12762:23
+        at _handleRequest2 (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:13070:20)
+        at _request (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:13060:22)
+        at SupabaseAuthClient.signInWithPassword (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:15949:21)
+        at http://127.0.0.1:1420/src/cloud/AuthProvider.tsx:68:33
+        at http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:12762:23
+        at _handleRequest2 (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:13070:20)
+        at _request (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:13060:22)
+        at SupabaseAuthClient.signUp (http://127.0.0.1:1420/node_modules/.vite/deps/@supabase_supabase-js.js?v=cb8252e7:15778:21)
+        at async http://127.0.0.1:1420/src/cloud/AuthProvider.tsx:70:9
+        at /Users/andrejvysny/workspace/openpcb/OpenPCB/tests/e2e/builtin-footprints.spec.ts:327:39
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/builtin-footprints-builtin-71fc9-nvas-without-console-errors-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/builtin-footprints-builtin-71fc9-nvas-without-console-errors-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/builtin-footprints-builtin-71fc9-nvas-without-console-errors-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/builtin-footprints-builtin-71fc9-nvas-without-console-errors-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium] › tests/e2e/designer-3d.spec.ts:245:1 › Designer PCB 3D view renders imported component board geometry 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeTruthy[2m()[22m
+
+    Received: [31mfalse[39m
+
+      214 |     },
+      215 |   );
+    > 216 |   expect(uploadResponse.ok()).toBeTruthy();
+          |                               ^
+      217 |   return { componentId, footprintId };
+      218 | }
+      219 |
+        at importComponentWithReadyModel (/Users/andrejvysny/workspace/openpcb/OpenPCB/tests/e2e/designer-3d.spec.ts:216:31)
+        at /Users/andrejvysny/workspace/openpcb/OpenPCB/tests/e2e/designer-3d.spec.ts:268:27
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/designer-3d-Designer-PCB-3-93171-ed-component-board-geometry-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/designer-3d-Designer-PCB-3-93171-ed-component-board-geometry-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/designer-3d-Designer-PCB-3-93171-ed-component-board-geometry-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/designer-3d-Designer-PCB-3-93171-ed-component-board-geometry-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    [chromium] › tests/e2e/3d-preview.spec.ts:220:1 › Library imports KiCad ZIP and renders component 3D preview 
+    [chromium] › tests/e2e/builtin-footprints.spec.ts:311:3 › builtin footprints — Designer canvas smoke › New design loads PCB canvas without console errors 
+    [chromium] › tests/e2e/designer-3d.spec.ts:245:1 › Designer PCB 3D view renders imported component board geometry 
+  4 skipped
+  39 passed (31.9s)
+exit 1

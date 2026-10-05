@@ -1,0 +1,88 @@
+===== dark 1440
+3d                     small=  7 nameless= 2 odd=1 ctl={'select:26': 1, 'textarea:47': 1} coming=3 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     small: {(9, 'Camera'): 1, (9, 'Display'): 1, (9, 'Board color'): 1, (9, 'Scene'): 1, (9, 'Transparency'): 1, (9, 'Tallest parts'): 1, (9, 'Strict'): 1}
+     nameless: ['div>div>div>select', 'div>div>div>input']
+     odd: [(26, 'div>div>div>select')]
+assistant              small=  5 nameless= 0 odd=1 ctl={'input:15': 1, 'textarea:32': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     small: {(9, 'S3 LLM Edge — additive'): 1, (9, 'S3 LLM Edge — bad reci'): 1, (9, 'S3 LLM Edge — 12V para'): 1, (9, 'probe'): 1, (9, 'Strict'): 1}
+     odd: [(15, 'aside>div>div>input')]
+bom                    small=  0 nameless= 0 odd=2 ctl={'input:15': 1, 'select:16': 1, 'input:22': 6, 'select:22': 1, 'textarea:56': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(15, 'bel>input[aria-label="Filter BOM lines"]'), (16, '>div>select[aria-label="Order quantity"]')]
+designer-empty         small=  0 nameless= 0 odd=1 ctl={'input:15': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(15, 'label>input[aria-label="Filter outline"]')]
+docs                   small=  0 nameless= 8 odd=1 ctl={'input:32': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     nameless: ['div>div>div>button', 'div>div>div>button', 'div>div>div>button', 'div>div>div>button', 'div>div>div>button', 'div>div>div>button', 'div>div>div>button', 'div>div>div>button']
+     odd: [(32, 'div>div>div>input')]
+drc                    small=  0 nameless= 0 odd=0 ctl={} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+home-grid              small=  0 nameless= 0 odd=1 ctl={'input:15': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(15, 'label>input[aria-label="Search designs"]')]
+home-list              small=  0 nameless= 0 odd=1 ctl={'input:15': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(15, 'label>input[aria-label="Search designs"]')]
+library-detail         small=  0 nameless= 0 odd=0 ctl={} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+library-grid           small=  0 nameless= 0 odd=3 ctl={'input:15': 3} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(15, 'div>header>label>input'), (15, 'nput[aria-label="Filter family options"]'), (15, 'input[aria-label="Filter other options"]')]
+library-table          small= 28 nameless= 0 odd=3 ctl={'input:15': 3} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     small: {(9.5, 'core'): 18, (9.5, 'user'): 10}
+     odd: [(15, 'div>header>label>input'), (15, 'nput[aria-label="Filter family options"]'), (15, 'input[aria-label="Filter other options"]')]
+library-wizard-step1   small=  0 nameless= 2 odd=0 ctl={} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     nameless: ['div>div>div>button', 'aside>div>section>input']
+pcb                    small=  0 nameless= 0 odd=0 ctl={} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+pcb-rules-dialog       small=  0 nameless= 7 odd=22 ctl={'input:21': 22, 'select:22': 7} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     nameless: ['section>div>div>select', 'section>div>div>select', 'section>div>div>select', 'section>div>div>select', 'section>div>div>select', 'section>div>div>select', 'section>div>div>select']
+     odd: [(21, 'section>label>span>input'), (21, 'section>label>span>input'), (21, 'section>label>span>input'), (21, 'section>label>span>input'), (21, 'section>label>span>input'), (21, 'section>label>span>input'), (21, 'section>label>span>input'), (21, 'section>label>span>input')]
+schematic              small=  0 nameless= 0 odd=1 ctl={'input:15': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(15, 'label>input[aria-label="Filter outline"]')]
+settings-about         small=  0 nameless= 0 odd=1 ctl={'input:32': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(32, 'div>header>label>input')]
+settings-assistant     small=  5 nameless= 0 odd=5 ctl={'input:32': 1, 'select:30': 4} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     small: {(9, 'Advanced'): 1, (9, 'Caution'): 1, (9, 'LOCAL'): 2, (9, 'DEFAULT'): 1}
+     odd: [(32, 'div>header>label>input'), (30, 'section>div>label>select'), (30, 'section>div>label>select'), (30, 'section>div>label>select'), (30, 'section>div>label>select')]
+settings-general       small=  0 nameless= 0 odd=1 ctl={'input:32': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(32, 'div>header>label>input')]
+settings-libraries     small=  0 nameless= 0 odd=1 ctl={'input:32': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(32, 'div>header>label>input')]
+settings-privacy       small=  0 nameless= 0 odd=1 ctl={'input:32': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(32, 'div>header>label>input')]
+===== light 1440
+3d                     small=  7 nameless= 2 odd=1 ctl={'select:26': 1, 'textarea:47': 1} coming=3 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     small: {(9, 'Camera'): 1, (9, 'Display'): 1, (9, 'Board color'): 1, (9, 'Scene'): 1, (9, 'Transparency'): 1, (9, 'Tallest parts'): 1, (9, 'Strict'): 1}
+     nameless: ['div>div>div>select', 'div>div>div>input']
+     odd: [(26, 'div>div>div>select')]
+assistant              small=  7 nameless= 0 odd=1 ctl={'input:15': 1, 'textarea:32': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     small: {(9, 'S3 Smoke — 5 LED indic'): 1, (9, 'S3 LLM Edge — additive'): 1, (9, 'S3 LLM Edge — bad reci'): 1, (9, 'S3 LLM Edge — 12V para'): 1, (9, 'probe'): 1, (9, 'Strict'): 1, (9, 'Best'): 1}
+     odd: [(15, 'aside>div>div>input')]
+bom                    small=  0 nameless= 0 odd=2 ctl={'input:15': 1, 'select:16': 1, 'input:22': 6, 'select:22': 1, 'textarea:56': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(15, 'bel>input[aria-label="Filter BOM lines"]'), (16, '>div>select[aria-label="Order quantity"]')]
+designer-empty         small=  0 nameless= 0 odd=1 ctl={'input:15': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(15, 'label>input[aria-label="Filter outline"]')]
+docs                   small=  0 nameless= 8 odd=1 ctl={'input:32': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     nameless: ['div>div>div>button', 'div>div>div>button', 'div>div>div>button', 'div>div>div>button', 'div>div>div>button', 'div>div>div>button', 'div>div>div>button', 'div>div>div>button']
+     odd: [(32, 'div>div>div>input')]
+drc                    small=  0 nameless= 0 odd=0 ctl={} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+home-grid              small=  0 nameless= 0 odd=1 ctl={'input:15': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(15, 'label>input[aria-label="Search designs"]')]
+home-list              small=  0 nameless= 0 odd=1 ctl={'input:15': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(15, 'label>input[aria-label="Search designs"]')]
+library-detail         small=  0 nameless= 0 odd=0 ctl={} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+library-grid           small=  0 nameless= 0 odd=3 ctl={'input:15': 3} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(15, 'div>header>label>input'), (15, 'nput[aria-label="Filter family options"]'), (15, 'input[aria-label="Filter other options"]')]
+library-table          small= 28 nameless= 0 odd=3 ctl={'input:15': 3} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     small: {(9.5, 'core'): 18, (9.5, 'user'): 10}
+     odd: [(15, 'div>header>label>input'), (15, 'nput[aria-label="Filter family options"]'), (15, 'input[aria-label="Filter other options"]')]
+library-wizard-step1   small=  0 nameless= 2 odd=0 ctl={} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     nameless: ['div>div>div>button', 'aside>div>section>input']
+pcb                    small=  0 nameless= 0 odd=0 ctl={} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+pcb-selected           small=  0 nameless= 0 odd=0 ctl={} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+schematic              small=  0 nameless= 0 odd=1 ctl={'input:15': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(15, 'label>input[aria-label="Filter outline"]')]
+settings-about         small=  0 nameless= 0 odd=1 ctl={'input:32': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(32, 'div>header>label>input')]
+settings-assistant     small=  5 nameless= 0 odd=5 ctl={'input:32': 1, 'select:30': 4} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     small: {(9, 'Advanced'): 1, (9, 'Caution'): 1, (9, 'LOCAL'): 2, (9, 'DEFAULT'): 1}
+     odd: [(32, 'div>header>label>input'), (30, 'section>div>label>select'), (30, 'section>div>label>select'), (30, 'section>div>label>select'), (30, 'section>div>label>select')]
+settings-general       small=  0 nameless= 0 odd=1 ctl={'input:32': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(32, 'div>header>label>input')]
+settings-libraries     small=  0 nameless= 0 odd=1 ctl={'input:32': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(32, 'div>header>label>input')]
+settings-privacy       small=  0 nameless= 0 odd=1 ctl={'input:32': 1} coming=0 dlg={'prompt': 0, 'confirm': 0, 'alert': 0}
+     odd: [(32, 'div>header>label>input')]

@@ -1,0 +1,58 @@
+{
+ "bom-missing-mpn": [
+  {
+   "text": "C1: missing MPN or LCSC/JLC part number",
+   "x": 1129,
+   "y": 491,
+   "w": 303,
+   "h": 30,
+   "bg": "rgba(154, 107, 18, 0.12)",
+   "fg": "rgb(154, 107, 18)",
+   "bd": "0px rgb(154, 107, 18)",
+   "bl": "0px rgb(154, 107, 18)",
+   "rad": "0px",
+   "fs": "10px",
+   "pad": "8px",
+   "role": null,
+   "cls": "mx-2 mb-2 bg-status-warning-soft p-2 text-2xs text-status-warning"
+  }
+ ],
+ "lib-readonly": [],
+ "settings-needs-key": [],
+ "settings-mcp-caution": [
+  {
+   "text": "Caution",
+   "x": 744,
+   "y": 386,
+   "w": 43,
+   "h": 15,
+   "bg": "oklch(0.962 0.059 95.617)",
+   "fg": "oklch(0.555 0.163 48.998)",
+   "bd": "0px oklch(0.555 0.163 48.998)",
+   "bl": "0px oklch(0.555 0.163 48.998)",
+   "rad": "4px",
+   "fs": "9px",
+   "pad": "0px 6px",
+   "role": null,
+   "cls": "rounded bg-amber-100 px-1.5 text-[9px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+  }
+ ],
+ "settings-lib-uptodate": [
+  {
+   "text": "Up to date",
+   "x": 715,
+   "y": 167,
+   "w": 67,
+   "h": 19,
+   "bg": "rgb(247, 247, 248)",
+   "fg": "rgb(8, 145, 178)",
+   "bd": "0px rgb(8, 145, 178)",
+   "bl": "0px rgb(8, 145, 178)",
+   "rad": "3.35544e+07px",
+   "fs": "11px",
+   "pad": "2px 8px",
+   "role": null,
+   "cls": "rounded-full bg-surface-panel px-2 py-0.5 text-xs text-selection"
+  }
+ ]
+}

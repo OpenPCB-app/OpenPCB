@@ -1,0 +1,18 @@
+
+> openpcb@0.1.1-beta test:react
+> npm run test --workspace src/core/frontend
+
+
+> openpcb-core-frontend@0.1.0-beta.5 test
+> vitest run --config vitest.config.ts
+
+
+ RUN  v4.1.6 /Users/andrejvysny/workspace/openpcb/OpenPCB
+
+
+ Test Files  66 passed (66)
+      Tests  594 passed | 1 todo (595)
+   Start at  12:05:08
+   Duration  1.22s (transform 3.95s, setup 0ms, import 7.04s, tests 810ms, environment 3ms)
+
+exit 0

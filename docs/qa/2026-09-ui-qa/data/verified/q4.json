@@ -1,0 +1,3070 @@
+[
+ {
+  "id": "Q4-001",
+  "knownRef": "spike",
+  "area": "designer.pcb",
+  "title": "DRC count differs between toolbar (errors only) and dock tab / status bar (errors+warnings)",
+  "category": "consistency",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "Open 'Dual LED Blinker' (13 errors, 6 warnings in last DRC run)",
+   "Switch to PCB view",
+   "Compare toolbar 'DRC' badge, right-dock 'DRC' tab badge, and status-bar DRC chip"
+  ],
+  "expected": "One number (or clearly split errors/warnings) used consistently in every DRC indicator; badge colour red only when errors exist",
+  "actual": "Toolbar DRC button shows '13' (errors only, PcbCanvas drcErrorCount = summary.errors); dock tab badge shows '19' in red and status bar shows '19 DRC' with a red diamond (errors+warnings). Home list row shows '13 errors'. Three different numbers semantics on one screen, no label/tooltip telling which is which; warnings-only boards will still render a red (danger) badge on the dock tab. Re-checked after a later DRC run: toolbar 32 vs dock tab 106 vs status bar 106 (both themes); while a route is in progress the status-bar chip switches to the live route count ('1 DRC') — a fourth number with the same label.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/001-pcb-initial.png",
+    "shots/q4/dark/171-dual-led-pcb.png",
+    "shots/q4/dark/186-1100-routing.png",
+    "shots/q4/light/002-pcb.png",
+    "shots/vq4/dark/001-pcb.png",
+    "shots/vq4/dark/019-routing.png",
+    "shots/vq4/dark/030-drc-demo-pcb.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 606,
+    "note": "drcErrorCount = report.summary.errors"
+   },
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 930,
+    "note": "drcIssueCount = errors + warnings, dock badge always text-status-danger (:970)"
+   },
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 1588,
+    "note": "status bar: pcbLiveDrc ?? errors+warnings — live route count reuses the same chip"
+   }
+  ],
+  "suggestedFix": "Pick one metric (recommend errors, with warnings as a secondary amber count 'E 13 · W 6') and share it via a single selector in useDrcStore; use text-status-warning when only warnings exist; add a title like '13 errors, 6 warnings' on all three.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:drc-count:toolbar-vs-dock-mismatch",
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced on c2c58a19 (dark+light): toolbar DRC badge 32 (errors only) vs dock tab 106 and status bar 106 (errors+warnings); DRC Demo 3196d811 shows 6 vs 17 vs 17; while routing the status-bar chip switches to the live count ('3 DRC'). Root cause PcbCanvas.tsx:606 (summary.errors) vs Space.tsx:930-931 / :1588-1591 (errors+warnings, pcbLiveDrc override). Not intentional per PLAN D7 (which only routes the DRC button/counter to the dock).",
+   "evidence": [
+    "shots/vq4/dark/001-pcb.png",
+    "shots/vq4/dark/019-routing.png",
+    "shots/vq4/dark/030-drc-demo-pcb.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-002",
+  "area": "designer.pcb",
+  "title": "Ctrl+H activates the Hole tool instead of cycling the layer display mode",
+  "category": "keyboard",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "Open 'Dual LED Blinker' → PCB view, nothing selected, Select tool",
+   "Hover the 'Normal/Dim/Hide' display-mode buttons: tooltip says 'Display mode: … (Ctrl+H)'",
+   "Press Ctrl+H over the canvas"
+  ],
+  "expected": "Inactive-layer display mode cycles Normal → Dim → Hide (KiCad Ctrl+H) and no tool changes",
+  "actual": "The Add button switches to 'Hole' (hole placement tool armed); the Display mode group stays at Normal (aria-pressed Normal:true). The Ctrl+H handler is unreachable because the plain-H hole handler runs first and has no ctrl/meta guard.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/006-ctrl-h.png",
+    "shots/vq4/dark/002-ctrl-h.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 4391,
+    "note": "H → hole tool, no !ctrlKey/!metaKey guard, returns early"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 4932,
+    "note": "Ctrl+H display-mode cycle never reached"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbLayersPanel.tsx",
+    "line": 647,
+    "note": "tooltip advertises Ctrl+H"
+   }
+  ],
+  "suggestedFix": "In PcbCanvas onKey (PcbCanvas.tsx:4390) add `!event.ctrlKey && !event.metaKey && !event.altKey` to the plain H branch (and to P/T/M at :4478/:4490/:4500, which lack it too) so the Ctrl/⌘+H display-mode cycle at :4931 is reachable.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:keymap:ctrl-h-hole-tool",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: Ctrl+H over the canvas arms the Hole tool (Add button -> 'Hole', aria-pressed) and display mode stays Normal. PcbCanvas.tsx:4390-4399 plain-H branch has no ctrl/meta guard and returns before the Ctrl+H cycle at :4931. Severity lowered to S3: only the advertised shortcut is wrong; the Normal/Dim/Hide buttons work.",
+   "evidence": [
+    "shots/vq4/dark/002-ctrl-h.png"
+   ],
+   "severityWas": "S2"
+  }
+ },
+ {
+  "id": "Q4-003",
+  "area": "designer.pcb",
+  "title": "Status-bar hint shows 'Click to select…' while Hole/Pad/Text/Zone/Keepout/Tune/Cutout tools are armed",
+  "category": "copy",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "PCB view, nothing selected",
+   "Press H (or P, T, Z, K, U, Shift+Z with a zone selected)",
+   "Read the status-bar hint"
+  ],
+  "expected": "Tool-specific hint, e.g. 'Click on the board to place a 3.2 mm hole · Esc exit', 'Click to place vertices · Enter close · Esc cancel'",
+  "actual": "Hint stays 'Click to select · Shift+click to add · drag to box-select' for hole, pad, text, zone, keepout, zone-cutout and tune tools (only route/measure/board-shape have hints). Zone/keepout/text selections also summarise as a generic '1 selected'. Tune puts its hint in a separate floating status instead.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/007-zone-mode.png",
+    "shots/q4/dark/016-zone-cutout-mode.png",
+    "shots/vq4/dark/002-ctrl-h.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 5474,
+    "note": "statusHint only handles route/measure/boardShape/placement"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 5534,
+    "note": "zones/keepouts fall through to '1 selected'"
+   }
+  ],
+  "suggestedFix": "Add HINT_* strings for hole/pad/text/zone/keepout/zoneHole/tune/bundle/comment tool modes in statusHint, and zone/keepout cases in statusSelectionSummary ('Zone · GND · F.Cu').",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:status-hint:missing-tool-hints",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: with the Hole tool armed (Ctrl+H/H) the status bar still reads 'Click to select · Shift+click to add · drag to box-select'. statusHint (PcbCanvas.tsx:5475-5496) only handles route/measure/boardShape/single placement; statusSelectionSummary has no zone/keepout/text cases.",
+   "evidence": [
+    "shots/vq4/dark/002-ctrl-h.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-004",
+  "area": "designer.pcb",
+  "title": "Board jumps 14 px under the cursor each time a route/notice row appears (canvas resizes mid-gesture)",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "PCB view at 1440x900, note a pad position (J1 pin 2 at ~463,462)",
+   "Press R: the Route parameter row appears → pad now at ~463,476",
+   "Click the pad to start routing: second hint row appears → pad now at ~463,490",
+   "Press V where the via is refused: a third 'Via blocked…' row appears → board shifts again; row disappears on next action → shifts back"
+  ],
+  "expected": "Starting a tool/route never moves the design under a stationary cursor (param rows overlay the canvas or reserve fixed space, or the camera compensates)",
+  "actual": "The toolbar stack grows 28 px per row (Route row, hint row, notice row), the canvas shrinks and the orthographic camera stays centred, so all copper moves 14 px vertically. The rubber-band endpoint jumps ~0.7 mm at 80% zoom right after the first click, and again whenever a transient notice ('Via blocked', 'Commit blocked') appears/disappears, causing misplaced clicks.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/001-pcb-initial.png",
+    "shots/q4/dark/005-route-mode-idle.png",
+    "shots/q4/dark/021-routing-start.png",
+    "shots/q4/dark/028-route-via.png",
+    "shots/q4/dark/030-route-via3.png",
+    "shots/vq4/dark/017-before-route.png",
+    "shots/vq4/dark/018-route-idle.png",
+    "shots/vq4/dark/019-routing.png",
+    "shots/vq4/dark/021-via-blocked2.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 1314,
+    "note": "param-row slot is a shrink-0 flex child above the canvas, so every portalled row shrinks the canvas"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 6617,
+    "note": "param row / hint / notice rows portalled into paramRowTarget"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/RouteHud.tsx",
+    "line": 31,
+    "note": "routeNotice rendered as an extra row"
+   }
+  ],
+  "suggestedFix": "Keep the param row a fixed single 28 px row per D10: move the route hint line into the status bar (it is already duplicated there) and render routeNotice/autoFinish notices as an absolutely-positioned overlay inside the canvas (like AreaToolOptionsBar) instead of extra rows in the Space.tsx:1314 slot; optionally reserve the 28 px slot whenever the PCB view is active so arming Route doesn't resize the canvas.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "designer.pcb:route-chrome:canvas-shift",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced at 1440x900: canvas box top 64 -> 92 when R arms Route (param row), -> 120 after the first pad click (extra hint row 'Enter finish V via + layer…'), -> 148 when 'Via blocked…' notice appears; the whole editor body (left sidebar too) shifts, the board moves 14 px per row under a stationary cursor mid-gesture. PLAN D10 allows one 28 px param row; the extra hint/notice rows are not in D10 and cause the mid-route jump. Kept S2: it affects every route start in the core routing flow.",
+   "evidence": [
+    "shots/vq4/dark/017-before-route.png",
+    "shots/vq4/dark/018-route-idle.png",
+    "shots/vq4/dark/019-routing.png",
+    "shots/vq4/dark/021-via-blocked2.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-005",
+  "area": "designer.pcb",
+  "title": "Route refusal notices show raw DRC codes (NET_SHORT_CIRCUIT, COPPER_OFF_BOARD…) and a developer tooltip",
+  "category": "copy",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "PCB → R, click J1 pin, place a corner",
+   "Hover over copper of another net (or near the board edge) and press V",
+   "Read the notice row; hover the '4 warnings' text in the route status"
+  ],
+  "expected": "Human wording from drc-labels ('Via blocked: short circuit with R4.1 (Net_5)', 'too close to board edge'); tooltip 'Warnings are reported by DRC but do not block the commit'",
+  "actual": "'Via blocked: NET_SHORT_CIRCUIT' and 'Via blocked: COPPER_OFF_BOARD, COPPER_TO_BOARD_EDGE'; warning chip tooltip reads 'Reported by DRC but never blocking (contract 07 §6)'. 'Commit blocked: 4 DRC conflicts' also stays stale after the live count drops to 3 and never says which items conflict.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/028-route-via.png",
+    "shots/q4/dark/029-route-via2.png",
+    "shots/q4/dark/038-route-to-pad.png",
+    "shots/vq4/dark/021-via-blocked2.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 549,
+    "note": "violationCodeList returns raw DRC codes (used by Via blocked / Commit rejected / Reshape rejected notices)"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/RouteHud.tsx",
+    "line": 181,
+    "note": "title 'Reported by DRC but never blocking (contract 07 §6)'"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/drc/drc-labels.ts",
+    "line": 20,
+    "note": "human labels available"
+   }
+  ],
+  "suggestedFix": "Map codes through drc-labels (DRC_LABELS[code] ?? code) in violationCodeList; rewrite the RouteHud warning title; recompute the commit-blocked notice from the live conflict count.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:route-notice:raw-codes",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: pressing V over another net's pad while routing shows 'Via blocked: NET_SHORT_CIRCUIT'; warning chip title is 'Reported by DRC but never blocking (contract 07 §6)'. violationCodeList (PcbCanvas.tsx:549-551) joins raw codes; used at :1747, :2133, :2148, :2442, :2558.",
+   "evidence": [
+    "shots/vq4/dark/021-via-blocked2.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-006",
+  "area": "designer.pcb",
+  "title": "PCB status-bar zoom readout is frozen (shows the schematic's zoom, never updates on PCB)",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "Open design, PCB view: status bar shows 'zoom 80%'",
+   "Mouse-wheel zoom, click 'Zoom in' twice, or click a DRC violation (auto-zooms ~5x)",
+   "Read status bar zoom"
+  ],
+  "expected": "Zoom % tracks the PCB camera",
+  "actual": "Always 'zoom 80%' regardless of PCB zoom (value is the Space-level zoomPercent set only by SchematicCanvas onZoomChange; PcbCanvas never reports zoom).",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/043-drc-click-violation.png",
+    "shots/q4/dark/044-zoomed-in-readout.png",
+    "shots/vq4/dark/003-zoomed-readout.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 1202,
+    "note": "only SchematicCanvas wires onZoomChange={setZoomPercent}"
+   },
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 1598,
+    "note": "PCB status bar uses the same zoomPercent"
+   }
+  ],
+  "suggestedFix": "Add onZoomChange to PcbCanvas (report camera.zoom → % from the viewport/camera change handler) and keep a per-view zoom state in Space.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:statusbar:zoom-readout-frozen",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: after zooming ~10x on the PCB the status bar still reads 'zoom 80%' (value left over from the schematic). Only SchematicCanvas wires onZoomChange (Space.tsx:1202); PCB status bar reads the same zoomPercent state (Space.tsx:444, :1584).",
+   "evidence": [
+    "shots/vq4/dark/003-zoomed-readout.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-007",
+  "area": "designer.pcb",
+  "title": "PCB toolbar dropdowns (Add, View, width, via) have no menu semantics or keyboard support; Esc does not close them",
+  "category": "a11y",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "PCB view: click 'Add' (or 'View', or the W width chip while routing)",
+   "Press Escape",
+   "Press ArrowDown"
+  ],
+  "expected": "Menu closes on Esc and focus returns to the trigger; arrows move between items; trigger exposes aria-haspopup/aria-expanded; items are role=menuitem(checkbox)",
+  "actual": "Esc leaves the menu open (Add and View verified), ArrowDown does nothing (focus stays on trigger). Add trigger has no aria-expanded/aria-haspopup, menus are plain divs of buttons, trigger buttons use outline-none so there is no focus ring. (Tooltip copy → Q4-051; Measure/Tune entry points → Q4-035.)",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/002-add-menu.png",
+    "shots/q4/dark/003-view-menu.png",
+    "shots/vq4/dark/026-add-menu-after-esc.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx",
+    "line": 139,
+    "note": "useOutsideClose handles mousedown only"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx",
+    "line": 481,
+    "note": "Add trigger: no aria-haspopup/expanded, outline-none"
+   }
+  ],
+  "suggestedFix": "Reuse the kit Menu/Dropdown (with Esc, arrow roving focus, role=menu) for AddDropdown, ViewToggleDropdown, WidthDropdown, ViaSizeDropdown; add Esc to useOutsideClose; add 'Measure (M)' and 'Tune length (U)' entries to a Tools/Add menu.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:toolbar:dropdown-keyboard",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: Add menu stays open after Escape, ArrowDown leaves focus on the trigger, Add trigger has no aria-expanded/aria-haspopup and uses outline-none. Tooltip-copy and Measure/Tune discoverability sub-points overlap Q4-051 and Q4-035 (kept there); this finding is the menu-semantics/keyboard part.",
+   "evidence": [
+    "shots/vq4/dark/026-add-menu-after-esc.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-008",
+  "knownRef": "K03",
+  "area": "designer.pcb",
+  "title": "Trace width / via diameter / via drill 'Custom…' use native window.prompt with no validation",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "PCB → R → click J1 pin 2 to start routing",
+   "Click the 'W 0.500 mm' chip → 'Custom… (Alt+W)' → native prompt 'Custom trace width (mm):'",
+   "Click 'Ø 0.80 mm' → 'Custom…' → prompt 'Custom diameter (mm):', type 'abc' → nothing happens, no error",
+   "Click '⌀ 0.40 mm' → 'Custom…' → prompt 'Custom drill (mm):', type 1.2 (> 0.80 diameter) → accepted; press V → a via with drill larger than its pad is placed"
+  ],
+  "expected": "Inline numeric editor (the RouteHud already has one for width, opened by Alt+W) with validation (drill < diameter, ≥ fab min) and inline error text",
+  "actual": "3 window.prompt calls (dialog-spy count prompt=3); menu item label 'Custom… (Alt+W)' promises the inline editor but opens a native prompt instead; non-numeric input silently discarded; drill ≥ diameter accepted and a physically impossible via is dropped into the session (only live DRC '6 conflicts' hints at it). Native prompts are unstyled and blocked/unsupported in some Electron configs.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/023-width-dropdown.png",
+    "shots/q4/dark/025-alt-w-inline.png",
+    "shots/q4/dark/046-via-dia-dd.png",
+    "shots/q4/dark/047-drill-gt-dia.png",
+    "shots/q4/dark/048-via-bad-drill.png",
+    "shots/vq4/dark/022-width-dd.png",
+    "shots/vq4/dark/023-drill-gt-dia.png",
+    "shots/vq4/dark/024-drill-dd.png"
+   ],
+   "console": [
+    "dialog-spy: prompt: Custom trace width (mm): / prompt: Custom diameter (mm): / prompt: Custom drill (mm):"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx",
+    "line": 207,
+    "note": "window.prompt trace width"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx",
+    "line": 294,
+    "note": "window.prompt via diameter/drill"
+   }
+  ],
+  "suggestedFix": "Replace prompts with an inline numeric input inside the dropdown (reuse the RouteHud 'Trace width (mm)' input pattern); validate drill < diameter − 2×min annular ring and show the error inline; make the 'Custom…' item open the same inline editor as Alt+W.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:route-param:native-prompt",
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: while routing, W chip -> 'Custom… (Alt+W)' opens native prompt 'Custom trace width (mm):' (dialog spy prompt=1); drill chip -> Custom… accepted 1.2 mm with via diameter 0.80 (chip showed '⌀ 1.20 mm', no validation). Code PcbTopToolbar.tsx:207 and :294. Electron has no window.prompt support and electron/src has no shim, so these controls do nothing in the desktop app.",
+   "evidence": [
+    "shots/vq4/dark/022-width-dd.png",
+    "shots/vq4/dark/023-drill-gt-dia.png",
+    "shots/vq4/dark/024-drill-dd.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-009",
+  "area": "designer.pcb",
+  "title": "Via size shown in three different orders/symbols (preset list drill/diameter vs chips Ø diameter ⌀ drill vs status diameter/drill)",
+  "category": "consistency",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "Start routing",
+   "Open the via preset dropdown: rows read 'Standard 2L 0.40 / 0.80 mm' (drill / diameter)",
+   "Compare chips 'Ø 0.80 mm' (diameter) and '⌀ 0.40 mm' (drill) and the status 'via 0.80/0.40' (diameter/drill)"
+  ],
+  "expected": "One consistent order and explicit labels (e.g. 'Pad 0.80 · Drill 0.40')",
+  "actual": "Preset list order is drill/diameter, status is diameter/drill; the two chips differ only by Ø (U+00D8) vs ⌀ (U+2300), visually almost identical — users cannot tell which chip is drill without hovering. 'Net-class default (0.80 mm)' wraps to two lines in the dropdown.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/045-via-preset-dd.png",
+    "shots/q4/dark/046-via-dia-dd.png",
+    "shots/vq4/dark/025-via-preset-dd.png",
+    "shots/vq4/dark/019-routing.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx",
+    "line": 231,
+    "note": "ViaSizeDropdown"
+   }
+  ],
+  "suggestedFix": "Label chips 'Via 0.80' and 'Drill 0.40' (text, not glyphs) and render preset rows as 'Ø0.80 / drill 0.40' matching the status order.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:route-param:via-size-order",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: via preset rows read 'Standard 2L 0.40 / 0.80 mm' (drill/diameter), chips 'Ø 0.80 mm' / '⌀ 0.40 mm', route status 'via 0.80/0.40' (diameter/drill).",
+   "evidence": [
+    "shots/vq4/dark/025-via-preset-dd.png",
+    "shots/vq4/dark/019-routing.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-010",
+  "area": "designer.pcb",
+  "title": "Flipping to bottom view mirrors about the world origin, pushing the board half off-screen",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "PCB view, Zoom to fit (board centred)",
+   "Click 'Viewing Top' in the layer strip (or press Shift+F)"
+  ],
+  "expected": "View mirrors about the current view centre (or re-fits), so the board stays where it was on screen",
+  "actual": "Board jumps right and is clipped by the dock at x≈1139 (right third of the board invisible); user has to press Fit. The button label is abbreviated 'Viewing Bot'.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/050-bottom-view.png",
+    "shots/q4/dark/052-shiftF-bottom-again.png",
+    "shots/vq4/dark/044-before-flip.png",
+    "shots/vq4/dark/045-bottom-view.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 2685,
+    "note": "setViewSide without camera compensation"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbSideModeButton.tsx",
+    "line": 19,
+    "note": "'Viewing Bot' label"
+   }
+  ],
+  "suggestedFix": "When toggling viewSide, negate camera.position.x (mirror the camera about the scene X axis) so the same world region stays centred; label 'Viewing Bottom'.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:flip-view:camera-not-mirrored",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: Shift+F on the fitted Dual LED Blinker moves the board right; its right third is hidden behind the dock; the button label reads 'Viewing Bot'. handleToggleViewSide (PcbCanvas.tsx:2684) only flips viewSide with no camera compensation; label at PcbSideModeButton.tsx:19.",
+   "evidence": [
+    "shots/vq4/dark/044-before-flip.png",
+    "shots/vq4/dark/045-bottom-view.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-011",
+  "area": "designer.pcb",
+  "title": "Alt+click layer solo fails with 'Revision conflict. Please retry after refresh.' (two commands sent with same baseRevision)",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "PCB view, Layers panel",
+   "Alt+click the 'Top Copper F.Cu' row (while Bottom Copper is active) — or Alt+click 'Bottom Copper'",
+   "Observe toast at top of canvas and inline error in Board properties"
+  ],
+  "expected": "Layer soloed and made active, no error",
+  "actual": "Two POST /commands are fired back-to-back with the same baseRevision (pcb_set_visible_layers and pcb_set_active_layer, both baseRevision 474); the second returns {ok:false, code:'REVISION_CONFLICT', expected 474, actual 475}. User sees 'Revision conflict. Please retry after refresh.' in a toast and in the Board panel; active layer silently stays on the old layer (status bar still 'Bottom Copper' while Top Copper is soloed). Reproduced in light on QA-q4-board (Alt+click 'Bottom Copper'): toast + Board-panel error 'Revision conflict. Please retry after refresh.'; the layer strip keeps 'Top Copper' selected while B.Cu is SOLO.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/053-alt-solo.png",
+    "shots/q4/dark/057-alt-solo-bottom.png",
+    "shots/q4/light/022-alt-solo-toast.png",
+    "shots/vq4/dark/010-alt-solo.png",
+    "shots/vq4/dark/011-unsolo.png",
+    "shots/vq4/dark/012-normal-after-focus.png",
+    "shots/vq4/light/001-alt-solo-qa.png"
+   ],
+   "network": [
+    "POST /designs/c2c58a19/commands {pcb_set_visible_layers, baseRevision 474} → ok revision 475",
+    "POST /designs/c2c58a19/commands {pcb_set_active_layer F.Cu, baseRevision 474} → ok:false REVISION_CONFLICT"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 6590,
+    "note": "void setVisibleLayers(...) then void setActiveLayer(...) not awaited"
+   },
+   {
+    "path": "src/modules/designer/frontend/hooks/useDesignerWorkspace.ts",
+    "line": 505,
+    "note": "baseRevision read from projectionRef at send time; parallel sends share it"
+   },
+   {
+    "path": "src/modules/designer/frontend/hooks/useDesignerWorkspace.ts",
+    "line": 104,
+    "note": "conflict message"
+   }
+  ],
+  "suggestedFix": "In onToggleSoloLayer (PcbCanvas.tsx:6590) await setVisibleLayers before setActiveLayer (or send both via dispatchCommandsBatch); more robustly serialize PCB dispatches in dispatchEnvelope (useDesignerWorkspace.ts:485) through a promise queue so each envelope takes the previous result's revision. Keep focusedLayer in sync with activeLayer on solo enter/exit.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:layers:solo-revision-conflict",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced in both themes: Alt+click 'Bottom Copper' sends two POST /commands back to back; the toast and Board panel show 'Revision conflict. Please retry after refresh.'; the status bar keeps 'Top Copper' while B.Cu is SOLO. After un-solo the canvas dims F.Cu (focus stuck on B.Cu) while active layer = F.Cu. Root cause: onToggleSoloLayer fires `void setVisibleLayers` + `void setActiveLayer` (PcbCanvas.tsx:6590-6594), and dispatchEnvelope reads baseRevision from projectionRef before the first result lands (useDesignerWorkspace.ts:505). Sub-claim 'un-solo loses F.SilkS' NOT reproduced here (F.SilkS was restored on exit), so it is removed.",
+   "evidence": [
+    "shots/vq4/dark/010-alt-solo.png",
+    "shots/vq4/dark/011-unsolo.png",
+    "shots/vq4/dark/012-normal-after-focus.png",
+    "shots/vq4/light/001-alt-solo-qa.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-012",
+  "area": "designer.pcb",
+  "title": "Layers panel pour row: 'pad connection' select is crushed to 10 px, value unreadable",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "PCB → Layers panel → Top Copper row → click the droplet 'Show copper fills'",
+   "Look at the POUR row under Top Copper"
+  ],
+  "expected": "Net select and pad-connection select (Solid/Thermal…) both readable",
+  "actual": "'Top Copper pour net' select takes 173 px, 'Top Copper pad connection' select is 10 px wide (only a sliver of the chevron visible, current value 'Solid' hidden). Both are native <select> at 18 px height (kit standard 22/20). The adjacent 'Remove redundant pour traces' button deletes traces with no preview, no confirmation and no result feedback (clicked: nothing removed, nothing reported).",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/063-copper-fill.png",
+    "shots/q4/dark/064-remove-redundant.png",
+    "shots/vq4/dark/046-pour-row.png",
+    "shots/vq4/dark/046-pour-row-crop.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbLayersPanel.tsx",
+    "line": 590,
+    "note": "NetSelect + pad connection select in one flex row, no min-width"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/usePcbWorkspace.ts",
+    "line": 472,
+    "note": "cleanupPourTraces: no result count surfaced"
+   }
+  ],
+  "suggestedFix": "Put pad connection on its own labelled row (or give both selects flex-1 min-w-0 with a min width ~80px); use the kit Select at 20/22px; have pcb_cleanup_pour_traces return removed count and show a notice ('Removed 3 traces — Undo').",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:layers:pour-row-select-crushed",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: opening the Top Copper row settings shows 'Top Copper pour net' select 173x18 px and 'Top Copper pad connection' select 10x18 px (value hidden). Both use BOARD_ZONE_SELECT_CLASS (PcbLayersPanel.tsx:145, flex-1 min-w-0) next to a NetSelect that takes the width. cleanupPourTraces (usePcbWorkspace.ts:472) reports nothing and has no confirmation (code-verified; the button only shows with an enabled board zone).",
+   "evidence": [
+    "shots/vq4/dark/046-pour-row.png",
+    "shots/vq4/dark/046-pour-row-crop.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-013",
+  "area": "designer.pcb",
+  "title": "Inactive-layer display mode 'Normal' dims other layers to 22% once a layer is focused; 'Normal' and 'Dim' look identical",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "Open design → PCB: bottom traces bright blue (#2667dc)",
+   "Click any layer row / layer tab (e.g. 'Bottom Copper' then 'Top Copper')",
+   "Display mode still shows 'Normal' pressed; probe a B.Cu trace",
+   "Click 'Dim' and probe again"
+  ],
+  "expected": "'Normal' renders inactive layers at full strength (as on first open); 'Dim' visibly dims them",
+  "actual": "After any layer focus, Normal renders B.Cu at #0c1d3a (22% opacity) and Dim at #0a172d (16%) — practically indistinguishable, and very different from the initial Normal (#2667dc). Flipped parts on the inactive side are near-black (#000107) and easily lost.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/001-pcb-initial.png",
+    "shots/q4/dark/073-fit-allcopper.png",
+    "shots/q4/dark/074-dim-probe.png",
+    "shots/q4/dark/072-after-flip-allcopper.png",
+    "shots/vq4/dark/001-pcb.png",
+    "shots/vq4/dark/012-normal-after-focus.png",
+    "shots/vq4/dark/013-dim.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/vq4/dark/001-pcb.png",
+     "x": 900,
+     "y": 326,
+     "hex": "#fa1014",
+     "nearestToken": "--net-power",
+     "deltaE": 31.2
+    },
+    {
+     "file": "shots/vq4/dark/012-normal-after-focus.png",
+     "x": 900,
+     "y": 326,
+     "hex": "#3b0a0e",
+     "nearestToken": "--status-danger-soft@app",
+     "deltaE": 19.0
+    },
+    {
+     "file": "shots/vq4/dark/013-dim.png",
+     "x": 900,
+     "y": 326,
+     "hex": "#2c090d",
+     "nearestToken": "--status-danger-soft@app",
+     "deltaE": 12.3
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/pcb-visual-state.ts",
+    "line": 30,
+    "note": "mode = hasLayerFocus ? (solo ? 'solo' : 'dim') : 'normal' — displayMode 'normal' maps to 'dim'"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/pcb-visual-state.ts",
+    "line": 45,
+    "note": "0.16 vs 0.22"
+   }
+  ],
+  "suggestedFix": "Map displayMode 'normal' to visual mode 'normal' (opacity 1, maybe 0.85 for non-active copper) regardless of layer focus; keep 'dim' ~0.35 so the two are distinguishable.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:display-mode:normal-dims",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced with pixel probes: first-open Normal F.Cu trace #fa1014; after a layer focus (focus stuck on B.Cu) with 'Normal' pressed the same trace is #3b0a0e; with 'Dim' #2c090d, so Normal and Dim look almost the same. pcb-visual-state.ts:30-49 maps displayMode normal to mode 'dim' (0.22) whenever activeLayer focus exists vs dim 0.16.",
+   "evidence": [
+    "shots/vq4/dark/001-pcb.png",
+    "shots/vq4/dark/012-normal-after-focus.png",
+    "shots/vq4/dark/013-dim.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-014",
+  "area": "designer.pcb",
+  "title": "Deleting a footprint on PCB silently re-spawns it at an auto position overlapping another part",
+  "category": "data",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "Open 'Dual LED Blinker' → PCB",
+   "Click 'R3' in the Components panel (selects + centres R3 at X -6.480 Y -2.967)",
+   "Press Delete (hint says 'Del delete')",
+   "Click R3 in the Components panel again"
+  ],
+  "expected": "Either the footprint is removed (and the part shown as unplaced) or deletion is refused with a message ('R3 is driven by the schematic — delete it there'); never a silent move",
+  "actual": "POST pcb_delete_placement succeeds (rev 498→499), the schematic sync immediately creates a NEW placement for R3 at X -2.015 Y -3.052, rotation 0 — directly on top of R4's pads. No notice, Components list still shows 11 parts, selection cleared. Undo restores the old placement, but a user who doesn't notice ends up with overlapping parts / broken routing.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/076-delete-part.png",
+    "shots/q4/dark/077-r3-respawned.png",
+    "shots/vq4/dark/014-r3-respawned.png"
+   ],
+   "network": [
+    "POST /commands {pcb_delete_placement 84f4d01f} → ok rev 499",
+    "GET projection/pcb → R3 placement id 7cb794b2 positionMm {-2.015,-3.052}"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/backend/command-executor.ts",
+    "line": 1689,
+    "note": "pcb_delete_placement deletes the row"
+   },
+   {
+    "path": "src/modules/designer/backend/pcb/pcb-projection.ts",
+    "line": 206,
+    "note": "projection read calls syncPcbPlacementsFromSchematic, re-adding the part at an auto position"
+   },
+   {
+    "path": "src/modules/designer/backend/pcb/pcb-store.ts",
+    "line": 1870,
+    "note": "syncPcbPlacementsFromSchematic"
+   }
+  ],
+  "suggestedFix": "Refuse pcb_delete_placement for schematic-backed placements (or convert it into 'unplace' that keeps position/rotation in a parked area and shows a notice); in the UI, disable Delete for footprints and hint 'Delete R3 in the schematic'.",
+  "fixScope": "backend-needed",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:delete-footprint:respawn-overlap",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced on c2c58a19: selected R3 via the Components panel (84f4d01f at -6.480,-2.967), pressed Delete -> rev 533, R3 re-created as 7cb794b2 at (-2.015,-3.052) overlapping R4; still 11 components, no notice. Cmd+Z restored the original. Backend deletes the row (command-executor.ts:1689) and the projection read re-syncs missing placements from the schematic (pcb-projection.ts:206 -> pcb-store.ts:1870 syncPcbPlacementsFromSchematic).",
+   "evidence": [
+    "shots/vq4/dark/014-r3-respawned.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-015",
+  "knownRef": "K15",
+  "area": "designer.pcb",
+  "title": "PCB empty-canvas context menu advertises 'X' for route mode (real key R) and overflows the viewport bottom",
+  "category": "copy",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "PCB view, Select tool, nothing selected",
+   "Right-click empty canvas near the bottom (e.g. 700,760 at 1440x900)"
+  ],
+  "expected": "'Enter route mode  R'; menu fully inside the viewport",
+  "actual": "Item reads 'Enter route mode X' (X does nothing; R is the route hotkey). Menu is 210 px tall at y=720 → bottom 930 > 900 viewport; the last item 'Add comment' is clipped off-screen. The clamp estimates height from ENABLED items × 32 px, but disabled items ('Top layer (F.Cu)', 'Clear selection') also take space. 'Hide ratsnest' shows no ⇧B shortcut.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/079-ctx-empty.png",
+    "shots/vq4/dark/027-ctx-empty.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 4150,
+    "note": "shortcut: \"X\""
+   },
+   {
+    "path": "src/core/frontend/src/components/AppContextMenu.tsx",
+    "line": 17,
+    "note": "menuHeight = enabledCount * 32 + 12 ignores disabled items/separators"
+   }
+  ],
+  "suggestedFix": "shortcut 'R' (and '⇧B' for ratsnest); clamp using the rendered menu's getBoundingClientRect in a layout effect (or count all items + separators).",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:context-menu:route-key-and-overflow",
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: right-click at (700,760) shows 'Enter route mode  X'; menu top 720 bottom 930 > 900 viewport (last item clipped). AppContextMenu.tsx:17/:45-51 clamps using enabledCount*32+12 (disabled items 'Bottom layer (B.Cu)', 'Clear selection' ignored); shortcut literal 'X' at PcbCanvas.tsx:4149.",
+   "evidence": [
+    "shots/vq4/dark/027-ctx-empty.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-016",
+  "area": "designer.pcb",
+  "title": "Vias under a trace end can't be picked: click/right-click always hit the trace, and the Alt+click overlap picker closes the instant it opens",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "PCB, zoom in on any via with a trace ending on it (e.g. the via right of R5)",
+   "Click the middle of the via → status bar 'Trace · …'",
+   "Right-click the via → menu is 'Split and reroute from here / Delete trace / Add comment' (no via menu)",
+   "Alt+click the via → no chooser visible, the trace stays selected; repeating Alt+click never cycles to the via"
+  ],
+  "expected": "Via wins over track on a direct click (KiCad), or the Alt+click chooser stays open listing Trace + Via",
+  "actual": "hit order pad → trace → via, so any via with a connected trace is unreachable by click. The 'Disambiguation chooser' listbox is mounted and removed on the same click (MutationObserver saw it added once, it is gone 400 ms later): its window mousedown 'click-outside' listener is registered during the pointerdown that opened it and then fires for that same click's mousedown. Because the popup state is reset, 'Alt+click again to cycle' always re-picks candidate 0. Only workaround is F → Selection filter → untick Traces. Via right-click shows the trace menu even when traces are filtered out. Via and trace inspectors show only 'CONTENTS · Vias 1 / Traces 1' — no net, width, layer, diameter/drill, and nothing is editable.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/085-zoom-via.png",
+    "shots/q4/dark/088-via-selected.png",
+    "shots/q4/dark/089-ctx-via.png",
+    "shots/q4/dark/090-overlap-picker.png",
+    "shots/q4/dark/082-trace-inspector.png",
+    "shots/vq4/dark/015-zoom-via.png",
+    "shots/vq4/dark/016-ctx-via.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/pcb-hit.ts",
+    "line": 396,
+    "note": "Order: pad → trace → via → placement"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbDisambiguationPopup.tsx",
+    "line": 58,
+    "note": "window mousedown outside-close registered while the opening click is still in flight"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 3225,
+    "note": "Alt+click opens popup from the pointerdown handler"
+   }
+  ],
+  "suggestedFix": "Put vias before traces in the plain-click and context-menu hit order; in PcbDisambiguationPopup register the outside-close listener on the next tick (setTimeout 0) or ignore the event whose timeStamp ≤ open time; add real Trace/Via property sections (net, layer, width/diameter/drill, length) with editable width/size.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "designer.pcb:hit-test:via-unpickable",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: clicking the centre of a via with a trace ending on it selects 'Trace · 51272803:15620728'; right-click shows the trace menu (Split and reroute / Delete trace / Add comment); Alt+click mounts the 'Disambiguation chooser' listbox and removes it 6 ms later (MutationObserver log added/removed). Hit order pad->trace->via (pcb-hit.ts:396); popup's window mousedown outside-close (PcbDisambiguationPopup.tsx:58-66) catches the same click that opened it from pointerdown (PcbCanvas.tsx:3225).",
+   "evidence": [
+    "shots/vq4/dark/015-zoom-via.png",
+    "shots/vq4/dark/016-ctx-via.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-017",
+  "area": "designer.pcb",
+  "title": "Raw internal net/item IDs shown to users (status bar 'Trace · 51272803:15620728', DRC list 'trace 4f0646 ↔ net -10160 ↔ net -10277')",
+  "category": "copy",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "PCB: click a trace/via on a net without a schematic name → status bar shows 'Trace · 51272803:15620728' / 'Via · 51272803:15620728'",
+   "Open the DRC dock tab: rows read 'trace 4f0646 ↔ trace a6aea0', 'trace 1ff5f8 ↔ R4.1 ↔ net -10160 ↔ net -10277'"
+  ],
+  "expected": "Human names: 'Trace · Net_7 · F.Cu · 0.25 mm', 'Track (Net_3) ↔ R4 pad 1 (GND)'; unnamed nets get a stable readable name ('Net-(R4-Pad1)' like KiCad)",
+  "actual": "Coordinate-derived net ids and 6-char entity hashes are the primary text of violation rows and the status-bar selection summary; the severity filter buttons are named only by their counts ('13', '6', '0').",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/042-drc-dock.png",
+    "shots/q4/dark/090-overlap-picker.png",
+    "shots/vq4/dark/029-drc-dock.png",
+    "shots/vq4/dark/016-ctx-via.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 5503,
+    "note": "netLabel falls back to raw netId"
+   }
+  ],
+  "suggestedFix": "Generate display names for anonymous nets (from the first pad: 'Net-(R4-1)') in the projection's netNames; format DRC item refs via a shared describeItem() (kind + ref/pad + net name); give severity toggles aria-labels 'Errors 13' etc.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:labels:raw-net-ids",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: status bar 'Trace · -117449:10160000' / 'Trace · 51272803:15620728'; DRC dock rows 'trace 4f0646 ↔ net 508000 ↔ net 512728 ↔ Net_8 ↔ Net_11' with message 'unassigned trace bridges nets 5080000:32000000, 51272803:15620728…'; severity toggles named '32', '74', '0'. netLabel falls back to raw netId (PcbCanvas.tsx:5503).",
+   "evidence": [
+    "shots/vq4/dark/029-drc-dock.png",
+    "shots/vq4/dark/016-ctx-via.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-018",
+  "knownRef": "K18",
+  "area": "designer.pcb",
+  "title": "Cmd/Ctrl+A on PCB selects nothing on the board and instead text-highlights the entire app chrome",
+  "category": "keyboard",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "PCB view, hover canvas, nothing focused",
+   "Press Cmd+A (or Ctrl+A)"
+  ],
+  "expected": "All board items selected (schematic editor supports Cmd+A); app chrome is user-select:none",
+  "actual": "Status bar stays 'No selection'; the browser's native select-all highlights every label in the rail, tabs, layers panel, component list and properties (window.getSelection() = 'Home Designer Library …'). Related: pressing Esc to close any canvas context menu also clears the current selection (right-click U1 → Esc → 'No selection').",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/092-cmd-a.png",
+    "shots/q4/dark/091-ctx-placement.png",
+    "shots/vq4/dark/028-cmd-a.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 4340,
+    "note": "keymap has no Cmd/Ctrl+A branch"
+   }
+  ],
+  "suggestedFix": "Add Cmd/Ctrl+A → select all visible, unlocked items passing the selection filter (preventDefault); add `select-none` to the designer shell (keep text selectable in inputs); stopPropagation of Esc in AppContextMenu so the canvas doesn't also clear selection.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:keymap:select-all",
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: Cmd+A over the PCB leaves 'No selection' and the browser selection becomes 'Home Designer Library Docs Assistant Schem PCB 3D BOM DRC Local…'. No Cmd/Ctrl+A branch in the keymap (PcbCanvas.tsx:4340-5049). Related sub-point confirmed: Esc on a canvas context menu also cleared the selection.",
+   "evidence": [
+    "shots/vq4/dark/028-cmd-a.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-019",
+  "knownRef": "K12",
+  "area": "designer.pcb",
+  "title": "PCB hotkeys fire while typing in textareas: Assistant/comment text is mangled and Backspace deletes the selected board item",
+  "category": "keyboard",
+  "severity": "S1",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "Open 'Dual LED Blinker' → PCB view → right dock 'Assistant' tab",
+   "Click the 'Ask about this design…' composer and type 'rotate test' → composer shows 'ae es' (r/o/t swallowed; each toggles Route/Board/Text tools behind the scenes)",
+   "Click a trace on the board (status 'Trace · GND'), click back into the composer, press Backspace to fix a typo",
+   "Same with the PCB comment composer (Add → Comment, click board, type 'rotate test' → 'ae es')",
+   "Also in the Properties inspector: select a free pad → focus its 'Shape' <select> and press R → Route tool activates (Route (R) aria-pressed=true); focus its 'Layer' <select> and press Backspace → the pad is deleted (rev 27→28)"
+  ],
+  "expected": "Keys typed into any text field (textarea, contenteditable, select) never reach the PCB keymap",
+  "actual": "Text is silently corrupted (letters r,o,t,h,z,k,p,m,u,f,v,w,b… are preventDefault-ed and executed as tool hotkeys). Backspace in the composer did NOT delete a character but deleted the selected trace (projection traces 22 → 21, rev 505→506, selection cleared) — invisible data loss while the user is typing a chat message. F would flip a selected part, R rotate it, Delete delete it. Same in the Properties dock: Backspace in the pad 'Layer' <select> deletes the pad; R in the 'Shape' <select> enters Route mode.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/094-comment-typing.png",
+    "shots/q4/dark/096-assistant-typing.png",
+    "shots/q4/dark/097-backspace-in-composer-deletes-trace.png",
+    "shots/q4/dark/156-r-in-select.png",
+    "shots/vq4/dark/005-backspace-composer-deletes-trace.png",
+    "shots/vq4/dark/035-backspace-select-deletes-pad.png"
+   ],
+   "network": [
+    "POST /designs/c2c58a19/commands (trace delete) fired while focus was in TEXTAREA 'Ask about this design…'"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 4342,
+    "note": "if (event.target instanceof HTMLInputElement) return; — textarea/select/contenteditable not excluded"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 5012,
+    "note": "Delete/Backspace deletes selection"
+   }
+  ],
+  "suggestedFix": "Replace the guard with a shared isEditableTarget(e.target) (input, textarea, select, [contenteditable], role=textbox, and anything inside a dialog/dock that isn't the canvas) and apply it to every window keydown listener in the designer (PcbCanvas onKey + onShiftKey, SchematicCanvas, Space Cmd+K/W). Better: attach the keymap to the canvas container with focus-within semantics.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:keymap:fires-in-textarea",
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced (S1 kept): with a trace selected, typing 'rotate' in the dock Assistant composer produced 'ae'; Backspace in the TEXTAREA deleted the selected trace (traces 22->21, rev 520->521) and left the text unchanged. In the free-pad inspector R in the 'Shape' <select> armed Route, and Backspace in the 'Layer' <select> deleted the pad (freePads 1->0, rev 39->40). Both restored with Cmd+Z. Guard at PcbCanvas.tsx:4342 only exempts HTMLInputElement. Same root cause as Q5-024 and Q8-023 in other agents' files (cross-file dedupe candidate).",
+   "evidence": [
+    "shots/vq4/dark/005-backspace-composer-deletes-trace.png",
+    "shots/vq4/dark/035-backspace-select-deletes-pad.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-020",
+  "knownRef": "K14",
+  "area": "designer.pcb",
+  "title": "PCB Add menu advertises 'Comment  C' but C does nothing, and Esc does not exit the Comment tool",
+  "category": "keyboard",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "PCB view, hover canvas, press C → nothing (Add button stays 'Add')",
+   "Add ▾ → Comment → toolbar shows 'Comment' pressed",
+   "Press Esc (focus on body) → tool stays 'Comment'; only re-picking Add ▾ → Comment turns it off",
+   "After placing a pin the composer is not focused (activeElement BODY) so typing goes to the board hotkeys"
+  ],
+  "expected": "C toggles the comment tool (as on schematic), Esc exits it, composer autofocuses",
+  "actual": "No C handler in the PCB keymap; comment mode is not cleared by Esc; composer opens without focus.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/093-pcb-comment.png",
+    "shots/q4/dark/098-state.png",
+    "shots/vq4/dark/026-add-menu-after-esc.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx",
+    "line": 463,
+    "note": "hotkey: 'C' advertised"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 4340,
+    "note": "no 'c' branch; Esc branch does not call onToggleCommentMode"
+   }
+  ],
+  "suggestedFix": "Add C (no modifiers) → props.onToggleCommentMode(); on Escape with commentMode → exit; autoFocus the composer textarea.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:comment:c-key-esc",
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: C over the canvas does nothing (Add stays 'Add'); after Add -> Comment, Esc with body focus leaves 'Comment' pressed. No 'c' branch and the Escape branch never touches comment mode (PcbCanvas.tsx:4340-5049). PLAN §9 lists the Comment (C) hotkey as a known follow-up; still a user-visible defect. Overlaps Q5-027 (K14) and Q5-025 (composer autofocus) in other files.",
+   "evidence": [
+    "shots/vq4/dark/026-add-menu-after-esc.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-021",
+  "area": "designer.pcb",
+  "title": "Design rules 'Save & re-run DRC' opened from Board properties saves but never re-runs DRC",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "PCB → Properties (nothing selected) → Board → 'Edit rules…'",
+   "Change Minimums → Trace width 0.2 → 0.15",
+   "Click 'Save & re-run DRC'"
+  ],
+  "expected": "Rules saved and a DRC run starts (progress in DRC tab), counts update",
+  "actual": "Rules are saved (Board panel shows Min track 0.15) but no POST …/drc/run is made; GET /designs still reports drcStatus ranAtRevision 449, stale:true; toolbar/dock/status keep the old 13/19/19. Only the DRC view's 'Edit rules' path re-runs.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/099-rules-dialog.png",
+    "shots/q4/dark/102-rules-saved-drc-done.png",
+    "shots/vq4/dark/009-rules-dialog.png"
+   ],
+   "network": [
+    "POST /designs/c2c58a19/commands (pcb_set_design_rules) → ok; no /drc request follows"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 5556,
+    "note": "handleRulesSaved: refresh + refreshHistory only"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerDrcView.tsx",
+    "line": 175,
+    "note": "DRC view's onSaved re-runs"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/PcbDesignRulesDialog.tsx",
+    "line": 558,
+    "note": "label 'Save & re-run DRC'"
+   }
+  ],
+  "suggestedFix": "Call useDrcStore startRun() in PcbCanvas handleRulesSaved (or move the re-run into usePcbDesignRulesDialog so every entry point behaves the same).",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:rules-dialog:no-drc-rerun",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: Board panel -> Edit rules… -> 'Save & re-run DRC' sent POST /commands + GET projection + GET history only; no DRC run request; GET /designs drcStatus stayed ranAtRevision 527, stale:true (rev 528). PcbCanvas.tsx:5555-5558 handleRulesSaved only refreshes; the DRC view's handler (DesignerDrcView.tsx:175-181) re-runs.",
+   "evidence": [
+    "shots/vq4/dark/009-rules-dialog.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-022",
+  "area": "designer.pcb",
+  "title": "Design rules dialog: no Esc, no focus move/trap, unnamed dialog and selects, and PCB hotkeys fire from its <select>s",
+  "category": "a11y",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "Board properties → 'Edit rules…'",
+   "Check document.activeElement (still the 'Edit rules…' button behind the modal)",
+   "Press Esc with focus on an input or the dialog body → dialog stays open",
+   "Focus a Net assignments <select> (Auto) and press R then T"
+  ],
+  "expected": "Focus moves into the dialog and is trapped; Esc = Cancel; role=dialog has aria-labelledby 'Design rules'; selects labelled by their net; keys inside the dialog never reach the canvas",
+  "actual": "Focus stays on the trigger; Esc does nothing; dialog has no accessible name; 7 net-assignment selects are nameless (census); pressing R/T in a select armed Route and then the Text tool behind the modal (toolbar showed 'Text'). Numeric inputs are 21 px and centre-aligned (kit 22 px, right-aligned elsewhere).",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/099-rules-dialog.png",
+    "shots/q4/dark/100-rules-select-keys.png",
+    "shots/vq4/dark/009-rules-dialog.png"
+   ],
+   "census": "census/designer.pcb-rules-dialog-dark-1440.json"
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/PcbDesignRulesDialog.tsx",
+    "line": 284,
+    "note": "role=dialog aria-modal, no labelledby, no key handling"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 4342,
+    "note": "only HTMLInputElement ignored"
+   }
+  ],
+  "suggestedFix": "Render via the kit Dialog (focus trap, Esc, labelledby); aria-label each select `${net} net class`; see Q4-019 for the keymap guard.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:rules-dialog:a11y",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: after opening Design rules focus stays on 'Edit rules…' (BUTTON), Esc does not close, dialog has no aria-label/labelledby, all 8 selects have no accessible name; R pressed inside a net-assignment <select> armed Route behind the modal. The hotkey leak shares Q4-019's root cause; the dialog a11y part is distinct.",
+   "evidence": [
+    "shots/vq4/dark/009-rules-dialog.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-023",
+  "area": "designer.pcb",
+  "title": "DRC 'out of date' banner is inverted after PCB edits (missing while stale, shown right after a fresh run); tab revision frozen",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19, 3196d811",
+  "repro": [
+   "Open 'Dual LED Blinker' (tab shows r449, last DRC at rev 449)",
+   "On PCB add a zone / route a trace (server revision → 505, GET /designs drcStatus.stale:true)",
+   "Open DRC dock tab → no stale banner, old 13/6 results presented as current",
+   "Click 'Run DRC' → server drcStatus {ranAtRevision 508, stale:false}",
+   "Dock now shows 'The board changed since this DRC ran — results may be out of date. Re-run DRC.'",
+   "Reproduced on DRC Demo (3196d811): Fit to parts + Cmd+Z (rev 13) → DRC dock → Run DRC → banner 'The board changed since this DRC ran — results may be out of date. Re-run DRC.' appears immediately although GET /designs drcStatus = {ranAtRevision 13, stale:false}; design tab still reads 'r11'"
+  ],
+  "expected": "Banner appears exactly when report.revision ≠ current PCB revision; design tab shows the current revision",
+  "actual": "DesignerDrcView compares the report against Space's state.projection.revision, which is never refreshed by PCB commands (still 449). So stale results look current and fresh results look stale; the design tab label stays 'r449' through 60 PCB revisions. The banner is also flush against the toolbar row with no padding.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/042-drc-dock.png",
+    "shots/q4/dark/104-drc-done.png",
+    "shots/q4/dark/189-drc-demo-run.png",
+    "shots/vq4/dark/007-drc-dock-before-run.png",
+    "shots/vq4/dark/008-drc-dock-after-run-banner.png",
+    "shots/vq4/dark/032-drc-demo-stale-no-banner.png"
+   ],
+   "network": [
+    "GET /api/modules/designer/designs → c2c58a19 revision 508, drcStatus.ranAtRevision 508 stale false"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerDrcView.tsx",
+    "line": 162,
+    "note": "stale = report.revision !== revision"
+   },
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 1495,
+    "note": "revision={state.projection?.revision} — schematic projection state, not bumped by PCB commands"
+   },
+   {
+    "path": "src/modules/designer/frontend/hooks/useDesignerWorkspace.ts",
+    "line": 527,
+    "note": "PCB commands update only projectionRef.revision, not state"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignTabs.tsx",
+    "line": 252,
+    "note": "tab r{revision} from design list, not refreshed"
+   }
+  ],
+  "suggestedFix": "Pass the live PCB revision (usePcbWorkspace projection.revision, or a small design-revision store updated from every CommandResult) to DesignerDrcView at Space.tsx:1485/1495/1557 instead of state.projection?.revision; refresh the design list entry (or DesignTabs label) from the same source.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.drc:stale-banner:wrong-revision-source",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced both halves. c2c58a19: after Run DRC the server reports drcStatus {ranAtRevision 527, stale:false} but the dock shows 'The board changed since this DRC ran…', and the tab label still reads r520. 3196d811: after Fit to parts + undo (rev 15) the server says stale:true (ranAtRevision 13) but the DRC dock shows no banner. DesignerDrcView.tsx:162 compares against Space state.projection.revision (Space.tsx:1485/1495/1557), which PCB commands never update (they only update projectionRef, useDesignerWorkspace.ts:527-531).",
+   "evidence": [
+    "shots/vq4/dark/007-drc-dock-before-run.png",
+    "shots/vq4/dark/008-drc-dock-after-run-banner.png",
+    "shots/vq4/dark/032-drc-demo-stale-no-banner.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-024",
+  "knownRef": "K30",
+  "area": "designer.pcb",
+  "title": "Export dialog offers a checked 'Include inner copper layers (4-layer boards only)' on a 2-layer board; ZIP named by UUID; sloppy warning copy",
+  "category": "consistency",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "c2c58a19",
+  "repro": [
+   "'Dual LED Blinker' (Copper layers 2) → PCB → 'Export…'",
+   "Read the options and the warning box; tick 'Export anyway (ignore DRC errors)' → 'Export anyway'"
+  ],
+  "expected": "Inner-copper option hidden/disabled for 2-layer boards; ZIP named after the design ('Dual_LED_Blinker-r508-gerbers.zip'); clean list formatting",
+  "actual": "Checkbox enabled and checked (no effect: ZIP has 14 files, no In*.gbr). File name 'openpcb-c2c58a19-bef5-488a-bfa4-c6b133ea.zip' and every member prefixed with the truncated UUID. Warning text: 'C1, D1, D2, J1, R1,R2, R3, R4, R5,R6, ….' (inconsistent comma spacing, ellipsis + period). Dialog closes silently after the download with no confirmation. Download itself works (Gerber X2 F/B Cu, Mask, Paste, Silkscreen, Edge_Cuts, PTH/NPTH drl, gbrjob, BOM, PnP).",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/110-export-dialog.png",
+    "shots/q4/dark/111-export-after-download.png",
+    "shots/vq4/dark/006-keys-behind-export.png",
+    "shots/vq4/light/005-export-dialog.png"
+   ],
+   "network": [
+    "download openpcb-c2c58a19-bef5-488a-bfa4-c6b133ea.zip (14 files, 26 KB)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbExportDialog.tsx",
+    "line": 259,
+    "note": "inner copper checkbox not gated on layerCount"
+   }
+  ],
+  "suggestedFix": "Render the inner-copper option only when layerCount ≥ 4; slugify the design name for the ZIP/member prefix; join refdes groups with ', ' and drop the trailing period; show a brief 'Exported 14 files' toast/notice.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:export:inner-copper-2layer",
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced (dark+light): on the 2-layer Dual LED Blinker, 'Include inner copper layers (4-layer boards only)' is enabled and checked; file line '14 files · openpcb-c2c58a19-bef5-488a-bfa4-c6b133ea.zip'; warning 'C1, D1, D2, J1, R1,R2, R3, R4, R5,R6, ….'. Checkbox not gated on layerCount (PcbExportDialog.tsx:259-266). The silent close after download was not re-tested.",
+   "evidence": [
+    "shots/vq4/dark/006-keys-behind-export.png",
+    "shots/vq4/light/005-export-dialog.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-025",
+  "area": "designer.pcb",
+  "title": "Layer visibility / active-layer / view clicks are recorded as undoable document edits (revision bump, DRC stale) and their undo is a silent no-op",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "designId": "5909d519",
+  "repro": [
+   "New design 'QA-q4-board' → PCB (rev 0, undoDepth 0, Undo disabled)",
+   "Click the eye on 'Top Overlay' → rev 1, undoDepth 1, Undo enabled",
+   "Click layer tab 'Bottom Copper' → rev 2, undoDepth 2",
+   "Press Cmd+Z twice"
+  ],
+  "expected": "View state (visibility, active layer, view side, opacity, preset, display mode) is not part of the design undo history and doesn't bump the design revision",
+  "actual": "Each view click is a design command (pcb_set_visible_layers / pcb_set_active_layer / pcb_set_view_state), bumps the revision (Dual LED Blinker went r449→r510 in one session, mostly from view clicks; a single preset click = 4 revisions), marks DRC stale and pushes an undo entry. Cmd+Z then 'undoes' them with no visible change (F.SilkS stays hidden, active layer stays B.Cu) — two presses consumed, redoDepth 2. With the 200-entry cap, layer toggling pushes real edits out of the undo history.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/115-new-pcb.png",
+    "shots/q4/dark/116-undo-view-state.png",
+    "shots/vq4/dark/006-keys-behind-export.png"
+   ],
+   "network": [
+    "GET /designs/5909d519/history → after eye+tab clicks {canUndo:true, undoDepth:2}; after 2× Cmd+Z {undoDepth:0, redoDepth:2}, projection visibleLayers/activeLayer unchanged",
+    "c2c58a19 rev 524 activeLayer B.Cu → Cmd+Z → rev 525 activeLayer B.Cu (no-op undo) → Cmd+Z → rev 526 freeHoles 0→1",
+    "layer tab click 'Top Copper' → rev 526→527"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 6580,
+    "note": "comment claims view state is 'durable but non-undoable'"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/usePcbWorkspace.ts",
+    "line": 368,
+    "note": "setActiveLayer dispatches a design command"
+   }
+  ],
+  "suggestedFix": "Persist view state outside the command log (per-user view-state endpoint or local store), or mark these command types non-undoable and non-revisioning in the command executor.",
+  "fixScope": "backend-needed",
+  "estimate": "M",
+  "dedupeKey": "designer.pcb:view-state:undo-pollution",
+  "knownRef": null,
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced on c2c58a19: pressing B behind a dialog dispatched pcb_set_active_layer (rev 523->524); the next Cmd+Z bumped rev 524->525 with activeLayer still B.Cu (undo is a no-op), and only the second Cmd+Z restored the deleted hole. Clicking the 'Top Copper' layer tab bumped rev 526->527. Every view click also marks DRC stale (drcStatus is compared by revision). The PcbCanvas.tsx:6580 comment says view state is meant to be 'durable but non-undoable'.",
+   "evidence": [
+    "shots/vq4/dark/006-keys-behind-export.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-026",
+  "area": "designer.pcb",
+  "title": "Board panel shows un-applied typed size as the board's real size after 'Done' (e.g. 'Circle 80 × 60' for a 60 mm circle)",
+  "category": "data",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "5909d519",
+  "repro": [
+   "New design QA-q4-board → PCB, nothing selected → Properties → Board → Edit",
+   "Board is a 60 mm circle (projection outline kind=circle 60×60)",
+   "Click 'Rect', type Width 80, do NOT click Apply, click 'Done'",
+   "Read the read-only OUTLINE section"
+  ],
+  "expected": "Read-only view reflects the persisted outline (Circle, Ø60) and un-applied edits are discarded (or Done applies them / asks)",
+  "actual": "Read-only view shows 'Shape Circle · Width 80 · Height 60' while the canvas and backend still hold a 60×60 circle; same with the earlier rect case (shot 118: panel 'Rectangle 60 × 30', board 50 × 30). The stale buffer stays until the outline next changes, so the user believes the board is resized.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/118-done-without-apply.png",
+    "shots/q4/dark/121-done-unapplied-rect80.png",
+    "shots/vq4/dark/043-done-unapplied.png"
+   ],
+   "network": [
+    "GET /projection/pcb → board.outline {kind:circle,widthMm:60,heightMm:60} (rev 7, unchanged)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbBoardPanel.tsx",
+    "line": 418,
+    "note": "read-only Width/Height render widthText/heightText (edit buffers)"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 1170,
+    "note": "buffers only re-seeded when projection outline changes"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 5594,
+    "note": "onToggleEditMode does not reset buffers"
+   }
+  ],
+  "suggestedFix": "Render the read-only rows from currentOutline.widthMm/heightMm (roundDimMm), and on Done (onToggleEditMode false) re-seed widthText/heightText from the persisted outline; optionally prompt 'Apply changes?' when buffers differ.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:board-panel:done-shows-unapplied-size",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced on DRC Demo (rect 50×30): Edit -> Width 80 (no Apply) -> Done: the read-only panel shows 'Rectangle · Width 80 · Height 30' while the projection outline is still rect 50×30 (rev 15). Read-only rows render widthText/heightText edit buffers (PcbBoardPanel.tsx:418-423). The buffer was reset afterwards (no mutation).",
+   "evidence": [
+    "shots/vq4/dark/043-done-unapplied.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-027",
+  "area": "designer.pcb",
+  "title": "Board-outline modals (Fillet/Chamfer corner, Set vertex position, Set edge length, Import DXF) lack dialog semantics; Esc only works from the input (DXF: never)",
+  "category": "a11y",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "5909d519",
+  "repro": [
+   "QA-q4-board → PCB → Board panel Edit (custom outline) → right-click a corner → 'Fillet corner…' (or 'Chamfer corner…', 'Set position…'; right-click an edge → 'Set length…')",
+   "Inspect DOM: no role=dialog / aria-modal / aria-labelledby; click the dialog body or a button, then press Esc → nothing",
+   "Board panel → '⭳ Import DXF…' → choose board-rect.dxf → press Esc → dialog stays open (activeElement BODY)",
+   "Compare titles: 'Fillet Corner' / 'Chamfer Corner' (CSS capitalize) vs 'Set vertex position', 'Set edge length', 'Import board outline from DXF'"
+  ],
+  "expected": "Kit Dialog: role=dialog + label, focus trapped and returned, Esc closes from anywhere, sentence-case titles, kit radio/inputs (22px)",
+  "actual": "Hand-rolled fixed overlays (bg-black/40, shadow-xl); Esc handled only in the input onKeyDown (Corner/Edge) or not at all (DXF); focus not trapped; Title Case only on fillet/chamfer; inputs are 32px (h-8) with uppercase 'MM' suffix; DXF loop picker is a native radio rendered in browser-default blue (#99c8ff, off-token). Enter/validation themselves work ('Value is too large for this corner.').",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/135-fillet-modal.png",
+    "shots/q4/dark/136-fillet-applied.png",
+    "shots/q4/dark/138-set-position-modal.png",
+    "shots/q4/dark/139-edge-dim-modal.png",
+    "shots/q4/dark/146-dxf-inspected.png",
+    "shots/vq4/dark/041-fillet-modal.png",
+    "shots/vq4/dark/042-fillet-after-esc.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/q4/dark/146-dxf-inspected.png",
+     "x": 536,
+     "y": 492,
+     "hex": "#99c8ff",
+     "nearestToken": "--status-info",
+     "deltaE": 12.2
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/CornerOpModal.tsx",
+    "line": 50,
+    "note": "fixed overlay, no role/aria, capitalize title, Esc only on input"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/EdgeDimModal.tsx",
+    "line": 101,
+    "note": "same pattern, h-8 inputs"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/import/DxfImportModal.tsx",
+    "line": 96,
+    "note": "no Esc handler, native radio line 168"
+   }
+  ],
+  "suggestedFix": "Wrap all three in the shared kit Dialog (role=dialog, aria-labelledby, focus trap, Esc on the dialog root); drop 'capitalize' and use 'Fillet corner'/'Chamfer corner'; use kit Input (22px) and kit Radio (or accent-[var(--selection)]).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:outline-modals:no-dialog-semantics-esc",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: right-click board corner -> 'Fillet corner…' opens a fixed overlay with no role=dialog (0 dialogs in DOM), the title is lower-case 'fillet corner' with CSS capitalize, the input is 32 px (h-8); after blurring the input, Esc leaves the modal open (h2 still present). CornerOpModal.tsx:50-78 only handles Esc in the input onKeyDown; EdgeDimModal.tsx:89 does the same; DxfImportModal.tsx has no Escape handler and a native radio (:169).",
+   "evidence": [
+    "shots/vq4/dark/041-fillet-modal.png",
+    "shots/vq4/dark/042-fillet-after-esc.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-028",
+  "area": "designer.pcb",
+  "title": "'Fit to parts' ignores free pads/holes (cuts them off the board) and on an empty board silently resizes to a hard-coded 80 × 56 mm",
+  "category": "data",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "5909d519, 3196d811",
+  "repro": [
+   "QA-q4-board (0 components) → PCB → Board panel → Edit",
+   "Board is a rounded rect 80 × 60",
+   "Click 'Fit to parts'",
+   "DRC Demo (3196d811, 50×30 board with 2 free pads, 3 free holes, 5 traces, 1 via) → PCB → Board panel → 'Fit to parts'"
+  ],
+  "expected": "Button disabled (or a notice 'No parts to fit') when there is nothing on the board; free holes/pads/zones/text also counted when present",
+  "actual": "Board silently becomes 80 × 56 (rev 8 → 9): fallbackBoardBoundsFromProjection returns a fixed {-40,-28,40,28} box when there are no placements/traces/vias. The same helper ignores free holes, free pads, zones, keepouts and overlay text, so fitting a board that has them cuts them off. On DRC Demo the board shrank to 40.6 × 14 (rev 11→12) and the panel immediately warned '2 items outside outline' — the free pad at (-15, 8) and the hole at (16, 8) were left outside the new board. Undone with Cmd+Z.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/124-fit-to-parts-empty.png",
+    "shots/q4/dark/188-drc-demo-fit-to-parts.png",
+    "shots/vq4/dark/030-drc-demo-pcb.png",
+    "shots/vq4/dark/031-drc-demo-fit-to-parts.png"
+   ],
+   "network": [
+    "projection outline before {roundrect 80×60 r30} → after {roundrect 80×56 r30}"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/usePcbWorkspace.ts",
+    "line": 229,
+    "note": "fitBoardToParts uses 3D fallback bounds helper"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/primitives/geometry-utils.ts",
+    "line": 427,
+    "note": "hard-coded 80×56 fallback; only placements/traces/vias considered"
+   }
+  ],
+  "suggestedFix": "In PcbBoardPanel disable 'Fit to parts' when placements+traces+vias+freeHoles+freePads+zones+texts are all empty (title 'Nothing on the board to fit'); give fitBoardToParts its own bounds helper that includes every board item and returns null when empty.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:board-panel:fit-to-parts-empty",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced on DRC Demo: 'Fit to parts' shrank the board 50×30 -> 40.6×14 (rev 14); Board panel warned '2 items outside outline' (free hole and pad at the top left and top right left outside). Cmd+Z restored 50×30. fitBoardToParts (usePcbWorkspace.ts:229) uses fallbackBoardBoundsFromProjection (geometry-utils.ts:415-437), which reads only placements/traces/vias and returns a hard-coded ±40×±28 box when empty (code-verified for the empty-board case).",
+   "evidence": [
+    "shots/vq4/dark/030-drc-demo-pcb.png",
+    "shots/vq4/dark/031-drc-demo-fit-to-parts.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-029",
+  "area": "designer.pcb",
+  "title": "Board panel buttons use raw Unicode glyphs ('✏ Draw custom shape', '⭳ Import DXF…'); ⭳ renders as a tofu box",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "5909d519",
+  "repro": [
+   "PCB, nothing selected → Properties → Board → Edit",
+   "Look at the dashed 'Draw custom shape' / 'Import DXF…' buttons (and 'Redraw shape' for a custom outline)"
+  ],
+  "expected": "Lucide icons (Pencil / FileInput) at 12px like every other kit button",
+  "actual": "Text glyphs '✏' and '⭳' are embedded in the label; U+2B73 has no glyph in the UI font and renders as an empty box ('▯ Import DXF…'); the glyphs also end up in the accessible names ('⭳ Import DXF…'). Dashed-border button style is unique to this panel.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/120-shape-Oval.png",
+    "shots/q4/dark/134-ctx-corner.png",
+    "shots/vq4/dark/040-board-edit.png",
+    "shots/vq4/dark/040-board-edit-crop.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbBoardPanel.tsx",
+    "line": 309,
+    "note": "✏ Draw custom shape / ⭳ Import DXF… (also 228, 236, 317)"
+   }
+  ],
+  "suggestedFix": "Replace with kit Button variant=secondary size=sm icon={<Pencil/>} / icon={<FileUp/>}; remove glyphs from labels.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:board-panel:unicode-glyph-icons",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: the Board panel buttons are named '✏ Redraw shape' / '⭳ Import DXF…' / '✏ Draw custom shape'; U+2B73 renders as a tofu box. PcbBoardPanel.tsx:228, 236, 309, 317. e2e locators use /Import DXF/ and /Draw custom shape/ regexes, so swapping the glyphs for Lucide icons keeps the D9 names intact.",
+   "evidence": [
+    "shots/vq4/dark/040-board-edit.png",
+    "shots/vq4/dark/040-board-edit-crop.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-030",
+  "knownRef": "K02",
+  "area": "designer.pcb",
+  "title": "PCB Text tool asks for the label with a native window.prompt('Overlay text:')",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "5909d519",
+  "repro": [
+   "QA-q4-board → PCB → press T (or Add ▾ → Text)",
+   "Click on the board"
+  ],
+  "expected": "Inline in-canvas text editor or kit dialog (Electron blocks/does not support window.prompt; sandboxed renderer returns null)",
+  "actual": "Browser-native prompt 'Overlay text:' blocks the page (the click's mouseup hangs until the dialog is handled); dialog spy: {prompt:1, log:['prompt: Overlay text:']}. In Electron window.prompt is unsupported, so the Text tool cannot place anything there. Any add failure is swallowed (.catch(() => undefined)).",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/157-text-tool.png",
+    "shots/q4/dark/158-text-placed.png",
+    "shots/vq4/dark/033-qa-board.png"
+   ],
+   "console": [
+    "__qaDialogCalls = {\"prompt\":1,\"log\":[\"prompt: Overlay text:\"]}",
+    "__qaDialogCalls.log includes 'prompt: Overlay text:'"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 2996,
+    "note": "window.prompt(\"Overlay text:\", \"\")"
+   }
+  ],
+  "suggestedFix": "Place the text immediately with a placeholder ('TEXT') and focus the Properties 'Text' input (already exists in the text inspector), or open a small kit popover at the click point with an input + Enter/Esc; surface add failures via the workspace error strip.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:text-tool:native-prompt",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: T then a board click opens native prompt 'Overlay text:' on pointerdown; the playwright mousedown blocked until the dialog was dismissed; spy log 'prompt: Overlay text:'. PcbCanvas.tsx:2996. Electron has no window.prompt and there is no shim, so the Text tool cannot place text in the desktop app.",
+   "evidence": [
+    "shots/vq4/dark/033-qa-board.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-031",
+  "area": "designer.pcb",
+  "title": "Text tool drops text onto a hidden silkscreen layer with no feedback — placed text is invisible",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "5909d519",
+  "repro": [
+   "QA-q4-board → PCB with 'Top Overlay F.SilkS' hidden (eye off; default preset hides overlay here)",
+   "Press T, click the board, enter 'QA text' in the prompt",
+   "Look at the canvas; then turn on the Top Overlay eye"
+  ],
+  "expected": "Tool places on a visible layer, or auto-reveals the target layer, or shows a notice 'Placed on hidden layer F.SilkS'",
+  "actual": "Projection gains overlayText {layer:'F.SilkS', text:'QA text'} (rev 30) but nothing appears on the canvas and no notice/selection is shown; only after toggling the layer eye does the text appear. Layer is always F.SilkS/B.SilkS by view side, independent of the active layer (B.Cu here) or visibility.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/158-text-placed.png",
+    "shots/q4/dark/159-text-visible.png",
+    "shots/vq4/dark/033-qa-board.png"
+   ],
+   "network": [
+    "GET /projection/pcb → overlayTexts[0].layer 'F.SilkS'; board.visibleLayers lacks F.SilkS"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 2998,
+    "note": "textLayer = mirrorActive ? B.SilkS : F.SilkS, visibility not checked"
+   }
+  ],
+  "suggestedFix": "After addOverlayText, if the target layer is not in visibleLayers, add it (setVisibleLayers) or show a pcb-tool-notice 'Text placed on hidden layer Top Overlay — Show'; also select the new text so the inspector opens.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:text-tool:hidden-layer",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Confirmed from state and code: QA-q4-board has overlayTexts[0] {layer:'F.SilkS', text:'QA text rho'} while board.visibleLayers lacks F.SilkS, and the canvas shows no text. PcbCanvas.tsx:2997-3001 picks F.SilkS/B.SilkS by view side only, with no visibility check and no selection or notice.",
+   "evidence": [
+    "shots/vq4/dark/033-qa-board.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-032",
+  "area": "designer.pcb",
+  "title": "Free-hole inspector shows X/Y as raw 15-digit floats and read-only, although holes can be dragged",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "5909d519",
+  "repro": [
+   "QA-q4-board → PCB → press H, click the board",
+   "Select the hole",
+   "Read Properties → HOLE; then drag the hole on the canvas"
+  ],
+  "expected": "X/Y formatted to 3 decimals (like the status bar) and editable like other numeric fields; free pads also expose X/Y",
+  "actual": "'X 11.92982456140351', 'Y 15.958646616541353' as plain text (comment says 'read-only until a move command exists' but canvas drag moves the hole, rev 22→23). The free-pad inspector has no X/Y at all; hole/pad placements land off-grid.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/150-hole-inspector.png",
+    "shots/q4/dark/154-pad-inspector.png",
+    "shots/vq4/dark/037-hole-inspector.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbSelectionInspector.tsx",
+    "line": 157,
+    "note": "readOnly NumericField renders {value} unformatted; stale comment"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbSelectionInspector.tsx",
+    "line": 77,
+    "note": "readOnly branch has no toFixed"
+   }
+  ],
+  "suggestedFix": "Format readOnly values with toFixed(3); wire X/Y as editable NumericFields using the existing move command used by canvas drag (also allow 0/negative — NumericField currently rejects n <= 0); add X/Y rows to FreePadPanel.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:inspector:hole-xy-raw-float",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: the hole inspector shows X '16.19548872180451' / Y '13.076441102756894' as plain text. The NumericField readOnly branch renders {value} raw (PcbSelectionInspector.tsx:77-83), and the stale comment at :155 says 'read-only until a move command exists'.",
+   "evidence": [
+    "shots/vq4/dark/037-hole-inspector.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-033",
+  "area": "designer.pcb",
+  "title": "Pad/text Rotation field silently rejects 0° and negative angles (can't rotate back to 0); 360 stored un-normalised",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "5909d519",
+  "repro": [
+   "QA-q4-board → PCB → select the free pad (or an overlay text)",
+   "Properties → Rotation: type 45, Enter → rotationDeg 45 (rev 33)",
+   "Type 0, Enter",
+   "Type 360, Enter"
+  ],
+  "expected": "0 (and negative angles, normalised to 0–359) accepted",
+  "actual": "0 is discarded without any message; the field snaps back to 45 and no command is sent. -90 is also rejected. 360 is accepted and persisted as rotationDeg 360. The same NumericField guard (n > 0) applies to every inspector number, so any legitimately-zero value (rotation, and position once X/Y become editable) is impossible.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/162-pad-rot-zero-rejected.png",
+    "shots/vq4/dark/036-rot-zero-rejected.png"
+   ],
+   "network": [
+    "after '0'+Enter: projection freePads[0].rotationDeg still 45 (rev 33)",
+    "after '360': rotationDeg 360 (rev 34)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbSelectionInspector.tsx",
+    "line": 71,
+    "note": "commit(): requires n > 0"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbSelectionInspector.tsx",
+    "line": 236,
+    "note": "pad Rotation uses NumericField"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbSelectionInspector.tsx",
+    "line": 344,
+    "note": "text Rotation uses NumericField"
+   }
+  ],
+  "suggestedFix": "Make the positivity check opt-in (e.g. prop positive?: boolean used only for sizes/drill); for rotation normalise ((v % 360) + 360) % 360; show an inline invalid state instead of silently reverting.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:inspector:numericfield-rejects-zero",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: free pad Rotation (stored 360 from an earlier session) -> typed 0 + Enter -> no command sent (rev stays 41) and the field snaps back to 360. The commit guard `n > 0` (PcbSelectionInspector.tsx:69-74) applies to every NumericField. Kept S2: the most common rotation (0) is silently refused; the non-obvious workaround is typing 360.",
+   "evidence": [
+    "shots/vq4/dark/036-rot-zero-rejected.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-034",
+  "area": "designer.pcb",
+  "title": "Measure / sketch dimension labels are world-sized, off-token cyan and drawn under board items — the measured distance can be unreadable",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": "5909d519",
+  "repro": [
+   "QA-q4-board (free hole + keepout) at default fit zoom → press M",
+   "Click at bottom-left of the board, click at top-right so the midpoint lands near the hole",
+   "Read the distance label; separately: press O and start a board sketch, read the edge length label on the rubber-band line"
+  ],
+  "expected": "Screen-space label (constant ~11px) on an opaque token chip, always drawn above copper/holes, offset from the line",
+  "actual": "Measure label 'xx.62 mm' has its leading digits hidden behind the hole's silk ring (rendered on top) and the measure line strikes through the text; colour is hard-coded #38bdf8 (Tailwind sky-400). Sketch rubber-band length label is ~5px tall at the default 20% zoom ('47.27 mm' illegible, crop in shot 127); both are fixed world sizes (0.9 mm / edge labels 0.6 mm) so they vanish when zoomed out. Board-edit edge labels ('40.00 mm', '25.00 mm') are ~6px tall at 1100×720 fit zoom (shot 184).",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/169-measure-done.png",
+    "shots/q4/dark/127-sketch-first-edge2.png",
+    "shots/q4/dark/129-sketch-second.png",
+    "shots/q4/dark/184-1100-board-edit.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/layers/MeasureOverlayLayer.tsx",
+    "line": 15,
+    "note": "COLOR = '#38bdf8'"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/layers/MeasureOverlayLayer.tsx",
+    "line": 99,
+    "note": "EDAText fontSize 0.9 (world mm), no renderOrder"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/layers/OutlineEdgeLabels.tsx",
+    "line": 19,
+    "note": "FONT_MM = 0.6"
+   }
+  ],
+  "suggestedFix": "Render measure/sketch labels via the existing DOM HUD pattern (like SketchDimEntry) or scale fontSize by 1/zoom (EDAText screen-space); give them RENDER_ORDER top + a token background; replace #38bdf8 with the canvas theme measure token.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:measure:label-world-size-occluded",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Confirmed from the q4 screenshot 169 (the measure label '.62 mm' has its leading digits covered by the hole's silk ring) and code: MeasureOverlayLayer.tsx:15 COLOR '#38bdf8', EDAText fontSize 0.9 world-mm with no renderOrder (:99); OutlineEdgeLabels FONT_MM 0.6. The colour part touches the canvas palette, which PLAN §0 treats as a non-goal, but the legibility and z-order parts are in-tree bugs.",
+   "evidence": [
+    "shots/q4/dark/169-measure-done.png",
+    "shots/q4/dark/127-sketch-first-edge2.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-035",
+  "knownRef": "K13",
+  "area": "designer.pcb",
+  "title": "Tune (U) and Measure are hotkey-only and Bundle routing is unreachable: no toolbar/menu entry exposes them",
+  "category": "stub",
+  "severity": "S4",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "c2c58a19",
+  "repro": [
+   "Dual LED Blinker → PCB",
+   "Look for a Tune / length-matching control in the toolbar, Add ▾, View ▾, right-click menus",
+   "Press U over the canvas → 'Tune — click a routed trace…' row appears"
+  ],
+  "expected": "Every tool discoverable from the toolbar (e.g. Route ▾ → Tune length (U), Bundle) with the hotkey in the tooltip, like Route (R) / Board (O)",
+  "actual": "Tune (pcb.lengthTuning) is reachable only by pressing U; Measure only by M or the empty-canvas context menu; Bundle (K13) not at all. While Tune is active no toolbar button shows a pressed state and the status-bar hint still says 'Click to select…'. The Tune row also shows 'no net' for the picked trace and an 'Enter apply' that is disabled until a target is typed, with no explanation. K13 confirmed: nothing in PcbCanvas/PcbTopToolbar ever calls setToolMode('bundle') (only 'toolMode === \"bundle\"' checks exist), so the Bundle tool behind pcb.bundleRouting cannot be entered by any key, button or menu.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/177-tune-click-trace.png",
+    "shots/q4/dark/178-tune-active.png",
+    "shots/q4/dark/180-tune-target-set.png",
+    "shots/vq4/dark/027-ctx-empty.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx",
+    "line": 646,
+    "note": "'Measure (M), Tune (U) and Bundle stay hotkey-only'"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 348,
+    "note": "'bundle' tool mode declared; no setter anywhere"
+   },
+   {
+    "path": "src/core/contracts/feature-flags/registry.ts",
+    "line": 106,
+    "note": "pcb.lengthTuning / pcb.bundleRouting availability 'dev'"
+   }
+  ],
+  "suggestedFix": "Add a split button next to Route (Route / Tune length / Bundle) or put Tune/Measure/Bundle in the Add ▾ or a Tools ▾ menu with hotkey hints; show the pressed state while active; label 'Enter apply' with a tooltip 'Set a target length first'.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:toolbar:tune-measure-hotkey-only",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Code-confirmed: nothing calls setToolMode('bundle') (only toolMode==='bundle' checks), and PcbTopToolbar.tsx:646 documents that Measure/Tune/Bundle are hotkey-only. Downgraded to S4: Tune and Bundle sit behind pcb.lengthTuning / pcb.bundleRouting, both availability 'dev' (registry.ts:106-114), so release builds never show them. Measure is reachable from the empty-canvas context menu ('Measure distance M'). PLAN Run 2 follow-ups already record 'Bundle tool has no entry point'. Must be fixed before those flags graduate.",
+   "evidence": [
+    "shots/vq4/dark/027-ctx-empty.png"
+   ],
+   "severityWas": "S3"
+  }
+ },
+ {
+  "id": "Q4-036",
+  "area": "designer.pcb",
+  "title": "Footprint Properties are read-only: X/Y/Rotation/Side cannot be typed; multi-selection panel offers no actions",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "c2c58a19",
+  "repro": [
+   "Dual LED Blinker → PCB → Components panel → click 'U1'",
+   "Properties → GENERAL / LOCATION",
+   "Box-select several parts → Properties"
+  ],
+  "expected": "Pro-EDA inspector: editable X, Y, Rotation (and side/lock) for footprints, and for multi-selection at least Rotate/Flip/Delete/Align actions",
+  "actual": "U1 shows X 8.020, Y -1.927, Rotation 0.0 as static text (no inputs); the only way to position precisely is dragging. Multi-selection shows only 'CONTENTS Footprints 4 / Traces 1 / Vias 2'. Free text/pad/zone inspectors, in contrast, are editable — inconsistent.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/172-footprint-inspector.png",
+    "shots/q4/dark/174-box-select.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbPropertiesPanel.tsx",
+    "line": 306,
+    "note": "Location rows are PropertyRow text only"
+   }
+  ],
+  "suggestedFix": "Use the inspector NumericField (after fixing Q4-033) for X/Y/Rotation wired to movePlacement/rotatePlacement; add a Side segmented control (flipPlacement); add Rotate 90°/Flip/Delete buttons to the multi-selection panel.",
+  "fixScope": "design-decision",
+  "estimate": "M",
+  "dedupeKey": "designer.pcb:inspector:footprint-location-readonly",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Code-confirmed: PcbPropertiesPanel.tsx:306-317 renders X/Y/Rotation as static PropertyRow text. Partly intentional: PLAN D8 specifies 'multi → count + kinds', so the multi-selection panel matches the plan. D8 does allow editing where a dispatch command exists (rotate/flip, and moves already exist for canvas drag), yet the single-footprint inspector has no inputs. Kept as S3 design-decision.",
+   "evidence": [
+    "shots/q4/dark/172-footprint-inspector.png",
+    "shots/q4/dark/174-box-select.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-037",
+  "area": "designer.pcb",
+  "title": "Components panel: Shift/Cmd+click does not multi-select and instead leaves a native text-selection highlight across rows",
+  "category": "bug",
+  "severity": "S4",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "c2c58a19",
+  "repro": [
+   "Dual LED Blinker → PCB → Components panel",
+   "Click 'R1', then Shift+click 'R2'"
+  ],
+  "expected": "Range/additive selection like the canvas (Shift+click to add), no text highlight (user-select:none on rows)",
+  "actual": "Only R2 is selected; R1's footprint/value text stays highlighted in browser selection blue for the rest of the session (visible in later screenshots).",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/173-multi-rows.png",
+    "shots/q4/dark/174-box-select.png",
+    "shots/vq4/dark/049-shift-click-rows.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbComponentsPanel.tsx",
+    "line": 1,
+    "note": "row onClick selects single placement"
+   }
+  ],
+  "suggestedFix": "Add select-none to rows and honour shiftKey/metaKey in the row click handler (toggle/add to selection).",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:components-panel:shift-click-text-select",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: click R1 row, Shift+click R2 row → only R2 selected ('R2 · R_0603_1608Metric'); window.getSelection() = 'R_0603_1608Metric 220Ω R2' (native text highlight).",
+   "evidence": [
+    "shots/vq4/dark/049-shift-click-rows.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-038",
+  "knownRef": "K38",
+  "area": "designer.pcb",
+  "title": "PCB canvas clear colour is hard-coded #0e1116 (blue-cast) instead of --surface-canvas-well #08090a, in both themes",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "c2c58a19",
+  "repro": [
+   "Dual LED Blinker → PCB (dark, then light theme)",
+   "Probe empty canvas outside the board (700,780) and (360,200)"
+  ],
+  "expected": "Canvas well = --surface-canvas-well #08090a (neutral), matching the redesign tokens",
+  "actual": "Both themes render #0e1116 (ΔE 3.9 vs #08090a; B channel 0x16 > R 0x0e → visible blue cast next to the neutral #111113 / #f7f7f8 chrome). Board interior probes #05080c–#0d1219, also blue-shifted.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/183-canvas-clear.png",
+    "shots/q4/light/002-pcb.png",
+    "shots/vq4/dark/001-pcb.png",
+    "shots/vq4/light/004-pcb-light.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/vq4/dark/001-pcb.png",
+     "x": 700,
+     "y": 780,
+     "hex": "#0e1116",
+     "nearestToken": "--primary-foreground",
+     "deltaE": 1.8
+    },
+    {
+     "file": "shots/vq4/light/004-pcb-light.png",
+     "x": 700,
+     "y": 780,
+     "hex": "#0e1116",
+     "nearestToken": "--text-strong",
+     "deltaE": 1.8
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 5922,
+    "note": "backgroundColor=\"#0e1116\""
+   },
+   {
+    "path": "node_modules/@openpcb/r3f-eda-canvas/dist/theme/canvasTheme.js",
+    "line": 1,
+    "note": "package theme also carries #0e1116"
+   }
+  ],
+  "suggestedFix": "Read the token at runtime (getComputedStyle(document.documentElement).getPropertyValue('--surface-canvas-well')) or pass a theme-map constant '#08090a' to EdaCanvas backgroundColor; align the board-interior fill in the canvas theme package.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:canvas:clear-colour-off-token",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced with probes: empty PCB canvas is #0e1116 in dark (001-pcb.png 700,780 and 360,200) and in light (004-pcb-light.png); token --surface-canvas-well is #08090a (index.css:202/261). In-tree hard-code at PcbCanvas.tsx:5922. The dark canvas in light theme is intended (run log: 'PCB canvas stays dark'); only the off-token hex is the defect. The board-interior cast is in the @openpcb/r3f-eda-canvas package (PLAN §0 non-goal). Same K38 family as Q3-029 (schematic).",
+   "evidence": [
+    "shots/vq4/dark/001-pcb.png",
+    "shots/vq4/light/004-pcb-light.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-039",
+  "area": "designer.pcb",
+  "title": "Export dialog checkboxes render in browser-default blue (#0075ff light), off the neutral token palette",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "light",
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "c2c58a19",
+  "repro": [
+   "Light theme → Dual LED Blinker → PCB → 'Export…'",
+   "Probe the checked 'Include BOM CSV' checkbox"
+  ],
+  "expected": "Kit checkbox (or accent-[var(--selection)] as AreaToolOptionsBar already does) so checked state uses the neutral selection token",
+  "actual": "Native <input type=checkbox> with no accent class → Chromium default #0075ff (ΔE 46 from the nearest token) on all four checkboxes (Export anyway, BOM, PnP, inner copper). Same root cause as the DXF-import loop radio (Q4-027).",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/light/009-export-dialog.png",
+    "shots/q4/dark/110-export-dialog.png",
+    "shots/vq4/light/005-export-dialog.png",
+    "shots/vq4/dark/006-keys-behind-export.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/vq4/light/005-export-dialog.png",
+     "x": 503,
+     "y": 425,
+     "hex": "#0075ff",
+     "nearestToken": "--status-info",
+     "deltaE": 46.0
+    },
+    {
+     "file": "shots/vq4/dark/006-keys-behind-export.png",
+     "x": 501,
+     "y": 426,
+     "hex": "#99c8ff",
+     "nearestToken": "--status-info",
+     "deltaE": 12.2
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbExportDialog.tsx",
+    "line": 234,
+    "note": "type=checkbox without accent / kit Checkbox (also 245, 253, 261)"
+   }
+  ],
+  "suggestedFix": "Use the shared kit Checkbox, or add className=\"accent-[var(--selection)]\" to each input (pattern already used in AreaToolOptionsBar.tsx:162).",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:export-dialog:native-checkbox-blue",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced with probes: checked 'Include BOM CSV' is #0075ff in light (ΔE 46 vs nearest token) and #99c8ff in dark (Chromium dark-scheme default). Native inputs have no accent class (PcbExportDialog.tsx:234-265).",
+   "evidence": [
+    "shots/vq4/light/005-export-dialog.png",
+    "shots/vq4/dark/006-keys-behind-export.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-040",
+  "area": "designer.pcb",
+  "title": "PCB hotkeys stay live behind the Export dialog: Delete removes the selected item, R/B switch tool/layer under the modal",
+  "category": "keyboard",
+  "severity": "S2",
+  "themes": [
+   "light",
+   "dark"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": "c2c58a19",
+  "repro": [
+   "Dual LED Blinker → PCB → click the free mounting hole (bottom-right) to select it",
+   "Click 'Export…' (focus stays on the Export… button; dialog opens)",
+   "Press Delete",
+   "Close the dialog; also: with the dialog open press R, then B"
+  ],
+  "expected": "A modal owns the keyboard: focus moves into it and canvas hotkeys are suspended until it closes",
+  "actual": "Delete with the Export dialog open deleted the hole (projection holes 1 → 0, rev 513) with no visible feedback behind the backdrop; R armed Route mode (route parameter row appeared above the dialog) and B switched the active layer to Bottom Copper. Cmd+Z restored the hole. Same keymap gap as the Design rules dialog (Q4-022) and textareas (K12/Q4-019): the window keydown handler only ignores HTMLInputElement targets and never checks for an open modal.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/light/011-1100-route-row.png",
+    "shots/q4/light/013-delete-behind-export.png",
+    "shots/vq4/dark/006-keys-behind-export.png"
+   ],
+   "network": [
+    "projection freeHoles 1 → 0 at rev 513 while Export dialog open; Cmd+Z → holes 1 rev 514"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 4342,
+    "note": "onKey: only HTMLInputElement targets are ignored"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 743,
+    "note": "exportDialogOpen state exists but is not consulted by the keymap"
+   }
+  ],
+  "suggestedFix": "At the top of PcbCanvas onKey (and onShiftKey) return early when any PCB modal is open (exportDialogOpen, rules dialog, cornerOp, edgeDim, DXF modal) or when `document.querySelector('[aria-modal=\"true\"]')` exists / event.target is inside [role=dialog]; move focus into the Export dialog on open.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:keymap:hotkeys-behind-modal",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced on c2c58a19: selected the free hole, opened Export… (focus stayed on the Export… button, dialog aria-modal=true), pressed Delete: freeHoles 1->0 (rev 523) behind the backdrop. R then armed Route (param row appeared above the modal) and B switched to Bottom Copper. Restored with Cmd+Z. Distinct from Q4-019: the target here is a <button>, so even a textarea/select guard would not help. The keymap needs modal awareness.",
+   "evidence": [
+    "shots/vq4/dark/006-keys-behind-export.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-041",
+  "area": "designer.pcb",
+  "title": "At the 1100×720 minimum window the PCB canvas is squeezed to 458 px; layer tab strip overflows with a hidden scroll and the board is not re-fitted",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "light"
+  ],
+  "viewports": [
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": "c2c58a19",
+  "repro": [
+   "Dual LED Blinker → PCB with the right dock open (DRC or Properties) at 1440×900, board fitted",
+   "Resize the window to 1100×720"
+  ],
+  "expected": "Canvas keeps the majority of the width (side panels shrink to their minimums or the dock auto-collapses), layer strip collapses into an overflow menu, camera re-fits on resize",
+  "actual": "Left sidebar 260 px + dock 300 px leave a 458×612 canvas (42% of the window); the board stays at the old zoom and is cropped on both sides; the layer tab strip (sw 755 / cw 458) silently scrolls horizontally, cutting 'Top Court…' mid-word with no fade/chevron; Components VALUE column truncated.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/light/012-1100-pcb.png",
+    "shots/q4/light/010-1100-drc-dock.png",
+    "shots/vq4/light/006-1100-pcb.png",
+    "shots/vq4/dark/047-1100-pcb.png"
+   ],
+   "console": [
+    "overflow: DIV.flex h-[22px] overflow-x-auto sw=755 cw=458 @341,676"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbLayerTabStrip.tsx",
+    "line": 1,
+    "note": "overflow-x-auto strip without overflow affordance"
+   }
+  ],
+  "suggestedFix": "Below ~1280 px default the dock to collapsed or clamp dock+sidebar to ≤40% of width; add an overflow chevron/menu to PcbLayerTabStrip; call cameraControls.fit() on canvas resize when the user hasn't panned/zoomed since the last fit.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:layout:1100-canvas-squeezed",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced at 1100×720 (light and dark): canvas 458 px wide; layer tab strip scrollWidth 755 / clientWidth 458 with no overflow affordance ('Top Court' clipped); board not re-fitted after resize (light). The dock/sidebar widths follow PLAN D7/D10 defaults (300/260); the missing overflow affordance and re-fit are the defects.",
+   "evidence": [
+    "shots/vq4/light/006-1100-pcb.png",
+    "shots/vq4/dark/047-1100-pcb.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-042",
+  "area": "designer.pcb",
+  "title": "At 1100×720 the Layers list spills over the Components section while routing (rows and headers drawn on top of each other)",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": "c2c58a19",
+  "repro": [
+   "Window 1100×720 → Dual LED Blinker → PCB, left sidebar with Layers + Components expanded",
+   "Press R and click a J1 pad to start routing (route row + hint row appear, canvas area shrinks by 56 px)",
+   "Look at the bottom of the Layers list"
+  ],
+  "expected": "Layers section scrolls inside its own bounds; Components header stays below it",
+  "actual": "'▾ Components 11' header (top 453) is painted over the 'Bottom Courtyard B.CrtYd' row (top 452–474); the count '11' overlaps the row's eye icon. DOM: Layers scroller content 354 px inside a 304 px flex parent with overflow:visible. Also on the same screen the route parameter row wraps 'Standard 2L' onto two lines, the 'Net VCC 0.25 mm · netclass Default' status and the status-bar hint are clipped mid-word, and the layer row label truncates to 'Top Cop…' to fit the ROUTING badge.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/186-1100-routing.png",
+    "shots/vq4/dark/048-1100-routing.png"
+   ],
+   "console": [
+    "compHeader top=453 | BCrow top=452 bottom=474; parent DIV h=304 flex 1 1 0% overflow visible, child h=354"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbLayersPanel.tsx",
+    "line": 1,
+    "note": "layers scroller nested in overflow-visible flex parent"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx",
+    "line": 798,
+    "note": "28px parameter-row shell; chips allow wrapping"
+   }
+  ],
+  "suggestedFix": "Give the Layers section wrapper min-h-0 + overflow-hidden so its inner scroller is constrained; add whitespace-nowrap to param-row chips and let the row scroll/collapse lower-priority chips (net status) with an ellipsis.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:sidebar:layers-overlap-components-1100",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced at 1100×720 dark: while routing, the 'Components' header top is 452.5 px and the 'Bottom Courtyard' row spans 452–474, so they are painted over each other. 'Standard 2L' wraps to two lines, and the param row and status hint are clipped.",
+   "evidence": [
+    "shots/vq4/dark/048-1100-routing.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-043",
+  "area": "designer.pcb",
+  "title": "DRC markers are fixed-size screen diamonds that bury the board at fit zoom (106 markers cover every pad)",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": "c2c58a19",
+  "repro": [
+   "Dual LED Blinker (32 errors / 74 warnings) → PCB → Fit board",
+   "Look at the board at 1440×900 and at 1100×720"
+  ],
+  "expected": "Markers readable but subordinate to the design: cluster/aggregate at low zoom, scale with zoom, or show only errors by default; copper and pad numbers stay legible",
+  "actual": "Each violation draws a ~20 px layered diamond (glow + ring + core) at constant screen size; at fit zoom the markers overlap each other and completely cover pads/parts (at 1100×720 the board is an orange/pink field). Pad numbers under markers are hidden even when zoomed in (U1 pads 3/4/5/8, shot 172). Only workaround is View ▾ → DRC markers off, which hides all of them.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/171-dual-led-pcb.png",
+    "shots/q4/dark/185-1100-route-idle.png",
+    "shots/q4/dark/172-footprint-inspector.png",
+    "shots/q4/light/002-pcb.png",
+    "shots/vq4/dark/001-pcb.png",
+    "shots/vq4/dark/047-1100-pcb.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/drc",
+    "line": 1,
+    "note": "marker layer (drc-colors / markers) renders one badge per violation"
+   }
+  ],
+  "suggestedFix": "Cluster markers within N px into a count badge at low zoom; hide warnings below a zoom threshold; reduce marker size to ~12 px and drop the glow; draw pad numbers above markers or offset markers to the violation edge.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "designer.pcb:drc-markers:clutter-at-fit-zoom",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: at fit zoom on Dual LED Blinker (106 violations) the constant-size diamond markers cover most pads, worst at 1100×720. The marker design itself is deliberate (redesigned layered badge), but there is no density handling. Kept S3.",
+   "evidence": [
+    "shots/vq4/dark/001-pcb.png",
+    "shots/vq4/dark/047-1100-pcb.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-044",
+  "area": "designer.drc",
+  "title": "DRC messages expose internal rule keys ('pthAnnularRingMm', 'minNpthDrillMm') and repeat the numbers with an orphaned 'mm'",
+  "category": "copy",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "3196d811",
+  "repro": [
+   "DRC Demo (3196d811) → PCB → right dock 'DRC' → Run DRC",
+   "Read rows under 'ANNULAR BELOW FAB MINIMUM' and 'DRILL BELOW FAB MINIMUM', and any clearance row"
+  ],
+  "expected": "Plain-language limits ('PTH annular ring 0.050 mm is below JLCPCB 2-layer minimum 0.180 mm'), numbers stated once, units kept with values",
+  "actual": "'PTH annular ring 0.050 mm < JLCPCB 2-layer pthAnnularRingMm 0.180 mm 0.050 / 0.180 mm' and 'Non-plated drill 0.200 mm < JLCPCB 2-layer minNpthDrillMm 0.500 mm 0.200 / 0.500 mm' — camelCase config keys and '<' in user copy; every row appends 'measured / required mm' after a sentence that already contains both numbers, and the trailing 'mm' wraps onto its own line. Same pad also appears twice (ANNULAR RING BELOW MINIMUM + ANNULAR BELOW FAB MINIMUM). Short-circuit rows read 'overlap 0.000 / 0.250 mm', which is meaningless for a short.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/189-drc-demo-run.png",
+    "shots/q4/light/007-drc-dock.png",
+    "shots/vq4/dark/030-drc-demo-pcb.png",
+    "shots/vq4/dark/029-drc-dock.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/shared/drc/fab-presets.ts",
+    "line": 357,
+    "note": "message embeds ${drillRule} = 'minNpthDrillMm'"
+   },
+   {
+    "path": "src/shared/drc/fab-presets.ts",
+    "line": 373,
+    "note": "message embeds ${ringRule} = 'pthAnnularRingMm'"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerDrcView.tsx",
+    "line": 413,
+    "note": "always appends measured / required mm"
+   }
+  ],
+  "suggestedFix": "Map rule keys to labels ('PTH annular ring minimum', 'NPTH drill minimum') and phrase as 'below … minimum'; in DesignerDrcView render measured/required as a separate right-aligned mono chip (nowrap) and drop it when the message already includes the numbers, or strip numbers from messages; hide the chip for short-circuit rows.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.drc:messages:raw-rule-keys-duplicate-values",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced on DRC Demo: 'PTH annular ring 0.050 mm < JLCPCB 2-layer pthAnnularRingMm 0.180 mm 0.050 / 0.180 mm' with the orphan 'mm' wrapping; 'Non-plated drill … minNpthDrillMm …'; pad 3e4e4e is listed under both ANNULAR RING BELOW MINIMUM and ANNULAR BELOW FAB MINIMUM; short rows say 'overlap 0.000 / 0.250 mm'. fab-presets.ts:357/373 embed rule keys; DesignerDrcView.tsx:412-416 always appends measured/required.",
+   "evidence": [
+    "shots/vq4/dark/030-drc-demo-pcb.png",
+    "shots/vq4/dark/029-drc-dock.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-045",
+  "knownRef": "K16",
+  "area": "designer.pcb",
+  "title": "In Route mode before the first click, B switches to bottom copper but T quits Route and arms the Text tool (keymap advertises T/B = layer)",
+  "category": "keyboard",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "c2c58a19",
+  "repro": [
+   "Dual LED Blinker → PCB → Top Copper active → hover canvas, press R (route idle, 'Route — click a pad to start')",
+   "Press B → Route stays on, active layer Bottom Copper",
+   "Press T"
+  ],
+  "expected": "T mirrors B (select Top Copper while staying in Route), as the route keymap table declares ({keys:'T/B', label:'layer'}) and as 1/2 already do",
+  "actual": "T leaves Route (Route (R) aria-pressed=false) and the Add button turns into 'Text ▾' — the next board click opens the Text prompt. 1 and 2 behave correctly (Route stays, layer switches). The 'T/B layer' hint itself is never rendered (HUD uses primaryOnly hints), so the conflicting hint from K16 is not visible — only the behaviour is inconsistent.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/192-route-idle-T.png",
+    "shots/vq4/dark/050-route-idle-T.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 4490,
+    "note": "T → Text tool whenever not actively routing (incl. idle Route mode)"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/tools/route-keymap.ts",
+    "line": 34,
+    "note": "{ keys: 'T/B', label: 'layer' }"
+   }
+  ],
+  "suggestedFix": "While toolMode==='route' (idle or routing) treat T/B/1/2/PgUp/PgDn as layer keys before the global tool hotkeys; keep T=Text only in Select mode.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:route:t-key-arms-text-in-route-idle",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: R (Route idle) then T -> Route aria-pressed false, Add shows 'Text'. The T branch (PcbCanvas.tsx:4489-4497) only checks routeState !== 'routing', so in idle Route mode it toggles the Text tool before the layer-key block (:4862). route-keymap.ts:34 declares {keys:'T/B', label:'layer'}. As q4 noted, the K16 hint is not rendered (primaryOnly), so K16 is partial.",
+   "evidence": [
+    "shots/vq4/dark/050-route-idle-T.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-046",
+  "area": "designer.pcb",
+  "title": "Selection filter covers only Traces/Vias/Pads/Components — zones, keepouts, free holes/pads, text and outline can't be filtered",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "light",
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "5909d519",
+  "repro": [
+   "QA-q4-board (free hole, free pad, overlay text, keepout) → PCB, nothing selected",
+   "Press F → 'SELECTION FILTER' panel",
+   "Try to exclude the keepout/text/hole from box selection"
+  ],
+  "expected": "One toggle per selectable primitive (KiCad: Footprints, Text, Tracks, Vias, Pads, Graphics, Zones, Keepouts, Other), so users can box-select e.g. traces over a zone",
+  "actual": "Only 4 kinds: Traces ('Routed copper segments'), Vias, Pads ('Component pads'), Components. Free holes, free pads, zones, keepouts, overlay text and board outline are always selectable; with a large GND zone every box-select/click inside it competes with the zone.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/light/019-selection-filter.png",
+    "shots/q4/dark/087-selection-filter.png",
+    "shots/vq4/dark/038-selection-filter.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbSelectionFilter.tsx",
+    "line": 28,
+    "note": "FILTER_KINDS lists 4 kinds only"
+   }
+  ],
+  "suggestedFix": "Extend SelectionFilterKind with zones, keepouts, freeHoles, freePads, texts (and outline) and honour them in pcb-hit / box-select; add All/None shortcuts.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:selection-filter:missing-kinds",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: F opens 'Selection filter' with only Traces/Vias/Pads/Components (PcbSelectionFilter.tsx:28-31); QA-q4-board's free hole, free pad, text and keepout cannot be filtered.",
+   "evidence": [
+    "shots/vq4/dark/038-selection-filter.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-047",
+  "area": "designer.drc",
+  "title": "Before DRC has ever run, the DRC view is a blank page and every DRC indicator reads '0' as if the board were clean",
+  "category": "copy",
+  "severity": "S3",
+  "themes": [
+   "light",
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "5909d519",
+  "repro": [
+   "QA-q4-board (DRC never run; Home row 'DRC not run') → view tab 'DRC'",
+   "Look at the body and the status bar; switch to PCB and look at the dock DRC tab and status bar"
+  ],
+  "expected": "Centered empty state ('DRC has not been run for this board' + Run DRC button + rule preset summary) and indicators showing '—' / 'Not run' (neutral) until the first run",
+  "actual": "The full DRC view body is completely empty; only a small grey 'Run DRC to validate the board.' at the far right of the toolbar row. Status bar shows '◆ 0 DRC' (same chip that shows real counts) in both DRC and PCB views, suggesting zero violations. After Run DRC the view shows a green 'No DRC violations' strip with no run time/revision.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/light/020-drc-fullview-empty.png",
+    "shots/q4/light/021-drc-fullview-results.png",
+    "shots/q4/dark/120-shape-Oval.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerDrcView.tsx",
+    "line": 1,
+    "note": "no body empty state when result is null"
+   },
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 1589,
+    "note": "status-bar DRC count defaults to 0"
+   }
+  ],
+  "suggestedFix": "Render a kit EmptyState in DesignerDrcView when no result exists; make the status-bar/dock/toolbar DRC chips show '—' with title 'DRC not run' until drcStatus exists; show 'Last run r{rev} · {time}' next to results.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.drc:empty-state:not-run-shows-zero",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Confirmed from the q4 light screenshot (DRC full view empty body, only 'Run DRC to validate the board.' at the far right, status '0 DRC' with a neutral diamond) and code: DesignerDrcView.tsx:246-249 shows only the toolbar hint when report is null, with no body empty state; status bar drcCount defaults to 0 (Space.tsx:1601). Not re-run live because every owned design already has a DRC run.",
+   "evidence": [
+    "shots/q4/light/020-drc-fullview-empty.png",
+    "shots/q4/light/021-drc-fullview-results.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-048",
+  "area": "designer.pcb",
+  "title": "Selection filter panel ignores Esc and survives view switches; only F or its × closes it",
+  "category": "keyboard",
+  "severity": "S4",
+  "themes": [
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "5909d519",
+  "repro": [
+   "PCB, nothing selected → press F → 'SELECTION FILTER' floating panel",
+   "Press Esc (canvas hovered)",
+   "Switch to the DRC view tab and back to PCB"
+  ],
+  "expected": "Esc closes transient floating panels (like menus/pickers); panel does not reappear after navigating away",
+  "actual": "Esc leaves the panel open; it is still open after DRC view → PCB and overlaps the canvas top-right; pressing F again closes it.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/light/019-selection-filter.png",
+    "shots/q4/light/022-alt-solo-toast.png",
+    "shots/vq4/dark/038-selection-filter.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbSelectionFilter.tsx",
+    "line": 46,
+    "note": "no Escape handling"
+   }
+  ],
+  "suggestedFix": "Handle Escape in the PCB keymap (close filter first, before clearing selection) and close the panel on view change.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:selection-filter:esc-does-not-close",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced: after F, Esc with the canvas hovered leaves the 'Selection filter' dialog in the accessibility tree; it also survives DRC→PCB view switches. No Escape handling in PcbSelectionFilter.tsx; the keymap Escape branch (PcbCanvas.tsx:4977) doesn't close it.",
+   "evidence": [
+    "shots/vq4/dark/038-selection-filter.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-049",
+  "area": "designer.pcb",
+  "title": "Layer solo state leaks across design tabs; exiting it writes the other design's layer visibility into the current design",
+  "category": "data",
+  "severity": "S2",
+  "themes": [
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "5909d519, c2c58a19",
+  "repro": [
+   "Open two designs as tabs: QA-q4-board and Dual LED Blinker",
+   "On QA-q4-board PCB, Alt+click 'Bottom Copper' in Layers (row shows SOLO; see also Q4-011 conflict)",
+   "Switch to the Dual LED Blinker tab → PCB: its Bottom Copper row also shows 'SOLO'",
+   "Alt+click that row to exit solo; read GET /projection/pcb board.visibleLayers for both designs"
+  ],
+  "expected": "Solo / selection-filter UI state is per design (reset on design switch); exiting solo only restores that design's own snapshot",
+  "actual": "Dual LED Blinker shows a SOLO badge it never had. Exiting it replaced Dual LED Blinker's visibleLayers [B.Cu, Drill, Edge.Cuts, F.Cu, In1.Cu, In2.Cu, Metadata] with QA-q4-board's pre-solo snapshot [B.Cu, Drill, Edge.Cuts, F.Cu, F.SilkS, Metadata] and persisted it (rev 518 → 520). The global zustand store keeps soloLayer/preSoloVisible/preSoloActive/selectionFilter when hydrateFromProjection switches designId.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/light/022-alt-solo-toast.png",
+    "shots/q4/light/023-routing.png",
+    "shots/q4/light/024-solo-leaked.png",
+    "shots/q4/light/025-solo-exit-other-design.png",
+    "shots/vq4/light/001-alt-solo-qa.png",
+    "shots/vq4/light/002-solo-leaked.png",
+    "shots/vq4/light/003-solo-exit-other-design.png"
+   ],
+   "network": [
+    "c2c58a19 projection rev 518 visibleLayers [B.Cu,Drill,Edge.Cuts,F.Cu,In1.Cu,In2.Cu,Metadata] → rev 520 [B.Cu,Drill,Edge.Cuts,F.Cu,F.SilkS,Metadata]",
+    "c2c58a19 rev 538 visibleLayers [F.Cu,B.Cu,Edge.Cuts,Drill,Metadata,F.SilkS] → rev 539 [B.Cu,Edge.Cuts,Drill,Metadata,F.Cu] after un-solo of leaked state"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/pcb-view-store.ts",
+    "line": 219,
+    "note": "hydrateFromProjection sets designId/viewState/layers but never resets soloLayer/preSoloVisible/preSoloActive"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/pcb-view-store.ts",
+    "line": 345,
+    "note": "toggleSoloLayer restores preSoloVisible regardless of which design captured it"
+   }
+  ],
+  "suggestedFix": "In pcb-view-store hydrateFromProjection (pcb-view-store.ts:219), when `designId !== get().designId` reset soloLayer/preSoloVisible/preSoloActive (and selectionFilterPanelOpen) and flush or drop pendingPatch for the previous design before switching.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:layers:solo-leaks-across-designs",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Reproduced in light: Alt+click Bottom Copper on QA-q4-board (SOLO, plus the Q4-011 conflict toast), then opened Dual LED Blinker: its Bottom Copper row shows 'SOLO' while all layers are visible. Alt+click to exit wrote QA-q4-board's pre-solo set into Dual LED Blinker: visibleLayers [F.Cu,B.Cu,Edge.Cuts,Drill,Metadata,F.SilkS] -> [B.Cu,Edge.Cuts,Drill,Metadata,F.Cu] (rev 538->539, F.SilkS lost). Restored by re-enabling Top Overlay (rev 540). pcb-view-store.ts:219-236 hydrateFromProjection never resets soloLayer/preSoloVisible/preSoloActive.",
+   "evidence": [
+    "shots/vq4/light/001-alt-solo-qa.png",
+    "shots/vq4/light/002-solo-leaked.png",
+    "shots/vq4/light/003-solo-exit-other-design.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-050",
+  "knownRef": "K37",
+  "area": "designer.pcb",
+  "title": "PCB control heights are all over the place: 18 px inspector/board inputs, 18 px route segments vs 20 px chips, 32 px modal inputs, 13 px checkboxes (kit = 22 px)",
+  "category": "consistency",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "c2c58a19, 5909d519",
+  "repro": [
+   "PCB → Board panel → Edit: measure Width/Height/Corner radius inputs and size preset buttons",
+   "Select a free pad / text / zone / keepout: measure inspector inputs & selects",
+   "Press R: measure route-row chips and 45°/90° segments",
+   "Open Fillet corner / Set edge length / Import DXF modals: measure inputs"
+  ],
+  "expected": "Kit standard 22 px controls (20 px sm) everywhere; one checkbox component",
+  "actual": "Measured via getBoundingClientRect: Board panel inputs 18 px (INPUT_CLASS h-[18px]) and preset buttons 18 px; pad/text/zone/keepout inspector inputs + <select>s 18 px (FIELD_CLASS h-[18px]); route row W/Auto/via chips 20 px but 45°/90° segments 18 px; Corner/Edge/DXF modal inputs 32 px (h-8); keepout/inspector checkboxes 13 px native; Design rules inputs 21 px (Q4-022). Also nameless route-row buttons (only title attributes, no aria-label).",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/154-pad-inspector.png",
+    "shots/q4/dark/167-keepout-inspector.png",
+    "shots/q4/dark/135-fillet-modal.png",
+    "shots/q4/light/005-route-idle.png",
+    "shots/q4/dark/120-shape-Oval.png",
+    "shots/vq4/dark/043-done-unapplied.png",
+    "shots/vq4/dark/041-fillet-modal.png",
+    "shots/vq4/dark/046-pour-row.png"
+   ],
+   "console": [
+    "route row: W chip h=20, 45° h=18, 90° h=18, Auto h=20; inspector INPUT/SELECT h=18; modal INPUT h=32; checkbox h=13"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbBoardPanel.tsx",
+    "line": 34,
+    "note": "INPUT_CLASS h-[18px]"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbSelectionInspector.tsx",
+    "line": 41,
+    "note": "FIELD_CLASS h-[18px]"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/CornerOpModal.tsx",
+    "line": 70,
+    "note": "h-8 input"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/EdgeDimModal.tsx",
+    "line": 24,
+    "note": "h-8 input"
+   }
+  ],
+  "suggestedFix": "Replace the local INPUT_CLASS/FIELD_CLASS and native selects/checkboxes with the shared kit Input/Select/Checkbox at size sm (20) or md (22); give the route-row SegmentedControl the same height as its sibling chips; add aria-labels to route-row buttons.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "designer.pcb:controls:inconsistent-heights",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Confirmed: Board panel Width input measured at 18 px; INPUT_CLASS h-[18px] (PcbBoardPanel.tsx:34) and FIELD_CLASS h-[18px] (PcbSelectionInspector.tsx:41); Fillet modal input measured at 32 px (CornerOpModal.tsx:70, EdgeDimModal.tsx:24); pour-row selects 18 px (PcbLayersPanel.tsx:145). Same K37 family as Q11-009 / Q7-025 / Q9-015 in other files.",
+   "evidence": [
+    "shots/vq4/dark/043-done-unapplied.png",
+    "shots/vq4/dark/041-fillet-modal.png",
+    "shots/vq4/dark/046-pour-row.png"
+   ]
+  }
+ },
+ {
+  "id": "Q4-051",
+  "area": "designer.pcb",
+  "title": "PCB toolbar tooltips incomplete: Flip part/Fit board omit hotkeys, disabled Flip gives no reason, 'Add' tooltip omits Comment, DRC tooltip is just 'DRC'",
+  "category": "copy",
+  "severity": "S4",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "5909d519",
+  "repro": [
+   "PCB view, nothing selected",
+   "Hover each toolbar button / read title attributes"
+  ],
+  "expected": "Every tool tooltip names the action + hotkey (Flip part (F), Fit board (Home/0)…), disabled buttons explain why, DRC button says what the badge counts ('Run / show DRC — 32 errors')",
+  "actual": "titles: 'Fit board', 'Flip part' (disabled, no 'select a part' hint, F hotkey missing), 'Add hole, pad, text, zone, or keepout' (menu also has Comment), 'DRC' (badge meaning undefined — see Q4-001). Undo/Redo/Route/Board include hotkeys, so the set is inconsistent.",
+  "evidence": {
+   "screenshots": [
+    "shots/q4/dark/120-shape-Oval.png",
+    "shots/vq4/dark/001-pcb.png"
+   ],
+   "console": [
+    "Fit board | title=Fit board; Flip part | title=Flip part | disabled=true; Add | title=Add hole, pad, text, zone, or keepout; DRC | title=DRC"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx",
+    "line": 650,
+    "note": "frozen accessible names; titles composed by ToolbarButton"
+   }
+  ],
+  "suggestedFix": "In PcbTopToolbar pass richer titles while keeping aria-labels frozen (D9): 'Flip part (F)' and, when disabled, 'Flip part (F) — select a footprint first'; 'Add hole, pad, text, zone, keepout or comment'; DRC 'Design rule check — {errors} errors, {warnings} warnings' (see Q4-001).",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:toolbar:tooltips-incomplete",
+  "status": "confirmed",
+  "knownRef": null,
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq4",
+   "reason": "Confirmed via title attributes: 'Fit board', 'Flip part' (disabled, no F hint or reason), 'Add hole, pad, text, zone, or keepout' (the menu also has Comment), 'DRC'. Correction: Fit board has no hotkey in the PCB keymap, so its title is accurate and the suggested '(Home/0)' is dropped.",
+   "evidence": [
+    "shots/vq4/dark/001-pcb.png"
+   ]
+  }
+ }
+]

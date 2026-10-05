@@ -1,0 +1,1006 @@
+[
+ {
+  "id": "F1A-001",
+  "knownRef": null,
+  "area": "designer.drc",
+  "title": "Design rules 'Save & re-run DRC' silently throws away the edited rules when the save is rejected, then re-runs DRC with the old rules",
+  "category": "data",
+  "severity": "S1",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "91573bb6-cb22-4ca4-a8d9-58057a1ff45b",
+  "repro": [
+   "Open QA-f1a-board → PCB view, open the right dock DRC tab (leave it open)",
+   "Make any PCB edit that does not switch the dock tab, e.g. click toolbar Undo (server revision 25 → 26)",
+   "In the DRC dock click 'Edit rules', change Clearances › Trace ↔ trace 0.2 → 0.3, click 'Save & re-run DRC'",
+   "GET /api/modules/designer/designs/{id}/projection/pcb → board.designRules.clearance.traceToTraceMm",
+   "Variant: route '**/designs/*/commands' → 500 (or go offline) and click 'Save & re-run DRC'"
+  ],
+  "expected": "Either the rules are saved, or the dialog stays open with a clear error and a retry. DRC only re-runs after a successful save.",
+  "actual": "The command goes out with the stale baseRevision 25 and the server answers 200 {result:{ok:false, code:'REVISION_CONFLICT', expected:25, actual:26}}. The hook ignores result.ok: the dialog closes as if the save worked, DRC re-runs (POST /drc/runs 202) against the OLD rules, and nothing tells the user. The server still has 0.2 and the Board panel shows 'Clearance 0.20'. Reproduced twice (from the DRC full view after an external edit, and from the dock after toolbar Undo). On HTTP 500 or offline, the dialog stays open, the button reverts to 'Save & re-run DRC', and no message appears. The only trace is an unhandled promise rejection in the console. The dock/full-view DRC panel fetches its own projection once per mount, so any PCB edit made while it stays mounted makes the next rules save conflict.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1a/dark/116-rules-dock-edit.png",
+    "shots/f1a/dark/117-rules-dock-saved-silently-dropped.png",
+    "shots/f1a/dark/112-rules-save-cmd500.png",
+    "shots/f1a/dark/113-rules-save-conflict-silent.png",
+    "shots/f1a/dark/121-dxf-sample-txt.png"
+   ],
+   "console": [
+    "Error: Internal error at fetchData (api.ts:24) at async Object.dispatch (api.ts:337) at async use-pcb-design-rules-dialog.tsx:39 (uncaught in promise, commands→500 variant)"
+   ],
+   "network": [
+    "POST /designs/91573bb6…/commands {type:'pcb_set_design_rules', baseRevision:25, sessionId:'designer-drc-session'} → 200 {result:{ok:false,code:'REVISION_CONFLICT',conflict:{expected:25,actual:26}}}",
+    "POST /designs/91573bb6…/drc/runs → 202 (re-run with unchanged rules)",
+    "GET projection/pcb after save → clearance.traceToTraceMm 0.2 (user entered 0.3)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/use-pcb-design-rules-dialog.tsx",
+    "line": 82,
+    "note": "`await api.dispatch(designId, envelope)` result ignored: ok:false (REVISION_CONFLICT) treated as success, then onSaved() re-runs DRC"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/use-pcb-design-rules-dialog.tsx",
+    "line": 71,
+    "note": "baseRevision = projection?.revision from the caller's copy"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/PcbDesignRulesDialog.tsx",
+    "line": 236,
+    "note": "save(): try/finally with no catch, so no error state and the rejection escapes as unhandled"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerDrcView.tsx",
+    "line": 107,
+    "note": "projection (the source of baseRevision) is fetched once per mount and never refreshed after PCB edits while the dock stays mounted"
+   }
+  ],
+  "suggestedFix": "use-pcb-design-rules-dialog.tsx handleSave: capture `const result = await api.dispatch(...)`; if (!result.ok) and code === 'REVISION_CONFLICT', re-GET the projection (api.getPcbProjection) and re-dispatch once with its revision (rules are a full replace, so a retry is safe); on any other !ok throw new Error(<friendly message>). Only call onSaved() after ok. PcbDesignRulesDialog.save(): add catch that keeps the dialog open and renders an inline role='alert' error ('Couldn't save design rules: …') with the Save button re-enabled. DesignerDrcView: stop using the mount-time projection for baseRevision (pass the PCB workspace projection when docked, or re-read the head revision right before dispatch).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.drc:rules-dialog:save-result-ignored",
+  "status": "confirmed",
+  "relatedIds": [
+   "Q4-021",
+   "Q4-025",
+   "Q4-022",
+   "Q11-005"
+  ],
+  "mergedIds": [],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1a",
+   "reason": "Reproduced 2x on loopback, no latency shim. (1) PCB, dock DRC tab open, toolbar Redo (rev 26->27), Edit rules, Trace<->trace 0.2->0.3, Save: POST /commands pcb_set_design_rules base=26 -> 200 {ok:false, REVISION_CONFLICT, expected 26, actual 27}; the dialog closed, POST /drc/runs 202 re-ran DRC, no role=alert or text, and the server still has traceToTraceMm 0.2. (2) Everyday trigger: with the DRC dock open, one eye-toggle on 'Top Overlay' in the Layers panel (pcb_set_visible_layers bumps the revision, see Q4-025) then a rules save gave the same silent REVISION_CONFLICT plus a DRC re-run. Variant commands->500: the dialog stays open, the button reverts, no message, and pageerror 'Error: Internal error' (unhandled rejection). Code: use-pcb-design-rules-dialog.tsx:82 ignores the DesignerDispatchResult; PcbDesignRulesDialog.tsx save() is try/finally with no catch; DesignerDrcView.tsx:107-114 fetches the projection once per mount, so baseRevision goes stale after any PCB edit that keeps the dock mounted. Not intentional per PLAN D1-D15, not an environment artefact. S1 kept: user-entered rules are silently lost, and DRC re-runs as if they applied (a false manufacturability confirmation), from a normal workflow. Distinct from Q4-021 (Board-panel entry point never re-runs DRC); both live in the same hook and should be fixed together.",
+   "evidence": [
+    "shots/vf1a/dark/010-rules-dock-edit.png",
+    "shots/vf1a/dark/011-rules-dock-after-save.png",
+    "shots/vf1a/dark/012-rules-save-cmd500.png",
+    "network: POST /commands pcb_set_design_rules base=26 -> {ok:false,REVISION_CONFLICT,expected:26,actual:27}; POST /drc/runs 202; GET projection/pcb traceToTraceMm 0.2 (rev 27)",
+    "network: pcb_set_visible_layers base=35 -> rev 36; pcb_set_design_rules base=35 -> REVISION_CONFLICT; POST /drc/runs 202; server traceToTraceMm 0.2",
+    "pageerror: Error: Internal error (commands->500 variant)"
+   ]
+  }
+ },
+ {
+  "id": "F1A-002",
+  "knownRef": null,
+  "area": "designer.bom",
+  "title": "BOM sourcing edits are lost or truncated: switching line/view within the 650 ms autosave drops the value, and a returning save wipes text being typed on another line",
+  "category": "data",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "91573bb6-cb22-4ca4-a8d9-58057a1ff45b",
+  "repro": [
+   "(a) No latency. BOM tab, line C1 selected. Click MPN, type 'FAST-C1', and within ~0.5 s click line J1 (or the Schem tab)",
+   "GET /designs/{id}/bom → C1.manufacturerPartNumber",
+   "(b) Latency shim 2.5 s. Select line C1, type '-X' into MPN, wait 0.9 s (PATCH in flight), click line 'R1,R2', type 'R-LINE-MPN-TYPED-SLOWLY-0123' at ~150 ms per key",
+   "Wait for the saves to settle and GET /bom"
+  ],
+  "expected": "A typed value is flushed (or kept pending) when the user changes line or view. A save response for line A never touches the draft of line B being edited.",
+  "actual": "(a) No PATCH is sent and the value is silently discarded: C1 MPN stays null, and the same happens for Q1 'MMBT3904' on switching to Schem and back. (b) When C1's PATCH returns, setBom() replaces rows, the inspector's [row] effect resets the draft to server values, and the MPN input is wiped mid-typing. Only the tail 'ED-SLOWLY-0123' is saved to R1, and the line then splits (Q5-001) so the inspector silently falls back to C1 and shows 'SLOW-C1-X'. In race2 the J1 field also blanked for ~0.8 s and then reappeared. Values do land on the correct refdes (Q5's open question); the issue is loss and truncation.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1a/dark/063-bom-race-inflight-switch.png",
+    "shots/f1a/dark/065-bom-race-typing-wiped-2.png",
+    "shots/f1a/dark/111-k10-warning-toast-1440.png",
+    "shots/f1a/light/065-bom-typed-before-switch.png"
+   ],
+   "network": [
+    "(a) no PATCH /bom/refs/C1 after typing 'FAST-C1' + line switch",
+    "(b) PATCH /bom/refs/C1 200, PATCH /bom/refs/R1 200 body MPN 'ED-SLOWLY-0123' (user typed 'R-LINE-MPN-TYPED-SLOWLY-0123')",
+    "GET /bom → C1 'SLOW-C1-X', R1 'ED-SLOWLY-0123', Q1 null (typed 'MMBT3904' then switched view)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 603,
+    "note": "useEffect([row]) resets draft/lastSaved whenever the row object identity changes (every setBom), discarding unsaved typing"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 620,
+    "note": "debounced autosave (setTimeout 650 ms at :611); cleanup clears the pending timeout on row change or unmount without flushing"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 247,
+    "note": "updateSelected always calls setBom(result.bom), re-creating every row object"
+   }
+  ],
+  "suggestedFix": "DesignerBomView.tsx: render <BomInspector key={selected?.refs[0]?.refdes}> and keep the pending patch in a ref; in the autosave effect cleanup (and on unmount) flush a pending, unsaved patch by calling the onUpdate that was bound to that row's refdes (make updateSelected take the refdes explicitly instead of reading `selected`). Reset draft only when the row key changes, not on identity change (this also fixes Q5-004), and do not overwrite fields that are dirty in the draft when a server BOM for another line arrives.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "designer.bom:inspector:autosave-draft-loss",
+  "status": "confirmed",
+  "relatedIds": [
+   "Q5-001",
+   "Q5-004",
+   "Q5-032"
+  ],
+  "mergedIds": [],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1a",
+   "reason": "Part (a) reproduced on loopback with no latency: selected line Q1, typed 'VF1A-Q1' into MPN, clicked line R2 150 ms later -> no PATCH /bom/refs/* was sent and GET /bom still has Q1 MPN null; then typed 'VF1A-R2' on R2 and switched Schem -> BOM within 150 ms -> no PATCH, R2 MPN null. Code: DesignerBomView.tsx:620 autosave effect cleanup clears the 650 ms timeout on row change or unmount without flushing; :603 [row] effect resets draft on every row identity change. Part (b) (a returning PATCH wipes the draft being typed on another line) needs an in-flight PATCH, so it is latency-only on loopback; confirmed by code (:247 updateSelected always setBom -> new row identities -> :603 resets the draft) and f1a's latency evidence. Not a duplicate: Q5-001 is refs[0] addressing, Q5-004 is the 'Saved' flicker caused by the same :603 reset; the loss on line/view switch is new. S2 kept: silent loss of typed sourcing data in a normal fast-editing flow.",
+   "evidence": [
+    "shots/vf1a/dark/051-bom-typed-q1.png",
+    "network: 0 PATCH /bom/refs/* after typing 'VF1A-Q1' + line switch and 'VF1A-R2' + view switch; GET /bom Q1 null, R2 null",
+    "shots/f1a/dark/065-bom-race-typing-wiped-2.png (f1a, latency part b)"
+   ]
+  }
+ },
+ {
+  "id": "F1A-003",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "A PCB edit made while the previous one is still saving is rejected with 'Revision conflict. Please retry after refresh.' and snaps back",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "91573bb6-cb22-4ca4-a8d9-58057a1ff45b",
+  "repro": [
+   "PCB view, DRC markers hidden (View ▾ › DRC markers), latency shim 2.5 s (simulates a slow backend)",
+   "Drag J1 70 px down, release, and within ~0.5 s drag R2 to a new spot",
+   "Watch the canvas for 8 s, then GET projection/pcb"
+  ],
+  "expected": "Commands are serialized (or rebased): both moves persist, and the first part stays where it was dropped while its save is in flight.",
+  "actual": "Both envelopes carry baseRevision 15. J1's move is saved (rev 16); R2's gets {ok:false, code:'REVISION_CONFLICT', expected 15, actual 16}. R2 snaps back, and a 6 s toast says 'Revision conflict. Please retry after refresh.', telling the user to reload after a normal action. While both are in flight, J1 also jumps back to its old position, because the second drag replaces the single committedDragOverride map, then J1 reappears when the refresh lands. Reproduced 2/2. Same root cause as Q4-011 (Alt+click solo sends two commands with one baseRevision): the PCB command path has no queue.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1a/dark/057-drag-race-after-first.png",
+    "shots/f1a/dark/058-drag-race-after-second.png",
+    "shots/f1a/dark/059-drag-race-settled.png",
+    "shots/f1a/dark/060-drag-race-conflict-toast.png"
+   ],
+   "network": [
+    "POST /commands pcb_move_placement J1 baseRevision 15 → {ok:true, revision:16}",
+    "POST /commands pcb_move_placement R2 baseRevision 15 → {ok:false, code:'REVISION_CONFLICT', conflict:{expected:15, actual:16}}",
+    "GET projection/pcb → J1 moved, R2 unchanged (15,-8)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/hooks/useDesignerWorkspace.ts",
+    "line": 505,
+    "note": "baseRevision read from projectionRef, which only advances when a response returns; concurrent PCB envelopes share it"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 3753,
+    "note": "setCommittedDragOverride(optimistic) replaces the previous drag's optimistic map; also cleared to null on selection changes (:3284 etc.)"
+   },
+   {
+    "path": "src/modules/designer/frontend/hooks/useDesignerWorkspace.ts",
+    "line": 104,
+    "note": "user-facing copy 'Revision conflict. Please retry after refresh.'"
+   }
+  ],
+  "suggestedFix": "useDesignerWorkspace.ts dispatchEnvelope (:485-530): chain every dispatch for a design on a promise queue (queueRef.current = queueRef.current.then(() => send())) so each envelope takes baseRevision from the previous result (same fix as Q4-011). PcbCanvas.tsx: make committedDragOverride a Map merged per placementId and remove only that command's entries when it settles. Replace the 'retry after refresh' copy: on REVISION_CONFLICT for a move, refetch and re-dispatch once.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "designer.pcb:commands:concurrent-dispatch-conflict",
+  "status": "confirmed",
+  "severityOriginal": "S2",
+  "relatedIds": [
+   "Q4-011",
+   "Q3-021"
+  ],
+  "mergedIds": [],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1a",
+   "reason": "Reproduced with the in-page 2.5 s fetch shim: dragged C1, then J1 within 150 ms -> both envelopes base=28; C1 saved (rev 29), J1 -> {ok:false, REVISION_CONFLICT, expected 28, actual 29}; J1 snapped back and a role=alert toast read 'Revision conflict. Please retry after refresh.'; C1 jumped back to its old spot while its save was in flight (second drag replaced the single committedDragOverride). Also in a first attempt, merely clicking a trace while C1's move was in flight made C1 jump back (setCommittedDragOverride(null) on selection change). Severity lowered S2->S3: this is latency-only. On the real loopback stack a pcb_move_placement round trip measured 8-21 ms, so a human cannot start a second drag inside the window; it needs a slow or busy backend. The root cause (no serialized PCB dispatch; baseRevision shared by concurrent envelopes) is the same as Q4-011 (S2), whose robust fix already proposes the dispatchEnvelope promise queue; fix once there.",
+   "evidence": [
+    "shots/vf1a/dark/031-drag-race-after-first.png",
+    "shots/vf1a/dark/032-drag-race-after-second.png",
+    "shots/vf1a/dark/033-drag-race-conflict-toast.png",
+    "shots/vf1a/dark/022-drag-race-after-second.png",
+    "network: pcb_move_placement f2a87d5f base=28 -> ok rev 29; pcb_move_placement 8097ec81 base=28 -> REVISION_CONFLICT expected 28 actual 29",
+    "loopback timing: pcb_move_placement round trip 8-21 ms (curl), projection/pcb 2 ms"
+   ]
+  }
+ },
+ {
+  "id": "F1A-004",
+  "knownRef": null,
+  "area": "designer.comments",
+  "title": "A failed comment post silently discards the typed comment (uncaught TypeError) and leaves comment mode armed",
+  "category": "error-handling",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "91573bb6-cb22-4ca4-a8d9-58057a1ff45b",
+  "repro": [
+   "Schematic: click toolbar 'Comment', click the canvas, type 'QA f1a offline comment'",
+   "network-state-set offline (or route '**/comments/commands' → 500), press Cmd+Enter",
+   "network-state-set online; click anywhere on the schematic or PCB canvas; press Esc",
+   "GET /designs/{id}/comments?surface=schematic"
+  ],
+  "expected": "The composer stays open with the text and an error plus Retry, and comment mode ends only after a successful post.",
+  "actual": "The composer closes immediately, the text is gone, and no pin or message appears; the only signal is an uncaught 'TypeError: Failed to fetch' in the console. The server has 0 threads. The Comment tool stays pressed, so the next canvas click opens a new 'Add a comment…' composer; Esc does not leave the mode (Q5-027). The mode can be left via the schematic 'Comment' toggle or PCB 'Comment ▾' > 'Comment C'.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1a/dark/106-offline-comment-post.png",
+    "shots/f1a/dark/110-k10-error-toast-1440.png",
+    "shots/f1a/dark/114-pcb-drcdock-before-move.png",
+    "shots/f1a/dark/115-pcb-comment-mode-stuck.png"
+   ],
+   "console": [
+    "TypeError: Failed to fetch at fetchData (api.ts:19) at Object.dispatchCommentCommand (api.ts:162) at useDesignerComments.ts:104 at Object.createThread (useDesignerComments.ts:124) at onCreateComment (Space.tsx) … (uncaught in promise)"
+   ],
+   "network": [
+    "POST /designs/91573bb6…/comments/commands → net::ERR_INTERNET_DISCONNECTED",
+    "GET /comments?surface=schematic → {threads:[]}"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 1177,
+    "note": "`void comments.createThread(anchor, body)`: no catch, no user-facing error (also :1420)"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/SchematicCanvas.tsx",
+    "line": 3331,
+    "note": "setCommentDraft(null) runs synchronously before the post resolves (same in PcbCanvas.tsx:6011)"
+   },
+   {
+    "path": "src/modules/designer/frontend/hooks/useDesignerComments.ts",
+    "line": 175,
+    "note": "setCommentMode(false) only on the success path"
+   }
+  ],
+  "suggestedFix": "Change onCreateComment to return a Promise (Space.tsx:1176/1419: `(anchor, body) => comments.createThread(anchor, body)`), and in SchematicCanvas.tsx:3329 / PcbCanvas.tsx:6009 await it: clear the draft only on success; on failure keep the composer open with its text and an inline role='alert' 'Couldn't post comment — Retry'. Esc handling belongs to Q5-027.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.comments:create:silent-failure-mode-stuck",
+  "status": "confirmed",
+  "relatedIds": [
+   "Q5-027",
+   "Q9-012"
+  ],
+  "mergedIds": [],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1a",
+   "reason": "Reproduced on the schematic: Comment tool, click canvas, type 'VF1A offline comment', go offline, Cmd+Enter -> composer closed, text gone, no pin, no role=alert, pageerror 'TypeError: Failed to fetch' (unhandled); GET /comments?surface=schematic -> threads []. After going back online the Comment tool stays pressed (aria-pressed=true), Esc does not change it, and a canvas click opens a new 'Add a comment…' composer. Code: Space.tsx:1177/1420 `void comments.createThread(...)` with no catch; SchematicCanvas.tsx:3331 / PcbCanvas.tsx:6011 clear the draft synchronously; useDesignerComments.ts:175 exits comment mode only on success. Refuted part: 'PCB has no way out' is wrong. On PCB the toolbar shows 'Comment ▾' pressed, and choosing 'Comment C' in that menu toggles the mode off (toolbar returned to 'Add'). The Esc-does-not-exit part is already Q5-027. Environment note: browser 'offline' does not block a loopback backend in Electron; the real trigger is a local backend error (500) or an unreachable backend. S2 kept for the silent discard of user-written text (same class as Q9-012).",
+   "evidence": [
+    "shots/vf1a/dark/061-offline-comment-post.png",
+    "shots/vf1a/dark/062-comment-mode-stuck.png",
+    "shots/vf1a/dark/064-pcb-add-menu-comment-active.png",
+    "pageerror: TypeError: Failed to fetch (uncaught in promise)",
+    "network: GET /comments?surface=schematic -> {threads:[]}"
+   ]
+  }
+ },
+ {
+  "id": "F1A-005",
+  "knownRef": "K41",
+  "area": "designer.drc",
+  "title": "DRC view/dock swallow load failures: '0 DRC' + 'Run DRC to validate the board.' for a board with 33 violations, and unresolved '?.1 ↔ ?.2' / 'net pt:892' labels",
+  "category": "error-handling",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "91573bb6-cb22-4ca4-a8d9-58057a1ff45b",
+  "repro": [
+   "Reload (empty DRC store). route '**/api/modules/designer/designs/*/drc' → 500 problem+json",
+   "Open QA-f1a-board → DRC tab; also PCB → dock DRC tab",
+   "unroute; route '**/designs/*/projection/pcb*' → 500; open the DRC tab and click Run DRC",
+   "With a 2.5 s latency shim and no 500s, open the DRC tab or dock (every mount refetches the projection)"
+  ],
+  "expected": "A failed report or label fetch shows an error with Retry, not a 'never run' state. Counts are shown as unknown, not 0. Violation labels fall back to refdes/net names already in the report.",
+  "actual": "GET /drc 500: the view says 'Run DRC to validate the board.' (as if DRC never ran) and the status bar shows '0 DRC' with the blue no-issues diamond, although the persisted report has 1 error and 31 warnings (Home shows '32 errors'). The dock and PCB toolbar do the same. PCB projection 500: every violation anchor stays unresolved ('net pt:-14', '?.1 ↔ ?.2', 'part ↔ ?.4', 'part ↔ ?.5') permanently, and 'Edit rules' is disabled with no explanation. No error text appears in either case: both fetches end in .catch(() => {}). Under latency the same raw placeholders show for the whole projection round-trip on every DRC view/dock mount, because the view refetches a projection the PCB workspace already holds. Confirms K41 (DesignerDrcView part).",
+  "evidence": {
+   "screenshots": [
+    "shots/f1a/dark/042-k41-drcview-drcget500.png",
+    "shots/f1a/dark/043-k41-pcb-drcdock-drcget500.png",
+    "shots/f1a/dark/040-k41-drcview-pcbproj500.png",
+    "shots/f1a/dark/041-k41-pcb-view-proj500.png",
+    "shots/f1a/light/042-k41-drcview-drcget500.png",
+    "shots/f1a/light/045-k41-drcview-unresolved-labels.png",
+    "shots/f1a/dark/029-first-drc-250ms.png",
+    "shots/f1a/dark/033-first-drc-dock-250ms.png"
+   ],
+   "console": [
+    "Failed to load resource: 500 …/designs/91573bb6…/drc",
+    "Failed to load resource: 500 …/projection/pcb (no app-level log)"
+   ],
+   "network": [
+    "GET /designs/91573bb6…/drc → 500",
+    "GET /designs/91573bb6…/projection/pcb → 500"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerDrcView.tsx",
+    "line": 114,
+    "note": "getPcbProjection(...).catch(() => {}): labels unresolved and rules.available false forever, no error"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerDrcView.tsx",
+    "line": 121,
+    "note": "getDrcResult(...).catch(() => {}): renders the never-run state and the store count 0"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerDrcView.tsx",
+    "line": 405,
+    "note": "resolveAnchorLabel falls back to '?' / raw net id when projection is null"
+   }
+  ],
+  "suggestedFix": "DesignerDrcView.tsx:109-121: replace both `.catch(() => {})` with `useDrcStore.getState().setError('Couldn't load DRC results: …')` / a local projectionError, render them with a Retry button that re-runs the effect, and give 'Edit rules' a disabled title ('Board data failed to load'). Keep the status-bar/toolbar/dock counts at '—' (unknown) while no report is known (shared with Q4-047's fix). When docked in PCB, pass the PCB workspace projection instead of refetching.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.drc:view:silent-catch-zero-state",
+  "status": "confirmed",
+  "relatedIds": [
+   "Q4-047"
+  ],
+  "mergedIds": [],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1a",
+   "reason": "Reproduced after a reload (empty DRC store): route GET **/designs/*/drc -> 500, open the DRC view -> only 'Run DRC to validate the board.' and status '◆ 0 DRC' with the diamond probed #7aa7d9 (--status-info, ΔE 0) although the persisted report has 1 error + 32 warnings. With projection/pcb -> 500 and the report loaded: permanent 'net pt:-14', '?.1 ↔ ?.2', 'part ↔ ?.4' labels and 'Edit rules' disabled with no title/reason; no error text anywhere. Code: DesignerDrcView.tsx:114 and :121 `.catch(() => {})`. Confirms K41 (DRC part). The latency sub-claim (placeholders during the projection round trip) is negligible on loopback (projection 2 ms). Related to Q4-047 (the never-run state itself reads '0' / blank); the new defect here is that a failed load is disguised as that never-run state. S2 kept: wrong data shown (clean '0 DRC' for a board with violations), same calibration as F1D-003.",
+   "evidence": [
+    "shots/vf1a/dark/070-k41-drcview-drcget500.png",
+    "shots/vf1a/dark/071-k41-drcview-proj500-labels.png",
+    "probe 070: diamond (1324,889) #7aa7d9 --status-info ΔE 0.0",
+    "network: GET /designs/91573bb6…/drc -> 500; GET /projection/pcb -> 500",
+    "shots/f1a/light/045-k41-drcview-unresolved-labels.png (f1a, light)"
+   ]
+  }
+ },
+ {
+  "id": "F1A-006",
+  "knownRef": "K40",
+  "area": "designer.drc",
+  "title": "DRC/ERC run failures show only a bare 'Internal error' line; the stale error sticks above a good report, and Run DRC shows no pending state (double-click starts twice)",
+  "category": "error-handling",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "91573bb6-cb22-4ca4-a8d9-58057a1ff45b",
+  "repro": [
+   "route '**/designs/*/drc/runs' → 500; PCB dock DRC tab → Run DRC",
+   "route '**/designs/*/drc' (report GET) → 500 only; DRC full view → Run DRC",
+   "route '**/designs/*/erc' → 500; Schematic dock ERC tab → Run ERC",
+   "unroute; switch Schem → DRC (view remounts and loads the report)",
+   "With the latency shim, double-click Run DRC"
+  ],
+  "expected": "A contextual error ('DRC could not start: …') with Retry/Dismiss that clears when a report loads. The button shows Starting…/disabled from the first click.",
+  "actual": "Every failure shows only the raw problem title 'Internal error' in a thin red line (no 'DRC'/'ERC' context, no dismiss/retry, not role=alert). The header meanwhile still says 'Run DRC to validate the board.', which wraps to two lines in the 300 px dock. When the run succeeds but the report GET fails, the run is lost behind the same message. After recovery the error stays: 'Internal error' renders above a fully loaded 33-violation report until the next run. During the 2.5 s start request the button still says 'Run DRC' and stays enabled. A double-click sends two POST /drc/runs (both 202) and aborts both SSE streams, and the run then finishes via the poll fallback. ERC behaves the same way: 'Run ERC to check the schematic.' plus a bare 'Internal error'.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1a/dark/044-drc-dock-run-post500.png",
+    "shots/f1a/dark/045-drcview-run-ok-report-get500.png",
+    "shots/f1a/dark/046-erc-run-500.png",
+    "shots/f1a/dark/050-race-dblclick-rundrc.png"
+   ],
+   "network": [
+    "POST /drc/runs → 500",
+    "POST /drc/runs → 202 ×2 on double-click",
+    "GET /drc/runs/eedf71ce…/stream → net::ERR_ABORTED ×2",
+    "GET /erc → 500"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/drc/use-drc-run.ts",
+    "line": 230,
+    "note": "start(): guard checks store.run only; nothing marks 'starting' before await api.startDrcRun, so a second click passes"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/drc/drc-store.ts",
+    "line": 180,
+    "note": "setReport(report) sets only report; the stale error survives hydration"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerDrcView.tsx",
+    "line": 331,
+    "note": "error strip renders the raw message, no dismiss/retry, no role=alert"
+   }
+  ],
+  "suggestedFix": "drc-store.ts: add `starting: boolean`; set it synchronously at the top of use-drc-run.ts start() and return early when already set; clear it in beginRun/failRun. Make setReport also set error: null. DesignerDrcView.tsx:331: render '`DRC couldn't start: ${error}`' in a role='alert' strip with Retry (startRun) and Dismiss (setError(null)); show 'Starting…' and disable Run DRC while starting. Same pattern in DesignerErcView.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.drc:run:error-feedback",
+  "status": "confirmed",
+  "relatedIds": [
+   "Q4-047"
+  ],
+  "mergedIds": [],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1a",
+   "reason": "Reproduced: route POST **/drc/runs -> 500, DRC view Run DRC -> a thin red line with the bare 'Internal error' (no 'DRC' context, no retry/dismiss, not role=alert) under the header hint. After unroute and a Schem -> DRC remount the report loads (labels resolve) but 'Internal error' still renders above it: drc-store.ts:180 setReport never clears error. Double-click Run DRC under the 2.5 s shim: button stays 'Run DRC' and enabled at 400 ms, two POST /drc/runs are sent, and the SSE stream is aborted once and reopened; the backend returned the same runId, so only one run happened. The double-click part is latency-only (on loopback the first POST resolves before the second click). Confirms K40 for DRC/ERC. S3 kept.",
+   "evidence": [
+    "shots/vf1a/dark/080-drcview-run-post500.png",
+    "shots/vf1a/dark/081-drcview-stale-error-after-recovery.png",
+    "shots/vf1a/dark/082-dblclick-rundrc-inflight.png",
+    "network: POST /drc/runs x2 on double-click; GET /drc/runs/9342b0f4…/stream net::ERR_ABORTED then reopened"
+   ]
+  }
+ },
+ {
+  "id": "F1A-007",
+  "knownRef": null,
+  "area": "designer.shell",
+  "title": "Opening a design briefly shows 'No design open' + 'Empty design', and loading views show confident zeros ('0 DRC', 'All 0', '$0.00', 'Synced with schematic')",
+  "category": "bug",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "91573bb6-cb22-4ca4-a8d9-58057a1ff45b",
+  "repro": [
+   "Close all design tabs, reload, open QA-f1a-board from Home (double-click)",
+   "Watch the first frames with no latency: poll the DOM every 20 ms",
+   "Repeat with a 2.5 s fetch latency shim and switch to PCB, BOM, 3D, DRC right after opening"
+  ],
+  "expected": "A loading state ('Opening QA-f1a-board…' or a skeleton) until data arrives. No empty-state CTAs and no 0 counts while loading.",
+  "actual": "Schem: the tab is only created after the design list loads. Until then the canvas says 'No design open — Create a new design or open an existing one' with a primary 'New design' button, and the Outline says 'Empty design — Add your first component…' with Place/Add/Browse CTAs. At loopback speed this lasts ~50 ms (t=178–222 ms), then 'Loading schematic…' still sits next to Outline 'Empty design'. With 2.5 s latency it lasts ~5 s, and clicking 'New design' there creates a stray design. PCB: 'Loading PCB...' (good), but Components '0' and the status bar '◆ 0 DRC' in success blue; the toolbar and dock are blank. BOM: 'Loading BOM…' next to 'All 0 · Missing MPN 0 · DNP 0', '0 lines · 0 parts', '$0.00', a red '0 missing MPN' and 'Synced with schematic r15', with Export enabled. 3D has a proper spinner card; its left rail is an empty 260 px column. Designer counterpart of F1D-002.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1a/dark/020-first-schem-250ms.png",
+    "shots/f1a/dark/021-first-schem-1450ms.png",
+    "shots/f1a/dark/022-first-pcb-250ms.png",
+    "shots/f1a/dark/025-first-3d-250ms.png",
+    "shots/f1a/dark/027-first-bom-250ms.png",
+    "shots/f1a/light/020-first-schem-250ms.png",
+    "shots/f1a/light/027-first-bom-250ms.png"
+   ],
+   "console": [],
+   "network": [
+    "GET /designs (2.5 s) gates tab creation; GET projection/schematic afterwards"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 522,
+    "note": "route/tab reconciliation waits for state.loadingDesigns, so noTabsOpen stays true meanwhile"
+   },
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 1380,
+    "note": "noTabsOpen renders DesignerEmptyState ('No design open' + New design) with no loading branch"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 391,
+    "note": "'Loading BOM…' row while filters, footer totals and 'Synced with schematic' render from the empty bom"
+   }
+  ],
+  "suggestedFix": "Open the tab immediately from the route designId (optimistically) and show 'Loading design…' until designs load, or render a loading branch while state.loadingDesigns. Hide Outline empty CTAs until the projection exists. In BOM, hide counts/totals/sync status and disable Export while loading. In the PCB status bar render '— DRC' in a neutral colour until the report is known.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.shell:loading:misleading-empty-states",
+  "status": "confirmed",
+  "severityOriginal": "S3",
+  "relatedIds": [
+   "F1D-002",
+   "Q4-047"
+  ],
+  "mergedIds": [],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1a",
+   "reason": "Reproduced. With the 2.5 s shim, opening QA-f1a-board from Home showed at 400 ms both 'No design open … New design' and Outline '0 · Empty design' with Place/Add/Browse CTAs; BOM showed 'Loading BOM…' next to 'All 0 · Missing MPN 0', '$0.00', '0 missing MPN', 'Synced with schematic r34'; PCB 'Loading PCB...' with 'Components 0' and '0 DRC'. On the real loopback stack a per-frame rAF sampler saw 'No design open' + 'Empty design' in only 2 painted frames (t=261-263 ms) and never saw 'Loading schematic'. Severity lowered S3->S4 to match F1D-002 (the same loading-state class on Home/Assistant, S4): invisible at loopback speed, only a slow backend shows it (and only then can the 'New design' CTA create a stray design).",
+   "evidence": [
+    "shots/vf1a/dark/090-first-schem-400ms.png",
+    "shots/vf1a/dark/091-first-bom-400ms.png",
+    "shots/vf1a/dark/092-first-pcb-400ms.png",
+    "rAF sampler (no shim): 148 frames, 'No design open'+'Empty design' at 261 ms and 263 ms only"
+   ]
+  }
+ },
+ {
+  "id": "F1A-008",
+  "knownRef": null,
+  "area": "home",
+  "title": "Pressing N twice on Home while the first create is in flight creates two 'Untitled Design' designs",
+  "category": "bug",
+  "severity": "S4",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "c1fbe4fd-6b34-409f-a765-ee559f458dcc",
+  "repro": [
+   "Home, latency shim 2.5 s",
+   "Press N, then N again while the button reads 'Creating…'",
+   "GET /api/modules/designer/designs"
+  ],
+  "expected": "The second N is ignored while a create is pending (as the disabled button suggests).",
+  "actual": "Two POST /designs (both 201) create c1fbe4fd… and 91573bb6… ('Untitled Design' ×2, 13:47:07.519Z / .648Z). The designer opens only the second, so the first is an invisible orphan in the list. It was renamed afterwards via API to 'QA-f1a-dup-from-N-twice'. The button correctly shows a disabled 'Creating…', but the N hotkey handler doesn't check `creating`.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1a/dark/001-home-N-twice-creating.png",
+    "shots/f1a/dark/002-designer-after-N-twice.png"
+   ],
+   "network": [
+    "POST /api/modules/designer/designs → 201 (#251)",
+    "POST /api/modules/designer/designs → 201 (#575)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 296,
+    "note": "keydown N calls handleCreateDesign() without checking `creating`"
+   },
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 171,
+    "note": "handleCreateDesign has no in-flight guard (a ref), only setCreating for the button"
+   }
+  ],
+  "suggestedFix": "Guard handleCreateDesign with a creatingRef (return early if set) and add `!creating` to the N hotkey condition. The same pattern is worth applying to the Designer empty-state 'New design' and the tab-strip '+'.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "home:new-design:double-create",
+  "status": "confirmed",
+  "severityOriginal": "S3",
+  "mergedIds": [],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1a",
+   "reason": "Reproduced without creating designs: an in-page fetch wrapper held POST /api/modules/designer/designs unresolved; on Home, pressing N three times while the button read 'Creating…' (disabled=true) issued 3 POSTs. Code: HomeScreen.tsx:296 N hotkey has no `creating` check and handleCreateDesign (:171) has no in-flight guard. Severity lowered S3->S4: latency-only. On loopback the create resolves and navigates to the designer (unmounting Home) within one round trip, well before a second key press; the outcome is an extra empty design, not data loss.",
+   "evidence": [
+    "shots/vf1a/dark/100-home-N-thrice-creating.png",
+    "in-page counter: POST /designs issued 3 (held, never sent)"
+   ]
+  }
+ },
+ {
+  "id": "F1A-009",
+  "knownRef": "K10",
+  "area": "designer.shell",
+  "title": "Designer toast is off-token (raw red/amber, backdrop-blur, shadow), has no role/aria-live, lasts only 3 s even for errors and covers header controls",
+  "category": "a11y",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": "91573bb6-cb22-4ca4-a8d9-58057a1ff45b",
+  "repro": [
+   "Error toast: route '**/library/components/*/placement' → 500; Schematic Cmd+K, type 'Capacitor', Enter (Space.tsx:698)",
+   "Warning toast: BOM line whose refs have no placementId (mocked GET /bom), inspector 'PCB' (Space.tsx:895)",
+   "Inspect the toast DOM, time its lifetime, probe colours in both themes, repeat at 1100×720"
+  ],
+  "expected": "Kit notice: token colours (--status-danger / --status-danger-soft), no blur or shadow, role=status or alert with aria-live, errors persist until dismissed, a ≥20 px dismiss target, and placement clear of header controls.",
+  "actual": "Container and items have no role or aria-live, so screen readers never announce them. Classes are 'rounded-md border … shadow-sm backdrop-blur border-red-300 bg-red-50 text-red-700 dark:bg-red-950 …' (computed backdrop-filter blur(8px), box-shadow 0 1px 3px). Pixel probes: dark error bg #460809 (ΔE 25.7 vs --status-danger-soft), dark warning bg #461901 (ΔE 23.9 vs --status-warning-soft), light error bg #fef2f2 (red-50) and light warning #fffbeb (amber-50). Both auto-dismiss after ~3.05 s, including errors. The '×' button is named 'Dismiss' but is a 7×15 px glyph in raw slate-400. At top-right it covers 'Assistant', 'Toggle side panel' and 'ERC' (1440), plus the BOM inspector's 'Show in schematic' / 'PCB' links the user just clicked. At 1100 it covers 'Assistant' and 'Toggle side panel'. The error text is the raw problem title 'Internal error' with no mention of the failed part placement.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1a/dark/110-k10-error-toast-1440.png",
+    "shots/f1a/dark/111-k10-warning-toast-1440.png",
+    "shots/f1a/dark/110-k10-error-toast-1100.png",
+    "shots/f1a/light/110-k10-error-toast-1440.png",
+    "shots/f1a/light/111-k10-warning-toast-1440.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/f1a/dark/110-k10-error-toast-1440.png",
+     "x": 1330,
+     "y": 20,
+     "hex": "#460809",
+     "nearestToken": "--status-danger-soft@app",
+     "deltaE": 25.7
+    },
+    {
+     "file": "shots/f1a/dark/111-k10-warning-toast-1440.png",
+     "x": 1183,
+     "y": 20,
+     "hex": "#461901",
+     "nearestToken": "--status-warning-soft@app",
+     "deltaE": 23.9
+    },
+    {
+     "file": "shots/f1a/light/110-k10-error-toast-1440.png",
+     "x": 1325,
+     "y": 16,
+     "hex": "#fef2f2",
+     "nearestToken": "--primary-foreground",
+     "deltaE": 4.3
+    },
+    {
+     "file": "shots/f1a/light/111-k10-warning-toast-1440.png",
+     "x": 1183,
+     "y": 16,
+     "hex": "#fffbeb",
+     "nearestToken": "--surface-input",
+     "deltaE": 8.4
+    }
+   ],
+   "network": [
+    "GET /api/modules/designer/library/components/openpcb.core.passive.capacitor/placement → 500 (injected)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/hooks/use-toast.tsx",
+    "line": 81,
+    "note": "raw palette + shadow-sm + backdrop-blur, no role/aria-live"
+   },
+   {
+    "path": "src/modules/designer/frontend/hooks/use-toast.tsx",
+    "line": 32,
+    "note": "default duration 3000 ms for every variant, including error"
+   },
+   {
+    "path": "src/modules/designer/frontend/hooks/use-toast.tsx",
+    "line": 77,
+    "note": "fixed right-3 top-3 overlays the 34 px header controls"
+   }
+  ],
+  "suggestedFix": "Replace ToastViewport with the shared kit notice (or port Library's NoticeViewport): bg-surface-raised with border-status-danger and a text-status-* accent, no blur or shadow, role='status' (role='alert' for errors) on an aria-live region, a 20 px IconButton close, errors sticky until dismissed and others ~5 s. Place it below the header (top: 34px + 8px) or bottom-right above the status bar. Prefix messages with the action ('Couldn't place Capacitor: …').",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.shell:toast:off-token-a11y",
+  "status": "confirmed",
+  "relatedIds": [
+   "Q10-004",
+   "Q6-035"
+  ],
+  "mergedIds": [],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1a",
+   "reason": "Reproduced in both themes: route **/library/components/*/placement -> 500, Schematic Cmd+K 'Capacitor' Enter -> toast 'Internal error ×' at (1321,12) 107×33. No role/aria-live on toast or container; classes 'rounded-md … shadow-sm backdrop-blur border-red-300 bg-red-50 … dark:bg-red-950'; computed backdrop-filter blur(8px) and box-shadow 0 1px 3px; 'Dismiss' button 7×15 px in slate (#7f7f84). Gone at 3.1 s (error variant uses the 3000 ms default). Covers 'Assistant', 'Toggle side panel', 'ERC'. Probes: dark bg #460809 ΔE 25.7 vs --status-danger-soft, border #82181a ΔE 32.2 vs --status-danger; light bg #fef2f2 (red-50), border #ffa2a2 ΔE 34.6. Confirms K10. S3 kept.",
+   "evidence": [
+    "shots/vf1a/dark/110-k10-error-toast-1440.png",
+    "shots/vf1a/light/110-k10-error-toast-1440.png",
+    "probe dark (1330,20) #460809 --status-danger-soft ΔE 25.7; (1321,20) #82181a --status-danger ΔE 32.2",
+    "probe light (1330,20) #fef2f2 ΔE 4.3 to --primary-foreground (raw red-50); (1321,20) #ffa2a2 ΔE 34.6"
+   ]
+  }
+ },
+ {
+  "id": "F1A-010",
+  "knownRef": "K40",
+  "area": "designer.shell",
+  "title": "Failed designer commands show a context-free raw 'Internal error'/'Failed to fetch' up to three times; the header strip never clears and shifts the whole layout",
+  "category": "error-handling",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": "91573bb6-cb22-4ca4-a8d9-58057a1ff45b",
+  "repro": [
+   "route '**/api/modules/designer/designs/*/commands' → 500 problem+json {title:'Internal error'}",
+   "Schematic: drag R2 (move_part) → header strip. Draw a wire J1.5 → R2.2",
+   "PCB: drag R2, R route J2 → R2 + Enter, V via + Enter, select a trace + Delete, flip C1",
+   "unroute; do a successful PCB move; reload and diff GET /designs/{id} with what the UI showed",
+   "Offline (network-state-set offline): PCB move/route/delete, schematic Value '10k' + Enter"
+  ],
+  "expected": "Each failure says what failed ('Couldn't move R2 — server error') in one place, with Retry/Dismiss, and clears once the backend recovers.",
+  "actual": "Positives: no divergence or data loss. Every edit rolls back (server stayed at rev 19, and the UI matched after reload), the route session survives a failed commit, and pressing Enter again once online commits it (rev 21) without a reload. Messaging: one PCB failure shows the raw title 'Internal error' (or 'Failed to fetch' offline) three times: the designer header strip (from the earlier schematic failure), a canvas toast with shadow-lg that auto-hides after 6 s, and a Board-panel inline box. None names the operation. The header strip (Space.tsx state.error) persists across views and after successful PCB commands, has no dismiss or retry, and inserts a 24 px row that pushes the toolbar and canvas down (a layout jump mid-drag). Offline, a schematic Value edit just reverts the field to empty: the typed '10k' is lost and only the generic strip explains it. After the wire commit fails, the rubber-band wire stays live from J1.5 with no failure hint at the wire. No white screen and no uncaught errors for these paths.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1a/dark/082-cmd500-schem-move-3s.png",
+    "shots/f1a/dark/086-cmd500-wire-after-mousemove.png",
+    "shots/f1a/dark/089-cmd500-pcb-move.png",
+    "shots/f1a/dark/092-cmd500-route-enter.png",
+    "shots/f1a/dark/097-cmd500-delete-2s.png",
+    "shots/f1a/dark/098-after-unroute-successful-move.png",
+    "shots/f1a/dark/102-offline-route-commit.png",
+    "shots/f1a/dark/105-offline-schem-value.png",
+    "shots/f1a/light/082-cmd500-schem-strip-1100.png",
+    "shots/f1a/light/090-cmd500-pcb-flip-toast-1100.png"
+   ],
+   "network": [
+    "POST /commands → 500 ×8 (move_part, create_wire, pcb_move_placement, pcb_commit_route ×2, pcb_delete_trace, pcb_flip_placement)",
+    "GET /designs/91573bb6… after unroute → revision 19 unchanged, positions unchanged"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 1303,
+    "note": "header error strip: raw state.error, inserted as a 24 px row, no dismiss/retry, not cleared by PCB commands"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 6310,
+    "note": "second copy as a role=alert toast (shadow-lg, 6 s timer at :5427)"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbBoardPanel.tsx",
+    "line": 513,
+    "note": "third copy inline in the Board panel (visible when nothing is selected)"
+   }
+  ],
+  "suggestedFix": "Route command failures through one surface. Wrap errors with the operation name in usePcbWorkspace/useDesignerWorkspace (e.g. setError(`Move failed: ${msg}`)) and map TypeError 'Failed to fetch' to 'Can't reach the OpenPCB backend'. Make the header strip dismissible, overlay it instead of inserting a row, and clear it on any successful command. Drop the duplicate Board-panel copy.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.shell:command-errors:raw-duplicated-sticky",
+  "status": "confirmed",
+  "relatedIds": [
+   "Q3-025"
+  ],
+  "mergedIds": [],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1a",
+   "reason": "Reproduced: route **/designs/*/commands -> 500. Schematic drag R2 -> header strip 'Internal error' (80,34 1360×24) pushes the toolbar from y=34 to y=58. PCB drag C1 -> the same strip plus a role=alert canvas toast 'Internal error ×' (auto-hides after 6 s, has a Dismiss button); the move rolled back (server unchanged). After unroute, a successful PCB move (rev 34->35) left the header strip in place. The third copy (PcbBoardPanel.tsx:513) renders only when nothing is selected, per the code; with a selection the dock shows the part instead. Messages never name the operation. Confirms K40 for designer commands. S3 kept (no data divergence).",
+   "evidence": [
+    "shots/vf1a/dark/111-cmd500-schem-move.png",
+    "shots/vf1a/dark/114-cmd500-pcb-move-3copies.png",
+    "shots/vf1a/dark/115-after-unroute-successful-move-strip-stays.png",
+    "DOM: schem toolbar top 34 -> 58 after the strip appears; strip still present after pcb_move_placement ok rev 35"
+   ]
+  }
+ },
+ {
+  "id": "F1A-011",
+  "knownRef": "K40",
+  "area": "designer.pcb",
+  "title": "Export and DXF import failures surface raw transport/parser text ('Failed to fetch' ×2, 'Ended on code undefined') that lingers after recovery",
+  "category": "copy",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "91573bb6-cb22-4ca4-a8d9-58057a1ff45b",
+  "repro": [
+   "PCB → Export…, tick 'Export anyway', route '**/exports/gerber*' → 500, click Export anyway",
+   "unroute; network-state-set offline; click Export anyway, then toggle 'Include BOM CSV'",
+   "network-state-set online; toggle the checkbox again",
+   "Board panel → Edit → '⭳ Import DXF…' → Choose a .dxf file → upload fixtures/sample.txt, then fixtures/garbage.step"
+  ],
+  "expected": "Human messages ('Couldn't build the ZIP — server error', 'Not a DXF file'), a single error at a time, cleared when the next attempt succeeds, and the chosen file name shown.",
+  "actual": "Export 500: 'Internal error'. Offline: two stacked identical boxes 'Failed to fetch' / 'Failed to fetch' (summary + download). After reconnecting, the summary recovers but the stale download 'Failed to fetch' stays until the next click. The double-click Download guard works (1 request). DXF: the input has accept='.dxf', but any file picked via 'All files' is sent. The modal shows the backend detail verbatim, 'could not parse DXF: Unexpected end of input: EOF group not read before end of file. Ended on code undefined' (and 'Ended on code ' for garbage.step), lowercase and developer-facing. The chosen file name is never shown.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1a/dark/069-export-zip-500.png",
+    "shots/f1a/dark/070-export-offline.png",
+    "shots/f1a/dark/071-export-offline-summary.png",
+    "shots/f1a/dark/121-dxf-sample-txt.png",
+    "shots/f1a/dark/122-dxf-garbage-step.png"
+   ],
+   "network": [
+    "POST /exports/gerber?format=zip → 500",
+    "POST /exports/gerber?format=summary → net::ERR_INTERNET_DISCONNECTED",
+    "POST /imports/dxf/inspect → 400 {detail:'could not parse DXF: Unexpected end of input: EOF group not read before end of file. Ended on code undefined'}"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbExportDialog.tsx",
+    "line": 139,
+    "note": "handleDownload stores err.message verbatim; download status is not reset when options change or the summary refetch succeeds"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbExportDialog.tsx",
+    "line": 275,
+    "note": "summary error rendered separately with the same text"
+   },
+   {
+    "path": "src/modules/designer/backend/import/dxf/parse-dxf.ts",
+    "line": 75,
+    "note": "`could not parse DXF: ${err.message}` passes the dxf-parser exception text to the user"
+   }
+  ],
+  "suggestedFix": "PcbExportDialog.tsx: map TypeError('Failed to fetch') to 'Can't reach the OpenPCB backend' and 5xx to 'Export failed (server error)'; reset download status to idle when any option changes or the summary succeeds, and render one error box. parse-dxf.ts:75: throw 'This file isn't a valid DXF' (keep the parser detail for logs only). Show the chosen file name in the DXF drop zone and disable 'Import outline' until a file parses.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:export-dxf:raw-errors",
+  "status": "confirmed",
+  "mergedIds": [],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1a",
+   "reason": "Reproduced. Export dialog with 'Export anyway' checked: ZIP request routed to 500 -> 'Internal error'; offline -> two 'Failed to fetch' boxes; back online and toggling 'Include BOM CSV' -> the summary recovers but one stale 'Failed to fetch' remains. DXF: 'Import DXF…' > 'Choose a .dxf file' > upload sample.txt -> modal shows 'could not parse DXF: Unexpected end of input: EOF group not read before end of file. Ended on code undefined'; the drop zone still says 'Choose a .dxf file' (no file name). Correction: the DXF text is produced in the backend parser (parse-dxf.ts:75), not routes.ts:3841. Offline is only a stand-in for an unreachable backend on desktop; the DXF wrong-file path is a real user-error path. S3 kept (K40).",
+   "evidence": [
+    "shots/vf1a/dark/120-export-zip-500.png",
+    "shots/vf1a/dark/121-export-offline.png",
+    "shots/vf1a/dark/122-export-online-stale.png",
+    "shots/vf1a/dark/130-dxf-sample-txt.png"
+   ]
+  }
+ },
+ {
+  "id": "F1A-012",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "If the PCB projection fails to load, PCB shows only grey 'PCB projection unavailable' with no reason or retry, and the workspace error is never rendered",
+  "category": "error-handling",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "91573bb6-cb22-4ca4-a8d9-58057a1ff45b",
+  "repro": [
+   "route '**/api/modules/designer/designs/*/projection/pcb*' → 500",
+   "Open QA-f1a-board → PCB (or click a violation in the DRC view)",
+   "unroute and wait 10 s without leaving the view"
+  ],
+  "expected": "An error state with the reason and a Retry button, recovering automatically or on Retry.",
+  "actual": "Unlike K09 it doesn't spin forever: it switches to plain 13 px grey text 'PCB projection unavailable' in the middle of the canvas. There is no reason, no Retry, and no role=alert. The Layers section is empty, 'Components 0' is shown, the PCB toolbar is gone, and the Properties dock is blank. usePcbWorkspace stores the failure message in workspace.error, but the alert toast only renders inside the projection branch, so it never appears. After unroute nothing retries until the user leaves PCB and comes back (Schem → PCB recovers).",
+  "evidence": {
+   "screenshots": [
+    "shots/f1a/dark/041-k41-pcb-view-proj500.png",
+    "shots/f1a/dark/123-pcb-proj500-after-unroute-viewswitch.png"
+   ],
+   "network": [
+    "GET /projection/pcb → 500"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 6189,
+    "note": "!workspace.projection -> 'Loading PCB...' / 'PCB projection unavailable' text only"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/usePcbWorkspace.ts",
+    "line": 136,
+    "note": "refresh() sets error, but the role=alert surface is gated on projection"
+   }
+  ],
+  "suggestedFix": "Render a kit error state when !projection && error: 'Couldn't load the PCB — <reason>', a Retry button calling workspace.refresh(), role=alert. Retry automatically on window focus and 'online' events.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:load-failure:no-retry",
+  "status": "confirmed",
+  "relatedIds": [
+   "Q3-025"
+  ],
+  "mergedIds": [],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1a",
+   "reason": "Reproduced: route **/projection/pcb* -> 500, Schem -> PCB: the canvas shows only 13 px grey 'PCB projection unavailable' on #08090a, no reason, no Retry, no role=alert; Layers empty, Components 0, toolbar gone, Properties dock blank. After unroute and 10 s the text was still there; Schem -> PCB recovered. Code: PcbCanvas.tsx:6189-6191 renders only text when !workspace.projection; usePcbWorkspace.ts:136 stores the message but the alert toast is inside the projection branch. PCB analogue of K09/Q3-025 (not a duplicate: different view and code path). S3 kept.",
+   "evidence": [
+    "shots/vf1a/dark/140-pcb-proj500.png",
+    "DOM: 0 Retry buttons, 0 role=alert; 'PCB projection unavailable' still present 10 s after unroute; gone after Schem -> PCB"
+   ]
+  }
+ },
+ {
+  "id": "F1A-013",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "No in-flight feedback for PCB commands: Undo/moves on a slow backend look like no-ops for seconds",
+  "category": "perf",
+  "severity": "S4",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "91573bb6-cb22-4ca4-a8d9-58057a1ff45b",
+  "repro": [
+   "Latency shim 2.5 s, PCB view with 2 undoable moves",
+   "Click toolbar Undo 3× quickly and watch the canvas and the Undo button for 10 s",
+   "GET projection/pcb + response bodies of the /history/undo calls"
+  ],
+  "expected": "A busy indicator (status-bar 'Saving…' or a disabled Undo while pending), and extra clicks either queue or are ignored with a hint.",
+  "actual": "Undo stays enabled and nothing changes for ~5 s (undo POST plus projection refetch), then the board jumps. All 3 clicks are sent: two apply (rev 17 → 19), the third returns {ok:false, code:'HISTORY_EMPTY'} and is silently ignored. The history itself is correct (no data issue); the problem is only the lack of pending state, which also lets the user trigger the F1A-003 conflict.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1a/dark/061-undo-race-inflight.png",
+    "shots/f1a/dark/062-undo-race-settled.png"
+   ],
+   "network": [
+    "POST /history/undo → {ok:true, revision:18}",
+    "POST /history/undo → {ok:true, revision:19}",
+    "POST /history/undo → {ok:false, code:'HISTORY_EMPTY'}"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/usePcbWorkspace.ts",
+    "line": 243,
+    "note": "undo/redo await api + refresh + refreshHistory with no pending flag exposed to the toolbar"
+   }
+  ],
+  "suggestedFix": "Expose a pendingCommands count from the workspace. Show 'Saving…' in the status bar and disable Undo/Redo while an undo/redo is in flight.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:commands:no-pending-feedback",
+  "status": "confirmed",
+  "relatedIds": [
+   "F1A-003"
+  ],
+  "mergedIds": [],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1a",
+   "reason": "Reproduced with the 2.5 s shim: three quick toolbar Undo clicks all went through (Undo stayed enabled after each click, isDisabled=false at 90/252/387 ms); nothing changed on the canvas until ~2.5 s, then three undos applied (rev 31 -> 34). Code: usePcbWorkspace.ts:243 undo awaits api.undo + refresh + refreshHistory with no pending flag and ignores {ok:false, HISTORY_EMPTY}. Latency-only; S4 kept.",
+   "evidence": [
+    "shots/vf1a/dark/040-undo-race-inflight.png",
+    "shots/vf1a/dark/041-undo-race-settled.png",
+    "network: POST /history/undo x3 -> rev 32, 33, 34"
+   ]
+  }
+ }
+]

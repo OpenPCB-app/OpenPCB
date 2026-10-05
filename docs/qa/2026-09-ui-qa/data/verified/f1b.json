@@ -1,0 +1,2303 @@
+[
+ {
+  "id": "F1B-001",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "PCB sidebar: with more than ~15 components the Layers list overflows onto the Components list at 1440×900 — clicks on component rows hit hidden layer rows",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "Open QA-f1b-stress (150 parts) at 1440×900",
+   "Switch to PCB",
+   "Look at the left sidebar: Layers section and Components section",
+   "Click component row C3 in the Components list"
+  ],
+  "expected": "Layers and Components sections each get their own height and scroll independently (or the sidebar scrolls); no painted overlap; clicking a component row selects that component.",
+  "actual": "The Layers section is squeezed to 56 px while its 354 px body stays overflow:visible, so the layer rows (Top Solder Paste … Bottom Courtyard, the Normal/Dim/Hide segment) are painted over component rows C1–C11. elementFromPoint on component rows C1–C4 and C6–C10 returns layer rows (pcb-layer-row-F.Paste/F.Mask/F.Cu/F.CrtYd/B.Cu/B.Mask/B.Paste/B.SilkS/B.CrtYd), so clicking 'C3' actually activates Top Copper instead of selecting C3. Happens on any board whose component list + layer list exceed the sidebar height (≈15+ parts at 1440×900) — not only while routing at 1100×720 (Q4-042 is the same root cause). Root cause shared with Q4-042 (reported there only for 1100×720 while routing); this shows it at the primary 1440×900 viewport on any mid-size board, with mis-targeted clicks.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/014-pcb-stacked-150.png"
+   ],
+   "console": [],
+   "pixelProbes": [],
+   "census": null,
+   "network": [],
+   "domProbe": "section 'Layers' h=80, body div.min-h-0.flex-1 h=56 containing div.flex-1.overflow-y-auto h=330 (overflow visible); hit-test C3 row centre → pcb-layer-row-F.Cu"
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/CollapsibleSection.tsx",
+    "line": 63,
+    "note": "section 'flex min-h-0 flex-col' shrinks (flex 0 1 auto) and body 'min-h-0 flex-1' has no overflow clipping"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerSidebar.tsx",
+    "line": 62,
+    "note": "aside overflow-y-auto never scrolls because both sections shrink instead"
+   }
+  ],
+  "suggestedFix": "In DesignerSidebar PCB branch make the Layers section `shrink-0` (or cap it with max-h + overflow-y-auto) and give the Components section `flex-1 min-h-0` with its list `overflow-y-auto`; add `overflow-hidden` to the CollapsibleSection body so a shrunk section can never paint over its sibling.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:sidebar:layers-overlap-components-1100",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced at 1440x900 dark on my own 60-part design QA-vf1b-stack60 (a27efb0a): Layers section 176 px, Components 638 px; elementFromPoint at the C2-C6 component rows (y 318-406) returns the layer rows Bottom Copper / Bottom Solder Mask / Paste / Overlay / Courtyard. A real click on the 'C2' row activated Bottom Copper (status bar and layer tab switched to B.Cu) and selected nothing ('No selection'). So it happens at the primary viewport on a 60-part board without routing. Same root cause and fix as verified Q4-042 (S3, only reported at 1100x720 while routing); this finding is the broader case with mis-targeted clicks, so S2 stays. At triage, merge Q4-042 into this one.",
+   "evidence": [
+    "shots/vf1b/dark/002-pcb-stack60-markers.png",
+    "shots/vf1b/dark/003-click-c2-hits-layer.png",
+    "DOM: hit-test y=318..406 -> 'Bottom CopperB.Cu','Bottom Solder MaskB.',...; sections Layers h=176 / Components h=638"
+   ]
+  },
+  "relatedTo": [
+   "Q4-042"
+  ]
+ },
+ {
+  "id": "F1B-002",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "New schematic parts land on the PCB in only 24 fixed slots within 4 mm of the board centre — a 150-part design becomes one stacked blob of overlapping footprints",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "Create a design and place 150 parts in the schematic (any mix; here placed via POST /commands place_part on a 20 mm grid)",
+   "Open the PCB view",
+   "Zoom into the board centre"
+  ],
+  "expected": "Unplaced footprints are laid out without overlap (e.g. packed in a row/grid beside or on the board, like KiCad's 'update PCB from schematic' spreads new footprints), or at least never exactly coincident, so the user can pick them apart.",
+  "actual": "All 150 placements sit within ±3.9 mm of the board centre on 24 distinct positions (hashStringToIndex(part.id) % 24 → radius 1.5–3.9 mm ring slots); up to 11 footprints share the exact same coordinate. The result is an unreadable blob (pads, refdes and silkscreen overprinted), every footprint overlaps others, and individual parts can only be separated by dragging 150 times one by one. Even 2-part designs can collide because the slot is a hash, not a free position.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/014-pcb-stacked-150.png",
+    "shots/f1b/dark/015-pcb-stack-zoom.png"
+   ],
+   "console": [],
+   "pixelProbes": [],
+   "census": null,
+   "network": [
+    "GET /api/modules/designer/designs/cc5a12b9…/projection/pcb → 150 placements, 24 distinct positions, x∈[-3.9,3.9] y∈[-3.377,3.377]; most common (0.75,1.3)×11, (-1.55,2.69)×11"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/backend/pcb/pcb-store.ts",
+    "line": 1846,
+    "note": "deterministicOffset: 6 slots per ring, base 1.5 mm, step 0.8 mm"
+   },
+   {
+    "path": "src/modules/designer/backend/pcb/pcb-store.ts",
+    "line": 1935,
+    "note": "index = hashStringToIndex(part.id) % 24 for every new placement"
+   }
+  ],
+  "suggestedFix": "In syncPcbPlacementsFromSchematic place new footprints with a packing pass: sort by footprint bbox, place left-to-right in rows just outside the board outline (or inside if it fits), advancing by bbox width + clearance and skipping occupied cells; keep the hash only as a tie-breaker.",
+  "fixScope": "backend-needed",
+  "estimate": "M",
+  "dedupeKey": "designer.pcb:placement-sync:stacked-initial-positions",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced through the API on fresh designs. 60 parts gave 22 distinct PCB positions (x -3.9..3.1 mm, y ±3.377 mm, up to 5 parts on one point). 150 parts gave 24 distinct positions with up to 10 per point. On the 5-part QA-f1b-bomgroup, Q1 and Q3 share (3.1, 0) exactly, so small designs collide too. Code: pcb-store.ts:1935 `hashStringToIndex(part.id) % 24` -> deterministicOffset (1846, 6 slots per ring, 1.5 mm + 0.8 mm/ring). Cloud auto-place is off and cloud-only, so there is no local spread action. S2 kept.",
+   "evidence": [
+    "shots/vf1b/dark/002-pcb-stack60-markers.png",
+    "API QA-vf1b-stack60: placements 60, distinct 22; QA-vf1b-stack150: 150 -> 24 distinct, max share 10",
+    "API QA-f1b-bomgroup pnp.csv: Q1 3.1000,0.0000 and Q3 3.1000,0.0000"
+   ]
+  }
+ },
+ {
+  "id": "F1B-003",
+  "knownRef": null,
+  "area": "designer.drc",
+  "title": "DRC view hangs the whole app for 10+ minutes on a large report — the violation list renders every row with no virtualization",
+  "category": "perf",
+  "severity": "S1",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "Create a 150-part design (parts land stacked on the PCB, see F1B-002)",
+   "PCB → dock DRC tab → Run DRC (report: 50,996 violations — 14,068 errors / 36,928 warnings; persisted report JSON is 24.7 MB)",
+   "Click the DRC view tab in the designer header"
+  ],
+  "expected": "The DRC view opens within a second or two regardless of report size: rows virtualized/windowed, groups collapsed by default above N items, or a capped list with 'show more'; the app stays responsive.",
+  "actual": "The renderer is blocked by a single 632,559 ms long task (≈10.5 min, PerformanceObserver longtask) after the click; playwright clicks/evals time out, nothing repaints, the user would have to force-quit. When it finally paints, the list shows every violation of the 6,323-row first group expanded. The dock DRC tab has the same unvirtualized list (DesignerDrcView) and the first click on a row costs ~6 s of long tasks (80+2716+743+755+525+513+727+511 ms). Backend DRC itself is fast (0.14 s on the spread board); the hang is purely frontend.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/017-drc-dock-stacked.png",
+    "shots/f1b/dark/019-drc-51k-click-violation.png",
+    "shots/f1b/dark/020-drc-view-51k.png"
+   ],
+   "console": [],
+   "pixelProbes": [],
+   "census": null,
+   "network": [
+    "GET /api/modules/designer/designs/cc5a12b9…/drc → 200, 24,768,443 bytes, 50,996 violations"
+   ],
+   "perf": "window.__f1b.lt after view click: [..., 632559] ms; row click lt=[80,2716,743,755,525,513,727,511]"
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerDrcView.tsx",
+    "line": 380,
+    "note": "group.violations.map renders every row; no windowing/cap"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/drc/drc-labels.ts",
+    "line": 100,
+    "note": "resolveAnchorLabel does projection.placements.find per anchor per render (O(violations×placements))"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/layers/DrcMarkerLayer.tsx",
+    "line": 110,
+    "note": "48k marker groups x4 meshes/materials; tearing them down on PCB->DRC switch accounts for ~9 of the 10 min freeze"
+   }
+  ],
+  "suggestedFix": "DesignerDrcView.tsx: virtualize the violation rows (fixed-height windowing or @tanstack/react-virtual) and auto-collapse groups over ~200 rows. Build a placementId->reference Map once per projection instead of calling resolveAnchorLabel -> placements.find per anchor (drc-labels.ts:100). Fix the marker teardown via F1B-004 (InstancedMesh: one object per visual layer, not 48k groups). Optionally cap the persisted report per code (first N + count).",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "designer.drc:violation-list:no-virtualization-hang",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced. QA-vf1b-stack150 (150 stacked parts): DRC via API = 47,988 violations, 23.3 MB report. A 100 ms in-page heartbeat measured one main-thread freeze of 619,856 ms (10.3 min) on PCB -> DRC view, matching f1b's 632,559 ms long task. Schem -> DRC view (PCB not mounted) froze for 59.5 s and rendered 96,006 buttons (every row, no windowing). Leaving the view cost another 5.3 s. At 8,171 violations (60 parts) the view takes 0.6 s from Schem but 3.0 s from PCB. Refinement of the root cause: the unvirtualized list (DesignerDrcView.tsx group.violations.map) costs ~60 s. The extra ~9 min on the PCB path comes from tearing down the PCB canvas with ~48k marker groups (192k meshes and materials, see F1B-004); mounting the same PCB with markers took only 6.4 s. The stacked-board precondition arises naturally from F1B-002, so S1 stays: the app is frozen for 10 minutes.",
+   "evidence": [
+    "shots/vf1b/dark/001-drc-view-8k.png",
+    "vf1b/hang.log, vf1b/hang2.log: heartbeat gaps [619856,1689] ms (PCB->DRC view), [59536,1643] ms (Schem->DRC view)",
+    "API QA-vf1b-stack150 c9d5aa13: GET /drc 23,304,682 bytes, 47,988 violations"
+   ]
+  }
+ },
+ {
+  "id": "F1B-004",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "PCB canvas freezes with many DRC markers: one wheel notch ≈0.75 s, 10 notches 50 s, hovering 10 px >30 s (4 meshes + 4 materials per marker, rebuilt on every hover)",
+  "category": "perf",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "Same 150-part board after Run DRC (50,996 markers)",
+   "Hover the board and wheel-zoom 10 notches",
+   "Move the mouse 10 small steps across markers",
+   "Click a violation in the DRC dock"
+  ],
+  "expected": "Pan/zoom/hover stay at interactive frame rates (KiCad handles tens of thousands of markers); markers drawn with one InstancedMesh per layer and hover handled without rebuilding every marker.",
+  "actual": "Idle 60 fps; with markers: 10 wheel notches took 50,690 ms (1 fps, 64 long tasks, max 1,609 ms); a single wheel notch = 745 ms long task; 10 mouse-move steps over the markers exceeded a 30 s timeout (hoveredId change rebuilds the whole marker array and re-renders ~204k meshes). Same board before DRC: 55–60 fps for wheel/pan. With the ~784 markers of the spread board it is usable, so the cost is linear in marker count.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/017-drc-dock-stacked.png",
+    "shots/f1b/dark/018-drc-51k-zoomout.png"
+   ],
+   "console": [],
+   "pixelProbes": [],
+   "census": null,
+   "network": [],
+   "perf": "measure.sh wheel×10: {elapsedMs:50690,fps:1,longTasks:64,maxLongTask:1609}; single notch: {elapsedMs:830,maxLongTask:745}"
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/layers/DrcMarkerLayer.tsx",
+    "line": 74,
+    "note": "markers memo depends on hoveredId/selectedId → full rebuild on hover"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/layers/DrcMarkerLayer.tsx",
+    "line": 110,
+    "note": "markers.map → group + 4 <mesh> + 4 meshBasicMaterial per marker; useFrame rescales every group every frame"
+   }
+  ],
+  "suggestedFix": "Render markers with one InstancedMesh per visual layer (glow/stroke/ring/core) and a per-instance colour attribute; update only the hovered/selected instance matrices; drive constant screen size with a shader uniform (or one group scale) instead of per-group scale in useFrame; decimate/cluster markers below a zoom threshold.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "designer.pcb:drc-markers:perf-no-instancing",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on QA-vf1b-stack60 with 8,171 markers. Five wheel notches ran at 9 fps (15 long tasks, max 193 ms), and ten hover moves at 7 fps (21 long tasks). With the same board and markers hidden (useDrcStore.setMarkersVisible(false)), both ran at 61 fps with 0 long tasks. Code confirmed: DrcMarkerLayer.tsx:74 markers memo depends on hoveredId/selectedId (full rebuild per hover), and :110 renders a group + 4 meshes + 4 meshBasicMaterials per marker, with useFrame rescaling every group each frame. S2 kept. The cost is linear in marker count, and the same object graph also drives the 10-minute teardown in F1B-003.",
+   "evidence": [
+    "shots/vf1b/dark/002-pcb-stack60-markers.png",
+    "measure: markers on wheel {fps:9,longTasks:15,max:193}, hover {fps:7,longTasks:21}; markers off wheel/hover {fps:61,longTasks:0}"
+   ]
+  }
+ },
+ {
+  "id": "F1B-005",
+  "knownRef": null,
+  "area": "designer.bom",
+  "title": "BOM merges different components that share a footprint and have no Value — NPN, PNP and NMOS transistors become one 'Generic NPN BJT ×3' line (also in CSV/JLC/KiCad exports)",
+  "category": "data",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "89009c50-e648-4eee-80f4-2f426b39220e",
+  "repro": [
+   "Create a design (QA-f1b-bomgroup) and place NPN Transistor SOT-23, NMOS Transistor SOT-23, PNP Transistor SOT-23, Generic Diode and Zener Diode (default Value is empty for all)",
+   "Open BOM",
+   "Export ▾ → CSV / JLC BOM / KiCad CSV, or PCB Export… with 'Include BOM CSV'"
+  ],
+  "expected": "Each distinct component (componentId / library part) gets its own BOM line; parts are only grouped when they are the same component with the same value/footprint/MPN.",
+  "actual": "BOM shows 2 lines: 'Q1,Q2,Q3 — SOT-23 — Generic NPN BJT using E-B-C SOT-23 pin order — qty 3' and 'D1,D2 — D_SOD-123 — Generic two-pin diode … — qty 2'. The NMOS and PNP take the NPN's description; the Zener is listed as a generic diode. bom.csv: ',\"Q1,Q2,Q3\",SOT-23,,,,3,…'; bom-jlc.csv and kicad-bom.csv the same. An assembler would populate three NPN BJTs. The same merge happened on the 150-part stress board (30 Q = 15 NPN + 15 NMOS in one line) until values were typed.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/039-bom-grouping-npn-nmos.png",
+    "shots/f1b/dark/030-bom-150.png"
+   ],
+   "console": [],
+   "pixelProbes": [],
+   "census": null,
+   "network": [
+    "GET /api/modules/designer/designs/89009c50…/exports/bom.csv → ',\"D1,D2\",D_SOD-123,,,,2,…' / ',\"Q1,Q2,Q3\",SOT-23,,,,3,…'"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/backend/export/bom/writer.ts",
+    "line": 269,
+    "note": "group key = value|footprint|MPN|LCSC|dnp — componentId not part of the key; description = first non-empty"
+   }
+  ],
+  "suggestedFix": "export/bom/writer.ts aggregateRows: add the component identity (schPart.componentId, or library part id + variant) to the grouping key so different components never merge. The empty-Comment fallback is tracked in F1B-016.",
+  "fixScope": "backend-needed",
+  "estimate": "S",
+  "dedupeKey": "designer.bom:grouping:merges-different-components",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced read-only on QA-f1b-bomgroup. GET /bom returns 2 lines: Q1,Q2,Q3 'Generic NPN BJT…' qty 3 (NPN + NMOS + PNP components) and D1,D2 'Generic two-pin diode' qty 2 (generic + zener). bom.csv, bom-jlc.csv and kicad-bom.csv all merge them the same way. Code: writer.ts aggregateRows key = value|footprint|MPN|LCSC|dnp, with no componentId. S2 kept (wrong data in the fab BOM).",
+   "evidence": [
+    "API GET /designs/89009c50…/exports/bom-jlc.csv -> ',\"D1,D2\",D_SOD-123,,2' / ',\"Q1,Q2,Q3\",SOT-23,,3'"
+   ]
+  }
+ },
+ {
+  "id": "F1B-006",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "Design rules accept and persist impossible net-class values (width 0, width 999 mm, clearance −1) with no validation — the route tool then draws a 0 mm or 999 mm trace",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "PCB → Properties → Edit rules…",
+   "Net classes: Default width = 0, Power width = 999, Power clearance = −1",
+   "Net assignments: Net_43 → Power",
+   "Save & re-run DRC",
+   "Route (R) from a Default-class pad, then from U1 pad 1 (Net_43)"
+  ],
+  "expected": "Inline validation (e.g. width ≥ fab minimum trace width and ≤ a sane max, clearance > 0), Save disabled while invalid, backend rejects non-positive values; DRC flags an invalid rule if one ever gets stored.",
+  "actual": "No inline error, Save enabled, dialog closes. Projection afterwards: default traceWidthMm 0, power traceWidthMm 999 / clearanceMm −1. Routing a Default net shows 'W 0.000 mm' and draws a zero-width trace; routing Net_43 shows 'W 999.000 mm · Class Power', the preview floods the entire canvas red and reports 440 conflicts. DRC after save reports nothing about the rules (same 64 errors / 720 warnings). Clearing a field while typing also silently becomes 0 (parseFloat(...) || 0).",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/043-netclass-invalid.png",
+    "shots/f1b/dark/045-route-power-999.png",
+    "shots/f1b/dark/046-route-power-999.png"
+   ],
+   "console": [],
+   "pixelProbes": [],
+   "census": null,
+   "network": [
+    "GET /projection/pcb → netClasses default 0/0.25, power 999/-1; perNetClassAssignments {pt:120000000:-10160000: power}"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/PcbDesignRulesDialog.tsx",
+    "line": 136,
+    "note": "onChange Number.parseFloat(v) || 0; min={0} only affects the spinner"
+   },
+   {
+    "path": "src/modules/designer/backend/pcb/pcb-store.ts",
+    "line": 532,
+    "note": "parseNetClass keeps any finite traceWidthMm/clearanceMm (asNumber ?? default)"
+   }
+  ],
+  "suggestedFix": "In PcbDesignRulesDialog validate each class (width ≥ minimums.traceWidthMm and ≤ e.g. 10 mm, clearance ≥ clearance floor), show the error under the field and disable Save; keep the raw string in state instead of coercing '' to 0. In pcb-store parseNetClass reject non-positive/non-finite widths and clearances (ValidationError) rather than persisting them.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:design-rules:no-netclass-validation",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced. In the dialog (QA-vf1b-stack60), Power width 999 was accepted with no inline error and Save stayed enabled. Clearing the Default width field immediately coerced it to '0', and typing 0.3 then displayed '00.3' (parseFloat('')||0 at PcbDesignRulesDialog.tsx:136). Via the API, pcb_set_design_rules with default width 0 and power width 999 / clearance -1 was persisted as-is; DRC reported nothing about the rules. Severity lowered to S3: the harm is bounded. The backend rejects a zero-width trace commit (400 'command.widthMm must be a positive number'), and the DRC resolver takes max(board, classA, classB) clearance (rule-resolver.ts:309), so a negative class clearance has no effect. What remains is missing validation, a confusing 999 mm preview, and the input glitch.",
+   "evidence": [
+    "shots/vf1b/dark/007-netclass-invalid-values.png",
+    "API QA-vf1b-refdes fa21e39a: netClasses after save [('default',0,0.25),('power',999,-1)]; pcb_add_trace widthMm 0 -> 400 validation"
+   ]
+  }
+ },
+ {
+  "id": "F1B-007",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "Net classes are a fixed Default/Power/GND trio: no Add/rename/delete class and no per-class via size in Design rules",
+  "category": "stub",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "PCB → Properties → Edit rules…",
+   "Look at the 'Net classes' section"
+  ],
+  "expected": "Pro EDA net-class editor: add a class (name, track width, clearance, via diameter/drill, colour), rename, delete (with reassignment of its nets), like KiCad Board Setup → Net Classes.",
+  "actual": "Only three hard-wired rows (Default, Power, GND) with 'width' and 'clearance' spinbuttons. No 'Add class' button (Length match groups has 'Add group', net classes do not), no delete, no rename, and the via diameter/drill stored per class (PcbNetClass.viaDiameterMm/viaDrillMm, shown in the route chip as 'via 0.80/0.40') cannot be edited anywhere. A user who needs a 'HighCurrent 1.0 mm' or 'USB 0.2 mm' class has no way to create it. Editing a class in use works (Power 0.5→0.6: route chip then shows W 0.600 mm and the committed trace is 0.6 mm), existing traces keep their width.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/041-design-rules-dialog.png",
+    "shots/f1b/dark/050-route-committed.png"
+   ],
+   "console": [],
+   "pixelProbes": [],
+   "census": null,
+   "network": [
+    "projection board.netClasses keys: id,name,traceWidthMm,clearanceMm,viaDiameterMm,viaDrillMm,color,defaultViaProtection"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/PcbDesignRulesDialog.tsx",
+    "line": 360,
+    "note": "net classes rendered from the existing array with width/clearance fields only"
+   }
+  ],
+  "suggestedFix": "Add an 'Add class' action and per-row name, via Ø / drill fields and a delete button (reassign its nets to Default on delete) in PcbDesignRulesDialog; the backend (parseNetClasses) already accepts arbitrary ids.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "designer.pcb:design-rules:netclass-crud-missing",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Seen in the Design rules dialog on QA-vf1b-stack60: Net classes shows only the Default/Power/GND rows with width + clearance. There is no Add/rename/delete and no via diameter/drill fields; 'Add group' exists only for length groups. The backend accepts arbitrary class ids (parseNetClasses). S3 kept (feature gap versus KiCad Board Setup).",
+   "evidence": [
+    "shots/vf1b/dark/006-design-rules-dialog.png"
+   ]
+  }
+ },
+ {
+  "id": "F1B-008",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "Design rules net pickers don't scale: 353 unfilterable Net assignment selects in a 192 px box and 353 length-group chips in an 80 px box; selected members not summarised",
+  "category": "consistency",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "On the 150-part board open PCB → Edit rules…",
+   "Scroll 'Net assignments' to find Net_43",
+   "Add group → pick Net_37 and Net_43 → switch to Absolute",
+   "Resize to 1100×720"
+  ],
+  "expected": "A searchable net list (filter box, only multi-pin/routed nets by default, sort by class), and the group shows its members as removable chips; one scroll container.",
+  "actual": "Net assignments renders one native <select> per net — 353 of them (including every single-pin 'net') inside a max-h-48 (192 px) scroller that shows ~5 rows; no search. Each length group renders all 353 nets as toggle chips in an 80 px scroller (scrollHeight 1221 px) — once you scroll away you cannot see which nets are in the group; chips expose no aria-pressed. The dialog body is a third scroller (and overflows horizontally by 14 px at 1100×720). In Absolute mode the '± tol' label wraps to two lines and the tolerance 'mm' sits on the dialog padding edge.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/042-netclass-assign.png",
+    "shots/f1b/dark/049-length-group-absolute.png",
+    "shots/f1b/dark/053-design-rules-1100.png",
+    "shots/f1b/dark/054-design-rules-1100-bottom.png"
+   ],
+   "console": [],
+   "pixelProbes": [],
+   "census": null,
+   "network": [],
+   "domProbe": "selects=353, net-assign scroller clientHeight 192/scrollHeight 12704; chips=353 in 80/1221 px; dialog grid scrollWidth 572 > clientWidth 558 at 1100"
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/PcbDesignRulesDialog.tsx",
+    "line": 527,
+    "note": "one <select> per net"
+   }
+  ],
+  "suggestedFix": "Replace the per-net select list with a filterable table (search box, 'only nets with ≥2 pads' default, class column with a single select for the selected rows); in length groups show members as chips plus an 'Add net' combobox with search; drop the nested fixed-height scrollers so only the dialog body scrolls.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "designer.pcb:design-rules:net-pickers-scale",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on QA-vf1b-stack60 (60 parts, 0 wires): 168 native <select>s under Net assignments in a 192 px scroller (scrollHeight 6044). A new length group lists 168 chips in an 80 px scroller (scrollHeight 571) with no aria-pressed and no search box. The dialog body is a second, nested scroller (660/754). S3 kept.",
+   "evidence": [
+    "shots/vf1b/dark/006-design-rules-dialog.png",
+    "shots/vf1b/dark/008-length-group-row.png",
+    "DOM: selects=168, net-assign 192/6044, chips=168 in 80/571, ariaPressed=null, search inputs=0"
+   ]
+  }
+ },
+ {
+  "id": "F1B-009",
+  "knownRef": null,
+  "area": "designer.drc",
+  "title": "Built-in core footprints fail the default JLCPCB DRC preset out of the box: every placed part adds ~5 silkscreen warnings (0.12 mm silk width, silk 0.12 mm from mask)",
+  "category": "data",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "Place core-library parts (Resistor, Capacitor, LED, diodes, SOT-23 transistors, NE555 SOIC-8, inductor) and spread them so nothing overlaps (QA-f1b-stress after spreading)",
+   "Run DRC with the default fabricator (jlcpcb_2l)"
+  ],
+  "expected": "Parts shipped in the core library pass the app's default fab preset (or the preset's silk minimums match what the library ships, as KiCad's 0.12 mm silk / 0.2 mm silk-to-pad library conventions do); a fresh board of non-overlapping stock parts is warning-free.",
+  "actual": "720 warnings on 150 non-overlapping parts: FAB_SILK_WIDTH ×150 ('Silkscreen of D42 is 0.120 mm wide < JLCPCB 2-layer min 0.150 mm') — one per part — plus FAB_SILK_CLEARANCE ×570 ('Silkscreen of R6 is 0.123 mm from a pad's mask opening < … 0.150 mm'): 4/part for R, C, L; 7/part for SOT-23; 5/part for SOIC-8. Dual LED Blinker (11 parts) likewise shows 43 + 11 of them. Real problems drown in stock-library noise and DRC markers bury every footprint (see shots/f1b/dark/023).",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/023-pcb-spread-fit.png"
+   ],
+   "console": [],
+   "pixelProbes": [],
+   "census": null,
+   "network": [
+    "POST /drc/run → countsByCode {FAB_SILK_CLEARANCE:570, FAB_SILK_WIDTH:150, NET_SHORT_CIRCUIT:17, UNCONNECTED_NET:47}"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/shared/drc/checks/silkscreen.ts",
+    "line": 137,
+    "note": "silk artwork checks against fab preset minimums"
+   }
+  ],
+  "suggestedFix": "Either regenerate/clip the core footprints' silkscreen to the preset (0.15 mm width, ≥0.15 mm from mask openings — KiCad's own export clips silk at mask openings) or make the fab silk checks clip-and-report-once per footprint; at minimum group identical per-footprint silk warnings into one row per library footprint.",
+  "fixScope": "design-decision",
+  "estimate": "M",
+  "dedupeKey": "designer.drc:core-footprints:silk-warnings-noise",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on my own 2-resistor design (QA-vf1b-netid, parts spread 16 mm apart): DRC gives FAB_SILK_CLEARANCE 8 + FAB_SILK_WIDTH 2, i.e. 5 warnings per stock 0603 resistor on a clean board. The preset values are sourced correctly (fab-presets.ts:150 minSilkLineWidthMm 0.15 and silkToMaskMm 0.15, JLCPCB published rules), so the defect is that the shipped core footprints (0.12 mm KLC silk, unclipped at mask openings) fail the app's own default preset. S3 kept. The fix belongs in the CoreLibrary data or in grouping/clipping, not in the preset.",
+   "evidence": [
+    "API QA-vf1b-netid 7af2033c before-move DRC {FAB_SILK_CLEARANCE:8, FAB_SILK_WIDTH:2}",
+    "src/shared/drc/fab-presets.ts:150"
+   ]
+  }
+ },
+ {
+  "id": "F1B-010",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "Net count disagrees between views: schematic Summary 'Nets 60' vs PCB Board Summary 'Nets 353' for the same design (PCB counts every unconnected pin as a net)",
+  "category": "consistency",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "Open QA-f1b-stress (150 parts, 60 wires)",
+   "Schematic, nothing selected → Properties Summary: Nets",
+   "Switch to PCB, nothing selected → Board panel Summary: Nets",
+   "Also open Design rules → Net assignments / length group chips"
+  ],
+  "expected": "One definition of 'net' across the app (nets with ≥2 connections, like KiCad's net count); the same number in both summaries; auto single-pin nets hidden from net pickers.",
+  "actual": "Schematic Summary shows Nets 60 (filters out auto 1-pin nets), PCB Board Summary shows Nets 353 (Object.keys(projection.netNames)). The 293 single-pin 'Net_n' entries also flood the Outline Nets tab numbering (Net_187…Net_335), the Design-rules Net assignments list (353 selects) and length-group chips (353). Dual LED Blinker shows 13 vs 13 only because every pin there is wired.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/021-reopen.png",
+    "shots/f1b/dark/026-pcb-fit-to-parts.png"
+   ],
+   "console": [],
+   "pixelProbes": [],
+   "census": null,
+   "network": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbBoardPanel.tsx",
+    "line": 499,
+    "note": "Nets = Object.keys(projection.netNames).length"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/SelectionInspector/SelectionInspector.tsx",
+    "line": 61,
+    "note": "schematic netCount excludes auto 1-pin nets"
+   }
+  ],
+  "suggestedFix": "Count only nets with ≥2 pads (or with a wire/label/primitive) in PcbBoardPanel, and apply the same filter to the Design-rules net lists; share one helper between schematic and PCB summaries.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:board-summary:net-count-mismatch",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on QA-vf1b-stack60: the schematic Sheet summary shows 'Nets 0' (no wires) while the PCB Board summary shows 'Nets 168'. Code: PcbBoardPanel.tsx:499 counts Object.keys(netNames); SelectionInspector.tsx:61 filters out auto 1-pin nets. S3 kept.",
+   "evidence": [
+    "shots/vf1b/dark/009-schem-summary-nets.png",
+    "shots/vf1b/dark/002-pcb-stack60-markers.png"
+   ]
+  }
+ },
+ {
+  "id": "F1B-011",
+  "knownRef": null,
+  "area": "designer.schematic",
+  "title": "'Delete all 150' deletes one part per request over ~8 s with no confirmation, and needs 150 Undo clicks (≈17 s) to restore",
+  "category": "perf",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "Open QA-f1b-stress (150 parts, 60 wires) → Schematic",
+   "Cmd+A (inspector: '150 parts · Delete all 150')",
+   "Click 'Delete all 150'",
+   "Click Undo until it disables"
+  ],
+  "expected": "A bulk delete is one command (one revision, one undo step), completes in well under a second, and a 150-item destructive action asks for confirmation or at least offers an 'Undo' toast.",
+  "actual": "No confirmation. The UI dispatches 150 sequential delete_entity commands: after 3 s the inspector still showed '122 parts', parts vanish one by one for ≈8 s while the canvas stays interactive (fps 47). History: undoDepth 150, revision 210 → 362. Restoring took 151 Undo clicks and 17.1 s (schematic has no Cmd+Z, K17). Same root cause as Q3-011 (non-atomic batch), here quantified at scale.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/006-stress-schem-selectall.png",
+    "shots/f1b/dark/008-after-delete-all.png",
+    "shots/f1b/dark/009-after-delete-all-done.png"
+   ],
+   "console": [],
+   "pixelProbes": [],
+   "census": null,
+   "network": [
+    "GET /history?sessionId=designer-ui-session → undoDepth 28 (t+3 s) → 119 → 150"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/SelectionInspector/MultiPartInspectorPanel.tsx",
+    "line": 45,
+    "note": "deleteAll awaits dispatchCommand(delete_entity) in a for-loop, one envelope per part"
+   }
+  ],
+  "suggestedFix": "Add a batch delete command (delete_entities with ids[]) that plans all patches in one envelope → one revision and one inverse; confirm deletes above a threshold (e.g. >10 items) with the kit dialog or show an Undo toast.",
+  "fixScope": "backend-needed",
+  "estimate": "M",
+  "dedupeKey": "designer.schematic:undo:batch-not-atomic",
+  "status": "duplicate",
+  "verification": {
+   "verdict": "duplicate",
+   "by": "vf1b",
+   "reason": "Reproduced on QA-vf1b-stack60: Cmd+A -> 'Delete all 60' -> no confirmation (dialog spy 0). Parts vanished one by one (after 2 s the inspector still read '30 parts'; finished after ~3 s), and history went to undoDepth 60. Same root cause as verified Q3-011 (S2, a multi-delete is N envelopes / N undo entries). This finding adds a second call site: MultiPartInspectorPanel.tsx:45 deleteAll awaits dispatchCommand per part, so each delete also refreshes the projection, which is why it is slow. Fold into Q3-011: route deleteAll through the same batch command, and add the scale data and the missing confirmation for large deletes.",
+   "evidence": [
+    "shots/vf1b/dark/025-nothing-to-undo-strip.png",
+    "GET /history -> undoDepth 60 after one 'Delete all 60' click"
+   ]
+  },
+  "duplicateOf": "Q3-011"
+ },
+ {
+  "id": "F1B-012",
+  "knownRef": null,
+  "area": "designer.shell",
+  "title": "Undo stays enabled after the last step; the extra click shows a red 'Nothing to undo' error strip that never goes away and shifts the canvas down 24 px",
+  "category": "error-handling",
+  "severity": "S4",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "After a multi-step edit, click the schematic Undo button quickly until it disables (e.g. restoring the 150-part delete)",
+   "Observe the top of the designer",
+   "Switch Schem → PCB → DRC → BOM"
+  ],
+  "expected": "Undo disables as soon as the last step is consumed (or queued clicks are coalesced); 'nothing to undo' is not an error — at most a transient hint.",
+  "actual": "The button remained enabled while the previous undo was in flight; the 151st click returned ok:false and useDesignerWorkspace sets setError('Nothing to undo'). A 24 px bg-status-danger-soft strip 'Nothing to undo' appears above the toolbar (pushing every view down), has no role=alert, no close button and no timeout, and persisted through Schem/PCB/3D/BOM/DRC switches and a successful DRC run until the page was reloaded.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/010-outline-filter.png",
+    "shots/f1b/dark/014-pcb-stacked-150.png",
+    "shots/f1b/dark/020-drc-view-51k.png"
+   ],
+   "console": [],
+   "pixelProbes": [],
+   "census": null,
+   "network": [
+    "POST /history/undo → 200 {result.ok:false}"
+   ],
+   "domProbe": "div.shrink-0.border-b.bg-status-danger-soft.text-status-danger h=24, role=null, no button"
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/hooks/useDesignerWorkspace.ts",
+    "line": 593,
+    "note": "setError('Nothing to undo') on ok:false; error strip has no dismiss"
+   }
+  ],
+  "suggestedFix": "useDesignerWorkspace.ts undo/redo: treat result.ok===false (history empty) as a silent no-op (applyHistorySnapshot only, no setError) and disable Undo/Redo while a history request is in flight. Strip dismiss and auto-clear are handled under F1A-010.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.shell:error-strip:nothing-to-undo-sticky",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on QA-vf1b-stack60: with one undo step left, three quick Undo clicks produced the red 24 px 'Nothing to undo' strip (role=null, no button). It stayed through Schem -> PCB -> Schem and cleared on the next schematic history action (Redo), because refreshProjectionForDesign calls setError(null). The claim that it persists 'until reload' is overstated; it clears on the next schematic edit. With 40 ms spacing between clicks Undo disabled correctly, so this is a click race. Re-scoped and lowered to S4. The unique defect is that useDesignerWorkspace.ts:593 turns a benign ok:false (history empty) into a red error. Strip persistence, no dismiss and layout shift are already verified as F1A-010; Undo staying enabled in flight is F1A-013 (PCB path).",
+   "evidence": [
+    "shots/vf1b/dark/025-nothing-to-undo-strip.png",
+    "DOM strip {t:'Nothing to undo',h:24,role:null,btns:0}; onPcb:true, back:true, afterRedo:false"
+   ]
+  },
+  "relatedTo": [
+   "F1A-010",
+   "F1A-013"
+  ]
+ },
+ {
+  "id": "F1B-013",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "PCB copper, net-class assignments and length groups are bound to ephemeral coordinate net ids: moving a schematic part (connectivity unchanged) orphans every routed trace on that net — DRC then reports false shorts/dangling tracks and the ratsnest reappears",
+  "category": "data",
+  "severity": "S1",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "38bbcc7f-b8e5-43ff-9c3e-681206aa3ce4",
+  "repro": [
+   "Create QA-f1b-tracenet: place two resistors 20.32 mm apart and wire R1.2→R2.1 (place_part ×2 + create_wire, same as the UI)",
+   "PCB: route the net R1.2–R2.1 (pcb_add_trace F.Cu, netId = the net's id 'pt:15240000:0' — exactly what the route tool stores) → Run DRC: only 10 stock silk warnings, ratsnest 0",
+   "Schematic: move R1 and R2 by +10.16 mm each (move_part; the wire still joins the same two pins, the netlist is identical)",
+   "PCB projection + Run DRC again",
+   "Also (net classes): assign the net to Power and add it to a length group in Design rules (QA-f1b-netid), move the parts, then move a capacitor so its pin lands on the old coordinate"
+  ],
+  "expected": "Net identity is stable across geometry edits (keyed on a stable pad address or persisted net identity, as src/modules/designer/AGENTS.md 'IDENTITY' requires): traces, vias, zones, net-class assignments and length groups follow the net; a pure schematic move never changes PCB connectivity or DRC.",
+  "actual": "Traces: after the move trace.netId is still 'pt:15240000:0' but that id no longer exists (resolves: false) — the routed trace now belongs to no net. The ratsnest edge reappears (0 → 1) and DRC jumps from 10 silk warnings to +2 NET_SHORT_CIRCUIT (the trace 'shorts' its own pads), +1 TRACK_DANGLING, +1 UNCONNECTED_NET. On QA-f1b-stress it already happened during normal editing: 1 of 21 traces (67fe2d…, netId 'pt:74920000:-40000000') no longer resolves after earlier part moves, and the DRC view shows it as 'trace 67fe2d ↔ Q7.1 ↔ net pt:749 ↔ Net_18' / '… Q7.2 ↔ net pt:749 ↔ Net_330' shorts (raw truncated id because the orphaned net has no name). The UI route tool stores the same coordinate ids (UI-routed trace 88f4fff1 netId 'pt:120000000:-10160000'), so hand-routed boards are affected identically. Every schematic tidy-up after routing therefore silently un-routes the board and the export DRC gate blocks on phantom shorts. Net classes / length groups (original report): the assignment and group entry dangle (perNetClassAssignments still {'pt:14920000:0':'power'} but no net has that id). After C1 is moved onto the old coordinate, projection netNames['pt:14920000:0'] = 'Net_2' is C1's single-pin net — it silently becomes a Power-class net and a member of length group G1. Auto net names also renumber (Net_2→Net_1), so the user cannot recognise the lost assignment. Route width/clearance and NETCLASS/LENGTH DRC follow the wrong net.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/114-tracenet-after-schem-move.png",
+    "shots/f1b/dark/113-stress-drc-view-rerun.png"
+   ],
+   "console": [],
+   "network": [
+    "POST /designs/0d2709d2…/commands pcb_set_design_rules → ok rev4",
+    "POST move_part ×2 → ok",
+    "GET /designs/0d2709d2…/projection/pcb → netNames {'pt:14920000:0':'Net_2' (C1 pad 1 only), 'pt:25080000:10160000':'Net_3' (R1–R2)}, board.perNetClassAssignments {'pt:14920000:0':'power'}",
+    "QA-f1b-tracenet 38bbcc7f: before move trace.netId pt:15240000:0 resolves:true (Net_2), ratsnest 0, DRC {FAB_SILK_CLEARANCE:8, FAB_SILK_WIDTH:2}",
+    "after move_part ×2: trace.netId pt:15240000:0 resolves:false, ratsnest 1, DRC {FAB_SILK_CLEARANCE:8, FAB_SILK_WIDTH:2, NET_SHORT_CIRCUIT:2, TRACK_DANGLING:1, UNCONNECTED_NET:1}",
+    "QA-f1b-stress rev693: traces 21, resolving 20; DRC NET_SHORT_CIRCUIT anchors {trace 67fe2d47…, pad Q7.1, net pt:74920000:-40000000 (not in netNames), net pt:100000000:-36190000}"
+   ],
+   "script": "f1b/netid.py, netid2.py, netid3.py, tracenet.py, tracenet2.py"
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/backend/projection-world.ts",
+    "line": 582,
+    "note": "net ids are `pt:<x>:<y>` union-find roots — change whenever a pin moves"
+   },
+   {
+    "path": "src/sdks/designer/types.ts",
+    "line": 886,
+    "note": "perNetClassAssignments keyed netId → classId"
+   },
+   {
+    "path": "src/sdks/designer/types.ts",
+    "line": 912,
+    "note": "lengthMatchGroups keep dangling net ids 'nets may reappear'"
+   },
+   {
+    "path": "src/modules/designer/AGENTS.md",
+    "line": 45,
+    "note": "'Net ids are ephemeral and must never be persisted against'"
+   },
+   {
+    "path": "src/modules/designer/backend/pcb/pcb-projection.ts",
+    "line": 120,
+    "note": "bindNetName skips entities whose netId is already set, so stale coordinate ids never re-bind (even for named nets)"
+   }
+  ],
+  "suggestedFix": "Stop persisting coordinate net ids. Store the stable pad address (`${placementId}|${padNumber}`, per designer/AGENTS.md IDENTITY) or the net name on traces/vias/zones and in perNetClassAssignments/lengthMatchGroups, then resolve to the live net.id through padNets at projection time. Minimal fix: in pcb-projection.ts re-bind any trace/via whose stored netId is absent from netNames by the net of the pads its endpoints touch. Add a regression test: route, move_part, expect identical DRC and 0 ratsnest.",
+  "fixScope": "backend-needed",
+  "estimate": "L",
+  "dedupeKey": "designer.pcb:net-identity:coordinate-net-ids-orphan-copper-and-rules",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced independently on a fresh design, QA-vf1b-netid (7af2033c). I placed two resistors, wired R1.2-R2.1 (net 'pt:15240000:0'), spread them on the PCB, routed a pcb_add_trace with that netId and assigned the net to Power. Before: trace netId resolves, ratsnest 0, DRC {FAB_SILK_CLEARANCE:8, FAB_SILK_WIDTH:2}. Then I moved R1 and R2 by +10.16 mm in the schematic (netlist unchanged). After: trace netId no longer resolves, ratsnest 1, DRC adds NET_SHORT_CIRCUIT 2 + TRACK_DANGLING 1 + UNCONNECTED_NET 1, and perNetClassAssignments still holds the dead id while the live net is 'pt:25400000:10160000'. On QA-f1b-stress the UI-routed trace 88f4fff1 stores netId 'pt:120000000:-10160000' with netName null, so hand routing is affected too. Refutation check: designer/AGENTS.md documents net-id instability as a design constraint, but it also says 'Never store a net.id' and that traces re-bind by name. pcb-projection.ts bindNetName only re-binds when netId is null (`if (entity.netId || !entity.netName) return entity`), so stored coordinate ids never re-bind, even for named nets. S1 kept: routed copper silently becomes phantom shorts that block export.",
+   "evidence": [
+    "API QA-vf1b-netid before {trace resolves:true, ratsnest:0, drc:{FAB_SILK_CLEARANCE:8,FAB_SILK_WIDTH:2}} after move {resolves:false, ratsnest:1, +NET_SHORT_CIRCUIT:2,TRACK_DANGLING:1,UNCONNECTED_NET:1}",
+    "API QA-f1b-stress: trace 88f4fff1 netId pt:120000000:-10160000 netName None; trace 67fe2d47 netId pt:74920000:-40000000 resolves False",
+    "src/modules/designer/backend/pcb/pcb-projection.ts:115-124 bindNetName"
+   ]
+  }
+ },
+ {
+  "id": "F1B-014",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "Fab bundle (all 14 Gerber/drill/CSV files, ZIP and .gbrjob ProjectId) is named after a truncated design UUID, never the design name (extends Q5-010 from BOM downloads to the manufacturing ZIP)",
+  "category": "copy",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "Open QA-f1b-stress → PCB → Export… : dialog footer reads '14 files · openpcb-cc5a12b9-bd16-4e8c-9c00-f9459807.zip'",
+   "Download ZIP and unzip: every file is 'openpcb-cc5a12b9-bd16-4e8c-9c00-f9459807-F_Cu.gbr', '…-PTH.drl', '…-BOM.csv'; the .gbrjob GeneralSpecs.ProjectId.Name is the raw UUID 'cc5a12b9-bd16-4e8c-9c00-f94598075fd5'",
+   "Same for Dual LED Blinker (openpcb-c2c58a19-bef5-488a-bfa4-c6b133ea.zip) and QA-f1b-empty",
+   "BOM view → Export ▾ → CSV downloads 'openpcb-cc5a12b9-bd16-4e8c-9c00-f9459807-csv.csv' (JLC → '-jlc.csv', PnP → '-pnp.csv') while the server's Content-Disposition for the same endpoint says 'openpcb-<id>-BOM.csv'"
+  ],
+  "expected": "Bundle and files use a slug of the design name (e.g. 'Dual_LED_Blinker-r540-F_Cu.gbr'), job file ProjectId.Name = design name; BOM downloads named '<design>-BOM.csv' / '<design>-JLC-BOM.csv' / '<design>-CPL.csv'.",
+  "actual": "The user (and the fab house) receives several ZIPs that are indistinguishable except for a 32-char UUID fragment; the UUID is cut mid-group (last group truncated to 8 of 12 chars). BOM view names end in '-csv.csv'. Related: Q5-010 reported the UUID naming for BOM-view downloads; this finding covers the manufacturing ZIP, every file inside it and the X2 job file.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/036-export-dialog-stress.png",
+    "shots/f1b/dark/040-export-empty-design.png"
+   ],
+   "files": [
+    "f1b/export/stress.zip",
+    "f1b/export/dual.zip",
+    "f1b/export/empty.zip",
+    "f1b/export/stress-bom-alldnp-openpcb-cc5a12b9-bd16-4e8c-9c00-f9459807-csv.csv"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/sdks/designer/pcb-helpers.ts",
+    "line": 13,
+    "note": "exportBundleName(designId) = 'openpcb-' + designId.slice(0,32)"
+   },
+   {
+    "path": "src/modules/designer/backend/export/gerber/job-file.ts",
+    "line": 44,
+    "note": "ProjectId.Name: pcb.designId"
+   },
+   {
+    "path": "src/modules/designer/frontend/api.ts",
+    "line": 738,
+    "note": "downloadBlob name `${exportBundleName(designId)}-${kind}.${extension}` → '-csv.csv'"
+   }
+  ],
+  "suggestedFix": "Pass the design name into exportBundleName (slugify [^A-Za-z0-9_-]→'_', max ~40 chars, append short id only on collision/empty name); use it in job-file ProjectId.Name; in api.downloadBomArtifact use the Content-Disposition filename or a kind→label map (BOM, BOM.tsv, JLC-BOM, KiCad-BOM, CPL).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:export:bundle-name-uuid",
+  "status": "duplicate",
+  "verification": {
+   "verdict": "duplicate",
+   "by": "vf1b",
+   "reason": "Confirmed, but already covered: the export dialog footer on QA-vf1b-empty reads '14 files · openpcb-cb93fe99-63c1-414a-8bf9-ec87ff3c.zip'. The member prefix and the .gbrjob GeneralSpecs.ProjectId.Name = raw UUID (job-file.ts:44) were confirmed via POST /exports/gerber. The ZIP and member UUID naming is verified in Q4-024 ('ZIP named by UUID', fix: slugify the design name). The '-csv.csv' BOM-view names and the ignored Content-Disposition are verified in Q5-010. The only new detail is the .gbrjob ProjectId.Name; add it to Q4-024's fix: exportBundleName(designId) in sdks/designer/pcb-helpers.ts:13 should take the design name and feed job-file.ts ProjectId.Name.",
+   "evidence": [
+    "shots/vf1b/dark/026-export-empty-design.png",
+    "API POST /designs/cb93fe99…/exports/gerber -> .gbrjob ProjectId.Name 'cb93fe99-63c1-414a-8bf9-ec87ff3cadcd'"
+   ]
+  },
+  "duplicateOf": "Q4-024"
+ },
+ {
+  "id": "F1B-015",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "Export of an empty board (no parts, no copper, default 50×30 outline) reports 'DRC passed — no errors · no warnings' and produces a full 14-file fab bundle of empty layers",
+  "category": "error-handling",
+  "severity": "S4",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "2964a68a-fc15-442c-bae6-3b085e74",
+  "repro": [
+   "Create a new design QA-f1b-empty (nothing placed)",
+   "PCB → Export…",
+   "Dialog: green 'DRC passed — no errors.', footer '14 files · openpcb-2964a68a-….zip · no warnings', Download ZIP enabled",
+   "Download and unzip"
+  ],
+  "expected": "Preflight warns 'Board has no components and no copper — nothing to fabricate' (and ideally that the outline is the untouched default), BOM/PnP checkboxes disabled or noted as empty.",
+  "actual": "ZIP contains F_Cu/B_Cu/Mask/Paste/Silk Gerbers with only headers + M02, PTH/NPTH drill files with no tools ('T0 M30'), a header-only BOM.csv and PnP.csv, and an Edge_Cuts of the auto-created 50×30 mm rectangle — all presented as a clean, ready-to-upload bundle.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/040-export-empty-design.png"
+   ],
+   "files": [
+    "f1b/export/empty/openpcb-2964a68a-fc15-442c-bae6-3b085e74-F_Cu.gbr (292 B, no objects)",
+    "f1b/export/empty/…-PnP.csv (header only)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/backend/export/preflight.ts",
+    "line": 17,
+    "note": "warns only for missing outline, sub-min drills/traces, unsourced BOM lines — no 'empty board' check"
+   }
+  ],
+  "suggestedFix": "In runExportPreflight add: placements.length===0 && traces/vias/zones empty → warning 'Board is empty — no copper, parts or drills'; when includeBom/includePnp and no active rows → 'BOM/CPL would be empty'. Consider treating it as blocking like DRC errors.",
+  "fixScope": "backend-needed",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:export:empty-board-no-warning",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on a fresh QA-vf1b-empty (0 parts, default 50x30 outline). The export dialog shows 'DRC passed — no errors.' and '14 files · … · no warnings'. Summary warnings are [], the F_Cu Gerber is header + M02 only, PTH/NPTH drill files have 'T0' + 'M30' with no tools, and BOM/PnP are header-only. preflight.ts has no empty-board check. Severity lowered to S4: KiCad and Altium also plot empty layers without warning, it takes an explicit user action, and nothing is lost. An 'empty board' preflight note is polish.",
+   "evidence": [
+    "shots/vf1b/dark/026-export-empty-design.png",
+    "API POST /designs/cb93fe99…/exports/gerber?format=summary -> warnings [] , 14 files"
+   ]
+  }
+ },
+ {
+  "id": "F1B-016",
+  "knownRef": null,
+  "area": "designer.bom",
+  "title": "BOM/CPL exports write an empty Comment/Val for parts with no Value (and a currency with no price); DNP policy part already covered by Q5-010",
+  "category": "data",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "QA-f1b-stress → BOM → select all 150 → bulk DNP",
+   "Export ▾ → CSV",
+   "Compare with Export ▾ → TSV / KiCad CSV (backend writers)",
+   "Dual LED Blinker / QA-f1b-bomgroup: export the fab bundle, open BOM.csv and PnP.csv rows for U1 / Q1,Q2,Q3"
+  ],
+  "expected": "One consistent DNP policy: either every BOM export lists DNP lines flagged DNP=yes, or none do and the DNP column is removed; the export dialog/menu says which. Parts without a Value export a meaningful Comment (value → component name/description fallback, as the BOM table shows).",
+  "actual": "bom.csv after bulk DNP is only the header line ('Comment,Designator,…,DNP,…'); buildBomCsv filters dnp rows but still writes a DNP column → it is always 'no' in 150/150 rows of the non-DNP export. buildBomTsv and buildKicadBomCsv write DNP rows with yes/1. For parts with empty Value the Comment/Val cell is empty: Dual LED Blinker BOM ',U1,SOIC-8_3.9x4.9mm_P1.27mm,…' and PnP 'U1,,SOIC-8…' although the BOM view shows a description; QA-f1b-bomgroup ',\"Q1,Q2,Q3\",SOT-23,…' (see also F1B-005). Also one row carries Currency 'USD' with no unit price (C1 on Dual LED Blinker) because the inspector pre-fills USD. Related: Q5-010 noted the dead DNP column in bom.csv; new here are the cross-format disagreement, the header-only file after bulk DNP, and the empty Comment/Val cells.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/034-bom-bulk-dnp.png",
+    "shots/f1b/dark/039-bom-grouping-npn-nmos.png"
+   ],
+   "files": [
+    "f1b/export/stress-bom-alldnp-openpcb-cc5a12b9-bd16-4e8c-9c00-f9459807-csv.csv (header only)",
+    "f1b/export/dual/openpcb-c2c58a19-bef5-488a-bfa4-c6b133ea-BOM.csv"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/backend/export/bom/writer.ts",
+    "line": 90,
+    "note": "buildBomCsv filters !row.dnp then writes row.dnp ? 'yes':'no'"
+   },
+   {
+    "path": "src/modules/designer/backend/export/bom/writer.ts",
+    "line": 100,
+    "note": "buildBomTsv keeps DNP rows"
+   },
+   {
+    "path": "src/modules/designer/backend/export/bom/writer.ts",
+    "line": 152,
+    "note": "buildKicadBomCsv keeps DNP rows"
+   },
+   {
+    "path": "src/modules/designer/backend/export/bom/writer.ts",
+    "line": 335,
+    "note": "Comment = row.value only, no fallback"
+   }
+  ],
+  "suggestedFix": "export/bom/writer.ts formatBomCsvRow / buildJlcBomCsv / buildKicadBomCsv and the PnP writer: when row.value is empty, fall back to the component name (or MPN, then description) for Comment/Val. Only emit Currency when unitPrice is set. The DNP policy is handled under Q5-010.",
+  "fixScope": "backend-needed",
+  "estimate": "S",
+  "dedupeKey": "designer.bom:export:dnp-policy-inconsistent",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Partly a duplicate, re-scoped. The DNP part (bom.csv/JLC drop DNP lines but keep an always-'no' DNP column, while KiCad CSV/TSV keep them) is already verified as Q5-010, and a header-only file after bulk DNP is the same filter (writer.ts:90). New and confirmed read-only on Dual LED Blinker: bom.csv ',U1,SOIC-8_3.9x4.9mm_P1.27mm,…' and pnp.csv 'U1,,SOIC-8…' have an empty Comment/Val for a value-less part, and C1 carries Currency 'USD' with no Unit Price. The same empty Comment appears in QA-f1b-bomgroup's BOM/JLC/KiCad rows. S3 kept for the empty Comment/Val, which JLC assembly review uses to identify parts.",
+   "evidence": [
+    "API GET /designs/c2c58a19…/exports/bom.csv -> ',U1,SOIC-8_3.9x4.9mm_P1.27mm,,,,1,no,top,,,' and '10µF,C1,…,USD,'",
+    "API pnp.csv -> 'U1,,SOIC-8_3.9x4.9mm_P1.27mm,…'"
+   ]
+  },
+  "relatedTo": [
+   "Q5-010",
+   "F1B-005"
+  ]
+ },
+ {
+  "id": "F1B-017",
+  "knownRef": "K30",
+  "area": "designer.pcb",
+  "title": "Export dialog 'Include inner copper layers (4-layer boards only)' is enabled and checked by default on 2-layer boards and silently does nothing",
+  "category": "consistency",
+  "severity": "S4",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "Open QA-f1b-stress (Stackup 2 layer) → PCB → Export…",
+   "Observe third checkbox",
+   "Download ZIP"
+  ],
+  "expected": "Checkbox hidden or disabled with a note on boards with layerCount 2 (only shown for 4+ layers).",
+  "actual": "Checkbox is enabled and checked on QA-f1b-stress, Dual LED Blinker and QA-f1b-empty (all 2-layer); toggling it changes nothing — both ZIPs have the same 14 files (no In1/In2).",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/036-export-dialog-stress.png",
+    "shots/f1b/dark/038-export-dialog-dual.png",
+    "shots/f1b/dark/040-export-empty-design.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbExportDialog.tsx",
+    "line": 258,
+    "note": "includeInner checkbox not gated on board.layerCount"
+   }
+  ],
+  "suggestedFix": "Render the checkbox only when board.layerCount > 2 (or disabled with title 'Board has 2 copper layers').",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:export-dialog:inner-layers-2layer",
+  "status": "duplicate",
+  "verification": {
+   "verdict": "duplicate",
+   "by": "vf1b",
+   "reason": "Reproduced on the 2-layer QA-vf1b-empty: 'Include inner copper layers (4-layer boards only)' is enabled and checked (PcbExportDialog.tsx:258-265, not gated on layerCount). This is exactly the verified Q4-024 (K30).",
+   "evidence": [
+    "shots/vf1b/dark/026-export-empty-design.png"
+   ]
+  },
+  "duplicateOf": "Q4-024"
+ },
+ {
+  "id": "F1B-018",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "Design rules → Length match group row overflows the dialog: the 'Remove group' (trash) button is clipped to ~9 px at the dialog edge and '± tol' wraps onto two lines",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": "0d2709d2-24bf-463a-b37a-6b5713b46aea",
+  "repro": [
+   "Open QA-f1b-netid (or QA-f1b-stress) → PCB → Board properties → Edit rules…",
+   "Length match groups → Add group (or view existing G1), set target kind Absolute",
+   "Look at the right end of the group row"
+  ],
+  "expected": "Group row (name, kind, target, tolerance, remove) fits inside the 560 px dialog; the remove button is fully visible and the label reads '± tol' on one line.",
+  "actual": "Row content is 547 px wide inside a 508 px container (scrollWidth 547 > clientWidth 508, overflow visible): button[aria-label='Remove group G1'] spans x 991–1013 while the dialog panel ends at x 1000, so only a 9 px sliver of the trash icon shows and the rest is cut off. '± tol' breaks into '±' / 'tol'. Same in QA-f1b-stress (shots 048/049). Same at 1100×720 (shot 054: trash sliver at x≈826 against the dialog edge).",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/057-netid-rules-stale-assignment.png",
+    "shots/f1b/dark/057b-remove-group-clipped-zoom.png",
+    "shots/f1b/dark/049-length-group-absolute.png",
+    "shots/f1b/dark/054-design-rules-1100-bottom.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/PcbDesignRulesDialog.tsx",
+    "line": 460,
+    "note": "'± tol' NumberField label + Remove group button at :466 in a non-wrapping flex row"
+   }
+  ],
+  "suggestedFix": "In the design-rules length-group row allow the name input to shrink (min-w-0 flex-1) and give numeric inputs a fixed w-16, or wrap the row into two lines (name+kind / target+tol+remove); add whitespace-nowrap to the '± tol' label.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:design-rules:length-group-row-overflow",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on QA-vf1b-stack60: Add group -> Absolute. The row's scrollWidth 547 > clientWidth 508. 'Remove group' spans x 991-1013 while the dialog panel ends at x 1000, so only a sliver of the trash icon shows, and elementFromPoint at its centre does not hit the button. The '± tol' label is 13 px wide and 30 px tall, wrapping onto two lines. S3 kept.",
+   "evidence": [
+    "shots/vf1b/dark/008-length-group-row.png",
+    "shots/vf1b/dark/008b-length-group-row-zoom.png"
+   ]
+  }
+ },
+ {
+  "id": "F1B-019",
+  "knownRef": null,
+  "area": "designer.bom",
+  "title": "Renaming a reference designator in the schematic never reaches the PCB: the placement keeps the old refdes and the BOM/JLC BOM lists the part twice (old + new ref), so exports order extra parts and BOM ≠ CPL",
+  "category": "data",
+  "severity": "S1",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "43a2da78-9d2e-43a0-bcd3-ecebe3f72551",
+  "repro": [
+   "Open QA-f1b-long (5 parts: R1, U1, D1, J1, C1) → Schem → select R1",
+   "Inspector header: click the 'R1' reference button, type R123456789, Enter (dispatches update_part_properties {reference})",
+   "Reload, switch to PCB: Components panel and silkscreen still say 'R1'",
+   "Switch to BOM",
+   "Minimal API repro on QA-f1b-netid (R1, R2, C1): update_part_properties {partId: R1, reference: 'R7'} → GET /exports/bom.csv, /exports/bom-jlc.csv, /exports/pnp.csv",
+   "Same via Outline → row '…' → Rename (F2): renamed R2 → R8 on QA-f1b-netid (light) → schematic [R7, R8, C1], PCB still [R1, R2, C1], bom-jlc.csv ',\"R1,R2,R7,R8\",R_0603_1608Metric,,4' for two resistors"
+  ],
+  "expected": "The refdes change propagates to the PCB placement (same partId), silkscreen, PnP and BOM; BOM part count stays equal to the number of parts.",
+  "actual": "PCB projection placements keep reference 'R1' (partId a8178b98…) while the schematic part is 'R123456789'. BOM view shows '6 lines · 6 parts' for a 5-part design: a phantom 'R1' line (no value, no description) plus 'R123456789 10kΩ', footer still claims 'Synced with schematic r17'. On QA-f1b-netid: bom.csv / bom-jlc.csv ',\"R1,R2,R7\",R_0603_1608Metric,…,3' for two resistors, while pnp.csv lists only R1 and R2 → JLC BOM/CPL mismatch (R7 has no placement), an extra resistor is ordered, and the silkscreen/assembly drawing shows R1 where the schematic says R7. Persisted through reload and further edits (5 more commits).",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/069-long-pcb.png",
+    "shots/f1b/dark/070-long-bom-duplicate-ref.png",
+    "shots/f1b/dark/066-long-r1-inspector.png",
+    "shots/f1b/light/022-outline-rename.png"
+   ],
+   "network": [
+    "POST …/43a2da78…/commands update_part_properties {reference:'R123456789'} → ok r14",
+    "GET …/43a2da78…/projection/pcb → placements [R1,U1,D1,J1,C1]",
+    "GET …/43a2da78…/bom → rows [[C1],[D1],[J1],[R1],[R123456789],[U1]]",
+    "GET …/0d2709d2…/exports/bom-jlc.csv → ',\"R1,R2,R7\",R_0603_1608Metric,,3'",
+    "GET …/0d2709d2…/exports/pnp.csv → C1,R1,R2",
+    "GET …/0d2709d2…/exports/bom-jlc.csv after Outline rename → '\"R1,R2,R7,R8\" … 4'"
+   ],
+   "script": "f1b/refdes.py"
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/backend/command-executor.ts",
+    "line": 2466,
+    "note": "update_part_properties writes schematicParts.reference only; PCB placement reference untouched"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/SelectionInspector/SelectionInspector.tsx",
+    "line": 146,
+    "note": "inspector refdes rename dispatches update_part_properties {reference}"
+   },
+   {
+    "path": "src/modules/designer/backend/export/bom/writer.ts",
+    "line": 233,
+    "note": "BOM merges PCB placements and schematic parts by refdes → both refs survive"
+   },
+   {
+    "path": "src/modules/designer/backend/pcb/pcb-store.ts",
+    "line": 1921,
+    "note": "existing placement's reference refreshed only when footprint JSON changed"
+   }
+  ],
+  "suggestedFix": "pcb-store.ts syncPcbPlacementsFromSchematic: always refresh `reference` (and componentId) from the schematic part when it differs, not only when the footprint changed. Or update the placement row in the update_part_properties handler (command-executor.ts:2449) in the same transaction. Key the BOM merge on partId (writer.ts:233). Add a regression test: rename -> PCB projection reference, bom refs and pnp.csv follow.",
+  "fixScope": "backend-needed",
+  "estimate": "S",
+  "dedupeKey": "designer.bom:refdes-rename:pcb-not-synced",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on a fresh 3-part design, QA-vf1b-refdes (fa21e39a). update_part_properties {reference:'R7'} on R1 leaves the schematic at [R7,R2,C1] and the PCB at [R1,R2,C1]. GET /bom shows partCount 4 for 3 parts, and bom.csv/bom-jlc.csv list ',\"R1,R2,R7\",R_0603_1608Metric,…,3' while pnp.csv has R1,R2. The UI shows the same on QA-f1b-long: BOM '6 lines · 6 parts' for 5 parts, a phantom 'R1' line, and 3D refdes 'R1'. Root cause: command-executor.ts:2449 updates only schematicParts.reference, and syncPcbPlacementsFromSchematic (pcb-store.ts:1919-1934) refreshes placement.reference only when the footprint changed. designer/AGENTS.md says re-annotation is supposed to update the reference, so this is a bug, not a design decision. S1 kept: a routine refdes rename silently makes the fab BOM order extra parts, and BOM and CPL disagree.",
+   "evidence": [
+    "shots/vf1b/dark/021-bom-1100-export-hidden.png",
+    "shots/vf1b/dark/019-long-3d-top.png",
+    "API QA-vf1b-refdes: pcb ['R1','R2','C1'] vs sch ['R7','R2','C1']; bom summary partCount 4; bom-jlc.csv ',\"R1,R2,R7\",R_0603_1608Metric,,3'"
+   ]
+  }
+ },
+ {
+  "id": "F1B-020",
+  "knownRef": null,
+  "area": "designer.shell",
+  "title": "Status-bar selection segment hard-clips long names mid-glyph with no ellipsis ('Text · Long PCB overlay text for silkscreen overlap Q')",
+  "category": "visual",
+  "severity": "S4",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "43a2da78-9d2e-43a0-bcd3-ecebe3f72551",
+  "repro": [
+   "QA-f1b-long → PCB → T, click the board, accept a 150-char overlay text",
+   "Click the text to select it",
+   "Look at the status bar selection segment (right side)"
+  ],
+  "expected": "Segment truncates with an ellipsis ('Text · Long PCB overlay text for silk…') and exposes the full text via title.",
+  "actual": "The segment has class 'flex … max-w-[240px] truncate' (text-overflow: ellipsis, overflow hidden, scrollWidth 718 > clientWidth 239) but, being a flex container, never renders the ellipsis: the text is cut through the letter 'Q' flush against the 'view top' segment. Same for any long selection label (e.g. long refdes/value).",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/076-long-pcb-text-selected.png",
+    "shots/f1b/dark/076b-statusbar-zoom.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerStatusBar.tsx",
+    "line": 144,
+    "note": "<StatusSegment sans className='max-w-[240px] truncate'> — truncate on a flex container"
+   },
+   {
+    "path": "src/shared/frontend/ui/status-bar.tsx",
+    "line": 38,
+    "note": "StatusSegment is display:flex"
+   }
+  ],
+  "suggestedFix": "Wrap the label in an inner <span className='min-w-0 truncate'> inside StatusSegment (keep max-w on the segment) and add title={fullText}.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.shell:status-bar:truncate-no-ellipsis",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on QA-f1b-long PCB after selecting the overlay text. The segment 'max-w-[240px] truncate' is display:flex with text-overflow:ellipsis, clientWidth 239 and scrollWidth 718. The text is cut mid-glyph ('…overlap Q') with no ellipsis and no title. S4 kept.",
+   "evidence": [
+    "shots/vf1b/dark/016-statusbar-long-selection.png",
+    "shots/vf1b/dark/016b-statusbar-zoom.png"
+   ]
+  }
+ },
+ {
+  "id": "F1B-021",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "DRC marker hover tooltip: long net names overflow the 280 px card (no wrap, no viewport clamp), and in light theme its 10 px message text is 2.8:1 on a blue-tinted translucent card",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "43a2da78-9d2e-43a0-bcd3-ecebe3f72551",
+  "repro": [
+   "QA-f1b-long has a net labelled VERY_LONG_NET_LABEL_FOR_QA_… (80 chars) and a DRC run with an UNCONNECTED_NET on it",
+   "PCB view, hover the Unconnected-net marker near the stacked parts"
+  ],
+  "expected": "Tooltip text wraps (break-all for identifiers) or truncates with an ellipsis inside the card; the card is clamped to the viewport.",
+  "actual": "The card is max-w-[280px] (x≈766–1046) but the anchor line 'VERY_LONG_NET_LABEL_FOR_QA_VERY_LONG…' and the quoted net in the message run to x≈1302, outside the card background, over the canvas/inspector boundary (1140) and onto the Properties panel. The card is placed at cursor+14 px with no viewport clamping, so near the right edge it runs off-screen. Light theme (shots/f1b/light/010-drc-tooltip.png): the card is bg-surface-raised/95 + backdrop-blur, so over the B.Cu pour it renders #d9dce5 (blue cast, nearest --status-info-soft) instead of --surface-raised #e2e2e5; the 10 px layer line and message (#818188 / #85858d) reach only 2.82:1 contrast (dark theme: 4.27:1).",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/086-overlap-picker.png",
+    "shots/f1b/dark/086b-drc-tooltip-overflow.png",
+    "shots/f1b/light/010-drc-tooltip.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/f1b/light/010-drc-tooltip.png",
+     "x": 1000,
+     "y": 500,
+     "hex": "#d9dce5",
+     "nearestToken": "--status-info-soft@app",
+     "deltaE": 1.5
+    },
+    {
+     "file": "shots/f1b/light/010-drc-tooltip.png",
+     "x": 800,
+     "y": 541,
+     "hex": "#818188",
+     "nearestToken": "--text-tertiary",
+     "deltaE": 0.5
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 6410,
+    "note": "tooltip div: max-w-[280px], no break-words/break-all, fixed left=cursor+14 without clamping"
+   }
+  ],
+  "suggestedFix": "Add 'break-all' (or [overflow-wrap:anywhere]) to the anchors and message rows, and clamp left/top against window.innerWidth/innerHeight minus the measured card size (flip to the left of the cursor near the right edge). Use an opaque bg-surface-raised (drop /95 and backdrop-blur) and text-text-secondary for the message so it meets 4.5:1 in light.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:drc-tooltip:long-text-overflow",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on QA-f1b-long by hovering the UNCONNECTED_NET marker at (750,455). The card spans x 764-1044 while the anchor and message rows have scrollWidth 526/486 in a 258 px box; the text runs to x≈1300, over the Properties dock. Light: the card probes #d9dce5 (95% alpha + blur(8px) over the blue pour; nearest --status-info-soft) and the darkest message pixel is #818188, which is 2.82:1 at 10 px. Dark tertiary on raised is 4.27:1. Code: PcbCanvas.tsx:6410, no wrap, no viewport clamp. S3 kept.",
+   "evidence": [
+    "shots/vf1b/dark/018-drc-tooltip-overflow.png",
+    "shots/vf1b/light/004-drc-tooltip.png",
+    "probe light 1000,475 #d9dce5 (--status-info-soft dE 1.5)"
+   ]
+  }
+ },
+ {
+  "id": "F1B-022",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "Tune HUD renders its key readouts in disabled/tertiary grey: the length delta ('13.68 mm short', 'in tolerance') is 2.5:1 in dark and ~2:1 in light; the current length without a target is 3.3:1 in light",
+  "category": "a11y",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "QA-f1b-stress → PCB (length group 'Group 1', absolute 30 mm) → press U",
+   "Click a routed trace on a group net (dark shot 052: Net_43) and on a non-group net (light shot 017: Net_131)",
+   "Read the HUD row: net · length · delta"
+  ],
+  "expected": "The live length and its distance to target — the whole point of the Tune tool — are rendered at ≥4.5:1 (text-text or the band status colour); only the inapplicable 'Enter apply' hint is dimmed.",
+  "actual": "Dark: '≈16.32 / 30.00 mm' is --status-warning (#d9a441, fine) but '13.68 mm short' is #515156 (--text-disabled #55555a) on the #151517 HUD = 2.46:1. Light: the delta span uses --text-disabled #a8a8ae on #ebebed ≈ 2.0:1, and with no target the length '25.06 mm' plus 'set target…' are --text-tertiary #7f7f86 on #ebebed = 3.34:1 at 11 px. (The hint row itself is OK only by accident: PcbParamRow is given both 'text-text-secondary' and 'text-text-disabled' and secondary wins in CSS order.)",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/052-tune-hud.png",
+    "shots/f1b/light/017-tune-hud.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/f1b/dark/052-tune-hud.png",
+     "x": 340,
+     "y": 77,
+     "hex": "#515156",
+     "nearestToken": "--text-disabled",
+     "deltaE": 1.0
+    },
+    {
+     "file": "shots/f1b/light/017-tune-hud.png",
+     "x": 700,
+     "y": 77,
+     "hex": "#ebebed",
+     "nearestToken": "--surface-panel-head",
+     "deltaE": 0
+    },
+    {
+     "file": "shots/f1b/light/017-tune-hud.png",
+     "x": 200,
+     "y": 77,
+     "hex": "#828288",
+     "nearestToken": "--text-tertiary",
+     "deltaE": 0.6
+    }
+   ],
+   "console": [
+    "computed: light '25.06 mm' rgb(127,127,134) 11px; hint kbd rgb(85,85,92)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/TuneHud.tsx",
+    "line": 90,
+    "note": "delta span className='text-text-disabled'"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/TuneHud.tsx",
+    "line": 83,
+    "note": "length falls back to text-text-tertiary without a band"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx",
+    "line": 808,
+    "note": "PcbParamRow hard-codes text-text-secondary, so a passed text-* class conflicts"
+   }
+  ],
+  "suggestedFix": "TuneHud.tsx: render the delta in the same BAND_CLASS as the length (or text-text-secondary) and the no-target length in text-text; merge PcbParamRow classes with tailwind-merge (or drop its default colour) so callers can override deterministically.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:tune-hud:low-contrast-readout",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on QA-f1b-stress, Tune on the Net_43 trace. Dark: '13.68 mm short' is computed rgb(85,85,90) = --text-disabled on the #151517 row = 2.46:1. Light: the darkest delta pixel is #acacb2 on HUD #ebebed (probed, --surface-panel-head) ≈ 1.9:1, and 'target:…' / 'A 2.00 · pitch' use --text-tertiary #7f7f86 = 3.34:1 at 11 px. Code: TuneHud.tsx:90 delta 'text-text-disabled'. S3 kept.",
+   "evidence": [
+    "shots/vf1b/dark/022-tune-hud.png",
+    "shots/vf1b/light/005-tune-hud.png",
+    "probe light 700,70 #ebebed --surface-panel-head dE 0"
+   ]
+  }
+ },
+ {
+  "id": "F1B-023",
+  "knownRef": null,
+  "area": "designer.comments",
+  "title": "Light theme: PCB comment thread popup timestamps and meta text are 10 px slate-400 on white — 2.0–2.4:1 contrast (unreadable 'now' / '9m')",
+  "category": "a11y",
+  "severity": "S3",
+  "themes": [
+   "light",
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "43a2da78-9d2e-43a0-bcd3-ecebe3f72551",
+  "repro": [
+   "QA-f1b-long → PCB → Add ▾ → Comment, click the board, post a comment",
+   "Switch to light theme (localStorage theme=light, reload), open the design → PCB, click the pin '1'",
+   "Read the header/message timestamps ('9m'), 'deleted' and 'No messages yet.' labels"
+  ],
+  "expected": "Meta text uses --text-tertiary/--text-secondary tokens and reaches ≥4.5:1 (or ≥3:1 at minimum) on the popup background in both themes.",
+  "actual": "Popup body is #ffffff; timestamps render #b5b5b9–#bcbcc0 (text-[10px] text-slate-400 → remapped #a8a8ad) = 2.04–2.37:1. In dark the same span is #a1a1a6 on #111113 (≈7:1), so the problem is light-only. The avatar is a fixed dark disc (#3a3a40 light / #505056 dark, bg-violet-600 remapped) with a '·' placeholder; the pin stays violet #895bf3 in both themes (raw palette already reported in Q5-030/Q3-023 — this finding is the measured light-theme contrast failure).",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/light/011-comment-popup.png",
+    "shots/f1b/dark/091-pcb-comment-posted.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/f1b/light/011-comment-popup.png",
+     "x": 700,
+     "y": 600,
+     "hex": "#ffffff",
+     "nearestToken": "--surface-input",
+     "deltaE": 0
+    },
+    {
+     "file": "shots/f1b/light/011-comment-popup.png",
+     "x": 628,
+     "y": 543,
+     "hex": "#b5b5b9",
+     "nearestToken": "--text-disabled",
+     "deltaE": 3.0
+    },
+    {
+     "file": "shots/f1b/light/011-comment-popup.png",
+     "x": 554,
+     "y": 548,
+     "hex": "#895bf3",
+     "nearestToken": "--status-info",
+     "deltaE": 59.8
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/comments/CommentThreadPopup.tsx",
+    "line": 105,
+    "note": "timestamp 'shrink-0 text-[10px] text-slate-400'"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/comments/CommentThreadPopup.tsx",
+    "line": 257,
+    "note": "'text-[10px] text-slate-400' meta line"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/comments/CommentThreadPopup.tsx",
+    "line": 78,
+    "note": "avatar bg-violet-600"
+   }
+  ],
+  "suggestedFix": "Replace text-slate-400 with text-text-tertiary (or text-text-secondary for 10 px), raise to text-2xs (10 px min is fine) and migrate the popup to tokens (bg-menu-bg/border-menu-border, avatar bg-surface-control text-text-secondary) as part of Q5-030.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.comments:thread-popup:light-meta-contrast",
+  "status": "duplicate",
+  "verification": {
+   "verdict": "duplicate",
+   "by": "vf1b",
+   "reason": "Measurement reproduced in light on QA-f1b-long: the comment popup body is #ffffff and the timestamps '2h' are computed rgb(168,168,173) (text-slate-400 remapped by D1) at 10 px = 2.37:1. The root cause is the unmigrated raw-palette CommentThreadPopup, already verified as Q5-030 (K45: comment popups on raw palette / raw white light background; fix = restyle with tokens). Fold the contrast measurement into Q5-030. When migrating, use text-text-secondary for the 10 px meta text, since --text-tertiary on white is only 3.9:1. Side note: the stored comment text on this pin is missing its hotkey letters ('QA cen: cec e lng ne…'). That is the textarea-hotkey defect already verified as Q4-019/Q5-024, not a new issue.",
+   "evidence": [
+    "shots/vf1b/light/003-comment-popup.png",
+    "shots/vf1b/light/003b-comment-popup-zoom.png",
+    "DOM: timestamp color rgb(168,168,173) 10px on #ffffff"
+   ]
+  },
+  "duplicateOf": "Q5-030"
+ },
+ {
+  "id": "F1B-024",
+  "knownRef": null,
+  "area": "designer.schematic",
+  "title": "Schematic Outline row 'Actions' menu uses a fourth menu recipe (bg-surface-raised grey, border-border, 24 px items) — grey #e2e2e5 in light where kit menus are white --menu-bg",
+  "category": "consistency",
+  "severity": "S4",
+  "themes": [
+   "light",
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "43a2da78-9d2e-43a0-bcd3-ecebe3f72551",
+  "repro": [
+   "QA-f1b-long → Schem → Outline → hover a part row → click '…' (Actions)",
+   "Compare with BOM → Export ▾ in the same theme"
+  ],
+  "expected": "All dropdowns use the kit DropdownMenu recipe (bg-menu-bg, border-menu-border, 22 px items).",
+  "actual": "Outline Actions: class 'min-w-[9rem] rounded-float border border-border bg-surface-raised py-1 shadow-lg', computed bg rgb(226,226,229) and 24 px items; BOM Export ▾: 'bg-menu-bg border-menu-border p-1' → #ffffff in light. In dark both tokens resolve to #1c1c1f so the drift is only visible in light. Additional instance of the menu-recipe drift in Q11-012 (kit dropdown vs context menu vs PCB Add/View).",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/light/003-outline-actions-menu.png",
+    "shots/f1b/light/004-bom-export-menu.png",
+    "shots/f1b/dark/083-outline-actions-menu.png",
+    "shots/f1b/dark/082-bom-export-menu.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/f1b/light/003-outline-actions-menu.png",
+     "x": 420,
+     "y": 230,
+     "hex": "#e2e2e5",
+     "nearestToken": "--surface-raised",
+     "deltaE": 0
+    },
+    {
+     "file": "shots/f1b/light/004-bom-export-menu.png",
+     "x": 1020,
+     "y": 135,
+     "hex": "#ffffff",
+     "nearestToken": "--menu-bg",
+     "deltaE": 0
+    },
+    {
+     "file": "shots/f1b/dark/083-outline-actions-menu.png",
+     "x": 420,
+     "y": 230,
+     "hex": "#1c1c1f",
+     "nearestToken": "--menu-bg",
+     "deltaE": 0
+    }
+   ]
+  },
+  "codeRefs": [],
+  "suggestedFix": "Render the Outline row actions with the kit DropdownMenu (src/shared/frontend/ui) or switch its classes to bg-menu-bg border-menu-border p-1 with 22 px items.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "cross-cutting:menu-recipe:outline-actions",
+  "status": "duplicate",
+  "verification": {
+   "verdict": "duplicate",
+   "by": "vf1b",
+   "reason": "Reproduced in light: the Outline row 'Actions' menu is 'rounded-float border border-border bg-surface-raised py-1 shadow-lg', computed bg rgb(226,226,229) (--surface-raised), items 23-24 px. This is the same --surface-raised recipe that verified Q11-012 lists for the PCB toolbar Add/View dropdowns, not a fourth recipe. Add OutlinePanel's row menu to Q11-012's list of places to migrate to the kit DropdownMenu.",
+   "evidence": [
+    "shots/vf1b/light/001-outline-actions-menu.png",
+    "DOM menu bg rgb(226,226,229), itemH [24,24,23,24]"
+   ]
+  },
+  "duplicateOf": "Q11-012"
+ },
+ {
+  "id": "F1B-025",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "PCB Layers panel swatches: Top and Bottom Solder Mask share #0a0d12 — invisible on the dark panel (1.03:1) and identical to the Drill black in light; paste/silk swatches use Tailwind slate (blue cast) instead of the --color-layer-* tokens",
+  "category": "visual",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "43a2da78-9d2e-43a0-bcd3-ecebe3f72551",
+  "repro": [
+   "Open any design → PCB → Layers panel (dark)",
+   "Look at 'Top Solder Mask F.Mask' and 'Bottom Solder Mask B.Mask' swatches; repeat in light"
+  ],
+  "expected": "Each layer has a distinct, visible swatch matching the design tokens (index.css defines --color-layer-f-mask #5b3a7a, --color-layer-b-mask #3a5a7a, --color-layer-f-paste #b8b8c8).",
+  "actual": "Both mask swatches are #0a0d12 (dark panel row #111113 → 1.03:1, effectively an empty slot; light → a black square indistinguishable from 'Drill Holes' #000000). F.Paste #cbd5e1 / B.Paste #94a3b8 / F.SilkS #f8fafc are Tailwind slate-300/400/50 (blue-grey cast). The panel reads PCB_LAYER_COLORS from @openpcb/r3f-eda-canvas, which ignores the app's --color-layer-* tokens.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/089-long-pcb-zones-layers-zoom.png",
+    "shots/f1b/light/005-long-pcb-layers-zoom.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/f1b/dark/089-long-pcb-zones.png",
+     "x": 110,
+     "y": 231,
+     "hex": "#0a0d12",
+     "nearestToken": "--primary-foreground",
+     "deltaE": 2.0
+    },
+    {
+     "file": "shots/f1b/light/005-long-pcb.png",
+     "x": 110,
+     "y": 231,
+     "hex": "#0a0d12",
+     "nearestToken": "--text-strong",
+     "deltaE": 2.0
+    },
+    {
+     "file": "shots/f1b/light/005-long-pcb.png",
+     "x": 110,
+     "y": 209,
+     "hex": "#cbd5e1",
+     "nearestToken": "--status-info-soft@app",
+     "deltaE": 5.0
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "node_modules/@openpcb/r3f-eda-canvas/dist/layers.js",
+    "line": 79,
+    "note": "'F.Mask': '#0a0d12', 'B.Mask': '#0a0d12', 'F.Paste': '#cbd5e1', 'B.Paste': '#94a3b8', 'F.SilkS': '#f8fafc'"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbLayersPanel.tsx",
+    "line": 402,
+    "note": "swatch colour = PCB_LAYER_COLORS[node.id]"
+   },
+   {
+    "path": "src/core/frontend/src/index.css",
+    "line": 95,
+    "note": "--color-layer-f-mask #5b3a7a / --color-layer-b-mask #3a5a7a unused by the panel"
+   }
+  ],
+  "suggestedFix": "In @openpcb/r3f-eda-canvas give the two mask layers distinct swatch colours (or a separate swatch palette from the render colour) aligned with --color-layer-*; or have PcbLayersPanel read the CSS tokens for swatches. Add a 1 px border-control ring around swatches so near-background colours stay visible.",
+  "fixScope": "shared-package",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:layers-panel:mask-swatch-invisible",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Probed. Dark: the F.Mask and B.Mask swatches are both #0a0d12 on the #111113 panel (1.03:1). Light: the same #0a0d12 black squares are indistinguishable from Drill #000000. F.Paste #cbd5e1 and B.Paste #94a3b8 are Tailwind slate. Source: node_modules/@openpcb/r3f-eda-canvas/dist/layers.js:79-84 via PcbLayersPanel.tsx:402, while index.css:95-97 defines unused --color-layer-f-mask/-b-mask/-f-paste tokens. Not refuted by the PLAN: §0 makes the canvas palette a non-goal, and §9 lists it as pending follow-up work, not as an intended final state. S4 kept.",
+   "evidence": [
+    "shots/vf1b/dark/014-long-pcb.png",
+    "shots/vf1b/light/002-long-pcb.png",
+    "probe dark 110,231/110,341 #0a0d12; light 94,143 #000000 (Drill)"
+   ]
+  },
+  "relatedTo": [
+   "PLAN §9 canvas palette follow-up"
+  ]
+ },
+ {
+  "id": "F1B-026",
+  "knownRef": null,
+  "area": "designer.3d",
+  "title": "3D view drops to 14–19 fps on a 150-part board: every orbit/zoom frame is a 55–90 ms long task (60 fps on a 5-part board)",
+  "category": "perf",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "Open QA-f1b-stress (150 placements: R/C/L 0603/0805, SOD-123, SOT-23, SOIC-8, 15 pin headers) → 3D tab, wait 6 s for models",
+   "Install an rAF counter + PerformanceObserver('longtask') (f1b/perf-install.js)",
+   "Left-drag orbit 40 steps × 16 ms, then 10 wheel notches",
+   "Repeat on QA-f1b-long (5 parts)"
+  ],
+  "expected": "Orbit/zoom stay interactive (≥45 fps) on a 150-part board on an Apple M4 Pro GPU (ANGLE Metal).",
+  "actual": "150 parts: orbit 18–19 fps with 124 long tasks (max 78 ms, sum 7.1 s) — a 40-step drag that should take ~0.7 s took 7.2 s; wheel zoom 14 fps (36 long tasks, max 88 ms). Idle 60 fps (demand loop). Same machine, 5-part board: orbit 60 fps, 0 long tasks. Time to first render of the 3D tab itself is fine (tab ready 100 ms, 540 ms of long tasks while models load). Every frame re-renders 2048² soft shadow map + ContactShadows + N8AO over ~150 individually cloned GLB groups + 150 refdes labels.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/105-stress-3d-orbit.png",
+    "shots/f1b/dark/106-long-3d-orbit.png",
+    "shots/f1b/dark/107-stress-3d-after.png"
+   ],
+   "console": [
+    "WebGL renderer: ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro)",
+    "stress orbit {elapsedMs:7212,fps:18,longTasks:124,maxLongTask:78}",
+    "stress wheel {elapsedMs:2500,fps:14,longTasks:36,maxLongTask:88}",
+    "5-part orbit {elapsedMs:1654,fps:60,longTasks:0}"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 540,
+    "note": "castShadow directional light, shadow-mapSize 2048×2048"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 555,
+    "note": "ContactShadows re-rendered per frame"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 490,
+    "note": "N8AO post-processing pass"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 758,
+    "note": "shadows='soft' on the Canvas"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/ModelCacheProvider.tsx",
+    "line": 39,
+    "note": "cloneModelScene deep-clones geometry AND material per placement (lines 44-45) — 150 parts = 150 geometry/material copies, no sharing or instancing"
+   }
+  ],
+  "suggestedFix": "Bake static shadows (ContactShadows frames={1} / shadow autoUpdate=false, update only on layout change), drop N8AO/SMAA while the camera is moving (PerformanceMonitor / regress), and instance or merge identical footprint models per componentId (150 parts here are only 8 distinct models). Add a perf budget test for 150+ parts.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "designer.3d:scene:orbit-fps-scales-with-parts",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on QA-f1b-stress (150 placements), 3D tab, ANGLE Metal on Apple M4 Pro. A 40-step orbit took 8.3 s at 15 fps (121 long tasks, max 146 ms); 10 wheel notches ran at 18 fps (30 long tasks). The same orbit on the 5-part QA-f1b-long ran at 60 fps with 0 long tasks. The long tasks are main-thread CPU time per frame, not headless GPU limits. S2 kept, since 100-200-part boards are common. Caveat: only one GPU was tested, in headless Chromium.",
+   "evidence": [
+    "shots/vf1b/dark/020-stress-3d-after-orbit.png",
+    "measure: 150-part orbit {elapsedMs:8255,fps:15,longTasks:121,max:146}; wheel {fps:18,longTasks:30}; 5-part orbit {fps:60,longTasks:0}"
+   ]
+  }
+ },
+ {
+  "id": "F1B-027",
+  "knownRef": null,
+  "area": "designer.3d",
+  "title": "3D status bar shows hard-coded 'FPS —' and 'Zoom —' placeholders that never update",
+  "category": "stub",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "Open any design → 3D tab",
+   "Orbit, wheel-zoom, switch camera presets",
+   "Read the right side of the 3D status bar"
+  ],
+  "expected": "Either live readouts (frame rate / zoom or camera distance) or no segment at all; the 2D views show a real zoom % in the shell status bar.",
+  "actual": "The bar always reads 'FPS —' and 'Zoom —' (em-dash placeholders) before and after orbit/zoom, on every design; the spans are literal strings. Looks unfinished next to the working 'iso · studio dark' segments.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/105-stress-3d-orbit.png",
+    "shots/f1b/dark/106-long-3d-orbit.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DOverlay.tsx",
+    "line": 389,
+    "note": "<span className=\"ml-auto\">FPS —</span>"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DOverlay.tsx",
+    "line": 390,
+    "note": "<span>Zoom —</span>"
+   }
+  ],
+  "suggestedFix": "Remove both spans, or feed them from the canvas (camera distance → zoom %, a throttled useFrame fps sampler behind a dev flag). Add them to the K43 stub list if kept as placeholders.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.3d:statusbar:fps-zoom-placeholders",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Seen on the QA-f1b-long 3D view: the status bar always reads 'FPS —' and 'Zoom —'. Code: Board3DOverlay.tsx:389-390 has the literal strings. Lowered to S4: harmless static placeholder text in a status strip, no dead control and no misleading claim (Q2-024, a similar placeholder block, was S4). It still conflicts with D6 ('no placeholders'). The strip also uses raw slate classes (K45).",
+   "evidence": [
+    "shots/vf1b/dark/019-long-3d-top.png"
+   ]
+  }
+ },
+ {
+  "id": "F1B-028",
+  "knownRef": null,
+  "area": "designer.bom",
+  "title": "At the 1100×720 minimum window the BOM 'Export ▾' button slides under the inspector and cannot be clicked — JLC BOM, PnP, KiCad CSV and Copy TSV become mouse-unreachable",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": "43a2da78-9d2e-43a0-bcd3-ecebe3f72551",
+  "repro": [
+   "Resize the window to 1100×720",
+   "Open any design with BOM lines (QA-f1b-long) → BOM",
+   "Look for the Export ▾ button at the right end of the BOM toolbar and click where it is"
+  ],
+  "expected": "The toolbar stays inside the 700 px table pane; Export ▾ is visible and opens CSV / JLC BOM / PnP / KiCad CSV / Copy TSV.",
+  "actual": "The button is laid out at x 869–930 while the table pane ends at x 780, so it sits under the 320 px inspector: elementFromPoint at its centre returns the inspector's '1 part' span, a click opens nothing (aria-expanded stays false, 0 menuitems). Only plain CSV remains reachable via ⌘E (and Tab+Enter). Same in dark (shots/f1b/dark/081) and light, with or without a selected line. At 1440×900 the button is visible. Cause: the <section> grid item stretches to the fixed BOM column template's min width, and the toolbar's flex-1 spacer pushes Export past the pane (the header overflow itself is Q5-012; this is the functional consequence it did not list).",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/light/024-long-bom-1100.png",
+    "shots/f1b/light/025-bom-1100-export-click.png",
+    "shots/f1b/light/026-bom-1100-noselection.png",
+    "shots/f1b/dark/081-long-bom-1100.png",
+    "shots/f1b/light/023-long-bom-1440.png"
+   ],
+   "console": [
+    "Export button rect x=869 right=930 y=37.5; table pane width 700 (x 80–780); elementFromPoint → <span class='shrink-0 text-2xs text-text-tertiary'>1 part</span>; after click aria-expanded='false', menuitems=0"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 320,
+    "note": "grid-cols-[minmax(0,1fr)_320px] — the section inside the 1fr track has min-width:auto"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 322,
+    "note": "toolbar row with flex-1 spacer then ExportMenu (line 339) is as wide as the overflowing table"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 413,
+    "note": "fixed gridTemplateColumns COLS forces the min width"
+   }
+  ],
+  "suggestedFix": "Give the <section> `min-w-0` (and `grid-cols-[minmax(0,1fr)]`), wrap only the table header+rows in an `overflow-x-auto` container, and keep the toolbar at pane width so Export ▾ stays pinned to the pane's right edge. Add a 1100×720 e2e assertion that Export ▾ opens.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.bom:toolbar:export-hidden-under-inspector-1100",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced at 1100x720 dark on QA-f1b-long BOM. The Export ▾ button is laid out at x 869-930 while the table <section> spans x 80-780. elementFromPoint at its centre hits the inspector header row. A real click at (900,49) left aria-expanded='false' with 0 menuitems. JLC BOM, PnP, KiCad CSV and Copy TSV are unreachable by mouse at the minimum window size (⌘E still exports plain CSV). Same root cause and fix as verified Q5-012 (S3, header overflow: 'section min-w-0 + overflow-x-auto'); this is the functional consequence Q5-012 did not list. S2 kept (feature unreachable, workaround: widen the window or use the PCB Export dialog). At triage, fix once with Q5-012.",
+   "evidence": [
+    "shots/vf1b/dark/021-bom-1100-export-hidden.png",
+    "DOM: btn [869,930], section [80,780], hitIsBtn false; after click menuitems 0"
+   ]
+  },
+  "relatedTo": [
+   "Q5-012"
+  ]
+ },
+ {
+  "id": "F1B-029",
+  "knownRef": null,
+  "area": "designer.schematic",
+  "title": "Outline Parts 'REF' column leaves 24 px for the designator: every 4+ character refdes (R100, C101, LED1, SW10, TP1…) is cut to 'R1…'/'C1…' and reads as a different part",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": "43a2da78-9d2e-43a0-bcd3-ecebe3f72551",
+  "repro": [
+   "Open QA-f1b-long → Schem → Outline, Parts tab",
+   "Rename R1 to R123456789 (or look at any board with ≥100 resistors / R100)",
+   "Read the REF column"
+  ],
+  "expected": "The REF column fits typical designators (at least 5–6 characters: R100, C101, TP12, SW10, LED1) and truncates only unusually long ones, ideally with the column sized to content or resizable.",
+  "actual": "The Parts grid template is '40px 1fr 80px'; after the 13 px type icon and gap the designator span is 24 px wide at 11 px IBM Plex Mono (6.6 px/char) — measured widths: R10 19.8 px fits, R100/C101/SW10/LED1 26.4 px and TP100 33 px do not. 'R123456789' renders as 'R1…' (clientWidth 24, scrollWidth 66; the full text is only in a title tooltip). On a real 100+ part board R100–R199 all show as 'R1…', indistinguishable from R1–R19, and sorting by REF then looks random. Same at 1100×720 (the sidebar has the same width).",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/108-long-schem-fit.png",
+    "shots/f1b/dark/066-long-r1-inspector.png",
+    "shots/f1b/light/002-long-schem-inspector.png",
+    "shots/f1b/dark/079-long-schem-1100.png"
+   ],
+   "console": [
+    "font 11px 'IBM Plex Mono'; cellW 24; widths R1 13.2, R10 19.8, R100 26.4, C101 26.4, SW10 26.4, LED1 26.4, TP100 33, R123456789 66"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/OutlinePanel/OutlinePanel.tsx",
+    "line": 66,
+    "note": "TAB_COLS.parts = '40px 1fr 80px' — 40 px includes the icon"
+   }
+  ],
+  "suggestedFix": "Size the REF track to content: 'minmax(56px,max-content) 1fr 80px' (or compute from the longest designator, capped at ~96 px), or move the type icon out of the REF cell. Keep ellipsis + title for pathological lengths.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.schematic:outline:ref-column-24px",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on QA-f1b-long Outline (Parts): the designator cell for R123456789 has clientWidth 24 and scrollWidth 66, rendered 'R1…' with title. In 11 px IBM Plex Mono, R10 is 19.8 px (fits) while R100/C101/LED1 are 26.4 px and TP100 is 33 px (do not fit). TAB_COLS.parts = '40px 1fr 80px' (OutlinePanel.tsx:66). S3 kept.",
+   "evidence": [
+    "shots/vf1b/dark/012-long-schem-fit.png",
+    "DOM: cw 24 sw 66; widths R10 19.8, R100 26.4, TP100 33"
+   ]
+  }
+ },
+ {
+  "id": "F1B-030",
+  "knownRef": null,
+  "area": "designer.schematic",
+  "title": "Long Value / net-label text is drawn as one unbounded line across the whole schematic, ignored by 'Fit schematic', and a same-named net portal shows as a second identical net",
+  "category": "visual",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": "43a2da78-9d2e-43a0-bcd3-ecebe3f72551",
+  "repro": [
+   "Open QA-f1b-long → Schem (U1 Value = 200-char description; net label and a net portal both named 'VERY_LONG_NET_LABEL_FOR_QA…' (80 chars))",
+   "Click Fit schematic",
+   "Zoom to 25% around R123456789/U1",
+   "Outline → Nets tab"
+  ],
+  "expected": "Fit schematic frames all visible text; field text longer than a sensible limit is elided on canvas (full text in inspector/tooltip), or the Value field enforces a length; a net portal that shares a net label's name is the same net (or ERC flags the clash).",
+  "actual": "U1's value is drawn as a single ~1,450 px line running off both sides of the fitted canvas (Fit only frames symbol bodies). The 80-char net label is drawn from R1 pin 2 straight through U1's body, over the DISCH/OUT pin names. The net portal with the identical text forms a separate 0-pin net (projection nets 'pt:30480000:-10160000' 2 pins and 'pt:8414275:-2064275' 0 pins, same name), so Outline → Nets lists two rows that both read 'VERY_LONG_NET_LABEL_FO…' with no way to tell them apart. (Same-named labels never joining is Q3-013; this is the label↔portal variant plus the duplicate-name display.) Note: resistor Value rejects free text ('Value must include a valid resistor unit'), so the long-value case is reachable on ICs/connectors only.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/108-long-schem-fit.png",
+    "shots/f1b/dark/109-long-schem-label-overlap.png",
+    "shots/f1b/dark/067-long-outline-nets.png",
+    "shots/f1b/light/002-long-schem-inspector.png",
+    "shots/f1b/dark/061-long-value-rejected.png"
+   ],
+   "network": [
+    "GET /api/modules/designer/designs/43a2da78…/projection/schematic → nets[VERY_LONG…] ×2 (2 pins + label; 0 pins + net_portal)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/backend/projection-world.ts",
+    "line": 556,
+    "note": "portal names only union with other portals/pwr/gnd; DesignerLabel text never joins the portal namespace"
+   },
+   {
+    "path": "src/modules/designer/backend/projection-world.ts",
+    "line": 728,
+    "note": "global named-net union covers gnd/pwr/net_portal only"
+   }
+  ],
+  "suggestedFix": "Include field-text bounds in the schematic fit bounds; elide canvas field text beyond N chars (KiCad-style long fields are rare — a max length on Value/label text of ~64 chars with inspector showing full text is simplest). Either put label text into the same name namespace as portals or raise an ERC 'duplicate net name on different nets' warning, and disambiguate duplicate names in Outline (append pin count / id).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.schematic:canvas:long-field-text-unbounded",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on QA-f1b-long. After 'Fit schematic' (13%) U1's 200-char value runs off both canvas edges, and the 80-char label runs through U1's body. Outline Nets lists two rows that both read 'VERY_LONG_NET_LABEL_FO…' (2 pins / 0 pins). The label-vs-portal net split has the same root cause as verified Q3-013 (the named-net union covers gnd/pwr/net_portal only; labels never join by name), so only the unbounded text, the fit bounds and the indistinguishable duplicate rows are new here. S4 kept (pathological field lengths).",
+   "evidence": [
+    "shots/vf1b/dark/012-long-schem-fit.png",
+    "shots/vf1b/dark/013b-long-outline-nets-zoom.png"
+   ]
+  },
+  "relatedTo": [
+   "Q3-013",
+   "Q5-023"
+  ]
+ },
+ {
+  "id": "F1B-031",
+  "knownRef": null,
+  "area": "designer.3d",
+  "title": "3D view omits board-level silkscreen: PCB Text-tool overlay text (and overlay shapes) is exported to F_Silkscreen but never drawn on the 3D board",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "43a2da78-9d2e-43a0-bcd3-ecebe3f72551",
+  "repro": [
+   "Open QA-f1b-long → PCB → Add ▾ → Text (T), click on the board, enter a text (K02 prompt) — here 'Long PCB overlay text …' on F.SilkS at (−15.85, 9.37) mm",
+   "Switch to 3D, Display → Silkscreen checked, camera Top",
+   "Compare with PCB view and with the Gerber F_Silkscreen from Export…"
+  ],
+  "expected": "3D silkscreen shows everything that goes to the silkscreen Gerber — footprint silk, refdes and user text/graphics on F.SilkS/B.SilkS.",
+  "actual": "Only footprint silk and refdes labels render; the overlay text is missing in both themes (board top-left is blank green) while the PCB view shows it and POST /exports/gerber puts it in F_Silkscreen (24.6 kB, strokes spanning x −90.9…58.8 mm). Board3D never reads projection.overlayTexts / overlayShapes (they appear only in test fixtures), so version labels, logos and assembly notes are invisible in the 3D review step.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/110-long-3d-top-no-overlay-text.png",
+    "shots/f1b/light/027-long-3d-top.png",
+    "shots/f1b/light/005-long-pcb.png",
+    "shots/f1b/dark/075-long-pcb-text.png"
+   ],
+   "network": [
+    "GET /projection/pcb → overlayTexts[0] {layer:'F.SilkS', positionMm:{x:-15.85,y:9.37}, fontSizeMm:1}",
+    "POST /exports/gerber?format=json → F_Silkscreen.gbr 24657 B, X range −90.85…58.81 mm"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/three-d/FootprintOverlayLayer.tsx",
+    "line": 19,
+    "note": "only per-footprint silk/refdes are rendered"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 794,
+    "note": "showSilkscreen only toggles the footprint overlay layer"
+   },
+   {
+    "path": "src/modules/designer/backend/export/gerber/writer.ts",
+    "line": 193,
+    "note": "the Gerber writer does include proj.overlayTexts"
+   }
+  ],
+  "suggestedFix": "Reuse the S12 silk artwork model (src/shared/rendering/pcb/artwork — the one the Gerber writer and DFM checks share) to build the 3D silk layer, so 3D, Gerber and DRC draw the same silk; at minimum add an OverlaySilkLayer that strokes overlayTexts/overlayShapes on the matching board side.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "designer.3d:silkscreen:overlay-text-missing",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on QA-f1b-long, 3D, camera Top, Silkscreen checked. The F.SilkS overlay text visible in the PCB view (and exported to F_Silkscreen) is absent; the board's top-left is blank, and only footprint silk/refdes render (refdes still shows the stale 'R1', see F1B-019). Code: no reference to overlayTexts/overlayShapes anywhere under src/modules/designer/frontend/three-d. S3 kept.",
+   "evidence": [
+    "shots/vf1b/dark/019-long-3d-top.png",
+    "shots/vf1b/dark/014-long-pcb.png",
+    "grep overlayTexts|overlayShapes in three-d -> 0 hits"
+   ]
+  }
+ },
+ {
+  "id": "F1B-032",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "PCB editor draws the F.Cu copper pour over Top Overlay (F.SilkS) text — board silkscreen text disappears wherever it crosses a top zone",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "43a2da78-9d2e-43a0-bcd3-ecebe3f72551",
+  "repro": [
+   "QA-f1b-long → PCB: a F.SilkS overlay text 'Long PCB overlay text …' at y≈9.4 mm and a no-net F.Cu zone (red, top-right) that the text runs into",
+   "View top, Top Copper or Bottom Copper active, Display mode Normal",
+   "Follow the text to the right"
+  ],
+  "expected": "Silkscreen is printed on top of mask/copper: F.SilkS text (like footprint silk) renders above F.Cu pours, as in KiCad; the Gerber F_Silkscreen contains the full string.",
+  "actual": "The text is cut off at the zone's left edge (x≈810 px) — '…Long PCB overlay text fo' — and does not reappear to the right of the pour; the solid red fill paints over it in both themes and with either copper layer active. Footprint silk/refdes inside the same pour stay visible, so only board-level overlay text is affected. A user placing a label/logo over a ground pour cannot see it in the editor.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/111-silk-under-fcu-zone.png",
+    "shots/f1b/light/030-silk-under-fcu-zone.png",
+    "shots/f1b/light/030b-silk-under-fcu-zone-zoom.png",
+    "shots/f1b/light/005-long-pcb.png"
+   ],
+   "network": [
+    "GET /projection/pcb → overlayTexts[0].layer 'F.SilkS'; zones [('B.Cu', net), ('F.Cu', no net)]"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/layers/CopperFillLayer.tsx",
+    "line": 72,
+    "note": "copperFillRenderOrder: F.Cu pour at RENDER_ORDER.PINS − 0.35"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/layers/OverlayLayer.tsx",
+    "line": 93,
+    "note": "overlay text renderOrder = effectiveRenderOrder(layer,'object') — the F.SilkS object slot sits below the F.Cu pour slot"
+   }
+  ],
+  "suggestedFix": "Render board-level silk (OverlayLayer text/shapes on F.SilkS/B.SilkS) in a slot above same-side copper objects and pours, e.g. RENDER_ORDER.ANNULAR-0.5 for the view side, or change BASE_RENDER_SLOTS in @openpcb/r3f-eda-canvas so silk > copper fill for the facing side. Add a unit test: F.SilkS object > F.Cu fill (view top) and B.SilkS > B.Cu fill (view bottom).",
+  "fixScope": "shared-package",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:render-order:silk-under-copper-pour",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on QA-f1b-long PCB in dark and light: the F.SilkS overlay text stops at the left edge of the no-net F.Cu zone (x≈810, '…overlay text fo') and does not continue over or past it. Code confirms the order: OverlayLayer.tsx:96 uses effectiveRenderOrder(F.SilkS,'object') = RENDER_ORDER.F_SILK 9, while the F.Cu pour renders at PINS-0.35 = 9.65 (CopperFillLayer.tsx:72). The package's dedicated F_COPPER_FILL slot (11.65) is also above F_SILK, so the 'Phase 6' migration alone would not fix it. Physically, and in KiCad when F.Cu is not the active layer, silk sits above copper. S3 kept.",
+   "evidence": [
+    "shots/vf1b/dark/015-silk-under-fcu-zone.png",
+    "shots/vf1b/light/002-long-pcb.png",
+    "node_modules/@openpcb/r3f-eda-canvas/dist/layers.js:19-66 RENDER_ORDER"
+   ]
+  }
+ },
+ {
+  "id": "F1B-033",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "Arming Route (R) or Tune (U) inserts a 28 px parameter bar above the PCB canvas, so the board jumps ~14 px under the cursor; clicking a trace in Tune adds a second row and shifts it again",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "QA-f1b-stress → PCB, hold the mouse still at (700,500) and read the status-bar X/Y",
+   "Press R (route) without moving the mouse and read X/Y again",
+   "Esc; press U (Tune), click a routed trace (Net_43)"
+  ],
+  "expected": "Tool parameters appear in a fixed-height strip or an overlay so the canvas never resizes; the pad/trace under the cursor stays under the cursor when a tool is armed by key (KiCad/Altium keep the canvas fixed).",
+  "actual": "Canvas top moves 64 → 92 px on R and on U (Measure M and Hole H do not); the world point under the stationary cursor changes from (−10.055, −11.243) to (−10.055, −7.633) mm — a 14 px jump — and returns on Esc. In Tune, clicking a trace adds the 28 px HUD row (canvas top 92 → 120) so the trace the user just clicked slides another ~14 px away before 'sweep along the trace' can start (shots 115: trace at y≈600–715 before, ≈615–730 after). At 1100×720 the Tune HUD wraps to 56 px (F1B-034), shifting further.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/115-tune-long-group-name.png",
+    "shots/f1b/dark/116-tune-long-group-1100.png",
+    "shots/f1b/dark/117-tune-short-group-1100.png"
+   ],
+   "console": [
+    "canvas top: idle 64, tuneArmed 92, routeArmed 92, measure 64, holeTool 64, afterEsc 64",
+    "status X/Y at fixed cursor (700,500): idle [-10.055,-11.243] → route armed [-10.055,-7.633] → Esc [-10.055,-11.243]"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 1314,
+    "note": "pcbParamRowSlot is an in-flow shrink-0 div above the canvas — portalled PcbParamRow content changes its height"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx",
+    "line": 799,
+    "note": "PcbParamRow (RouteHud/TuneHud/BundleHud render into it)"
+   }
+  ],
+  "suggestedFix": "Reserve the param strip permanently (fixed 28 px, empty/idle hint when no tool) or render tool HUDs as an absolutely positioned overlay on top of the canvas so the canvas box never changes when a tool is armed; single-line HUD with ellipsis (see F1B-034).",
+  "fixScope": "design-decision",
+  "estimate": "S",
+  "dedupeKey": "designer.pcb:param-row:canvas-layout-shift-on-tool-arm",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on QA-f1b-stress with the mouse held at (700,500). Canvas top is 64 idle, 92 after R, 64 after Esc, 92 after U; the world point under the cursor moved from Y -11.243 to -7.633 mm (14 px) on arming. Clicking a trace in Tune moved the canvas top 92 -> 120. Not refuted: PLAN D10 intends the 28 px parameter row to appear only while Route/Tune/Bundle is active, but D5/D10 do not require it to resize the canvas. The in-flow slot (Space.tsx:1314) causes the jump, so the fix should overlay the HUD rather than reserve a permanent strip (which would contradict D10). S3 kept, fixScope design-decision.",
+   "evidence": [
+    "shots/vf1b/dark/022-tune-hud.png",
+    "run-code: idle top 64 'X -10.313 Y -11.243' -> route top 92 'Y -7.633' -> esc 64 -> tune 92; trace click 92->120"
+   ]
+  }
+ },
+ {
+  "id": "F1B-034",
+  "knownRef": null,
+  "area": "designer.pcb",
+  "title": "Tune HUD wraps every readout mid-value when the row is full ('≈16.32 /' ⏎ '30.00 mm', 'A 2.00 · pitch' ⏎ '1.00') and never truncates a long length-group name",
+  "category": "visual",
+  "severity": "S4",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1100x720",
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "QA-f1b-stress: rename length group 'Group 1' to a 60-char name (USB_HS_DIFFERENTIAL_PAIR_LENGTH_MATCH_GROUP_FOR_QA_LONG_NAME; via Design rules or pcb_set_design_rules)",
+   "PCB → U → click the Net_43 trace (member of the group)",
+   "Resize to 1100×720"
+  ],
+  "expected": "One-line HUD: numeric readouts never break; the group name truncates with ellipsis (full name in title); the hint collapses first.",
+  "actual": "At 1440 the 60-char name fits on one line only because the canvas is wide. At 1100×720 the HUD row is 56 px (scrollWidth 1020 in a 1020 px bar, white-space: normal): '≈16.32 / 30.00 mm', '13.68 mm short', 'target: '…'', 'A 2.00 · pitch 1.00' and the hint each wrap independently into ragged two-line cells. Without a target (Net_334) the row fits on one line at 1100.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/115-tune-long-group-name.png",
+    "shots/f1b/dark/116-tune-long-group-1100.png",
+    "shots/f1b/dark/117-tune-short-group-1100.png"
+   ],
+   "console": [
+    "HUD row at 1100: {x:80,right:1100,h:56,sw:1020,cw:1020,overflowX:visible,whiteSpace:normal}"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/TuneHud.tsx",
+    "line": 132,
+    "note": "target: '${model.groupName}' rendered untruncated"
+   }
+  ],
+  "suggestedFix": "Give each HUD segment `whitespace-nowrap shrink-0`, the group-name span `min-w-0 max-w-[16ch] truncate` with a title, and let the trailing hint `truncate` first.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:tune-hud:wraps-mid-value",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced at 1100x720 after temporarily renaming QA-f1b-stress's length group to the 60-char name (reverted afterwards, rev 697). Each HUD cell (≈16.32 / 30.00 mm, 13.68 mm short, target:'USB_HS_…', A 2.00 · pitch 1.00, the hint) wraps to 30 px inside the fixed 28 px PcbParamRow. Correction: the row stays 28 px (PcbParamRow h-[28px]) and text overflows it; the 56 px f1b measured is the two stacked rows. With 'Group 1' the HUD fits on one line at 1100, so this needs a long group name. S4 kept.",
+   "evidence": [
+    "shots/vf1b/dark/024-tune-long-group-1100.png",
+    "shots/vf1b/dark/024b-tune-long-group-1100-zoom.png",
+    "shots/vf1b/dark/023b-tune-hud-1100-zoom.png (short name fits)"
+   ]
+  }
+ },
+ {
+  "id": "F1B-035",
+  "knownRef": null,
+  "area": "designer.schematic",
+  "title": "Every Schem → PCB/3D/BOM/DRC → Schem round-trip resets the schematic camera to 80 % at the origin (zoom/pan lost); the PCB camera is restored correctly",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": "cc5a12b9-bd16-4e8c-9c00-f94598075fd5",
+  "repro": [
+   "Open QA-f1b-stress → Schem, click Fit schematic (zoom 10 %) or wheel-zoom to 49 % somewhere",
+   "Switch to PCB (or 3D/BOM/DRC, or another design tab) and back to Schem",
+   "Read zoom % and the X/Y under a fixed cursor position (700,450)"
+  ],
+  "expected": "Each view restores its own camera (the Space keeps viewportRef 'schem:<id>' / 'pcb:<id>' for exactly this), as the PCB view does.",
+  "actual": "Schematic: fit (10 %, cursor at 131.3, −85.8 mm) → after PCB round-trip 80 %, cursor at (−0.975, 0.525) — a giant close-up of R1 at the origin (shot 119/118). Wheel-zoomed 49 % at (0.66, −0.28) → 80 % at (−0.975, 0.525) again. Same after switching design tabs. PCB in the same round-trips: (−20.286, 6.713) before and after — restored. On a 150-part sheet the user has to re-find their place after every cross-check with the PCB. Probably the same default-camera write as Q3-004 (first open not fitted), here hit on every remount rather than only the first open.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1b/dark/118-stress-erc.png",
+    "shots/f1b/dark/119-schem-after-tab-roundtrip.png",
+    "shots/f1b/dark/100-stress-schem-refit.png"
+   ],
+   "console": [
+    "{fit:{z:10,c:[131.298,-85.800]}, afterPcbRoundtrip:{z:80,c:[-0.975,0.525]}, afterDesignTabRoundtrip:{z:80,c:[-0.975,0.525]}}",
+    "{pcbBefore:[-20.286,6.713], pcbAfter:[-20.286,6.713], schemBefore:{z:49,c:[0.659,-0.284]}, schemAfter:{z:80,c:[-0.975,0.525]}}"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 576,
+    "note": "onSchemViewportChange writes viewportRef 'schem:<id>' — fed by the fresh canvas's default camera on mount"
+   },
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 1203,
+    "note": "initialViewport read from viewportRef"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/SchematicCanvas.tsx",
+    "line": 899,
+    "note": "onViewportChange fires with the default zoom/position before initialViewport is applied"
+   }
+  ],
+  "suggestedFix": "In SchematicCanvas ignore onViewportChange until initialViewport has been applied (or the auto-fit ran), mirroring whatever PcbCanvas does; add a Vitest/e2e that zooms, switches to PCB and back, and asserts the zoom/centre.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.schematic:viewport:reset-on-remount",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1b",
+   "reason": "Reproduced on QA-vf1b-stack60: Fit schematic gives zoom 10% with the cursor at (131.098, -25.800). After Schem -> PCB -> Schem it is 80% at (-0.975, 0.525), the default camera at the origin. Same root cause as verified Q3-004 (ViewportReporter's first useFrame at SchematicCanvas.tsx:889-900 writes the default camera into viewportRef via Space.tsx:572-580 before initialViewport/auto-fit applies). Q3-004's verifier saw it on first open and on Designer->Library->Designer. This finding shows it on every view switch inside a design, which is the most frequent action and a larger impact, so S2 stays. Fix once together with Q3-004: gate onViewportChange until the initial viewport or auto-fit is applied.",
+   "evidence": [
+    "shots/vf1b/dark/010-schem-fit-before.png",
+    "shots/vf1b/dark/011-schem-after-pcb-roundtrip.png",
+    "status: before {z:'10%',xy:[131.098,-25.800]} after {z:'80%',xy:[-0.975,0.525]}"
+   ]
+  },
+  "relatedTo": [
+   "Q3-004"
+  ]
+ }
+]

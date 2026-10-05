@@ -1,0 +1,425 @@
+{
+ "agent": "q3",
+ "checklist": [
+  {
+   "item": "Designer rail with no open tabs -> empty state (K19)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Open designs from empty state 'Open existing'",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Design tabs: open several, switch",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Design tab dblclick rename (Enter / Esc / blur)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Design tab context menu Rename/Close/Close others/Close all (blocked: app menu hijacks right-click)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Design tab drag reorder (persisted in openpcb.designer.tabs.v1)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Design tab middle-click close",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "New design (+) button",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Cmd+W closes active tab",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "View tabs Schem/PCB/3D/BOM/DRC switching + keyboard arrows",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Left sidebar resize (+ persistence)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Right dock tabs Properties/ERC/Assistant, dock width + tab persistence across reload",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Cmd+I (Assistant dock) and Cmd+. (Toggle side panel), incl. while typing in inputs",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Schematic toolbar buttons + tooltips (native title)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Cmd+K palette: search, arrows, Enter places, Esc, focus return",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "G GND port, P power picker, H net portal picker, L net label",
+   "dark": "tested",
+   "light": "partial",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Wire pin->corner->pin, wire to wire T-junction",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Drag a part (rubber-band wires)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Drag a wire segment (N1)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "R / Shift+R direction vs labels (K28), incl. ports",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Delete / Backspace (canvas + outline row)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Cmd+A select all",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Cmd+Z / Cmd+Shift+Z / Ctrl+Y vs toolbar Undo/Redo (K17)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Box select (containment)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Right-click menus: part, wire, label, port, empty canvas",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Outline Parts/Nets/Labels, filter, column sort, row click, dblclick frame",
+   "dark": "tested",
+   "light": "partial",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Outline Actions menu Frame/Rename/Duplicate/Delete (+F/F2 shortcuts)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Empty-design outline state + Browse library (K21)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Inspector: Value (Enter/Esc/blur), Tolerance, footprint variant, MPN/Manufacturer/Datasheet, DNP",
+   "dark": "tested",
+   "light": "partial",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Inspector: Open in Library (K21), View on PCB, Replace component (K43)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Multi-select batch Value",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Label inspector (Text edit) + wire inspector",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Typing in inspector inputs does not trigger canvas hotkeys",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "ERC dock: Run ERC, severity toggles, click violation selects+frames",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Comment mode C: add, open thread, reply, resolve, Esc",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Status bar: cursor X/Y, zoom, hint, ERC count click",
+   "dark": "tested",
+   "light": "partial",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Zoom cluster, Fit schematic, Zoom to selection, wheel zoom, middle-drag/trackpad pan",
+   "dark": "tested",
+   "light": "partial",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Grid drawn? parts land on grid? (K44)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Load error: projection/schematic -> 500, open design (K09), then unroute",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Light-theme schematic canvas background vs tokens (K38) + dark canvas probe",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "1100x720 layout check (designer shell, schematic, palette, inspector)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720"
+   ]
+  },
+  {
+   "item": "DOM census (inspector 1440 dark, main 1100 dark/light)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  }
+ ],
+ "known": [
+  {
+   "ref": "K19",
+   "status": "confirmed",
+   "evidence": "Q3-002; shots/q3/dark/001-designer-no-tabs.png — only New design + Open existing"
+  },
+  {
+   "ref": "K17",
+   "status": "confirmed",
+   "evidence": "Q3-005; ⌘Z/Ctrl+Z/⌘⇧Z/Ctrl+Y left revision unchanged, toolbar Undo/Redo worked"
+  },
+  {
+   "ref": "K28",
+   "status": "confirmed",
+   "evidence": "Q3-010; R (+90) moves pin1 left→bottom (CCW) labelled 'clockwise'; Shift+R moves pin1 left→top (CW) labelled 'counter-clockwise'"
+  },
+  {
+   "ref": "K21",
+   "status": "confirmed",
+   "evidence": "Q3-016; Open in Library for R1 lands on list previewing 74HC00; Browse library → list (acceptable)"
+  },
+  {
+   "ref": "K43",
+   "status": "confirmed",
+   "evidence": "Q3-017; Replace component disabled 'coming in a future designer phase'; footprint variants all disabled 'Per-instance override coming soon'"
+  },
+  {
+   "ref": "K44",
+   "status": "confirmed",
+   "evidence": "Q3-007; no grid rendered, parts at -10.640498 mm, 10 µm wire jogs"
+  },
+  {
+   "ref": "N1",
+   "status": "confirmed",
+   "evidence": "Q3-008; segment shift quantised to 4.000 mm (2 mm relative) → still off-grid"
+  },
+  {
+   "ref": "K09",
+   "status": "confirmed",
+   "evidence": "Q3-025; 'Loading schematic...' forever + raw 'Internal error' strip + outline claims 'Empty design'; no retry"
+  },
+  {
+   "ref": "K38",
+   "status": "confirmed",
+   "evidence": "Q3-029; light canvas #f0f4fb, dark #0e1116 (probes)"
+  },
+  {
+   "ref": "K34",
+   "status": "partial",
+   "evidence": "Q3-033; designer view tabs have no focus ring (outline/box-shadow none); dock tabs/segmented not separately probed"
+  },
+  {
+   "ref": "K45",
+   "status": "partial",
+   "evidence": "Q3-023; comments pins/popups raw violet/slate hex confirmed; other surfaces outside charter"
+  },
+  {
+   "ref": "K10",
+   "status": "untested",
+   "evidence": "designer toast never appeared in my flows (errors go to the header strip)"
+  }
+ ],
+ "untested": [
+  {
+   "item": "Native title tooltips visual rendering",
+   "reason": "headless Chromium does not render native title tooltips; verified title/aria attributes via DOM instead"
+  },
+  {
+   "item": "Designer toast (K10)",
+   "reason": "no schematic flow in charter triggered a toast; errors surfaced via the header error strip"
+  },
+  {
+   "item": "Drop from Library onto schematic (N2)",
+   "reason": "requires cross-module HTML5 DnD; not in q3 checklist"
+  },
+  {
+   "item": "Tab context-menu items themselves",
+   "reason": "blocked — menu never opens (Q3-001)"
+  }
+ ]
+}

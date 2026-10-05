@@ -1,0 +1,85 @@
+===== dark
+3d                     rad+={'4px': 22} pills>12=0 shadows=3 blur=2 grad=0
+    RADEX 4px [('Iso', 'button', 76, 23), ('Persp', 'button', 76, 23), ('Top', 'button', 76, 23), ('Front', 'button', 76, 23), ('Side', 'button', 76, 23)]
+    SH MECHANICAL Export STEP Bo 192 x 265 rgba(0, 0, 0, 0) 0 | pointer-events-auto absolute right-3 top-3 w-48 ov
+    SH Snapshot Measure 187 x 35 rgba(0, 0, 0, 0) 0 | pointer-events-auto absolute bottom-9 left-1/2 fle
+    SH  8 x 8 rgba(0, 0, 0, 0) 0 | h-2 w-2 shrink-0 rounded-full bg-emerald-500 shado
+    BL MECHANICAL Export STEP Bo blur(8px) pointer-events-auto absolute right-3 top-3 w-48 ov
+    BL Snapshot Measure blur(8px) pointer-events-auto absolute bottom-9 left-1/2 fle
+assistant              rad+={'4px': 11, '10px': 2} pills>12=1 shadows=2 blur=0 grad=1
+    RADEX pill>12 [('All 12', 'button', 44, 19)]
+    RADEX 4px [('S3 LLM Edge — addi', 'span', 133, 18), ('S3 LLM Edge — bad ', 'span', 131, 18), ('S3 LLM Edge — 12V ', 'span', 137, 18), ('probe', 'span', 50, 18), ('STRICT', 'span', 44, 19)]
+    RADEX 10px [('offline send test', 'div', 117, 42), ('@ QA-q9-mention-ta', 'div', 386, 42)]
+    SH  8 x 8 rgba(0, 0, 0, 0) 0 | h-2 w-2 shrink-0 rounded-full bg-emerald-500 shado
+    SH Type / for commands Type  1008 x 98 rgba(0, 0, 0, 0) 0 | rounded-xl shadow-xl shadow-slate-900/5 dark:shado
+    GR  1040 x 80 linear-gradient(to top in oklab, rgb(12, 12, 13) 0%, rgba(0, 0, 0, 0) 
+bom                    rad+={} pills>12=0 shadows=0 blur=0 grad=0
+designer-empty         rad+={} pills>12=0 shadows=0 blur=0 grad=0
+docs                   rad+={} pills>12=0 shadows=0 blur=0 grad=0
+drc                    rad+={} pills>12=0 shadows=0 blur=0 grad=0
+home-grid              rad+={} pills>12=8 shadows=0 blur=0 grad=0
+    RADEX pill>12 [('DRC not run', 'span', 89, 18), ('32 errors', 'span', 76, 18), ('DRC not run', 'span', 89, 18), ('DRC not run', 'span', 89, 18), ('DRC not run', 'span', 89, 18)]
+home-list              rad+={} pills>12=8 shadows=0 blur=0 grad=0
+    RADEX pill>12 [('DRC not run', 'span', 89, 18), ('32 errors', 'span', 76, 18), ('DRC not run', 'span', 89, 18), ('DRC not run', 'span', 89, 18), ('DRC not run', 'span', 89, 18)]
+library-detail         rad+={} pills>12=0 shadows=0 blur=0 grad=0
+library-grid           rad+={} pills>12=0 shadows=0 blur=0 grad=0
+library-table          rad+={} pills>12=0 shadows=0 blur=0 grad=0
+library-wizard-step1   rad+={} pills>12=0 shadows=3 blur=1 grad=0
+    SH Next 50 x 32 rgba(0, 0, 0, 0) 0 | h-8 rounded-md border border-violet-600 bg-violet-
+    SH Import file 117 x 27 rgba(0, 0, 0, 0) 0 | flex-1 rounded-md px-2 py-1.5 text-xs font-medium 
+    SH Grid Zoom: scroll wheel 168 x 42 rgba(0, 0, 0, 0) 0 | mx-auto inline-flex items-center gap-2 rounded-lg 
+    BL Grid Zoom: scroll wheel blur(8px) mx-auto inline-flex items-center gap-2 rounded-lg 
+pcb                    rad+={} pills>12=0 shadows=0 blur=0 grad=0
+pcb-rules-dialog       rad+={} pills>12=0 shadows=1 blur=0 grad=0
+    SH Design rules Clearances T 560 x 765 rgba(0, 0, 0, 0) 0 | flex max-h-[85vh] w-[560px] max-w-[92vw] flex-col 
+schematic              rad+={} pills>12=0 shadows=0 blur=0 grad=0
+settings-about         rad+={} pills>12=0 shadows=0 blur=0 grad=0
+settings-assistant     rad+={'4px': 2} pills>12=3 shadows=0 blur=0 grad=0
+    RADEX 4px [('Advanced', 'span', 52, 15), ('Caution', 'span', 43, 15)]
+    RADEX pill>12 [('LOCAL', 'span', 56, 18), ('DEFAULT', 'span', 67, 18), ('LOCAL', 'span', 56, 18)]
+settings-general       rad+={} pills>12=0 shadows=0 blur=0 grad=0
+settings-libraries     rad+={} pills>12=4 shadows=0 blur=0 grad=0
+    RADEX pill>12 [('Up to date', 'span', 67, 19), ('user', 'span', 38, 18), ('core', 'span', 38, 18), ('read-only', 'span', 64, 18)]
+settings-privacy       rad+={} pills>12=0 shadows=0 blur=0 grad=0
+===== light
+3d                     rad+={'4px': 22} pills>12=0 shadows=3 blur=2 grad=0
+    RADEX 4px [('Iso', 'button', 76, 23), ('Persp', 'button', 76, 23), ('Top', 'button', 76, 23), ('Front', 'button', 76, 23), ('Side', 'button', 76, 23)]
+    SH MECHANICAL Export STEP Bo 192 x 265 rgba(0, 0, 0, 0) 0 | pointer-events-auto absolute right-3 top-3 w-48 ov
+    SH Snapshot Measure 187 x 35 rgba(0, 0, 0, 0) 0 | pointer-events-auto absolute bottom-9 left-1/2 fle
+    SH  8 x 8 rgba(0, 0, 0, 0) 0 | h-2 w-2 shrink-0 rounded-full bg-emerald-500 shado
+    BL MECHANICAL Export STEP Bo blur(8px) pointer-events-auto absolute right-3 top-3 w-48 ov
+    BL Snapshot Measure blur(8px) pointer-events-auto absolute bottom-9 left-1/2 fle
+assistant              rad+={'4px': 16, '10px': 1} pills>12=2 shadows=2 blur=0 grad=1
+    RADEX pill>12 [('All 13', 'button', 44, 19), ('BEST', 'span', 35, 20)]
+    RADEX 4px [('S3 Smoke — 5 LED i', 'span', 161, 18), ('S3 LLM Edge — addi', 'span', 133, 18), ('S3 LLM Edge — bad ', 'span', 131, 18), ('S3 LLM Edge — 12V ', 'span', 137, 18), ('probe', 'span', 50, 18)]
+    RADEX 10px [('How many LEDs are ', 'div', 321, 42)]
+    SH  8 x 8 rgba(0, 0, 0, 0) 0 | h-2 w-2 shrink-0 rounded-full bg-emerald-500 shado
+    SH Type / for commands Type  1008 x 98 rgba(0, 0, 0, 0) 0 | rounded-xl shadow-xl shadow-slate-900/5 dark:shado
+    GR  1040 x 80 linear-gradient(to top in oklab, rgb(247, 247, 248) 0%, rgba(0, 0, 0, 
+bom                    rad+={} pills>12=0 shadows=0 blur=0 grad=0
+designer-empty         rad+={} pills>12=0 shadows=0 blur=0 grad=0
+docs                   rad+={} pills>12=0 shadows=0 blur=0 grad=0
+drc                    rad+={} pills>12=0 shadows=0 blur=0 grad=0
+home-grid              rad+={} pills>12=8 shadows=0 blur=0 grad=0
+    RADEX pill>12 [('DRC not run', 'span', 89, 18), ('32 errors', 'span', 76, 18), ('DRC not run', 'span', 89, 18), ('DRC not run', 'span', 89, 18), ('DRC not run', 'span', 89, 18)]
+home-list              rad+={} pills>12=8 shadows=0 blur=0 grad=0
+    RADEX pill>12 [('DRC not run', 'span', 89, 18), ('32 errors', 'span', 76, 18), ('DRC not run', 'span', 89, 18), ('DRC not run', 'span', 89, 18), ('DRC not run', 'span', 89, 18)]
+library-detail         rad+={} pills>12=0 shadows=0 blur=0 grad=0
+library-grid           rad+={} pills>12=0 shadows=0 blur=0 grad=0
+library-table          rad+={} pills>12=0 shadows=0 blur=0 grad=0
+library-wizard-step1   rad+={} pills>12=0 shadows=3 blur=1 grad=0
+    SH Next 50 x 32 rgba(0, 0, 0, 0) 0 | h-8 rounded-md border border-violet-600 bg-violet-
+    SH Import file 117 x 27 rgba(0, 0, 0, 0) 0 | flex-1 rounded-md px-2 py-1.5 text-xs font-medium 
+    SH Grid Zoom: scroll wheel 168 x 42 rgba(0, 0, 0, 0) 0 | mx-auto inline-flex items-center gap-2 rounded-lg 
+    BL Grid Zoom: scroll wheel blur(8px) mx-auto inline-flex items-center gap-2 rounded-lg 
+pcb                    rad+={} pills>12=0 shadows=0 blur=0 grad=0
+pcb-selected           rad+={} pills>12=0 shadows=0 blur=0 grad=0
+schematic              rad+={} pills>12=0 shadows=0 blur=0 grad=0
+settings-about         rad+={} pills>12=0 shadows=0 blur=0 grad=0
+settings-assistant     rad+={'4px': 2} pills>12=3 shadows=0 blur=0 grad=0
+    RADEX 4px [('Advanced', 'span', 52, 15), ('Caution', 'span', 43, 15)]
+    RADEX pill>12 [('LOCAL', 'span', 56, 18), ('DEFAULT', 'span', 67, 18), ('LOCAL', 'span', 56, 18)]
+settings-general       rad+={} pills>12=0 shadows=0 blur=0 grad=0
+settings-libraries     rad+={} pills>12=4 shadows=0 blur=0 grad=0
+    RADEX pill>12 [('Up to date', 'span', 67, 19), ('user', 'span', 38, 18), ('core', 'span', 38, 18), ('read-only', 'span', 64, 18)]
+settings-privacy       rad+={} pills>12=0 shadows=0 blur=0 grad=0

@@ -1,0 +1,48 @@
+{
+  "agent": "f1a",
+  "design": "91573bb6-cb22-4ca4-a8d9-58057a1ff45b 'QA-f1a-board' (6 parts R1 J1 C1 J2 Q1 R2 via Cmd+K, 4 wires, 60x40 board, 5 traces + 2 vias seeded via POST /commands session qa-f1a-seed); orphan c1fbe4fd 'QA-f1a-dup-from-N-twice' created by the N-twice race (renamed, left as evidence)",
+  "checklist": [
+    {"item": "Latency shim first-render: Schem (No design open + Empty design flash), PCB (Loading PCB + Components 0 + 0 DRC), 3D (spinner card), BOM (Loading + zero counters/Synced), DRC full view (raw ?.1 / net pt:… labels), DRC dock, ERC dock (Running…)", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "No-latency flash measurement of No design open/Empty design (~50 ms)", "dark": "n/a", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "Race: double-click Run DRC under latency (2 POST /drc/runs, no pending state)", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "Race: toolbar Undo 3x fast under latency (2 applied, 3rd HISTORY_EMPTY silent, no pending UI)", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "Race: drag PCB part then another before first resolves (REVISION_CONFLICT, snap-back, 2/2)", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "Race: BOM MPN typing + line switch within debounce (lost), with PATCH in flight (lands on right refdes; truncation when a save returns mid-typing), view switch within debounce (lost)", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "Race: Export Download double-click under latency (guarded, 1 request)", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "Race: press N twice on Home (2 designs created)", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "Commands 500: schematic move, wire, PCB move, route commit, via, delete, flip; error surfaces; rollback; server diff after unroute (no divergence, rev unchanged)", "dark": "tested", "light": "tested", "viewports": ["1440x900", "1100x720"]},
+    {"item": "Offline mid-edit: PCB move/route/delete, schematic Value edit, comment post; back online recovery without reload; revision compare", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "K41 DRC view: projection/pcb 500 (labels unresolved, Edit rules disabled), GET /drc 500 ('Run DRC to validate' + 0 DRC), POST /drc/runs 500, report GET 500 after run; full view + dock + toolbar (toolbar DRC is a dock toggle, not a runner)", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "ERC run with /erc 500", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "Design rules Save & re-run: commands 500 (unhandled rejection, no UI error) and stale revision (silent drop) from DRC full view and PCB DRC dock", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "Export dialog Download: export 500, offline, recovery after online", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "Board panel Import DXF… with sample.txt and garbage.step", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "PCB view opened with projection/pcb 500 ('PCB projection unavailable', not endless; recovers only on view switch)", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "K10 toast: error (palette placement 500) + warning (BOM line without placement → PCB); DOM role/aria-live, dismiss name/size, blur/shadow, 3 s lifetime, covered controls, pixel probes", "dark": "tested", "light": "tested", "viewports": ["1440x900", "1100x720"]},
+    {"item": "White-screen check after injections (snapshot non-empty, console errors = injected 500s + 2 unhandled rejections: comment post, rules save)", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "Error strips/toasts at 1100x720", "dark": "tested", "light": "tested", "viewports": ["1100x720"]},
+    {"item": "Cleanup: unroute all, network online, __qaDelay=0, sessions f1a-dark/f1a-light closed", "dark": "tested", "light": "tested", "viewports": ["1440x900"]}
+  ],
+  "known": [
+    {"ref": "K10", "status": "confirmed", "evidence": "F1A-009: no role/aria-live on toast or container; classes shadow-sm backdrop-blur + raw red/amber palette (computed blur(8px)); dark error bg #460809 dE 25.7 vs --status-danger-soft, warning #461901 dE 23.9; light red-50/amber-50; x button aria-label 'Dismiss' but 7x15 px; auto-dismiss ~3.05 s for errors; covers Assistant / Toggle side panel / ERC and BOM 'Show in schematic'/'PCB'."},
+    {"ref": "K41", "status": "confirmed", "evidence": "F1A-005: DesignerDrcView.tsx:114/121 silent catches confirmed. GET /drc 500 → 'Run DRC to validate the board.' + status '0 DRC' (report has 33); projection 500 → permanent '?.1 ↔ ?.2', 'net pt:…', Edit rules disabled, no error. (model-conversion.ts part was confirmed by Q6-024.)"},
+    {"ref": "K09", "status": "partial", "evidence": "PCB analog: projection/pcb 500 does not spin forever; shows 'PCB projection unavailable' with no reason/retry and recovers only on view switch (F1A-012). Schematic K09 itself already confirmed by Q3-025."},
+    {"ref": "K40", "status": "partial", "evidence": "Designer command/DRC/ERC/export/DXF failures surface raw problem titles ('Internal error'), 'Failed to fetch' and parser text; see F1A-006, F1A-010, F1A-011."},
+    {"ref": "K01", "status": "partial", "evidence": "No white screen across all failure/latency injections in designer; but 2 uncaught promise rejections (comment createThread, rules save) confirm there is no global unhandledrejection handler."}
+  ],
+  "duplicatesSkipped": [
+    {"ref": "Q4-004", "note": "Board shifts 14 px when route/hint rows appear (re-observed: canvas rect 64→92 on R, +28 again on first click)"},
+    {"ref": "Q4-006", "note": "PCB status-bar zoom shows the schematic's zoom (re-observed: PCB wheel/buttons don't change it, schematic Zoom in changes PCB readout 80%→92%)"},
+    {"ref": "Q4-023", "note": "DRC 'out of date' banner inverted after fresh run (re-observed)"},
+    {"ref": "Q3-006", "note": "Tab revision badge stale (r19 while server r26)"},
+    {"ref": "Q5-001", "note": "BOM grouped line R1,R2 split on edit and inspector fell back to rows[0] (re-observed during F1A-002)"},
+    {"ref": "Q4-043", "note": "DRC markers bury parts; they also intercept part drags (clicking R2 hit its marker, no drag)"},
+    {"ref": "Q4-029/Q4-027", "note": "DXF modal glyph buttons / modal semantics"},
+    {"ref": "spike", "note": "Toolbar 'DRC 1' (errors only) vs dock/status '32'/'33' (all severities) reproduced on QA-f1a-board"}
+  ],
+  "untested": [
+    {"item": "Cloud-linked design offline behaviour", "reason": "Stack A has cloud off; covered by Q10 on C1"},
+    {"item": "3D view under request failure", "reason": "3D only shows loading card under latency; 3D failure state already covered by Q5-033"},
+    {"item": "Light-theme repeats of races/offline flows", "reason": "Behavioural (theme-independent); light used for first-render, K10, K41, command-failure strip/toast and BOM view-switch loss"}
+  ]
+}

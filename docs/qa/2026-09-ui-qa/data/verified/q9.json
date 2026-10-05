@@ -1,0 +1,1947 @@
+[
+ {
+  "id": "Q9-001",
+  "knownRef": null,
+  "area": "docs",
+  "title": "Title save wipes unsaved body text typed in the same second (editor reset to stale server content)",
+  "category": "data",
+  "severity": "S1",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Docs > open any tiptap page (e.g. QA-q9 'Untitled' d76ea8b4)",
+   "Click the title input, type 'Race' (title save debounced 1000 ms)",
+   "Immediately click the body, press Enter and keep typing 'abcdefghijklmnopqrstuvwxyz0123456789' at ~90 ms/key",
+   "Wait 3 s and read the body / GET the page"
+  ],
+  "expected": "Everything typed in the body is kept; a title save never touches body content",
+  "actual": "When PATCH /meta returns (~1 s) PageEditor calls onPageChange(updated) and the SSE meta_updated event triggers refreshPage(); both replace page.content_json with the server copy, and TiptapEditor's initialContent effect calls setContent() with it, wiping the new paragraph and the first 11 characters ('\\nabcdefghijk'). Remaining keystrokes land in the stale paragraph. Final saved content: 'Body text that should persist ZZZlmnopqrstuvwxyz0123456789' (paragraph break + 'abcdefghijk' lost).",
+  "evidence": {
+   "screenshots": [],
+   "console": [],
+   "network": [
+    "#321 PATCH /pages/d76ea8b4\u2026/meta 200",
+    "#322 GET /pages/d76ea8b4\u2026 200 (SSE-triggered refresh while body edits unsaved)",
+    "#325 PATCH /pages/d76ea8b4\u2026/content 200 (saves the truncated text)"
+   ],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx",
+    "line": 161,
+    "note": "onPageChange(updated) replaces page (incl. stale content_json) after a title-only save"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/Space.tsx",
+    "line": 44,
+    "note": "meta_updated SSE event without requestId -> refreshPage() while idle"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/TiptapEditor.tsx",
+    "line": 65,
+    "note": "any initialContent change != editor JSON -> setContent(), discarding local edits"
+   },
+   {
+    "path": "src/modules/knowledge/backend/routes.ts",
+    "line": 295,
+    "note": "meta_updated published without requestId, so the editor's own title save echoes back as a refresh"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/Space.tsx",
+    "line": 21,
+    "note": "authorityModeRef is never set away from 'idle' \u2014 every SSE event for the open page refreshes it mid-typing"
+   }
+  ],
+  "suggestedFix": "PageEditor.tsx:157-162: after a title save merge only title/updated_at (mutatePage(p => p && ({...p, title: updated.title, updated_at: updated.updated_at}))) instead of onPageChange(updated). Space.tsx:34-51: ignore 'meta_updated' for the open page (or send X-Request-Id on the meta PATCH and publish it in routes.ts:295 like content_updated) and defer refreshPage() while the autosave has pending/unsaved content. TiptapEditor.tsx:65-82: only push initialContent into the editor when the page id changes (see Q9-028 keying) or for a remote content_updated with no local pending edit.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "docs:page-editor:title-save-resets-body",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced on stack A (own QA-q9-parent d76ea8b4) with a scripted run-code: typed 'X' in the title, clicked the body, Enter + 'abcdefghijklmnopqrstuvwxyz0123456789' at 90 ms/key. Result exactly as reported: the new paragraph and 'abcdefghijk' vanished, the rest was appended to the old paragraph and autosaved (server text '...0123456789lmnopqrstuvwxyz0123456789'). Root cause verified in code: PageEditor.tsx:161 onPageChange(updated) replaces the page (incl. stale content_json); backend routes.ts:295 publishes meta_updated WITHOUT requestId, so Space.tsx:44 also calls refreshPage() (authorityModeRef is never set to anything but 'idle', so every SSE event for the open page refreshes it \u2014 the same wipe happens when the assistant/MCP edits the page while the user types); TiptapEditor.tsx:65-82 then setContent()s the stale JSON. Not an environment artefact (no StrictMode, main.tsx). Page restored via API afterwards. S1 kept: silent loss of typed text in the common rename-then-write flow.",
+   "evidence": [
+    "verify: run-code result 'Body text that should persist ZZZlmnopqrstuvwxyz0123456789lmnopqrstuvwxyz0123456789'",
+    "GET /pages/d76ea8b4 after run: title 'QA-q9-parentX', paragraph break + 'abcdefghijk' lost"
+   ]
+  }
+ },
+ {
+  "id": "Q9-002",
+  "knownRef": null,
+  "area": "docs",
+  "title": "Page title edits are silently dropped when switching page or leaving Docs within 1 s; no save feedback for titles",
+  "category": "data",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Docs > New page (editor header +)",
+   "Type 'QA-q9-title-loss' in the title",
+   "Within ~300 ms click another page in the tree (QA-q9-mention-target)",
+   "Wait 2.5 s; GET /api/modules/knowledge/workspaces/default/tree"
+  ],
+  "expected": "Pending title is flushed (like body content, which useAutosave flushes on switch) and a Saving\u2026/Saved indicator covers title edits",
+  "actual": "Tree/API still show 'Untitled'; no PATCH /meta was sent. The title debounce timer is cleared on pageId change and on unmount. The Saving\u2026/Saved pill only tracks body content \u2014 a title edit shows nothing (MutationObserver log over 3 s: no status change).",
+  "evidence": {
+   "screenshots": [],
+   "console": [],
+   "network": [
+    "no PATCH /pages/d76ea8b4\u2026/meta after the title fill"
+   ],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx",
+    "line": 202,
+    "note": "pageId effect clears titleTimerRef without flushing"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx",
+    "line": 98,
+    "note": "unmount clears title timer without flushing"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx",
+    "line": 256,
+    "note": "status pill driven only by content autosave"
+   }
+  ],
+  "suggestedFix": "PageEditor.tsx: keep {pageId,title} of the pending rename in a ref; on pageId change / unmount / title blur / Enter call the PATCH immediately (flush) instead of clearTimeout at :100-102 and :204-206; route title saves through the same Saving\u2026/Saved/Error pill (:256-270).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "docs:page-editor:title-dropped-on-switch",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced: QA-q9-B title + '-renamed', clicked QA-q9-mention-target within ~100 ms, waited 2.5 s: GET still 'QA-q9-B' and 0 PATCH /meta requests for 96d2aa15. Code: PageEditor.tsx:202-208 (pageId effect) and :98-104 (unmount) clearTimeout the 1000 ms title timer without flushing; the status pill (:256-270) is driven only by useAutosave content status. S2 kept (silent loss of a rename).",
+   "evidence": [
+    "network: no PATCH /api/modules/knowledge/pages/96d2aa15\u2026/meta after the title edit"
+   ]
+  }
+ },
+ {
+  "id": "Q9-003",
+  "knownRef": null,
+  "area": "docs",
+  "title": "Page tree does not refresh after New page (sidebar +), Add subpage, Delete from tree, or drag-move",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Docs with 0 pages: click the sidebar header '+' (New page) -> editor opens 'Untitled' but the sidebar still says 'No pages yet'",
+   "Hover QA-q9-parent > Add subpage -> child is created (API tree shows it) and opened, but the tree shows no child/chevron",
+   "Hover a page > Delete > accept -> DELETE 204, row stays in the tree; clicking it shows raw 'PAGE_NOT_FOUND'",
+   "Drag QA-q9-B onto the lower quarter of QA-q9-mention-target (or drag C into parent) -> POST /move 200, tree order unchanged until reload"
+  ],
+  "expected": "Tree reflects every create/delete/move immediately (it already does for title edits and imports, which call requestRefresh)",
+  "actual": "Only title saves, editor-header New page, editor Delete and import call requestRefresh(); Sidebar.handleCreatePage, PageTree.handleCreate, TreeItem.handleCreateChild/handleDelete/handleDrop never refresh. Tree is stale until reload or an unrelated title edit.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/002-new-page-tree-stale.png",
+    "shots/q9/dark/003-add-subpage-tree-stale.png",
+    "shots/q9/dark/005-deleted-page-click.png",
+    "shots/q9/dark/008-after-drag-inside.png",
+    "shots/q9/light/013-new-page-tree-stale.png",
+    "shots/vq9/light/004-sidebar-new-page-tree-stale.png",
+    "shots/vq9/dark/005-add-subpage-tree-stale.png",
+    "shots/vq9/dark/022-tree-delete-stale.png",
+    "shots/vq9/dark/023-deleted-row-click.png"
+   ],
+   "console": [
+    "404 GET /pages/945437d3\u2026 after clicking the stale deleted row"
+   ],
+   "network": [
+    "#292 POST /pages 201 with no following GET /tree",
+    "#499 DELETE /pages/945437d3\u2026 204, tree not refetched",
+    "#519 POST /pages/96d2aa15\u2026/move 200, tree not refetched"
+   ],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/Sidebar.tsx",
+    "line": 88,
+    "note": "handleCreatePage: no requestRefresh()"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/PageTree.tsx",
+    "line": 25,
+    "note": "empty-state New page: no refresh"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/TreeItem.tsx",
+    "line": 52,
+    "note": "handleCreateChild / handleDelete (76) / handleDrop (120): no refresh"
+   }
+  ],
+  "suggestedFix": "Call useTreeStore.getState().requestRefresh() after every successful mutation in Sidebar.tsx:96 (handleCreatePage), PageTree.tsx:33, TreeItem.tsx:63 (create child), :84 (delete), :150 (move). Better: in Space.tsx handle SSE page events for ANY page (created/deleted/moved/meta_updated/restored) by calling requestRefresh() (debounced) before the selectedPageId filter at :36-37, so API/assistant/MCP changes also appear. Clear selection when the selected page (or an ancestor) is deleted.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "docs:page-tree:stale-after-mutation",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced three paths: (1) light, sidebar '+' New page: API root pages 8\u21929, tree rows stayed 8; (2) dark, hover QA-q9-sample-txt > Add subpage: API shows child 'Untitled', tree shows no chevron/child; (3) dark, tree Delete on API-created QA-vq9-del-parent: DELETE ok (parent+child 404) but the row stays; clicking it shows 'PAGE_NOT_FOUND'. Also observed: a title changed through the API (SSE meta_updated) is not reflected in the tree ('QA-q9-parentX' stayed) \u2014 tree never listens to SSE. Code confirmed: only Sidebar import (:128) and PageEditor create/delete/title (:162,:180,:196) call requestRefresh; Sidebar.tsx:88-104, PageTree.tsx:25-39, TreeItem.tsx:52-74/76-92/120-154 do not. Drag-move not re-run in headless (HTML5 DnD) \u2014 code path identical (TreeItem.tsx:150 no refresh). Test pages cleaned up.",
+   "evidence": [
+    "shots/vq9/light/004-sidebar-new-page-tree-stale.png",
+    "shots/vq9/dark/005-add-subpage-tree-stale.png",
+    "shots/vq9/dark/022-tree-delete-stale.png",
+    "shots/vq9/dark/023-deleted-row-click.png"
+   ]
+  }
+ },
+ {
+  "id": "Q9-004",
+  "knownRef": null,
+  "area": "docs",
+  "title": "Page tree order is scrambled: tree sorts order keys with localeCompare but keys are ASCII base62",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Create pages in this order: QA-q9-mention-target (key 'V'), QA-q9-parent ('k'), QA-q9-B ('s'), QA-q9-C ('w')",
+   "Observe tree: parent, B, mention-target, C \u2014 the 2nd page appears above the 1st",
+   "Drag QA-q9-B onto the lower quarter of QA-q9-mention-target ('after')",
+   "Reload Docs"
+  ],
+  "expected": "New pages append at the end; 'drop after X' puts the page directly after X",
+  "actual": "Tree order after the drop is B, parent, mention-target \u2014 B jumped to the TOP (backend assigned key 'c' between 'V' and 'k' in binary order, but localeCompare sorts 'c' before 'k' and 'V' after 's'). Order depends on letter case of generated keys.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/006-drag-after-wrong-order.png",
+    "shots/vq9/dark/001-tree-order.png"
+   ],
+   "console": [],
+   "network": [
+    "GET /workspaces/default/tree -> [B 'c', parent 'k', mention 'V', C 'w']"
+   ],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/backend/db/repositories/page-repository.ts",
+    "line": 346,
+    "note": "list.sort((a,b) => a.order_key.localeCompare(b.order_key))"
+   },
+   {
+    "path": "src/modules/knowledge/backend/services/order-key-generator.ts",
+    "line": 1,
+    "note": "ALPHABET 0-9A-Za-z (ASCII order); siblings for key generation use SQL binary ORDER BY"
+   }
+  ],
+  "suggestedFix": "page-repository.ts:346: list.sort((a,b) => a.order_key < b.order_key ? -1 : a.order_key > b.order_key ? 1 : 0) (binary, matching SQLite BINARY collation and the generator's ASCII alphabet). Add a repo test with mixed-case keys.",
+  "fixScope": "backend-needed",
+  "estimate": "XS",
+  "dedupeKey": "docs:page-tree:order-key-localecompare",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Verified via API and code: GET /workspaces/default/tree returns root order c(QA-q9-B), k(parent), s(sample-md), V(mention-target), w, y, z \u2014 mention-target (created first, key 'V' = MID_CHAR) sorts after pages created later. node: ['c','k','s','V','w'].sort(localeCompare) \u2192 c,k,s,V,w vs binary sort \u2192 V,c,k,s,w. page-repository.ts:346 uses localeCompare while ALPHABET 0-9A-Za-z (order-key-generator.ts:1) and all sibling queries (asc(order_key), SQLite BINARY) assume ASCII order, so 'drop after X' (key 'c' between 'V' and 'k') lands B at the top. Screenshot shows the scrambled tree.",
+   "evidence": [
+    "shots/vq9/dark/001-tree-order.png",
+    "GET /workspaces/default/tree \u2192 order keys [c,k,s,V,w,y,z,zV]"
+   ]
+  }
+ },
+ {
+  "id": "Q9-005",
+  "knownRef": null,
+  "area": "docs",
+  "title": "Editor toolbar active/disabled states go stale (Bold stays highlighted outside bold text; Undo/Redo lag)",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Docs > QA-q9-B, type 'alpha beta gamma', double-click 'beta', click Bold",
+   "Click at the very start of 'alpha' (plain text) and wait 1.5 s",
+   "Observe the Bold toolbar button"
+  ],
+  "expected": "Bold/Italic/Heading/etc. reflect the mark/node at the caret; Undo/Redo disabled state follows history",
+  "actual": "Bold stays highlighted (bg-accent-soft) with the caret in plain text; immediately after clicking Bold the button is NOT highlighted. Undo/Redo disabled state only updates when some unrelated React state changes (autosave status), e.g. Redo reported disabled right after 4 undos.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/009-toolbar-stale-bold.png",
+    "shots/vq9/dark/007-toolbar-bold-stale.png"
+   ],
+   "console": [],
+   "network": [],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/TiptapEditor.tsx",
+    "line": 50,
+    "note": "shouldRerenderOnTransaction: false"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/FixedToolbar.tsx",
+    "line": 74,
+    "note": "editor.isActive()/can() read at render time; nothing re-renders on selectionUpdate/transaction"
+   }
+  ],
+  "suggestedFix": "FixedToolbar.tsx: derive state with useEditorState({ editor, selector: ({editor}) => ({ bold: editor.isActive('bold'), \u2026, canUndo: editor.can().undo(), canRedo: editor.can().redo() }) }) from @tiptap/react; add aria-pressed={active} to ToolbarButton (:26-51).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "docs:toolbar:stale-active-state",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced (inverse direction of the report, same cause): caret inside <strong>strong</strong> \u2192 editor.isActive('bold') true but the Bold button has no bg-accent-soft; after typing 'q' the Undo button stayed disabled while editor.can().undo() was true (100 ms), and only enabled ~1.5 s later when the autosave status re-rendered PageEditor. Code: TiptapEditor.tsx:50 shouldRerenderOnTransaction:false; FixedToolbar.tsx reads isActive()/can() at render only. S3 kept.",
+   "evidence": [
+    "shots/vq9/dark/007-toolbar-bold-stale.png",
+    "run-code: {inBold:{cls:false, edBold:true}}, {after100ms:{undoBtnDisabled:true, canUndo:true}}"
+   ]
+  }
+ },
+ {
+  "id": "Q9-006",
+  "knownRef": null,
+  "area": "docs",
+  "title": "Task list renders broken: bullet + checkbox on one line, item text on the next",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Docs > any page, click Task list (or type '[ ] ') and type an item",
+   "Observe the rendered item"
+  ],
+  "expected": "Checkbox and item text inline on one row, no list bullet (standard task list)",
+  "actual": "The <ul data-type=taskList> gets prose list-disc bullets; the <label> and <div> inside the <li> stack vertically, so the row shows a grey bullet + checkbox and the text drops to the next line.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/010-editor-formatting.png",
+    "shots/q9/dark/011-md-shortcuts-task.png",
+    "shots/vq9/dark/008-editor-formatting.png",
+    "shots/vq9/light/001-editor-formatting.png"
+   ],
+   "console": [],
+   "network": [],
+   "pixelProbes": [
+    {
+     "file": "shots/q9/dark/011-md-shortcuts-task.png",
+     "x": 554,
+     "y": 371,
+     "hex": "#4a5565",
+     "nearestToken": "--text-disabled",
+     "deltaE": 7.9
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/tiptap-extensions.ts",
+    "line": 25,
+    "note": "TaskList/TaskItem added without any styles"
+   },
+   {
+    "path": "src/core/frontend/src/index.css",
+    "line": 2,
+    "note": "no ul[data-type=taskList] rules anywhere"
+   }
+  ],
+  "suggestedFix": "Add editor styles (e.g. in index.css or a knowledge editor CSS file): .ProseMirror ul[data-type=taskList]{list-style:none;padding-left:0} ul[data-type=taskList] li{display:flex;gap:.5rem;align-items:flex-start} li>label{margin-top:.2rem;flex:none} li>div{flex:1;min-width:0} li>div>p{margin:0}; input[type=checkbox]{accent-color:var(--selection)}.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "docs:editor:tasklist-layout",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced both themes on QA-q9-B: ul[data-type=taskList] list-style-type 'disc', li display 'list-item'; label box y=573 and text div y=602 (text on the next line); checkbox accent-color 'auto' (browser blue). Marker colour oklch(0.446 0.03 256.8) = Tailwind gray-600. No taskList CSS in index.css.",
+   "evidence": [
+    "shots/vq9/dark/008-editor-formatting.png",
+    "shots/vq9/light/001-editor-formatting.png",
+    "probe dark 554,582 #4a5565 nearest --text-disabled dE 7.9"
+   ]
+  }
+ },
+ {
+  "id": "Q9-007",
+  "knownRef": "K45",
+  "area": "docs",
+  "title": "Editor prose uses Tailwind Typography default gray (blue-slate cast) and adds literal backticks around inline code",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Docs > page with a blockquote, horizontal rule ('---'), bullet list and `inline code`",
+   "Pixel-probe the quote bar / hr / bullets"
+  ],
+  "expected": "Neutral token colours (--border/--divider/--text-tertiary); inline code shown as a chip without literal backticks",
+  "actual": "Blockquote bar and <hr> are #364153 (Tailwind gray-700, blue cast, dE 12.8 from nearest token), list markers #4a5565 (gray-600, blue cast); the theme remaps slate/violet but not the prose 'gray' palette. Inline code renders as `code span` with visible backtick glyphs (prose code::before/::after), and quotes get auto curly quotes + italic. Light theme: code block background #1e2939 (gray-800 navy), body text #364153 and headings #101828 (blue-gray instead of --text #26262b/--text-strong #111114); task checkbox uses the browser's default blue accent.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/010-editor-formatting.png",
+    "shots/q9/dark/011-md-shortcuts-task.png",
+    "shots/q9/light/002-editor-formatting.png",
+    "shots/vq9/dark/008-editor-formatting.png",
+    "shots/vq9/light/001-editor-formatting.png"
+   ],
+   "console": [],
+   "network": [],
+   "pixelProbes": [
+    {
+     "file": "shots/q9/dark/011-md-shortcuts-task.png",
+     "x": 800,
+     "y": 554,
+     "hex": "#364153",
+     "nearestToken": "--surface-control",
+     "deltaE": 12.8
+    },
+    {
+     "file": "shots/q9/dark/010-editor-formatting.png",
+     "x": 548,
+     "y": 657,
+     "hex": "#364153",
+     "nearestToken": "--surface-control",
+     "deltaE": 12.8
+    },
+    {
+     "file": "shots/q9/dark/010-editor-formatting.png",
+     "x": 554,
+     "y": 503,
+     "hex": "#4a5565",
+     "nearestToken": "--text-disabled",
+     "deltaE": 7.9
+    },
+    {
+     "file": "shots/q9/light/002-editor-formatting.png",
+     "x": 800,
+     "y": 496,
+     "hex": "#1e2939",
+     "nearestToken": "--text",
+     "deltaE": 8.6
+    },
+    {
+     "file": "shots/q9/light/002-editor-formatting.png",
+     "x": 600,
+     "y": 291,
+     "hex": "#364153",
+     "nearestToken": "--text (#26262b)"
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/TiptapEditor.tsx",
+    "line": 60,
+    "note": "class 'prose prose-sm dark:prose-invert' -> default gray theme"
+   }
+  ],
+  "suggestedFix": "TiptapEditor.tsx:60: use 'prose prose-sm prose-neutral dark:prose-invert' and map --tw-prose-body/headings/bullets/hr/quote-borders/code/pre-code/pre-bg (and --tw-prose-invert-*) to the index.css tokens (--text, --text-strong, --text-tertiary, --border, --surface-canvas-well); add prose-code:before:content-none prose-code:after:content-none prose-blockquote:not-italic and style inline code with bg-surface-raised px-1 rounded-control.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "docs:editor:prose-gray-palette",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Pixel-verified both themes. Dark: quote bar #364153 (dE 12.8 to --surface-control), list markers #4a5565 (dE 7.9). Light (computed + probe): body text #364153 (dE 12.3 to --text-secondary; token --text is #26262b), h1 #101828 (dE 10.3), code block bg #1e2939 navy (dE 8.6), blockquote border gray-200. Inline code renders with literal backticks and quotes get curly quotes + italic (visible in screenshots). D1 remaps only slate/violet, not Tailwind Typography's gray theme, so this is a gap in the token re-skin rather than an intentional choice.",
+   "evidence": [
+    "shots/vq9/dark/008-editor-formatting.png",
+    "shots/vq9/light/001-editor-formatting.png",
+    "probe light 559,249 #364153; 549,343 #101828; 800,717 #1e2939"
+   ]
+  }
+ },
+ {
+  "id": "Q9-008",
+  "knownRef": "K01",
+  "area": "docs",
+  "title": "App white-screens when opening a text page after a PDF page or after deleting the open page (FixedToolbar uses destroyed Tiptap editor)",
+  "category": "crash",
+  "severity": "S1",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Path A (most common): Docs > open any text page (e.g. QA-q9-sample-txt), then click a PDF page (QA-q9-sample-pdf) \u2014 viewer renders \u2014 then click any text page again",
+   "Path B: open QA-q9-B, click editor header '+' (New page), click 'Delete page' and accept the confirm, then click QA-q9-B in the tree"
+  ],
+  "expected": "QA-q9-B opens normally",
+  "actual": "Entire app goes blank (#root innerHTML length 0, playwright snapshot empty) in both paths. Console: 'TypeError: Cannot read properties of null (reading \\'can\\') at FixedToolbar (FixedToolbar.tsx:70)' + 'An error occurred in the <FixedToolbar> component'. Reload required. Also reproduced during exploration after deleting a page and opening a search result. Reproduced in light theme too (QA-q9-sample-md -> QA-q9-sample-pdf -> QA-q9-B: #root length 0).",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/022-crash-pdf-to-text.png",
+    "shots/q9/dark/017-crash-after-editor-delete.png",
+    "shots/q9/dark/016-crash-white-screen.png",
+    "shots/q9/light/012-crash-pdf-to-text.png",
+    "shots/vq9/dark/003-crash-pdf-to-text.png",
+    "shots/vq9/light/003-crash-pdf-to-text.png"
+   ],
+   "console": [
+    "TypeError: Cannot read properties of null (reading 'can') at FixedToolbar (src/modules/knowledge/frontend/components/Editor/FixedToolbar.tsx:70:27)",
+    "An error occurred in the <FixedToolbar> component. Consider adding an error boundary\u2026"
+   ],
+   "network": [],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx",
+    "line": 67,
+    "note": "editor kept in state; never reset when TiptapEditor unmounts/destroys it"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx",
+    "line": 326,
+    "note": "{editor && !pdfData && <FixedToolbar editor={editor}/>} renders with the destroyed instance while the next page loads"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/TiptapEditor.tsx",
+    "line": 90,
+    "note": "cleanup editor.destroy() without notifying parent"
+   }
+  ],
+  "suggestedFix": "TiptapEditor.tsx:90-94: in the destroy cleanup also call onReady(null) (widen the prop to Editor|null) \u2014 or in PageEditor setEditor(null) whenever pageId changes, page is null or pdfData is set; guard PageEditor.tsx:326 and :357 with `editor && !editor.isDestroyed`. Add an error boundary around ModuleSpaceHost spaces (K01) so a module render error cannot blank the whole app.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "docs:page-editor:destroyed-editor-crash",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced Path A in both themes (dark: txt\u2192pdf\u2192QA-q9-B; light: B\u2192pdf\u2192sample-md) and Path B in dark (editor 'Delete page' + accept \u2192 click QA-q9-B): #root innerHTML length 0, console 'TypeError: Cannot read properties of null (reading 'can') at FixedToolbar (FixedToolbar.tsx:70)'. Not a dev artefact: no StrictMode (main.tsx renders <App/> directly) and no error boundary (K01). Mechanism: the TiptapEditor unmounts (PDF branch / no-page branch) and destroys its editor (TiptapEditor.tsx:90-94) but PageEditor keeps it in state (:67); on the next text page render `editor && !pdfData` (:326) renders FixedToolbar with the destroyed instance before the new editor's onCreate.",
+   "evidence": [
+    "shots/vq9/dark/003-crash-pdf-to-text.png",
+    "shots/vq9/light/003-crash-pdf-to-text.png",
+    "console: TypeError: Cannot read properties of null (reading 'can') at FixedToolbar (FixedToolbar.tsx:70:27)"
+   ]
+  }
+ },
+ {
+  "id": "Q9-009",
+  "knownRef": null,
+  "area": "docs",
+  "title": "Single click on a link in the editor opens it in a new window (duplicate Link extension overrides openOnClick:false)",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Docs > QA-q9-C, select 'ordered', Link > https://example.com > Enter",
+   "Click once on the linked word to place the caret/edit it"
+  ],
+  "expected": "Caret is placed in the link (openOnClick:false is configured); links open only on an explicit action",
+  "actual": "A new tab/window to https://example.com opens on every plain click (context pages 1 -> 2), making link text practically uneditable with the mouse. Console on every editor mount: '[tiptap warn]: Duplicate extension names found: [\\'link\\']'. StarterKit 3.27.1 already registers Link with openOnClick:true; the separately added Link.configure({openOnClick:false}) loses.",
+  "evidence": {
+   "screenshots": [],
+   "console": [
+    "[tiptap warn]: Duplicate extension names found: ['link']. This can lead to issues."
+   ],
+   "network": [],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/tiptap-extensions.ts",
+    "line": 18,
+    "note": "StarterKit.configure({heading}) keeps its bundled Link"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/tiptap-extensions.ts",
+    "line": 28,
+    "note": "second Link.configure({ openOnClick: false })"
+   }
+  ],
+  "suggestedFix": "tiptap-extensions.ts:18-28: StarterKit.configure({ heading: { levels: [1,2,3] }, link: { openOnClick: false, autolink: true } }) and remove the separate Link import/entry (also fixes the markdown importer which shares the list). Optional: Cmd/Ctrl+click opens via window.open.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "docs:editor:duplicate-link-extension",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced: single click on the linked word 'ordered' in QA-q9-C opened a second tab https://example.com (tab-list 1\u21922). editor.extensionManager has two 'link' extensions with openOnClick [true,false]; StarterKit 3.27.1 bundles Link (starter-kit dist :69-70) and tiptap warns '[tiptap warn]: Duplicate extension names found: ['link']'. In Electron the same click goes through setWindowOpenHandler \u2192 shell.openExternal (electron/src/main/index.ts:171), i.e. every plain click launches the system browser.",
+   "evidence": [
+    "tab-list after click: 0 OpenPCB, 1 Example Domain",
+    "console: [tiptap warn]: Duplicate extension names found: ['link']"
+   ]
+  }
+ },
+ {
+  "id": "Q9-010",
+  "knownRef": null,
+  "area": "docs",
+  "title": "Link dialog: Save with a collapsed caret silently does nothing; Esc drops focus to <body>; Remove always shown",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Docs > QA-q9-C, click at end of 'md bullet' (no selection)",
+   "Click Link, type https://nothing.example, press Enter",
+   "Open Link again on an existing link and press Esc, then type"
+  ],
+  "expected": "With no selection the URL is inserted as linked text (or Link is disabled with a hint); after Esc/Cancel focus returns to the editor at the previous selection; 'Remove' only when a link exists",
+  "actual": "Enter closes the dialog and nothing is inserted, no feedback (html unchanged '<p>md bullet</p>'). After Esc document.activeElement is BODY, so typing goes nowhere. 'Remove' button is always rendered. Radix warns 'Missing Description or aria-describedby for {DialogContent}' on each open; the URL input has no label (placeholder only).",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/012-link-dialog.png",
+    "shots/vq9/dark/009-link-dialog.png"
+   ],
+   "console": [
+    "Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}."
+   ],
+   "network": [],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/LinkDialog.tsx",
+    "line": 26,
+    "note": "setLink on empty selection is a no-op"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/LinkDialog.tsx",
+    "line": 42,
+    "note": "no onCloseAutoFocus -> focus not returned to editor; no DialogDescription"
+   }
+  ],
+  "suggestedFix": "LinkDialog.tsx:26-33: if editor.state.selection.empty insertContent({type:'text', text:url, marks:[{type:'link', attrs:{href:url}}]}); DialogContent (:42) add onCloseAutoFocus={e => { e.preventDefault(); editor.commands.focus(); }} and aria-describedby={undefined} or a DialogDescription; render Remove (:66) only when editor.isActive('link'); aria-label='Link URL' on the input and use the kit input.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "docs:link-dialog:collapsed-selection-focus",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced on QA-q9-C: caret at end of 'md bullet', Link \u2192 URL \u2192 Enter: editor JSON unchanged (only a stored link mark, nothing visible, no feedback). Dialog buttons [Cancel, Remove, Save, Close] \u2014 Remove shown with no link present. Esc \u2192 document.activeElement BODY. Radix warning 'Missing Description or aria-describedby' logged; URL input has placeholder only. S3 kept.",
+   "evidence": [
+    "shots/vq9/dark/009-link-dialog.png",
+    "console: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}"
+   ]
+  }
+ },
+ {
+  "id": "Q9-011",
+  "knownRef": null,
+  "area": "docs",
+  "title": "Failed body save shows a bare 'Error' pill, never retries, and the edit is silently discarded on page switch",
+  "category": "error-handling",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "route '**/api/modules/knowledge/pages/*/content' -> 500",
+   "Docs > QA-q9-sample-txt, type ' unsaved-edit' -> pill shows 'Error'",
+   "unroute (backend healthy again), wait 4 s",
+   "Click QA-q9-B then back to QA-q9-sample-txt"
+  ],
+  "expected": "Clear message ('Couldn't save \u2014 retrying\u2026' / Retry action), automatic retry with backoff once the backend is reachable, and a warning/flush before leaving a page with unsaved changes",
+  "actual": "Pill reads only 'Error' (no tooltip/cause/retry). No retry happens after the backend recovers (GET page still 'Plain text QA sample.'). Switching pages resets pending state and the edit 'unsaved-edit' is gone. Same for 409 conflicts (PageContentConflictError is thrown and just shows 'Error'). Same with network offline (light theme): 'Error' pill, and after going back online for 5 s the text ' offline-edit' is still not saved.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/025-save-error.png",
+    "shots/q9/light/011-offline-save.png",
+    "shots/vq9/dark/010-save-error.png"
+   ],
+   "console": [
+    "Failed to save page content: KnowledgeApiError: boom"
+   ],
+   "network": [
+    "PATCH /pages/{txt}/content -> 500 (injected)",
+    "GET /pages/{txt} after switch -> content without the edit"
+   ],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/hooks/useAutosave.ts",
+    "line": 64,
+    "note": "catch -> status 'error', pending content already cleared, no retry"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx",
+    "line": 268,
+    "note": "'Error' label only"
+   }
+  ],
+  "suggestedFix": "useAutosave.ts: on failure restore pendingRef.current = content (if nothing newer is pending) and schedule retries with backoff (2/5/15 s) plus retry on window 'online'/visibilitychange; expose the error; PageEditor.tsx:256-270 render 'Not saved \u2014 Retry' as a button with the message in title; on pageId change with pending/failed content flush (or warn) instead of resetPending() at :203; on 409 (PageContentConflictError) offer Reload/Overwrite.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "docs:autosave:no-retry-edit-lost",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced (dark): route PATCH \u2026/pages/*/content \u2192 500, typed ' vq9-unsaved' in QA-q9-sample-txt \u2192 pill 'Error' (no title/role/retry). After unroute and 5 s the server still had 'Plain text QA sample.' (no retry). Switching to QA-q9-B and back: editor shows the server text \u2014 edit silently gone. Code: useAutosave.ts:54 clears pendingRef before the request and :64-67 only sets status 'error'; PageEditor.tsx:268 label 'Error'. Rated S2 (not S1) because a loopback backend failure is rare and an Error indicator is visible.",
+   "evidence": [
+    "shots/vq9/dark/010-save-error.png",
+    "GET /pages/876ec896 after 5 s and after page switch: content without the edit"
+   ]
+  }
+ },
+ {
+  "id": "Q9-012",
+  "knownRef": "K40",
+  "area": "docs",
+  "title": "Docs failures are silent or show raw codes: import/create/delete/move errors only console.error; tree error shows 'HTTP_500' in raw red",
+  "category": "error-handling",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Import document > choose a .pdf that is not a PDF (QA-q9-fake.pdf) -> backend 400 'File is not a PDF (missing %PDF- header)'",
+   "route POST '**/api/modules/knowledge/pages' -> 500, click New page",
+   "route '**/workspaces/default/tree' -> 500, reload, open Docs",
+   "Click a deleted-but-still-listed tree row (see Q9-003)"
+  ],
+  "expected": "Human-readable inline error/toast ('Couldn't import QA-q9-fake.pdf: not a valid PDF'), token-coloured, with Retry where relevant",
+  "actual": "Import and create failures: no UI feedback at all (only console 'Failed to import document: KnowledgeApiError: File is not a PDF\u2026', 'Failed to create page: KnowledgeApiError: boom'); spinner stops and nothing happens. Delete/move failures likewise only console.error. Tree load failure shows 'HTTP_500' + 'Retry' in raw text-red-600 (#e6000b, dE 21.7 from nearest token; --status-danger is #e0705f). Page load failure shows raw 'PAGE_NOT_FOUND'. Offline: New page click does nothing and shows nothing.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/023-import-bad-pdf.png",
+    "shots/q9/dark/026-create-fail.png",
+    "shots/q9/dark/024-tree-load-error.png",
+    "shots/q9/dark/005-deleted-page-click.png",
+    "shots/vq9/dark/011-import-bad-pdf.png",
+    "shots/vq9/dark/012-tree-load-error.png",
+    "shots/vq9/dark/013-create-fail.png",
+    "shots/vq9/dark/023-deleted-row-click.png"
+   ],
+   "console": [
+    "Failed to import document: KnowledgeApiError: File is not a PDF (missing %PDF- header)",
+    "Failed to create page: KnowledgeApiError: boom"
+   ],
+   "network": [
+    "POST /pages/import/pdf -> 400",
+    "POST /pages -> 500 (injected)",
+    "GET /workspaces/default/tree -> 500 (injected)"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/q9/dark/024-tree-load-error.png",
+     "x": 131,
+     "y": 97,
+     "hex": "#e6000b",
+     "nearestToken": "--net-power",
+     "deltaE": 21.7
+    },
+    {
+     "file": "shots/vq9/dark/012-tree-load-error.png",
+     "x": 131,
+     "y": 97,
+     "hex": "#e6000b",
+     "nearestToken": "--net-power",
+     "deltaE": 27.9
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/Sidebar.tsx",
+    "line": 130,
+    "note": "import catch: console.error only"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/Sidebar.tsx",
+    "line": 99,
+    "note": "create catch: console.error only"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/PageTree.tsx",
+    "line": 53,
+    "note": "text-red-600, raw error code, hand-rolled Retry button"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/hooks/useKnowledgeApi.ts",
+    "line": 125,
+    "note": "code falls back to `HTTP_${status}` and is used as the message"
+   }
+  ],
+  "suggestedFix": "Map KnowledgeApiError codes to copy in one helper (PAGE_NOT_FOUND \u2192 'This page was deleted', NETWORK_ERROR/HTTP_5xx \u2192 'Couldn't reach the Docs service', import 400 \u2192 use payload message 'Couldn't import <file>: not a valid PDF'); surface failures from Sidebar/TreeItem/PageTree/PageEditor via the app notice/toast kit or an inline bg-status-danger-soft banner with a kit Button Retry; PageTree.tsx:53 text-red-600 \u2192 text-status-danger.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "docs:errors:silent-or-raw-codes",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced: (a) Import document \u2192 vq9-fake.pdf: 400 'File is not a PDF (missing %PDF- header)' only in console, no role=alert/status and no visible text; (b) route GET tree \u2192 500: sidebar shows raw 'HTTP_500' + 'Retry' in #e6000b (probe dE 27.9 from nearest token; --status-danger dark is #e0705f); (c) route POST /pages \u2192 500 + sidebar New page: console 'Failed to create page: KnowledgeApiError: HTTP_500', nothing in UI; (d) clicking a stale deleted row shows raw 'PAGE_NOT_FOUND'. Code: useKnowledgeApi.ts:118-125 builds `HTTP_${status}` codes used as messages; Sidebar.tsx:99/130, TreeItem.tsx:86/152 console.error only; PageTree.tsx:53 text-red-600.",
+   "evidence": [
+    "shots/vq9/dark/011-import-bad-pdf.png",
+    "shots/vq9/dark/012-tree-load-error.png",
+    "shots/vq9/dark/013-create-fail.png",
+    "shots/vq9/dark/023-deleted-row-click.png",
+    "probe 131,97 #e6000b"
+   ]
+  }
+ },
+ {
+  "id": "Q9-013",
+  "knownRef": "K34",
+  "area": "docs",
+  "title": "Docs page tree is not keyboard operable: rows unfocusable, chevrons nameless, row actions focusable while invisible, ghost buttons show no focus",
+  "category": "keyboard",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Docs, focus the Search field, press Tab repeatedly",
+   "Watch document.activeElement and the screen"
+  ],
+  "expected": "Tree is a role=tree/treeitem list: Tab into it, arrows move, Enter opens, Right/Left expand/collapse, row actions revealed on focus; every focused control has a visible ring",
+  "actual": "Tab order: Import document, New page, then per row: nameless BUTTON (chevron, present even on leaf rows where it does nothing), 'Add subpage' (opacity 0), 'Delete' (opacity 0). Page rows themselves (div onClick) can never be focused, so a page cannot be opened from the keyboard. Focused kit ghost buttons (Import/New page/toolbar) have border 0 + outline none -> no visible focus indicator (focus-visible:border-selection needs a border).",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/029-tree-keyboard-focus.png",
+    "shots/q9/dark/030-import-btn-focus.png"
+   ],
+   "console": [],
+   "network": [],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/TreeItem.tsx",
+    "line": 160,
+    "note": "row is a div with onClick; no tabIndex/role/onKeyDown"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/TreeItem.tsx",
+    "line": 183,
+    "note": "chevron button has no aria-label/aria-expanded, rendered for leaves"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/TreeItem.tsx",
+    "line": 209,
+    "note": "opacity-0 group-hover:opacity-100 without group-focus-within"
+   },
+   {
+    "path": "src/shared/frontend/ui/button.tsx",
+    "line": 55,
+    "note": "ghost variant focus-visible:border-selection with no border -> invisible"
+   }
+  ],
+  "suggestedFix": "TreeItem.tsx:160-231: role=treeitem with aria-level/aria-expanded/aria-selected, roving tabIndex and onKeyDown (Up/Down/Left/Right/Enter/Delete) inside a role=tree container in PageTree.tsx:96; chevron (:183) aria-label='Expand <title>'/aria-expanded and not rendered (or aria-hidden, tabIndex -1) for leaves; actions (:209) add group-focus-within:opacity-100; Sidebar.tsx:158 clear button aria-label='Clear search'; button.tsx:55 give ghost/primary a visible focus-visible ring (outline 1px var(--selection) / box-shadow) \u2014 kit-wide K34.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "docs:page-tree:keyboard-a11y",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced: Tab from Search goes Import document \u2192 New page \u2192 per row: nameless chevron BUTTON (also on leaves) \u2192 'Add subpage' (opacity 0) \u2192 'Delete' (opacity 0); row divs tabIndex -1, no role=tree/treeitem. Kit ghost buttons report outline none, border 0, no box-shadow when focused (button.tsx:55 focus-visible:border-selection has no border to colour). The search clear 'X' button is also nameless. Severity recalibrated S2\u2192S3: not a keyboard trap and there is a keyboard workaround \u2014 search results are <button>s (Search 'sample-txt' \u2192 Tab \u2192 Enter opened the page); consistent with vq1's Q1-011/Q1-012 (S3).",
+   "evidence": [
+    "run-code tab sequence: BUTTON[Import document] outline none/border 0 \u2026 BUTTON[] (chevron) \u2026 BUTTON[Add subpage] opacity 0",
+    "rows tabIndex [-1,-1,-1], role null",
+    "workaround: search result BUTTON 'QA-q9-sample-txt' + Enter opened the page"
+   ]
+  }
+ },
+ {
+  "id": "Q9-014",
+  "knownRef": null,
+  "area": "docs",
+  "title": "Editor meta line is stale: word count carries over from the previous page and 'edited Xm ago' never updates after saves",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Open QA-q9-parent (6 words), then hover it > Add subpage (new empty page opens)",
+   "Read the meta line under the title",
+   "Type in any page, wait for 'Saved', read 'edited \u2026'"
+  ],
+  "expected": "Empty new page shows '0 words'; 'edited just now' after each save",
+  "actual": "New empty page shows '6 words' (previous page's count; also '5 words' after other switches) \u2014 setContent(emitUpdate:false) never fires 'update'. 'edited 3m ago' / '4m ago' shown on pages edited seconds earlier because page.updated_at is not refreshed after content saves.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/003-add-subpage-tree-stale.png",
+    "shots/q9/dark/027-long-title.png",
+    "shots/q9/dark/010-editor-formatting.png",
+    "shots/q9/dark/011-md-shortcuts-task.png",
+    "shots/vq9/dark/017-1100-meta-wrap.png",
+    "shots/vq9/dark/005-add-subpage-tree-stale.png"
+   ],
+   "console": [],
+   "network": [],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx",
+    "line": 106,
+    "note": "word count only recomputed on editor 'update'"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/TiptapEditor.tsx",
+    "line": 72,
+    "note": "setContent(..., { emitUpdate: false })"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx",
+    "line": 131,
+    "note": "save result updated_at kept in a ref only, page state not updated"
+   }
+  ],
+  "suggestedFix": "PageEditor.tsx:106-117: also listen to 'transaction' (tr.docChanged) or recompute in the TiptapEditor after setContent; :131-134 after a successful save mutatePage(p => p && p.id===result.page.id ? {...p, updated_at: result.page.updated_at} : p) (do not touch content_json); re-render the relative time on a 30-60 s interval.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "docs:page-editor:stale-meta-line",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced: after Add subpage the empty 'Untitled' page showed '6 words'; at 1100px the empty 'QA-q9-child of long' showed '19 words' (QA-q9-C's count, the page opened before). Typing ' Extra' in QA-q9-mention-target \u2192 Saved, meta still 'edited 9m ago'. Code: PageEditor.tsx:106-117 recomputes only on 'update'; TiptapEditor.tsx:72-77 setContent(\u2026, {emitUpdate:false}); :131-134 keeps the save result's updated_at in a ref only.",
+   "evidence": [
+    "shots/vq9/dark/017-1100-meta-wrap.png (empty page shows '19 words')",
+    "shots/vq9/dark/005-add-subpage-tree-stale.png",
+    "meta before/after save: 'edited 9m ago\u00b710 words' \u2192 'edited 9m ago\u00b711 words'"
+   ]
+  }
+ },
+ {
+  "id": "Q9-015",
+  "knownRef": "K37",
+  "area": "docs",
+  "title": "Docs search field is a 32px hand-rolled input (kit search fields are 22px in a 34px header)",
+  "category": "consistency",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Open Home, Library and Docs; measure the search inputs"
+  ],
+  "expected": "Same kit SearchField as Home/Library: 22px control, 11px text, inside the 34px module header",
+  "actual": "Docs 'Search...' input is 32px tall, 12px text, own border/violet focus ring, inside a 48px (p-2) bar; Home 'Search designs\u2026' and Library 'Search name, MPN, package\u2026' use a 22px wrapper in a 34px header. Link dialog URL input is likewise hand-rolled (px-3 py-2, ~34px). DOM census docs-editor-dark-1440: oddControls [{h:32}].",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/031-compare-Docs.png",
+    "shots/q9/dark/031-compare-Home.png",
+    "shots/q9/dark/031-compare-Library.png",
+    "shots/q9/dark/012-link-dialog.png",
+    "shots/vq9/dark/014-docs-layout.png"
+   ],
+   "console": [],
+   "network": [],
+   "pixelProbes": [],
+   "census": "census/docs-editor-dark-1440.json"
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/Sidebar.tsx",
+    "line": 150,
+    "note": "h-8 input with border-slate-300 focus:border-violet-500 focus:ring-violet-500"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/LinkDialog.tsx",
+    "line": 45,
+    "note": "hand-rolled input px-3 py-2 bg-white/slate-800"
+   }
+  ],
+  "suggestedFix": "Sidebar.tsx:148-165: replace the hand-rolled input with the kit SearchField (src/shared/frontend/ui) used by HomeScreen/Library, aria-label='Search pages', placeholder 'Search pages\u2026'; LinkDialog.tsx:45-57 use the kit input.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "docs:search:input-height",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Measured: Docs 'Search...' input 32px tall, 12px text, in a 49px bar, no aria-label, focus classes border-violet-500/ring-violet-500 (remapped); Home 'Search designs\u2026' and Library 'Search name, MPN, package\u2026' use a 22px wrapper with 11px text. Docs was scoped 'token re-skin only' in PLAN \u00a70, so this is an un-migrated surface rather than a regression, but K37 inconsistency stands. S3 kept.",
+   "evidence": [
+    "DOM: Docs {h:32,font:12px,bar:49,aria:null}; Home {wrap:22,font:11px}; Library {wrap:22,font:11px}",
+    "shots/vq9/dark/014-docs-layout.png"
+   ]
+  }
+ },
+ {
+  "id": "Q9-016",
+  "knownRef": "K45",
+  "area": "docs",
+  "title": "Docs (and Tasks) still use raw palette classes and hand-rolled controls instead of tokens/kit",
+  "category": "consistency",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "grep the knowledge frontend for slate-/violet-/red-/bg-white/rounded-md",
+   "Compare rendered colours with tokens (pixel probes)"
+  ],
+  "expected": "Semantic tokens (border-border, bg-surface-hover, text-status-danger, bg-selection \u2026) and kit components only",
+  "actual": "Knowledge module: border-slate-200/800 on every divider, hover:bg-slate-100/800 rows, focus:border-violet-500/ring-violet-500 search, drop indicators bg-violet-500, skeleton bg-slate-200/800 rounded-md, error text-red-600 (#e6000b, dE 21.7) + hand-rolled Retry, LinkDialog bg-white/text-slate-900/dark:bg-slate-800, PdfViewer well bg-slate-100/900, toolbar dividers bg-slate-200/700, status pill bg-slate-100. Most render close to tokens only because index.css remaps slate/violet to neutrals (e.g. dividers #1c1c1f vs --border #1e1e21), so they will drift the moment the remap changes; red and the prose 'gray' palette are visibly off (see Q9-007, Q9-012). Tasks space is entirely raw (see Q9-019).",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/005-deleted-page-click.png",
+    "shots/q9/dark/024-tree-load-error.png"
+   ],
+   "console": [],
+   "network": [],
+   "pixelProbes": [
+    {
+     "file": "shots/q9/dark/005-deleted-page-click.png",
+     "x": 339,
+     "y": 300,
+     "hex": "#1c1c1f",
+     "nearestToken": "--surface-raised (expected --border #1e1e21)",
+     "deltaE": 0.0
+    },
+    {
+     "file": "shots/q9/dark/024-tree-load-error.png",
+     "x": 131,
+     "y": 97,
+     "hex": "#e6000b",
+     "nearestToken": "--net-power",
+     "deltaE": 21.7
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/Space.tsx",
+    "line": 99,
+    "note": "border-slate-200 dark:border-slate-800"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/TreeItem.tsx",
+    "line": 171,
+    "note": "hover:bg-slate-100 dark:hover:bg-slate-800; drop lines bg-violet-500 (177,180)"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/PageTree.tsx",
+    "line": 44,
+    "note": "skeleton bg-slate-200 rounded-md; error text-red-600"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/LinkDialog.tsx",
+    "line": 50,
+    "note": "raw white/slate/violet input"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/PdfViewer.tsx",
+    "line": 171,
+    "note": "bg-slate-100 dark:bg-slate-900 well"
+   }
+  ],
+  "suggestedFix": "As part of the PLAN \u00a79 migration: swap border-slate-*/hover:bg-slate-* \u2192 border-border / hover:bg-surface-hover, bg-violet-500 drop lines \u2192 bg-selection, rounded-md skeletons \u2192 rounded-control bg-surface-hover, PdfViewer well \u2192 bg-surface-canvas-well or bg-surface-section, LinkDialog input \u2192 kit input; delete dark: pairs the tokens already handle.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "docs:styling:raw-palette",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Code-verified (grep of knowledge/tasks frontend) and consistent with PLAN run log ('knowledge 59, tasks 12 raw palette classes \u2014 documented remap-stopgap bucket', \u00a79 follow-up 'Migrate remaining files \u2026 Knowledge'). Most slate/violet classes render on-token via the D1 remap; the visibly off-token parts are already carried by Q9-007 (prose gray), Q9-012 (text-red-600 #e6000b) and Q9-023 (Tasks bg-red-50). Kept as the K45 umbrella for the code migration but downgraded S3\u2192S4 because what remains is a documented, intentional stopgap with no visible defect of its own.",
+   "evidence": [
+    "PLAN.md \u00a79 + Run log 2026-09-05 FINAL GATES",
+    "src/modules/knowledge/frontend/components/Sidebar/TreeItem.tsx:171,177,180",
+    "src/modules/knowledge/frontend/components/Editor/PdfViewer.tsx:171"
+   ]
+  }
+ },
+ {
+  "id": "Q9-017",
+  "knownRef": null,
+  "area": "docs",
+  "title": "Docs layout ignores shell metrics: no 34px module header, 36px tree rows, inverted surfaces, misaligned header borders, 3 'New page' CTAs",
+  "category": "consistency",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Open Docs next to Home/Library in dark theme",
+   "Measure/probe"
+  ],
+  "expected": "Like Home/Library: 34px header with title + count and search, 22px rows at 11-12px, side panel --surface-panel, main --surface-app, one primary create action",
+  "actual": "No module header/title; sidebar top bar 48px while the editor title block is 58px, so the two bottom borders are offset by 10px; tree rows 36px (py-1.5), editor font 14px. Sidebar is --surface-app (#0c0c0d) and the editor --surface-panel (#111113) \u2014 the reverse of Home/Library (side #111113, main #0c0c0d, header #0f0f10). Empty Docs shows three 'New page' buttons at once (header '+', sidebar card, editor card). Search results rows (48px, breadcrumb repeats the page's own title) differ from tree rows. Page body column (max-w 46rem centred) does not align with the left-aligned title.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/001-docs-empty.png",
+    "shots/q9/dark/031-compare-Docs.png",
+    "shots/q9/dark/031-compare-Library.png",
+    "shots/q9/dark/013-search-results.png",
+    "shots/q9/dark/009-toolbar-stale-bold.png",
+    "shots/vq9/dark/014-docs-layout.png",
+    "shots/vq9/dark/015-search-results.png"
+   ],
+   "console": [],
+   "network": [],
+   "pixelProbes": [
+    {
+     "file": "shots/q9/dark/031-compare-Docs.png",
+     "x": 190,
+     "y": 850,
+     "hex": "#0c0c0d",
+     "nearestToken": "--surface-app",
+     "deltaE": 0.0
+    },
+    {
+     "file": "shots/q9/dark/031-compare-Library.png",
+     "x": 190,
+     "y": 850,
+     "hex": "#111113",
+     "nearestToken": "--surface-panel",
+     "deltaE": 0.0
+    },
+    {
+     "file": "shots/q9/dark/031-compare-Docs.png",
+     "x": 700,
+     "y": 600,
+     "hex": "#111113",
+     "nearestToken": "--surface-panel",
+     "deltaE": 0.0
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/Space.tsx",
+    "line": 98,
+    "note": "sidebar bg-surface-app, editor bg-surface-card"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/TreeItem.tsx",
+    "line": 168,
+    "note": "py-1.5 text-sm rows"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/Sidebar.tsx",
+    "line": 147,
+    "note": "p-2 top bar, no module header"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx",
+    "line": 246,
+    "note": "58px title block"
+   }
+  ],
+  "suggestedFix": "Follow-up design pass for Docs: shared 34px module header ('Docs' + page count + SearchField + Import/New page), 22px tree rows, sidebar bg-surface-panel / editor bg-surface-app (Space.tsx:98-107), equal header heights, a single empty-state CTA, title left-aligned with the body column (PageEditor.tsx:246-253 vs TiptapEditor.tsx:60 mx-auto max-w-[46rem]), drop the last breadcrumb segment in search results (search-service/getBreadcrumb includes the page itself).",
+  "fixScope": "design-decision",
+  "estimate": "M",
+  "dedupeKey": "docs:layout:shell-metrics",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Measured (dark): tree rows 36px/12px, sidebar top bar bottom 49px vs editor title block 58px (borders offset 10px), editor font 14px, title x=356 vs body text x=546; sidebar #0c0c0d (--surface-app) and editor #111113 (--surface-panel) \u2014 inverted vs Home/Library side panels. Empty state with three 'New page' CTAs confirmed from q9 shot + code (Sidebar '+', PageTree.tsx:74-88, PageEditor.tsx:219-231); search results breadcrumb repeats the page's own title ('QA-q9-parent / QA-q9-C'). Recalibrated S3\u2192S4, fixScope design-decision: PLAN \u00a70 explicitly limited Knowledge/Docs to a token re-skin with 'no structural changes', so adopting the 34px module header/22px rows is new design work, not a regression.",
+   "evidence": [
+    "shots/vq9/dark/014-docs-layout.png",
+    "shots/vq9/dark/015-search-results.png",
+    "shots/q9/dark/001-docs-empty.png",
+    "probe 190,850 #0c0c0d --surface-app; 900,850 #111113 --surface-panel"
+   ]
+  }
+ },
+ {
+  "id": "Q9-018",
+  "knownRef": null,
+  "area": "docs",
+  "title": "Docs forgets the open page and tree expansion when leaving the module or reloading; search results don't reveal nested pages",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Docs > open QA-q9-B (QA-q9-parent expanded)",
+   "Click Library in the rail, then Docs again (or reload)",
+   "Search 'q9-C' and click the nested result"
+  ],
+  "expected": "Last page re-opens with its tree branch expanded (as Designer tabs persist); opening a nested search result expands and highlights it in the tree",
+  "actual": "Returns to 'No page selected' after a module switch or reload (tree expansion survives a module switch via the zustand store but is lost on reload). Selecting a nested search result opens it but the parent stays collapsed, so the page is not visible/highlighted in the tree (expandAncestors exists in tree-store but is never called).",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/031-compare-Docs.png",
+    "shots/vq9/dark/016-nested-result-not-revealed.png"
+   ],
+   "console": [],
+   "network": [],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/Space.tsx",
+    "line": 17,
+    "note": "selectedPageId is component state only"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/stores/tree-store.ts",
+    "line": 159,
+    "note": "expandAncestors never used"
+   }
+  ],
+  "suggestedFix": "Space.tsx:17: keep selectedPageId in the navigation store params or localStorage (try/catch, per workspace/design scope) and restore it on mount; persist expandedIds likewise; call useTreeStore.getState().expandAncestors(id) in the onSelectPage path (Space.tsx:102/118) so search results and @page mentions (K22) reveal the row.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "docs:space:selection-not-persisted",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Partially confirmed. Selected page is lost on module switch and on reload (Library \u2192 Docs: title input gone, 'No page selected'). Nested search result: collapsed QA-q9-parent, searched 'q9-C', clicked result \u2014 page opened but the parent stayed collapsed, row not visible; expandAncestors (tree-store.ts:159) has no callers. Correction: tree EXPANSION survives a module switch (zustand store; QA-q9-parent stayed expanded Library\u2192Docs) and is lost only on reload. S3 kept.",
+   "evidence": [
+    "shots/vq9/dark/016-nested-result-not-revealed.png",
+    "module switch: before {rows incl. 'QA-q9-C', title 'QA-q9-C'} after {rows incl. 'QA-q9-C', title null}"
+   ]
+  }
+ },
+ {
+  "id": "Q9-019",
+  "knownRef": null,
+  "area": "docs",
+  "title": "Docs search only matches titles \u2014 body text and imported .md/.txt content are not searchable",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Page QA-q9-C contains the words 'md ordered' in its body",
+   "Type 'ordered' in the Docs 'Search...' field"
+  ],
+  "expected": "Pages whose content contains the term are found (or the field says 'Search titles')",
+  "actual": "'No pages found for \"ordered\"'. Backend SearchService.searchByTitle does LIKE on title only (also unescaped % and _ wildcards). Imported documents are therefore unfindable by content.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/014-search-empty.png"
+   ],
+   "console": [],
+   "network": [
+    "GET /api/modules/knowledge/search?q=ordered&scope=all -> results []"
+   ],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/backend/services/search-service.ts",
+    "line": 7,
+    "note": "searchByTitle only"
+   },
+   {
+    "path": "src/modules/knowledge/backend/db/repositories/page-repository.ts",
+    "line": 241,
+    "note": "like(title, %query%)"
+   }
+  ],
+  "suggestedFix": "Short term: Sidebar.tsx:152 placeholder 'Search page titles\u2026'; escape %/_ in page-repository.ts:241 (like \u2026 ESCAPE '\\\\'). Proper: maintain a plain-text column (tiptap getText on save / imported text) and query it via SQLite FTS5 in SearchService.",
+  "fixScope": "backend-needed",
+  "estimate": "M",
+  "dedupeKey": "docs:search:title-only",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Verified via API: GET /search?q=ordered \u2192 {results:[]} although QA-q9-C's body contains 'md ordered'; 'q9-C' finds by title. search-service.ts:7 searchByTitle \u2192 page-repository.ts:241 like(title,'%q%') (also unescaped %/_). Not a PLAN decision; placeholder just says 'Search...'. S3 kept (content search gap + misleading copy).",
+   "evidence": [
+    "GET /api/modules/knowledge/search?q=ordered&scope=all \u2192 {\"results\":[]}"
+   ]
+  }
+ },
+ {
+  "id": "Q9-020",
+  "knownRef": null,
+  "area": "docs",
+  "title": "At 1100 px the editor meta line wraps ('edited 3m / ago', '0 / words') when a breadcrumb is present",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "resize 1100x720",
+   "Docs > expand 'QA-q9-long Title\u2026' > open child 'QA-q9-child of long'"
+  ],
+  "expected": "Breadcrumb truncates; 'edited \u2026' and word count stay on one line; header height stays constant",
+  "actual": "Breadcrumb takes the width and the trailing spans wrap onto two lines, growing the header from 58px to ~74px and pushing the toolbar down.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/032-1100-editor-breadcrumb.png",
+    "shots/vq9/dark/017-1100-meta-wrap.png"
+   ],
+   "console": [],
+   "network": [],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx",
+    "line": 299,
+    "note": "meta spans lack whitespace-nowrap/shrink-0; breadcrumb span needs min-w-0"
+   }
+  ],
+  "suggestedFix": "PageEditor.tsx:299-323: row 'flex min-w-0 items-center'; breadcrumb span 'min-w-0 flex-1 truncate' (or shrink); other spans 'shrink-0 whitespace-nowrap'; optionally make breadcrumb segments buttons that select the ancestor page.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "docs:page-editor:meta-wrap-1100",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced at 1100\u00d7720 (Electron minimum) on 'QA-q9-child of long': breadcrumb span 17px, 'edited 1h ago' and '19 words' spans 33px (wrapped to two lines), meta row 45px, title block 74px instead of 58px, toolbar pushed down.",
+   "evidence": [
+    "shots/vq9/dark/017-1100-meta-wrap.png",
+    "DOM: metaH 45, headerH 74, spans [[breadcrumb,17],[edited 1h ago,33],[19 words,33]]"
+   ]
+  }
+ },
+ {
+  "id": "Q9-021",
+  "knownRef": "K42",
+  "area": "tasks",
+  "title": "Tasks module is unreachable from the UI (hidden from rail; no menu/shortcut)",
+  "category": "stub",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Look at the left rail, Settings, context menu and command surfaces for 'Tasks'",
+   "Only eval navigateToModule('tasks') opens it"
+  ],
+  "expected": "Either a deliberate entry point (rail 'system' group, Settings > Diagnostics, or a status-bar background-work indicator) or the module is not shipped",
+  "actual": "manifest sidebar.hidden:true; rail shows Home/Designer/Library/Docs/Assistant only; the space renders only via the navigation store. When shown, no rail item is highlighted.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/034-tasks-list.png",
+    "shots/vq9/dark/018-tasks-list.png"
+   ],
+   "console": [],
+   "network": [
+    "GET /api/modules/tasks/tasks?limit=50 -> 200 (50 assistant.chat tasks)"
+   ],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/tasks/manifest.json",
+    "line": 13,
+    "note": "\"hidden\": true"
+   },
+   {
+    "path": "src/core/frontend/src/components/LeftSidebar.tsx",
+    "line": 36,
+    "note": "filters hidden modules"
+   }
+  ],
+  "suggestedFix": "Decide: expose background work as a status-bar activity popover or Settings > Diagnostics page (kit table), or drop the frontend entry until designed. Do not un-hide before Q9-022/Q9-023 are fixed.",
+  "fixScope": "design-decision",
+  "estimate": "S",
+  "dedupeKey": "tasks:shell:unreachable",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Verified: tasks/manifest.json sidebar.hidden:true since the module was added (commit b5fb5a0), LeftSidebar.tsx:35-37 filters hidden modules, no code path calls navigateToModule('tasks'); only reachable via eval; with the space open no rail item is active. This is a deliberate hide, so it is a product decision rather than a defect \u2014 kept as S4 design-decision per K42.",
+   "evidence": [
+    "shots/vq9/dark/018-tasks-list.png",
+    "src/modules/tasks/manifest.json:13 \"hidden\": true"
+   ]
+  }
+ },
+ {
+  "id": "Q9-022",
+  "knownRef": "K01",
+  "area": "tasks",
+  "title": "Tasks space white-screens the app when /tasks returns an error JSON (tasks.map is not a function)",
+  "category": "crash",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "route '**/api/modules/tasks/tasks*' -> 500 application/problem+json {\"type\":\"about:blank\",\"title\":\"Internal error\",\"status\":500}",
+   "eval navigateToModule('tasks')"
+  ],
+  "expected": "Error message with Retry; app keeps working",
+  "actual": "#root becomes empty (innerHTML length 0); console 'TypeError: tasks.map is not a function'. The fetch never checks response.ok and stores the problem object as the task array. Rated S2 only because the space is currently hidden (K42); it is S1 once reachable.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/036-tasks-500-crash.png",
+    "shots/vq9/dark/020-tasks-500-crash.png"
+   ],
+   "console": [
+    "TypeError: tasks.map is not a function"
+   ],
+   "network": [
+    "GET /api/modules/tasks/tasks?limit=50 -> 500 (injected)"
+   ],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/tasks/frontend/Space.tsx",
+    "line": 13,
+    "note": ".then(response => response.json()) without ok check; setTasks(data) with non-array"
+   }
+  ],
+  "suggestedFix": "tasks/frontend/Space.tsx:12-16: if (!response.ok) throw new Error(problem?.title ?? `Couldn't load tasks (${response.status})`); setTasks(Array.isArray(data) ? data : []); plus the module error boundary (K01).",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "tasks:space:crash-on-error",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced: route GET /api/modules/tasks/tasks* \u2192 500 problem+json, navigateToModule('tasks') via eval \u2192 #root innerHTML length 0, console 'TypeError: tasks.map is not a function'. tasks/frontend/Space.tsx:12-15 never checks response.ok and stores the problem object. Recalibrated S2\u2192S3: the space is unreachable from the UI (Q9-021, manifest hidden), so no user can hit it today; it becomes S1 the moment the module is exposed.",
+   "evidence": [
+    "shots/vq9/dark/020-tasks-500-crash.png",
+    "console: TypeError: tasks.map is not a function"
+   ]
+  }
+ },
+ {
+  "id": "Q9-023",
+  "knownRef": "K45",
+  "area": "tasks",
+  "title": "Tasks list is clipped (36 of 50 rows unreachable), has no loading state, and is styled with raw palette (light-pink error box in dark theme)",
+  "category": "visual",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "eval navigateToModule('tasks') on stack A (50 tasks)",
+   "Scroll the list with the mouse wheel",
+   "Make /tasks return invalid JSON (route body 'not json') and reload the space"
+  ],
+  "expected": "Scrollable dense table (22px rows: type, status chip, created/duration, id), 'Loading\u2026' while fetching, token-coloured error with Retry, no 'No tasks yet' under an error",
+  "actual": "List container is overflow-hidden inside a non-scrolling h-full column: scrollHeight 2799 vs 790 visible, wheel does nothing, rows 15-50 unreachable. Before data arrives it says 'No tasks yet.' (no loading state). Error shows the raw exception ('Unexpected token \\'o\\', \"not json\" is not valid JSON') in a bg-red-50 box that stays light pink (#fef2f2) in dark theme, text #c40d14 (dE 19.2), and 'No tasks yet.' still renders below it. Rows show only type + raw UUID + status (no timestamps/duration, no status colour), 56px tall, rounded-xl/rounded-lg containers, text-xl title \u2014 none of the kit metrics. No refresh/live update (SSE route exists).",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/034-tasks-list.png",
+    "shots/q9/dark/037-tasks-error-state.png",
+    "shots/q9/light/010-tasks-1440.png",
+    "shots/vq9/dark/018-tasks-list.png",
+    "shots/vq9/dark/019-tasks-error-state.png"
+   ],
+   "console": [],
+   "network": [],
+   "pixelProbes": [
+    {
+     "file": "shots/q9/dark/037-tasks-error-state.png",
+     "x": 700,
+     "y": 95,
+     "hex": "#fef2f2",
+     "nearestToken": "--text-strong",
+     "deltaE": 4.3
+    },
+    {
+     "file": "shots/q9/dark/037-tasks-error-state.png",
+     "x": 118,
+     "y": 106,
+     "hex": "#c40d14",
+     "nearestToken": "--net-power",
+     "deltaE": 19.2
+    },
+    {
+     "file": "shots/q9/light/010-tasks-1440.png",
+     "x": 700,
+     "y": 115,
+     "hex": "#ffffff",
+     "nearestToken": "--surface-input (list uses bg-white instead of a surface token)",
+     "deltaE": 0.0
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/tasks/frontend/Space.tsx",
+    "line": 26,
+    "note": "flex h-full flex-col p-6 bg-slate-50 dark:bg-slate-950 \u2014 no overflow-auto"
+   },
+   {
+    "path": "src/modules/tasks/frontend/Space.tsx",
+    "line": 29,
+    "note": "border-red-300 bg-red-50 text-red-700 without dark variants"
+   },
+   {
+    "path": "src/modules/tasks/frontend/Space.tsx",
+    "line": 30,
+    "note": "overflow-hidden rounded-xl list"
+   },
+   {
+    "path": "src/modules/tasks/frontend/Space.tsx",
+    "line": 37,
+    "note": "'No tasks yet.' also shown while loading/after error"
+   }
+  ],
+  "suggestedFix": "tasks/frontend/Space.tsx:26-38: make the list 'min-h-0 flex-1 overflow-auto' inside the h-full column, add loading/empty/error states (no 'No tasks yet.' while loading or on error), token classes (bg-surface-app, border-border, bg-status-danger-soft text-status-danger), kit table rows 22px with status chips and relative timestamps, Refresh button or subscribe to the tasks SSE stream.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "tasks:space:clipped-raw-styles",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced: 50 rows, list scrollHeight 2799 vs clientHeight 788, parent column overflow visible and not scrollable; after mousewheel 1500 no element scrolled (row 15 still at y=871). Invalid JSON \u2192 raw 'Unexpected token 'o', \"not json\" is not valid JSON' in a #fef2f2 box (light pink in dark theme, probe dE 4.3 to --text-strong) with #c40d14 text (dE 19.2) and 'No tasks yet.' still rendered below. Recalibrated S3\u2192S4: same latent surface as Q9-022 (hidden from the UI, PLAN \u00a70 token re-skin only).",
+   "evidence": [
+    "shots/vq9/dark/018-tasks-list.png",
+    "shots/vq9/dark/019-tasks-error-state.png",
+    "probe 700,90 #fef2f2; 118,102 #c40d14"
+   ]
+  }
+ },
+ {
+  "id": "Q9-024",
+  "knownRef": null,
+  "area": "docs",
+  "title": "Clearing a page title saves an empty title: tree shows a blank, unlabeled row; Enter in the title does nothing",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Docs > QA-q9-sample-md, select the title and delete all text",
+   "Wait 1.5 s; look at the tree and search",
+   "Press Enter in the title field"
+  ],
+  "expected": "Empty title falls back to 'Untitled' (display and/or persisted); Enter moves the caret into the body",
+  "actual": "PATCH /meta saves title '' and the tree row renders only an icon (blank label) \u2014 unidentifiable, and unfindable via search. Enter keeps focus in the title input.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/039-empty-title.png",
+    "shots/vq9/dark/021-empty-title.png"
+   ],
+   "console": [],
+   "network": [
+    "PATCH /pages/17bb733b\u2026/meta {title:''} -> 200"
+   ],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx",
+    "line": 149,
+    "note": "handleTitleChange saves any value"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/TreeItem.tsx",
+    "line": 207,
+    "note": "{node.title} without fallback"
+   }
+  ],
+  "suggestedFix": "PageEditor.tsx:149-168: trim and, if empty, persist 'Untitled' on blur (or render fallback); TreeItem.tsx:207, Sidebar search result (:226) and breadcrumb use `title || 'Untitled'` in text-tertiary; title input onKeyDown Enter \u2192 editor?.commands.focus('start').",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "docs:title:empty-allowed",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced on QA-q9-light-new: title filled with '' \u2192 after 1.8 s the API tree lists title '' and the tree row renders icon-only (text ''); Enter kept focus in the title input. Title restored afterwards.",
+   "evidence": [
+    "shots/vq9/dark/021-empty-title.png",
+    "GET /workspaces/default/tree last title ''"
+   ]
+  }
+ },
+ {
+  "id": "Q9-025",
+  "knownRef": "K06",
+  "area": "docs",
+  "title": "Docs page delete uses native window.confirm (tree + editor), doesn't mention subpages that are deleted too, and offers no undo",
+  "category": "stub",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Install dialog spy; Docs > hover a page row > Delete (trash)",
+   "Docs > open a page > editor header 'Delete page'",
+   "Delete a page that has subpages (e.g. QA-q9-parent)"
+  ],
+  "expected": "Kit confirm dialog (role=dialog, Esc/Enter, focus return) naming the page and the number of subpages that will also be deleted; an Undo toast (backend POST /pages/:id/restore already exists)",
+  "actual": "Native dialogs: spy log ['confirm: Delete \"Untitled\"?'] from the tree and ['confirm: Delete this page?'] from the editor (inconsistent copy). softDeletePage also soft-deletes all children silently. No undo/trash UI.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/dark/004-delete-tree-stale.png",
+    "shots/vq9/dark/022-tree-delete-stale.png"
+   ],
+   "console": [],
+   "network": [
+    "DELETE /api/modules/knowledge/pages/945437d3\u2026 -> 204"
+   ],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/TreeItem.tsx",
+    "line": 80,
+    "note": "window.confirm(`Delete \"${node.title}\"?`)"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx",
+    "line": 192,
+    "note": "window.confirm(\"Delete this page?\")"
+   },
+   {
+    "path": "src/modules/knowledge/backend/services/page-service.ts",
+    "line": 254,
+    "note": "softDeleteChildren"
+   }
+  ],
+  "suggestedFix": "Replace TreeItem.tsx:80 and PageEditor.tsx:192 window.confirm with the shared kit confirm dialog: 'Delete \"<title>\" and N subpages?' (count from the tree); after delete show a notice with Undo calling api.restorePage (make restore also restore children deleted in the same operation).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "docs:delete:native-confirm",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced both entry points with the dialog spy: editor 'Delete page' \u2192 'confirm: Delete this page?'; tree trash on API-created QA-vq9-del-parent \u2192 'confirm: Delete \"QA-vq9-del-parent\"?' (inconsistent copy, no subpage mention). After accept both parent and child returned 404 (page-service.ts:254 softDeleteChildren); no undo/notice although POST /pages/:id/restore exists (routes.ts:388). Native confirm = S2 per protocol (breaks the Electron look, no kit dialog).",
+   "evidence": [
+    "dialog spy: [\"confirm: Delete this page?\"], [\"confirm: Delete \\\"QA-vq9-del-parent\\\"?\"]",
+    "GET parent/child after delete \u2192 404 404",
+    "shots/vq9/dark/022-tree-delete-stale.png"
+   ]
+  }
+ },
+ {
+  "id": "Q9-026",
+  "knownRef": null,
+  "area": "docs",
+  "title": "Merely opening a page (first after load / new page) writes it back: spurious PATCH bumps revision and 'edited' time",
+  "category": "data",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "GET /api/modules/knowledge/pages/5bec1891\u2026 -> updated_at 10:17:51, revision 7",
+   "Reload, open Docs, click QA-q9-mention-target, do not type, wait 2.5 s",
+   "GET again"
+  ],
+  "expected": "Viewing a page never writes it",
+  "actual": "A PATCH /content is sent without user input (also right after creating a page): updated_at -> 10:44:45, revision 7 -> 8, 'Saved' pill flashes and the page shows 'edited just now'. With pages being edited by the assistant/MCP concurrently this can trigger conflicts or overwrite normalisation-only differences.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/light/002-editor-formatting.png"
+   ],
+   "console": [],
+   "network": [
+    "#293 PATCH /pages/49a03725\u2026/content 200 right after GET, no typing",
+    "dark session #294 PATCH /pages/5bec1891\u2026/content 200 right after POST /pages"
+   ],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/TiptapEditor.tsx",
+    "line": 86,
+    "note": "editor.setEditable(!readOnly) emits 'update' (tiptap core default emitUpdate=true) \u2192 onUpdate \u2192 autosave PATCH"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/TiptapEditor.tsx",
+    "line": 51,
+    "note": "onUpdate forwards every update event to autosave"
+   }
+  ],
+  "suggestedFix": "TiptapEditor.tsx:84-88: `if (editor && editor.isEditable !== !readOnly) editor.setEditable(!readOnly, false)` (or pass `editable` only via useEditor options). Defensive: in PageEditor/useAutosave skip saves whose JSON equals the last loaded/saved JSON.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "docs:autosave:spurious-save-on-open",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced: QA-q9-mention-target revision 8 \u2192 9 (updated_at 10:44:45 \u2192 11:31:44) just by opening it after reload; the PATCH body equals the GET content exactly. Root cause corrected: not a normalisation transaction \u2014 TiptapEditor.tsx:84-88 calls editor.setEditable(!readOnly) whenever a new editor instance appears, and @tiptap/core setEditable(editable, emitUpdate = true) emits 'update' (core dist :5802-5806), which onUpdate forwards to triggerSave. Proven in-page: calling editor.setEditable(true) fired 1 'update' and bumped the revision 13 \u2192 14. Happens on every fresh editor (first open after load, after PDF, after delete, after module switch). S3 kept.",
+   "evidence": [
+    "network: GET /pages/5bec1891 \u2192 PATCH /pages/5bec1891/content with identical body",
+    "in-page: setEditable(true) \u2192 'updates fired: 1', revision 13\u219214"
+   ]
+  }
+ },
+ {
+  "id": "Q9-027",
+  "knownRef": "K33",
+  "area": "docs",
+  "title": "Right-click in the Docs editor shows only the app menu ('Settings') \u2014 no Cut/Copy/Paste or spelling suggestions",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Docs > QA-q9-B, right-click on the word 'Heading_2' in the editor (or on a misspelled, red-underlined word)"
+  ],
+  "expected": "Native/text context menu with Cut, Copy, Paste, Select all and spell-check suggestions inside contenteditable/inputs",
+  "actual": "data-testid=app-context-menu opens with a single item 'Settings Ctrl+,'. Text editing via mouse (paste from context menu, accept spelling suggestion \u2014 the editor does show spell-check squiggles) is impossible. Same in the title and search inputs.",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/light/014-editor-context-menu.png",
+    "shots/vq9/dark/024-editor-context-menu.png"
+   ],
+   "console": [],
+   "network": [],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/AppShell.tsx",
+    "line": 36,
+    "note": "global contextmenu handler preventDefault everywhere"
+   }
+  ],
+  "suggestedFix": "AppShell.tsx:35-46 and :60-84: return early (no preventDefault, no app menu) when event.target is inside input, textarea, [contenteditable=true] or when there is a text selection; in electron/src/main add webContents.on('context-menu') building Cut/Copy/Paste/Select All + params.dictionarySuggestions (replaceMisspelling) for editable targets.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "cross-cutting:context-menu:text-inputs",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced: right-click on 'Heading_2' in the Docs editor opens data-testid=app-context-menu 'OpenPCB | Settings | Ctrl+,' only. AppShell.tsx:35-46 preventDefault()s every contextmenu in capture phase and :60-84 opens the app menu; electron/src has no webContents 'context-menu' handler, so Electron has no Cut/Copy/Paste/spellcheck menu either. Same root cause as Q1-006 (Home search input, verified S3 by vq1) \u2014 merge candidate at triage. Kept S2 here because in the rich-text editor spell-check squiggles are shown but can never be corrected and mouse paste is impossible (keyboard shortcuts remain the only workaround).",
+   "evidence": [
+    "shots/vq9/dark/024-editor-context-menu.png",
+    "DOM: app-context-menu text 'OpenPCB | Settings | Ctrl+,'"
+   ]
+  }
+ },
+ {
+  "id": "Q9-028",
+  "knownRef": null,
+  "area": "docs",
+  "title": "Undo after switching pages pastes the previous page's content into the current page and autosaves it (history shared across pages)",
+  "category": "data",
+  "severity": "S1",
+  "themes": [
+   "light",
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "A",
+  "designId": null,
+  "repro": [
+   "Docs > open QA-q9-sample-md, type ' mdedit' at the end, wait for Saved",
+   "Click QA-q9-sample-txt (content 'Plain text QA sample.')",
+   "Click into its body and press Cmd+Z (or the toolbar Undo, which is enabled)",
+   "Wait 1.5 s; GET /api/modules/knowledge/pages/876ec896\u2026"
+  ],
+  "expected": "Undo history is per page; on a freshly opened page Undo is disabled/no-op",
+  "actual": "First Cmd+Z replaces the txt page body with the md page's content ('QA sample / Some markdown text. / item 1 / item 2 / mdedit'); second Cmd+Z undoes 'mdedit'. Autosave then PATCHes that into QA-q9-sample-txt: its stored content is now the markdown document \u2014 original text 'Plain text QA sample.' overwritten. The same Tiptap instance is reused across pages and setContent() is recorded in history. (QA page restored afterwards with Cmd+Shift+Z twice; a real user would not know to do that.)",
+  "evidence": {
+   "screenshots": [
+    "shots/q9/light/015-undo-cross-page.png",
+    "shots/vq9/dark/004-undo-cross-page.png"
+   ],
+   "console": [],
+   "network": [
+    "PATCH /pages/876ec896\u2026/content 200 (with QA-q9-sample-md's content)"
+   ],
+   "pixelProbes": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/TiptapEditor.tsx",
+    "line": 72,
+    "note": "setContent(newData, { emitUpdate:false }) on page switch \u2014 goes into the undo stack"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx",
+    "line": 347,
+    "note": "TiptapEditor not keyed by page id, so one editor/history serves every page"
+   }
+  ],
+  "suggestedFix": "PageEditor.tsx:347: <TiptapEditor key={page.id} \u2026/> for a fresh editor + history per page \u2014 but this MUST land together with the Q9-008 fix (setEditor(null)/isDestroyed guard), otherwise FixedToolbar renders with the destroyed previous editor on every switch. Alternative without remount: on switch replace the state via editor.view.updateState(EditorState.create({ doc, plugins: editor.state.plugins })) which drops history. Add a regression test: switch page, Cmd+Z leaves content unchanged.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "docs:editor:undo-history-shared-across-pages",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq9",
+   "reason": "Reproduced (dark): opened QA-q9-mention-target, then QA-q9-sample-md without typing \u2014 editor.can().undo() already true. Cmd+Z in sample-md replaced its body with mention-target's text and autosave persisted it (GET sample-md: 'Mention target page for QA q9\u2026', revision 8). Restored with Cmd+Shift+Z (verified server content back to the markdown doc). Root cause confirmed: one TiptapEditor/history serves all text pages (PageEditor.tsx:347 not keyed) and the page-switch setContent (TiptapEditor.tsx:72-77) is recorded in history. S1 kept: one natural keystroke silently overwrites a page with another page's content.",
+   "evidence": [
+    "shots/vq9/dark/004-undo-cross-page.png",
+    "GET /pages/17bb733b after Cmd+Z: content = mention-target paragraph, revision 8"
+   ]
+  }
+ }
+]

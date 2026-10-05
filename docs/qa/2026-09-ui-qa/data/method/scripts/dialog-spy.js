@@ -1,0 +1,1 @@
+() => { if (!window.__qaDialogCalls) { window.__qaDialogCalls = { prompt: 0, confirm: 0, alert: 0, log: [] }; for (const k of ['prompt', 'confirm', 'alert']) { const orig = window[k].bind(window); window[k] = (...a) => { window.__qaDialogCalls[k]++; window.__qaDialogCalls.log.push(k + ': ' + String(a[0]).slice(0, 80)); return orig(...a); }; } } return 'spy installed'; }

@@ -1,0 +1,442 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "dark",
+ "vw": 1100,
+ "vh": 720,
+ "docW": 1100,
+ "bands": [
+  {
+   "tag": "header",
+   "x": 80,
+   "y": 0,
+   "w": 1020,
+   "h": 39,
+   "text": "Back 74HC00 Quad NAND SOIC-14 CORE Place",
+   "cls": "sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-surface-rail px-3 py-2",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(15, 15, 16)"
+  },
+  {
+   "tag": "div",
+   "x": 105,
+   "y": 197,
+   "w": 570,
+   "h": 22,
+   "text": "DETAILS",
+   "cls": "flex shrink-0 items-center gap-1.5 border-y border-border bg-surface-section px-2 h-[22px]",
+   "n": 1,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(21, 21, 23)"
+  },
+  {
+   "tag": "header",
+   "x": 695,
+   "y": 197,
+   "w": 380,
+   "h": 39,
+   "text": "SYMBOL shared across options",
+   "cls": "flex items-center justify-between gap-2 border-b border-border px-3 py-2",
+   "n": 2,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "div",
+   "x": 201,
+   "y": 219,
+   "w": 474,
+   "h": 22,
+   "text": "74HC00 Quad NAND SOIC-14",
+   "cls": "flex h-[22px] min-w-0 items-center gap-1.5 border-b border-border-subtle px-2 text-xs text-text-strong font-mono",
+   "n": 3,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "div",
+   "x": 201,
+   "y": 285,
+   "w": 474,
+   "h": 22,
+   "text": "Core library",
+   "cls": "flex h-[22px] min-w-0 items-center gap-1.5 border-b border-border-subtle px-2 text-xs text-text-strong",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "dl",
+   "x": 695,
+   "y": 556,
+   "w": 380,
+   "h": 55,
+   "text": "Reference prefix U Pins 14",
+   "cls": "grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 border-t border-border px-3 py-2",
+   "n": 1,
+   "bb": false,
+   "bt": true,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "header",
+   "x": 600,
+   "y": 631,
+   "w": 475,
+   "h": 31,
+   "text": "3D MODEL",
+   "cls": "flex items-center justify-between gap-2 border-b border-border px-3 py-2",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  }
+ ],
+ "rows": [
+  {
+   "parent": "mt-3 flex w-full flex-col items-center gap-2",
+   "px": 4,
+   "py": 137,
+   "child": "BUTTON.flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center g",
+   "n": 3,
+   "heights": {
+    "51": 3
+   },
+   "w": 72,
+   "sample": "Designer"
+  },
+  {
+   "parent": "mt-3.5 flex flex-wrap items-center gap-2",
+   "px": 104,
+   "py": 160,
+   "child": "SPAN.inline-flex h-[18px] items-center rounded-control border border-border-control px-1.5 text-2xs text-text",
+   "n": 5,
+   "heights": {
+    "18": 5
+   },
+   "w": 22,
+   "sample": "ic"
+  },
+  {
+   "parent": "grid grid-cols-[96px_1fr]",
+   "px": 105,
+   "py": 219,
+   "child": "DIV.flex h-[22px] min-w-0 items-center border-b border-border px-2 text-xs text-text-tertiary",
+   "n": 4,
+   "heights": {
+    "22": 4
+   },
+   "w": 96,
+   "sample": "Component name"
+  },
+  {
+   "parent": "grid grid-cols-[96px_1fr]",
+   "px": 105,
+   "py": 219,
+   "child": "DIV.flex h-[22px] min-w-0 items-center gap-1.5 border-b border-border-subtle px-2 text-xs text-text-strong font-mono",
+   "n": 3,
+   "heights": {
+    "22": 3
+   },
+   "w": 474,
+   "sample": "74HC00 Quad NAND SOIC-14"
+  }
+ ],
+ "btnHeights": {
+  "text:51": 5,
+  "text:22": 3,
+  "icon:22": 2,
+  "icon:32": 1
+ },
+ "btnVariants": {
+  "h51 fs12px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 132) fw400": {
+   "n": 4,
+   "ex": [
+    "Home",
+    "Designer",
+    "Docs"
+   ]
+  },
+  "h51 fs12px r2px bg:rgb(28, 28, 31) bd:none fg:rgb(245, 245, 245) fw400": {
+   "n": 1,
+   "ex": [
+    "Library"
+   ]
+  },
+  "h22 fs11px r2px bg:rgba(0, 0, 0, 0) bd:rgb(42, 42, 46) fg:rgb(217, 217, 217) fw400": {
+   "n": 2,
+   "ex": [
+    "Back",
+    "Place in design"
+   ]
+  },
+  "h22 fs11px r2px bg:rgb(232, 232, 232) bd:none fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "Duplicate to edit"
+   ]
+  }
+ },
+ "btnOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 137,
+   "w": 72,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 195,
+   "w": 64,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 678,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "fs": "12px"
+  }
+ ],
+ "inputs": [],
+ "tablists": [],
+ "segs": [],
+ "radii": {
+  "2px": 17
+ },
+ "radEx": {},
+ "shadows": [],
+ "shadowCount": 0,
+ "blurs": [],
+ "grads": [],
+ "fontSizes": {
+  "10px": 19,
+  "11px": 16,
+  "13px": 1,
+  "20px": 1
+ },
+ "fontFam": {
+  "IBM Plex Sans": 28,
+  "IBM Plex Mono": 9
+ },
+ "weights": {
+  "400": 32,
+  "500": 5
+ },
+ "small": [],
+ "big": [
+  {
+   "tag": "h2",
+   "x": 104,
+   "y": 96,
+   "w": 972,
+   "h": 26,
+   "text": "74HC00 Quad NAND SOIC-14",
+   "cls": "text-xl font-medium tracking-tight text-text-strong",
+   "fs": "20px",
+   "fw": "500"
+  }
+ ],
+ "iconSizes": {
+  "12x12": 6,
+  "20x20": 5,
+  "18x18": 2,
+  "16x16": 1,
+  "10x10": 1
+ },
+ "iconStroke": {
+  "1.5px/attr1.5": 8,
+  "2px/attr2": 7
+ },
+ "iconOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-layout-grid h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 137,
+   "w": 72,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-pen-tool h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 195,
+   "w": 64,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-box h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-book-open h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-bot h-5 w-5"
+  },
+  {
+   "tag": "a",
+   "x": 24,
+   "y": 638,
+   "w": 32,
+   "h": 32,
+   "label": "Report a bug or request a feature",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-circle-dot h-[18px] w-[18p"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 678,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-settings h-[18px] w-[18px]"
+  }
+ ],
+ "otherSvgs": [],
+ "floats": [],
+ "alerts": [],
+ "headings": [
+  {
+   "tag": "h1",
+   "x": 164,
+   "y": 10,
+   "w": 177,
+   "h": 18,
+   "text": "74HC00 Quad NAND SOIC-14",
+   "cls": "text-base font-medium text-text-strong",
+   "fs": "13px",
+   "fw": "500"
+  },
+  {
+   "tag": "h2",
+   "x": 104,
+   "y": 96,
+   "w": 972,
+   "h": 26,
+   "text": "74HC00 Quad NAND SOIC-14",
+   "cls": "text-xl font-medium tracking-tight text-text-strong",
+   "fs": "20px",
+   "fw": "500"
+  }
+ ],
+ "canvases": [
+  [
+   695,
+   236,
+   1075,
+   556
+  ],
+  [
+   105,
+   670,
+   580,
+   720
+  ],
+  [
+   600,
+   662,
+   1075,
+   720
+  ]
+ ],
+ "overflowX": [],
+ "clipped": []
+}

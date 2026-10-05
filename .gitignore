@@ -76,4 +76,5 @@ graphify-out/
 src/core/backend/.claude/
 
 # Local QA run archives (screenshots, DB snapshots, findings) — backed up manually, never committed
-/docs/qa/
+/docs/qa/2026-09-ui-qa/raw-run/
+/docs/qa/2026-09-ui-qa/evidence/

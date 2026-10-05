@@ -1,0 +1,448 @@
+{
+ "agent": "q11",
+ "checklist": [
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): Home list",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): Home grid",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): Designer empty state (no design open)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): Schematic (GUIDE-VALIDATE)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): PCB (GUIDE-VALIDATE)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): 3D",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): BOM",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): DRC full view",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): Library table",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): Library grid",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): Library detail page (74HC00)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): Library New part wizard step 1 (opened, closed with Esc, nothing saved)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): Docs",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): Assistant space",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): Settings General",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): Settings Libraries",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): Settings Assistant (list only, provider editor not opened)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): Settings Privacy",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "DOM census + metrics + screenshot + palette-audit (canvas masked): Settings About",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "Tab walk ~40 stops with focus-visibility probe: home-list, home-grid, designer-empty, schematic, pcb, 3d, bom, drc, library-table(+deep 75), library-grid, library-detail, library-wizard, docs, assistant, settings-general",
+   "dark": "tested",
+   "light": "tested (home-list, pcb walks + focus2-* crops for Home/Library/PCB/shell)",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Focus trap/return: Cmd+K palette",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Focus trap/return: power port picker",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Focus trap/return: PCB Design rules dialog (Cancel)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Focus trap/return: PCB Export dialog (Esc/Cancel, no export)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Focus trap/return: Home delete modal (Cancel only; GUIDE-VALIDATE intact)",
+   "dark": "tested (prior run census/q11/dlg-home-delete-dark.json)",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Home/BOM rows keyboard reachability (K35)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Arrow-key behaviour of view tabs, dock tabs, layer strip",
+   "dark": "n/a",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Consistency: header bar heights",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "Consistency: section headers / panel title bars / row heights",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Consistency: control heights, buttons, search fields, segmented controls",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Consistency: menus/popovers (Home sort/more, design-tab ctx, PCB canvas ctx, schematic ctx, PCB Add/View, power port, Cmd+K)",
+   "dark": "tested (sort, tab ctx, Add)",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Consistency: modal surfaces",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Consistency: empty states (Home Starred, Library no-match, Docs, Designer, Outline, Assistant Pinned)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Consistency: error/warning banners & status badges",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Icon sizes/stroke census",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Typography scale / sub-10px census (K36)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720",
+    "1440x900",
+    "1920x1080"
+   ]
+  },
+  {
+   "item": "Radius census (2px flat)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Shadows/blur/gradients census (K45)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Horizontal page overflow at 1100x720",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Console errors/warnings",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Native dialog spy (prompt/confirm/alert) during census",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  }
+ ],
+ "known": [
+  {
+   "ref": "K34",
+   "status": "confirmed",
+   "evidence": "Q11-002 (+ root-cause extension Q11-001: ToolbarButton/IconButton focus outline cancelled by outline-none). census/q11/tab-*.json, shots/q11/*/focus2-montage-*.png"
+  },
+  {
+   "ref": "K35",
+   "status": "confirmed",
+   "evidence": "Q11-021: tab walks tab-home-list/home-grid/bom-dark.json skip rows"
+  },
+  {
+   "ref": "K36",
+   "status": "confirmed",
+   "evidence": "Q11-014: 9px 3D labels \u00d77, 9.5px Library source badges \u00d728, 9px Assistant chips, 9px Settings Assistant \u00d75; other screens 0"
+  },
+  {
+   "ref": "K37",
+   "status": "partial",
+   "evidence": "Q11-009: search inputs 22/20 kit vs 29 (Assistant) / 32 (Docs, Settings); PCB rules dialog inputs 21px, Settings selects 30px, 3D select 26px. The 18px PcbBoardPanel/PcbLayersPanel inputs were not observed (Board properties render as static rows in the current UI)."
+  },
+  {
+   "ref": "K39",
+   "status": "confirmed",
+   "evidence": "Q11-007: Settings header 52px, search 32px (plus Assistant 56, Docs 49, wizard 57, Library detail 39)"
+  },
+  {
+   "ref": "K45",
+   "status": "confirmed",
+   "evidence": "Q11-016 (3D overlay shadow-xl+blur, Assistant composer shadow-xl + gradient, wizard blur), Q11-015 radius leaks, Q11-019 raw amber banners"
+  },
+  {
+   "ref": "K26",
+   "status": "confirmed",
+   "evidence": "Q11-005: Home delete modal has no role, focus stays on the menu item, Esc doesn't close, no return (census/q11/dlg2-home-delete-light.json); primary report Q1-002"
+  },
+  {
+   "ref": "K19",
+   "status": "confirmed",
+   "evidence": "Designer no-tabs empty state text = 'No design open / New design / OPEN EXISTING \u2026' \u2014 no Import KiCad entry (shots/q11/dark/020-designer-empty-live.png); already reported as Q3-002, not duplicated"
+  },
+  {
+   "ref": "K33",
+   "status": "confirmed",
+   "evidence": "Right-click on a design tab shows only 'OpenPCB \u203a Settings Ctrl+,' (shots/q11/light/menu-design-tab-ctx.png); reported by Q1-006/Q3-001, not duplicated"
+  }
+ ],
+ "untested": [
+  {
+   "item": "Settings \u2192 Account tab",
+   "reason": "cloud.auth forced OFF on stack A \u2014 tab not rendered"
+  },
+  {
+   "item": "Settings provider editor",
+   "reason": "forbidden on stack A by protocol"
+  },
+  {
+   "item": "Tab walks at 1100x720 / 1920x1080",
+   "reason": "focus behaviour is viewport-independent; walks done at 1440x900 only"
+  },
+  {
+   "item": "Light-theme tab walks for every screen",
+   "reason": "focus styles are theme-independent code; light covered by home-list + pcb walks and focus2 crops for Home/Library/PCB/shell"
+  },
+  {
+   "item": "Part wizard beyond step 1, Designer-empty 'Add net label'",
+   "reason": "charter: open step 1 only / read-only; no-design dead controls already reported by Q3-003/Q8-029"
+  },
+  {
+   "item": "R3F 'Cannot read properties of null (reading addEventListener)' console error seen after Library search",
+   "reason": "already reported (Q6-011, Q7-028); not duplicated"
+  }
+ ]
+}

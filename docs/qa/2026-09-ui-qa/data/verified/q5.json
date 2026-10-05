@@ -1,0 +1,2029 @@
+[
+ {
+  "area": "designer.bom",
+  "title": "BOM sourcing edits on a grouped line write to only the first designator, split the line, and redirect further typing into a different line",
+  "category": "data",
+  "severity": "S1",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Open 'LED Indicators 5V' → BOM tab",
+   "Click the grouped line 'R1,R2,R5,R6,R7,R8' (qty 6); inspector shows '6 parts'",
+   "Click MPN, type 'RC0603', pause ~1 s (autosave fires after 650 ms)",
+   "Keep typing 'FR-07150RL'",
+   "GET /api/modules/designer/designs/370447e2…/bom"
+  ],
+  "expected": "MPN applies to all 6 designators of the selected line; the inspector stays on the line being edited; the full string 'RC0603FR-07150RL' is saved on that line.",
+  "actual": "The PATCH goes to /bom/refs/R1 only: R1 gets 'RC0603' and splits off; R2,R5,R6,R7,R8 stay without MPN. Because the row id (refs joined) disappears, the inspector silently falls back to rows[0] (D1..D8) while focus stays in the MPN input, so the rest of the typing ('FR-07150RL') is autosaved as the MPN of LED D1 (which then also splits). Backend result: D1 mpn='FR-07150RL', R1 mpn='RC0603', R3 alone got the manufacturer/price typed for line 'R3,R4'. Same for Manufacturer/Supplier/Unit price/Notes/DNP/Assembly side edits and for the bulk Mark/Clear DNP (only refs[0] of each checked line is patched). Before the split, line 'R3,R4' displayed R3's $5 unit price as the line price and $10 ext. for both parts.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/003-bom-after-mpn-edit.png",
+    "shots/q5/dark/004-bom-mpn-typing-lands-on-other-line.png"
+   ],
+   "network": [
+    "PATCH /api/modules/designer/designs/370447e2…/bom/refs/R1 (only first ref)",
+    "GET …/bom → rows: 'D1' mpn=FR-07150RL, 'D2..D8' none, 'R1' mpn=RC0603, 'R2,R5,R6,R7,R8' none, 'R3' mpn=RC0603FR-07330RL, 'R4' none"
+   ],
+   "console": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 247,
+    "note": "updateSelected patches selected.refs[0].refdes only"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 227,
+    "note": "markCheckedDnp patches row.refs[0] only"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 129,
+    "note": "selected falls back to bom.rows[0] when the selected id vanishes"
+   },
+   {
+    "path": "src/modules/designer/backend/routes.ts",
+    "line": 3158,
+    "note": "PATCH /bom/refs/:refdes is per-designator"
+   }
+  ],
+  "suggestedFix": "Apply the override to every ref of the line (loop over selected.refs or add a backend PATCH /bom/lines that takes all refdes in one transaction). Track selection by a stable key (e.g. the first refdes) and re-resolve it after the BOM reloads instead of falling back to rows[0]; never switch the inspector row while an input inside it has focus/dirty draft.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "designer.bom:inspector:override-first-ref-only",
+  "id": "Q5-001",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced on stack A (own 370447e2). Selected grouped line D3..D8 (qty 6), typed 'VQ5A' in MPN, paused 1.5 s, typed 'BCD': backend then had D3 mpn='VQ5A' (split off), D4..D8 none, and D1's existing MPN overwritten to 'FR-07150RLBCD' while focus stayed in the MPN box and the inspector silently switched to D1. Bulk: checked 'D4,D5,D6,D7,D8' -> Mark DNP -> only D4 became DNP (line became 'D2,D4' + 'D5..D8'). Root cause DesignerBomView.tsx:247-248 (updateSelected patches selected.refs[0] only), :227-229 (markCheckedDnp refs[0] only), :128-129 (selected falls back to bom.rows[0] once the joined-refs id disappears). Pre-existing before the redesign (same code in 186c592^), not a PLAN decision. S1 kept: silent write of user input into a different part's sourcing data. Restored the BOM overrides via API afterwards. The 'R3,R4 showed R3 price' sub-claim was not re-checked (lines already split).",
+   "evidence": [
+    "shots/vq5/dark/001-bom-grouped-mpn-edit.png",
+    "shots/vq5/dark/002-bom-bulk-dnp-first-ref-only.png",
+    "network: PATCH …/bom/refs/D3 then PATCH …/bom/refs/D1; GET …/bom -> D1 'FR-07150RLBCD', D3 'VQ5A', D4..D8 null",
+    "network: bulk Mark DNP -> only PATCH …/bom/refs/D4"
+   ]
+  }
+ },
+ {
+  "area": "designer.bom",
+  "title": "BOM Unit price field cannot accept decimals — typing 0.05 saves 5",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Open 'LED Indicators 5V' → BOM",
+   "Select line 'R3,R4'",
+   "Click Unit price and type 0.05"
+  ],
+  "expected": "Field shows 0.05 and saves unitPrice=0.05.",
+  "actual": "Each keystroke is converted with Number() and written back via toString(), so the '.' and leading zeros are swallowed: the field shows '5' and unitPrice=5 is autosaved (Unit $5.000, Ext $10.00). '1.5' becomes 15; non-numeric input becomes NaN→null. No way to enter any sub-dollar price, which is every passive.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/002-bom-unitprice-005-becomes-5.png"
+   ],
+   "network": [
+    "GET …/bom → R3 unitPrice=5"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 726,
+    "note": "value={draft.unitPrice?.toString()} + onChange Number(v)"
+   }
+  ],
+  "suggestedFix": "Keep the raw string in draft state (e.g. unitPriceText) and parse only when saving (normalizePatch), rejecting/flagging invalid input; use inputMode=decimal + pattern.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.bom:unit-price:decimal-swallowed",
+  "id": "Q5-002",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced: R3 Unit price, select-all + type '0.05' -> field shows '5', backend unitPrice=5; '1.5' -> 15. Root cause DesignerBomView.tsx:725-728: value={draft.unitPrice?.toString()} + onChange Number(v) round-trips every keystroke, dropping '.' and leading zeros (non-numeric input renders 'NaN'). Workaround exists only by pasting the full string, so S2 kept. R3 price restored to its prior value (5).",
+   "evidence": [
+    "shots/vq5/dark/003-bom-unitprice-decimal.png",
+    "run-code: typed '0.05' -> inputValue '5'; GET …/bom -> R3 unitPrice 5; typed '1.5' -> unitPrice 15"
+   ]
+  }
+ },
+ {
+  "area": "designer.bom",
+  "knownRef": "K31",
+  "title": "Empty design BOM says 'No BOM lines match the current filter.' with filter=All, and Export stays enabled",
+  "category": "copy",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "a0ce5e9e-1d68-4e1a-9ce8-7139ce6b…(QA-q5-empty)",
+  "repro": [
+   "Designer → New design (+), rename tab to QA-q5-empty",
+   "Open BOM tab (filter All 0, search empty)",
+   "Open Export ▾ → PnP"
+  ],
+  "expected": "An empty state that explains there are no parts yet (e.g. 'No parts in this design — place components in the schematic') with a link to Schematic; Export disabled or warns that the BOM is empty.",
+  "actual": "Table body reads 'No BOM lines match the current filter.' although nothing is filtered; inspector reads 'No BOM row selected.' plus the Match tier legend; Export menu is enabled and PnP downloads a header-only file (openpcb-a0ce5e9e-…-pnp.csv containing only 'Designator,Val,Package,Mid X,Mid Y,Rotation,Layer'); totals row shows $0.00 while status bar shows 'est. —'.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/016-bom-empty-design.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 404,
+    "note": "single empty message for both empty BOM and no-match"
+   }
+  ],
+  "suggestedFix": "Branch on allRows.length===0 vs rows.length===0 and render a proper EmptyState; disable ExportMenu items when bom.rows is empty (or show a toast).",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.bom:empty-state:filter-copy",
+  "id": "Q5-003",
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced on QA-q5-empty (light): filter 'All 0', table body 'No BOM lines match the current filter.', inspector 'No BOM row selected.', totals '$0.00' while footer 'est. — @ 5 boards', Export ▾ enabled. Single message at DesignerBomView.tsx:404-408 for both empty BOM and no-match. K31 confirmed.",
+   "evidence": [
+    "shots/vq5/light/008-bom-empty-design.png"
+   ]
+  }
+ },
+ {
+  "area": "designer.bom",
+  "title": "BOM autosave indicator shows 'Saved' for ~4 ms, then snaps back to 'Autosaves changes'",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Open 'LED Indicators 5V' → BOM, select a line",
+   "Type into MPN/Manufacturer/Supplier",
+   "Watch the inspector footer (sampled every 5 ms with a MutationObserver-style poll)"
+  ],
+  "expected": "'Saving…' then 'Saved' (held for a second or two) so the user gets confirmation.",
+  "actual": "Sequence recorded: 'Autosaves changes' → 'Saving…' (t=2196ms) → 'Saved' (t=2867ms) → 'Autosaves changes' (t=2871ms). The successful save calls setBom(), the row object changes, and the row-reset effect sets saveState back to 'idle' in the same tick. Users never see a success confirmation; a failure would be visible only until the next row change.",
+  "evidence": {
+   "console": [
+    "saveLog=[{Autosaves changes,6},{Saving…,2196},{Saved,2867},{Autosaves changes,2871}]"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 587,
+    "note": "row-reset effect runs on every new row object and resets saveState to idle"
+   }
+  ],
+  "suggestedFix": "Only reset the draft/saveState when the selected row identity (refdes key) changes, not when the same row is re-fetched; hold 'Saved' for ~1.5 s.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.bom:autosave-indicator:saved-flash",
+  "id": "Q5-004",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced with a MutationObserver on the inspector footer while typing in Notes on R3: ['Saving…',0] -> ['Saved',854 ms] -> ['Autosaves changes',857 ms] — 'Saved' is on screen for ~3 ms. Root cause DesignerBomView.tsx:579-596: the row-reset effect depends on the row object; updateSelected's setBom(result.bom) creates a new row object, so the effect resets saveState to 'idle' right after the save resolves. Related to (but a different code path from) Q5-032's no-retry/stuck state; both live in the same BomInspector autosave state machine and should be fixed together.",
+   "evidence": [
+    "console: saveLog=[[\"Saving…\",0],[\"Saved\",854],[\"Autosaves changes\",857]]"
+   ]
+  }
+ },
+ {
+  "area": "designer.bom",
+  "title": "'Show in schematic' selects the part but leaves the canvas on an unrelated area; 'PCB' does not frame the part either",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Open 'LED Indicators 5V' → Schem → Fit schematic",
+   "Go to BOM, click line R4 (at 24,40 mm)",
+   "Click 'Show in schematic'",
+   "Back to BOM, click R3, click 'PCB'"
+  ],
+  "expected": "View switches and zooms/pans to the selected part(s), which are highlighted.",
+  "actual": "Schematic opens with R4 (or R2,R5,R6,R7,R8 for the grouped line) selected in Outline/Properties, but the canvas sits at 80% on D1/GND/+5V; the selected parts are not on screen. The frameToBoundsMm call in requestAnimationFrame runs before the freshly mounted schematic canvas restores its viewport, so it is lost. The PCB button selects R3 but keeps the whole-board view (parts are tiny and overlapping), no zoom-to-selection.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/012-bom-show-in-schematic.png",
+    "shots/q5/dark/014-bom-show-in-schem-R4.png",
+    "shots/q5/dark/015-bom-show-in-pcb-R3.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 866,
+    "note": "frameToBoundsMm in a single rAF right after setActiveView — lost on the fresh canvas mount"
+   },
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 892,
+    "note": "handleBomShowPcb only sets pcbSelectionRequest"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 1066,
+    "note": "selectionRequest effect selects but never frames"
+   }
+  ],
+  "suggestedFix": "Pass the frame request through the selectionRequest (like pcbSelectionRequest) and let SchematicCanvas/PcbCanvas frame the selection after their projection+viewport are ready.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.bom:cross-probe:no-frame",
+  "id": "Q5-005",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced: BOM line R4 -> 'Show in schematic' switches to Schem with R4 selected in Outline/Properties, but the canvas lands at 80% around D1/+5V; R4 is off-screen. With the canvas already mounted, 'Zoom to selection' frames R4 correctly (89%), so the frame math is fine and the rAF frameToBoundsMm call in Space.tsx:866-873 is lost because the schematic canvas remounts on the tab switch (cameraRef not ready / default camera applied after). BOM 'PCB' selects R3 but keeps the whole-board view (Space.tsx:892-905 sets only pcbSelectionRequest; PcbCanvas.tsx:1066-1091 never frames). Not a PLAN decision (D12 says cross-probe logic untouched — it was already broken). Workaround (Zoom to selection) exists -> S2 kept.",
+   "evidence": [
+    "shots/vq5/dark/004-schem-fit.png",
+    "shots/vq5/dark/005-bom-show-in-schem-R4.png",
+    "shots/vq5/dark/006-bom-show-in-pcb-R3.png"
+   ]
+  }
+ },
+ {
+  "area": "designer.bom",
+  "title": "BOM match tiers and counters contradict each other (no-MPN lines tagged 'Suggested', typed MPN tagged 'verified', Missing-MPN counts differ)",
+  "category": "data",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Open 'LED Indicators 5V' → BOM",
+   "Hover tier dots; compare with the Match tier legend",
+   "Type any MPN on R3",
+   "Mark D2 DNP, look at filter chips vs status bar"
+  ],
+  "expected": "Tier/legend/counters derived from one rule and consistent; 'Exact' only when verified; DNP lines not flagged as errors.",
+  "actual": "(1) Every R/C/L/D line without MPN shows an amber 'Suggested' dot although no suggestion exists and the legend says Missing = 'no MPN'; the MPN cell simultaneously says 'Add part number' in red. (2) After typing any string (e.g. 'RC0603' or even 'FR-07150RL') the line becomes green 'Exact' = 'MPN set and verified against supplier' — nothing is verified. (3) Filter chip 'Missing MPN 4' counts the DNP line while status bar says '3 missing MPN'. (4) DNP line D2 still shows red 'Add part number'. (5) Totals row shows '$0.00' / '$5.00' while the footer shows 'est. — @ 5 boards'. (6) '1 line · 1 parts' pluralisation.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/001-bom-initial.png",
+    "shots/q5/dark/007-bom-select-all-bulkbar.png",
+    "shots/q5/dark/009-bom-dnp-filter.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 83,
+    "note": "severityOf: R/C/L/D without MPN → 'suggested'; any MPN → 'sourced'/Exact"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 136,
+    "note": "counts.missingMpn includes DNP rows; missingMpnCount excludes them"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 421,
+    "note": "'{totals.parts} parts' not pluralised"
+   }
+  ],
+  "suggestedFix": "Until supplier matching exists, use two tiers: 'Has MPN' (neutral/success wording without 'verified') and 'Missing'; exclude DNP from all missing counts and render DNP MPN cell neutral; show the same estimate in totals row and footer; pluralise 'part(s)'.",
+  "fixScope": "design-decision",
+  "estimate": "S",
+  "dedupeKey": "designer.bom:tiers:inconsistent",
+  "id": "Q5-006",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Confirmed in UI and code. D1 carries a bogus MPN 'FR-07150RL' and its tier dot is 'Exact' while the legend says 'MPN set and verified against supplier' (nothing is verified; severityOf at DesignerBomView.tsx:83-90 returns 'sourced' whenever row.warnings is empty). R/C/L/D lines without MPN get the amber 'Suggested' tier although no suggestion exists, next to red 'Add part number'. Chip 'Missing MPN 3' counts DNP D2 while footer says '2 missing MPN' and totals say '2 without MPN' (:131-140). DNP D2 still shows red 'Add part number'. Totals row '$5.00' vs footer 'est. — @ 5 boards'. '{n} parts' not pluralised (:421). The tier->label mapping itself is PLAN D12, but D6 says elements without backing data must be omitted, not faked; the 'verified against supplier'/'inferred from value + footprint' copy is a false claim. Raised S3->S2 per rubric ('misleading claim': a typo'd MPN is presented as supplier-verified in a purchasing tool).",
+   "evidence": [
+    "shots/vq5/dark/001-bom-grouped-mpn-edit.png",
+    "shots/vq5/dark/007-bom-filter-hides-selected-line.png",
+    "snapshot: row D1 img 'Exact' with MPN 'FR-07150RL'; 'Missing MPN 3' chip vs '2 missing MPN' footer"
+   ]
+  },
+  "originalSeverity": "S3"
+ },
+ {
+  "area": "designer.bom",
+  "title": "BOM inspector keeps showing a line that the active filter hides (or silently jumps to row 1)",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "BOM of 'LED Indicators 5V', inspector showing D1 (has an MPN)",
+   "Click filter 'Missing MPN' (or 'DNP')"
+  ],
+  "expected": "Inspector follows the visible selection (first visible line, or an empty 'select a line' state).",
+  "actual": "Table lists only D2..D8/R2../R4 but the inspector still shows 'D1 · 1 part' with its MPN — edits there apply to an invisible line. When no line was explicitly clicked the inspector shows bom.rows[0] regardless of filter/sort.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/005-bom-filter-missing-inspector-shows-hidden-D1.png",
+    "shots/q5/dark/009-bom-dnp-filter.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 129,
+    "note": "selected = bom.rows.find(selectedId) ?? bom.rows[0] (unfiltered)"
+   }
+  ],
+  "suggestedFix": "Resolve `selected` against the filtered `rows`; if the selected line is filtered out, clear the inspector or pick rows[0] of the filtered list.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.bom:inspector:hidden-row",
+  "id": "Q5-007",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced: D1 selected, click 'Missing MPN 3' -> table lists only D2, D3..D8, R2.. while the inspector still shows D1 with its MPN (editable). Root cause DesignerBomView.tsx:128-129 resolves `selected` against unfiltered bom.rows. Separate symptom from Q5-001 (same selection helper, different trigger); one fix (resolve selection by stable key against filtered rows) covers both.",
+   "evidence": [
+    "shots/vq5/dark/007-bom-filter-hides-selected-line.png"
+   ]
+  }
+ },
+ {
+  "area": "designer.bom",
+  "knownRef": "K35",
+  "title": "BOM rows are not keyboard reachable — Tab only visits row checkboxes, arrows/Enter do nothing",
+  "category": "keyboard",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "BOM of 'LED Indicators 5V', focus the search field",
+   "Press Tab repeatedly, then ArrowDown ×2 and Enter on a row checkbox"
+  ],
+  "expected": "Rows are focusable (roving tabindex / grid role), ArrowUp/Down move the selection and the inspector follows; Enter/Space selects.",
+  "actual": "Tab order: Export ▾ → Select all → Designators → 'Select D1' … 'Select R4' (checkboxes only) → Order quantity → Show in schematic. Arrow keys and Enter don't change the inspector (stays D1). Keyboard users cannot open a line in the inspector except the default first row. Rows have no role/tabIndex/aria-selected.",
+  "evidence": {
+   "console": [
+    "activeElement sequence: BUTTON Export ▾, INPUT Select all, BUTTON Designators ▴, INPUT Select D1 … INPUT Select R4, SELECT Order quantity, BUTTON Show in schematic"
+   ],
+   "screenshots": [
+    "shots/q5/dark/017-bom-keyboard-focus.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 501,
+    "note": "TableRow onClick only"
+   }
+  ],
+  "suggestedFix": "Give the rows container role=grid/listbox, rows role=row/option + tabIndex (roving) + aria-selected, handle ArrowUp/Down/Home/End/Enter; same for Home design list.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "cross:table-rows:not-keyboard-reachable",
+  "id": "Q5-008",
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced Tab order from the search field: Export ▾ -> Select all -> Designators ▴ -> Select D1 … Select R4 (checkboxes) -> Order quantity -> Show in schematic -> PCB; ArrowDown/Enter did not change the inspector (stays D1). Shared TableRow (src/shared/frontend/ui/data-table.tsx:35-58) is a plain div with no role/tabIndex/aria-selected; BomRow only passes onClick. K35 confirmed for BOM.",
+   "evidence": [
+    "console: tab order BUTTON Export ▾, INPUT Select all, BUTTON Designators ▴, INPUT Select D1..R4, SELECT Order quantity, BUTTON Show in schematic, BUTTON PCB"
+   ]
+  }
+ },
+ {
+  "area": "designer.bom",
+  "title": "Only the Designators column sorts; Value/Footprint/Qty/MPN headers are inert (dead sort keys in code)",
+  "category": "bug",
+  "severity": "S4",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "BOM → click 'Designators' (toggles ▴/▾)",
+   "Click 'Qty', 'Value', 'MPN' headers"
+  ],
+  "expected": "All data columns sortable (Qty/Value especially), with aria-sort on the active header.",
+  "actual": "Only Designators toggles; other headers are plain spans. compareRows() implements value/footprint/qty/mpn/lcsc but nothing calls toggleSort with them. No aria-sort. When rows are checked the header row (incl. sort + Select all) is replaced by the bulk bar.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/007-bom-select-all-bulkbar.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 368,
+    "note": "only refs header is a button"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 933,
+    "note": "unused sort keys"
+   }
+  ],
+  "suggestedFix": "Render every sortable header as a button calling toggleSort(key) with the glyph + aria-sort; keep the header visible while the bulk bar shows (put bulk actions in the toolbar).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.bom:sort:single-column",
+  "id": "Q5-009",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Code-confirmed: only the Designators header is a button (DesignerBomView.tsx:365-372); Value/Footprint/Qty/MPN are spans although compareRows implements value/footprint/qty/mpn/lcsc; no aria-sort; bulk bar replaces the header row when rows are checked (:344-362). Pre-existing (pre-redesign BOM also only sorted by refs) and D12 specifies no per-column sort. Downgraded S3->S4: nothing on screen claims the other columns are sortable, so this is a missing enhancement/a11y polish rather than a visible inconsistency.",
+   "evidence": [
+    "src/modules/designer/frontend/components/DesignerBomView.tsx:365",
+    "shots/vq5/dark/002-bom-bulk-dnp-first-ref-only.png"
+   ]
+  },
+  "originalSeverity": "S3"
+ },
+ {
+  "area": "designer.bom",
+  "title": "BOM exports: no feedback for Copy TSV / downloads, filenames use a truncated design UUID, CSV silently drops DNP lines while keeping a DNP column",
+  "category": "copy",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "BOM → Export ▾ → CSV / JLC BOM / PnP / KiCad CSV / Copy TSV; also ⌘E",
+   "Open the downloaded files"
+  ],
+  "expected": "Human-readable filenames (design name + kind), a toast for 'Copied N lines' / export errors, and DNP handled consistently.",
+  "actual": "Files are named 'openpcb-370447e2-d91e-43f1-b0a5-e7dc9f6b-csv.csv', '…-jlc.csv', '…-kicad.csv', '…-pnp.csv' (UUID truncated, kind duplicated before the extension). Copy TSV gives no confirmation; export failures (res.ok false → throw) are unhandled promise rejections with no UI. 'CSV' omits DNP line D2 entirely yet has a 'DNP' column that is always 'no'; KiCad CSV includes D2 with DNP=1; PnP omits it. Menu is announced as 'Export ▾' (glyph in accessible name).",
+  "evidence": {
+   "network": [
+    "GET …/exports/bom.csv, bom-jlc.csv, kicad-bom.csv, pnp.csv → 200"
+   ],
+   "console": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/api.ts",
+    "line": 716,
+    "note": "downloadBomArtifact filename + throw without UI"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 262,
+    "note": "copyTsv no feedback / no catch"
+   },
+   {
+    "path": "src/sdks/designer/pcb-helpers.ts",
+    "line": 13,
+    "note": "exportBundleName(designId)"
+   }
+  ],
+  "suggestedFix": "Name files '<design-name>-BOM.csv', '<design-name>-JLC-BOM.csv', '<design-name>-CPL.csv'; wrap exports in try/catch + toast; show 'Copied N lines' toast; either include DNP rows flagged DNP=yes in generic CSV or drop the column; aria-label='Export'.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.bom:export:feedback-filenames",
+  "id": "Q5-010",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced Export ▾ -> CSV: file 'openpcb-370447e2-d91e-43f1-b0a5-e7dc9f6b-csv.csv' (exportBundleName slices the UUID to 32 chars, api.ts:736-739 appends '-csv.csv'); CSV omits DNP lines D2 and R4 yet every remaining row has DNP='no' (writer.ts:90 filters !row.dnp while keeping the DNP column). copyTsv (DesignerBomView.tsx:262-265) has no feedback and no catch; downloadBomArtifact throws 'HTTP n' into a void promise (unhandled). Accessible name 'Export ▾' confirmed in the a11y tree. Note the backend already sets a friendlier Content-Disposition 'openpcb-<id>-BOM.csv' that the client ignores.",
+   "evidence": [
+    ".playwright-cli/openpcb-370447e2-d91e-43f1-b0a5-e7dc9f6b-csv.csv (5 rows, no D2/R4, DNP column all 'no')"
+   ]
+  }
+ },
+ {
+  "area": "designer.bom",
+  "title": "BOM sourcing/DNP edits are not reflected in the schematic part inspector (two unsynced sources of truth)",
+  "category": "data",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "BOM: set R3 MPN 'RC0603FR-07330RL', Manufacturer 'Yageo'; mark D2 DNP (persisted, verified after reload and via GET …/bom)",
+   "Switch to Schem, select R3 → Properties → Fields; select D2 → Attributes",
+   "Conversely tick 'DNP (do not populate)' and type MPN on R4 in the schematic inspector, then GET …/bom"
+  ],
+  "expected": "One MPN/Manufacturer/DNP per designator, shown identically in the schematic inspector, BOM and exports.",
+  "actual": "Schematic inspector shows R3 MPN/Manufacturer empty and D2 DNP unchecked while BOM/exports use the BOM overrides (PnP omits D2). Schematic→BOM does propagate (R4 DNP=true, mpn='SCHEM-MPN-R4' appear in the BOM), so the two stores diverge silently; which one wins when both are set is invisible to the user.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/018-schem-R3-mpn-not-synced-with-bom.png"
+   ],
+   "network": [
+    "GET …/bom → R3 mpn=RC0603FR-07330RL, D2 dnp=true; schematic inspector inputs: MPN='' Manufacturer='' DNP=false"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/backend/routes.ts",
+    "line": 3158,
+    "note": "BOM overrides stored separately from part fields"
+   }
+  ],
+  "suggestedFix": "Make the BOM PATCH write the part fields (MPN/Manufacturer/DNP) through the designer command bus, or have the schematic inspector read the merged value (override ?? field) and show an 'overridden in BOM' hint.",
+  "fixScope": "backend-needed",
+  "estimate": "M",
+  "dedupeKey": "designer.bom:overrides:not-in-schematic",
+  "id": "Q5-011",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced and strengthened: schematic inspector for R3 shows MPN/Manufacturer empty while the BOM (and exports) use override 'RC0603FR-07330RL'/'Yageo'. Then typed MPN 'SCHEM-R3' in the schematic inspector (committed, revision 73): GET …/bom still returns R3 mpn='RC0603FR-07330RL' — the BOM override silently wins (writer.ts:233 override ?? part props), so the user's schematic edit has no effect on BOM/exports and nothing indicates it. Reverted the schematic field afterwards. S2 kept (wrong data shown in one surface, edits silently ignored).",
+   "evidence": [
+    "shots/vq5/dark/008-schem-R3-mpn-empty-vs-bom.png",
+    "shots/vq5/dark/009-schem-R3-mpn-ignored-by-bom.png",
+    "network: schematic MPN 'SCHEM-R3' -> rev 73; GET …/bom -> R3 mpn RC0603FR-07330RL"
+   ]
+  }
+ },
+ {
+  "area": "designer.bom",
+  "title": "BOM table overflows at 1100×720: header 'UNIT/EXT.' draws over the inspector, price columns and totals are cut off; '@ 1' hint clipped at all sizes",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1100x720",
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Open 'LED Indicators 5V' → BOM",
+   "Resize window to 1100×720 (Electron minimum)"
+  ],
+  "expected": "Table scrolls horizontally inside its pane (or collapses Description) and never paints over the inspector; all columns + totals readable.",
+  "actual": "The fixed column template (24+28+110+140+40+150+56+70 px + fr) exceeds the ~780 px table pane: header labels 'UNIT' and 'EXT.' render on top of the inspector's 'LINE' section header, row Unit/Ext cells and the totals '$' value are clipped, footer segment reads '2 missing MF'. Designators column shrinks to 'D3,D4,D5,…'. In the inspector, the Unit price hint '@ 1' is clipped by the panel edge at both 1100 and 1440 widths. Order-quantity select is 16 px (kit 20/22). (The search field container is 22 px; the 15 px value is its inner input — not an issue.)",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/019-bom-1100x720.png",
+    "shots/q5/dark/001-bom-initial.png"
+   ],
+   "census": "census/bom-main-dark-1100.json"
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 42,
+    "note": "COLS fixed widths"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 730,
+    "note": "hint '@ 1' in 320px rail"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 451,
+    "note": "h-4 select"
+   }
+  ],
+  "suggestedFix": "Give the table section min-w-0 + overflow-x-auto wrapping header+rows+totals together (or drop Description below ~1200px); clip the header row; move '@ 1' into the label ('Unit price @1') or widen the value column; use kit Select (h-[20px]) for Order quantity.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.bom:layout:narrow-overflow",
+  "id": "Q5-012",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced at 1100x720: header 'UNIT' (x 796-852) and 'EXT.' (860-930) paint over the inspector (starts ~780) hiding its 'LINE' section header; Unit/Ext cells and totals '$' value cut; footer '2 missing MF…' truncated; Designators column shrinks to 'D3,D4,D5,…'; '@ 1' hint clipped at the rail edge (also at 1440). Refuted sub-claim: the search field is 22 px (kit SearchField container h-[22px]); the 15 px value is the inner <input>. The Order-quantity <select> is really 16 px (h-4, DesignerBomView.tsx:451).",
+   "evidence": [
+    "shots/vq5/dark/010-bom-1100x720.png",
+    "shots/vq5/dark/001-bom-grouped-mpn-edit.png",
+    "dom: search container 22px / inner input 15px / select 16px"
+   ]
+  }
+ },
+ {
+  "area": "designer.3d",
+  "knownRef": "K43",
+  "title": "3D 'Height heatmap' is an enabled checkbox that shows a fabricated 0–12 mm legend while the board is unchanged",
+  "category": "stub",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Open 'LED Indicators 5V' → 3D",
+   "In the left rail tick 'Height heatmap'"
+  ],
+  "expected": "Either a working height heatmap or a clearly disabled control (K43 recon assumed it was disabled).",
+  "actual": "The checkbox is NOT disabled (input.disabled=false, only a 'Coming soon' title on the label). Ticking it renders a 'HEIGHT 0 ▬ 12 mm' gradient legend (#34D399→#FBBF24→#F87171) bottom-left, but the board/components are not recoloured — the legend presents invented data. Other 3D stubs confirmed: 'Export STEP' (disabled, title 'STEP / STL export — coming soon'), 'Measure' (disabled), status bar permanently 'FPS —' and 'Zoom —' (no zoom readout even after wheel zoom), Mechanical 'Tallest parts — needs component heights' and 'Min enclosure 52 × 32 × — mm'.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/021-3d-heatmap-stub-legend.png",
+    "shots/q5/dark/034-3d-after-wheel.png"
+   ],
+   "census": "census/3d-main-dark-1440.json"
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DOverlay.tsx",
+    "line": 189,
+    "note": "heatmap ToggleRow stub but onChange live"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DOverlay.tsx",
+    "line": 364,
+    "note": "hard-coded legend"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DOverlay.tsx",
+    "line": 389,
+    "note": "FPS — / Zoom — placeholders"
+   }
+  ],
+  "suggestedFix": "Remove the heatmap row and legend (or render it disabled) until implemented; drop the FPS/Zoom placeholders or wire the zoom readout to camera distance; hide 'Tallest parts'/'Min enclosure' height until component heights exist.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.3d:stubs:heatmap-legend",
+  "id": "Q5-013",
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced: 'Height heatmap' input.disabled=false (label title 'Coming soon'); ticking it shows a 'HEIGHT 0 ▬ 12 mm' gradient legend while the board is not recoloured. Export STEP / Measure disabled; status bar hard-codes 'FPS —' / 'Zoom —' (Board3DOverlay.tsx:389-390). Downgraded S2->S3: the stub is disclosed by a 'Coming soon' tooltip and presents no data a user could act on; 3D was 'token re-skin only' in PLAN §0, so this is a pre-existing stub rather than a redesign regression. K43 partial (heatmap is enabled, not disabled).",
+   "evidence": [
+    "shots/vq5/dark/012-3d-heatmap-legend.png",
+    "dom: Height heatmap input disabled=false, label title='Coming soon'"
+   ]
+  },
+  "originalSeverity": "S2"
+ },
+ {
+  "area": "designer.3d",
+  "title": "3D view ignores the design's board thickness (always 1.6 mm in the Mechanical panel and the rendered board)",
+  "category": "data",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "QA-q5-empty (a0ce5e9e…)",
+  "repro": [
+   "Open QA-q5-empty → PCB → Properties → Design rules 'Edit rules…'",
+   "Set Board thickness 0.8 mm → 'Save & re-run DRC' (Board panel now shows Thickness 0.80 mm; PCB projection has board.boardThicknessMm)",
+   "Open 3D"
+  ],
+  "expected": "Mechanical → Stackup '2 layer · 0.8 mm' and board rendered 0.8 mm thick.",
+  "actual": "Mechanical shows '2 layer · 1.6 mm' (and the 3D board keeps 1.6 mm): Board3DCanvas passes DEFAULT_BOARD_THICKNESS_MM instead of projection.board.boardThicknessMm; enclosure numbers are computed from the same constant.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/036-3d-thickness-ignores-design.png"
+   ],
+   "network": [
+    "GET …/projection/pcb → board.boardThicknessMm present"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 832,
+    "note": "thicknessMm: DEFAULT_BOARD_THICKNESS_MM"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 569,
+    "note": "BoardGeometry rendered without boardThicknessMm"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 590,
+    "note": "gridHelper offset uses the constant"
+   }
+  ],
+  "suggestedFix": "Use activeProjection.board.boardThicknessMm ?? DEFAULT_BOARD_THICKNESS_MM for the stat, BoardGeometry extrusion and floor-grid offset.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.3d:thickness:hardcoded",
+  "id": "Q5-014",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Confirmed: GET …/a0ce5e9e…/projection/pcb -> board.boardThicknessMm 0.8, but the 3D Mechanical card reads 'Stackup 2 layer · 1.6 mm'. Board3DCanvas.tsx:832 passes DEFAULT_BOARD_THICKNESS_MM to the overlay, BoardGeometry is rendered without boardThicknessMm (defaults to the constant, :569-578) and the floor grid/contact shadow use the constant (:556, :590). S2 kept (wrong data shown).",
+   "evidence": [
+    "shots/vq5/light/009-3d-thickness-empty-design.png",
+    "network: projection/pcb board.boardThicknessMm=0.8; snapshot 'Stackup 2 layer · 1.6 mm'"
+   ]
+  }
+ },
+ {
+  "area": "designer.3d",
+  "title": "3D Transparency slider has no visible effect",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Open 'LED Indicators 5V' → 3D, board colour Blue, scene Outdoor",
+   "Drag 'Board transparency' from 0 to 100 (slider value confirmed 100)",
+   "Compare screenshots"
+  ],
+  "expected": "Board mask becomes see-through (substrate/copper/inner features visible) as the slider moves.",
+  "actual": "Canvas pixel diff between slider 0 and 100: max 3/765, mean 0.36 — no visible change. BoardGeometry accepts maskOpacity only 'for API compatibility' and ignores it, so the slider is a dead control on every board. The 'Transparent' scene preset is just a #0b0b0d background with gl alpha:false, not a transparent background.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/028-3d-transp-drag-0.png",
+    "shots/q5/dark/028-3d-transp-drag-100.png",
+    "shots/q5/dark/025-3d-blue-transparent-70.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/three-d/BoardGeometry.tsx",
+    "line": 34,
+    "note": "maskOpacity 'accepted for API compatibility' — ignored"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 248,
+    "note": "transparencyToMaskOpacity feeds an ignored prop"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 765,
+    "note": "gl alpha:false; transparent scene = #0b0b0d (:244)"
+   }
+  ],
+  "suggestedFix": "Either wire maskOpacity into BoardSubstrate's face material (transparent + depthWrite off, opacity from the slider) so copper/drills show through, or remove the Transparency section from Board3DOverlay until implemented; rename 'Transparent' scene or render with alpha:true for snapshots.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.3d:transparency:no-effect",
+  "id": "Q5-015",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced: slider 0 vs 100 on LED Indicators 5V -> canvas pixel diff max 3/765, mean 0.36. Root cause is stronger than reported: BoardGeometry.tsx declares `maskOpacity` as 'Accepted for API compatibility; the matte two-tone board ignores it' and never uses it, so the Transparency slider is a dead control on every board (the q5 blocker about testing on a copper board is moot). 'Transparent' scene is just #0b0b0d with gl alpha:false (Board3DCanvas.tsx:244, :765).",
+   "evidence": [
+    "shots/vq5/dark/013-3d-transp-0.png",
+    "shots/vq5/dark/014-3d-transp-100.png",
+    "src/modules/designer/frontend/three-d/BoardGeometry.tsx:34-35"
+   ]
+  }
+ },
+ {
+  "area": "designer.3d",
+  "knownRef": "K33",
+  "title": "Right-drag pan in the 3D view pops the app context menu ('OpenPCB · Settings') on release",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Open 'LED Indicators 5V' → 3D",
+   "Press right mouse button on the board, drag ~80 px, release"
+  ],
+  "expected": "Right-drag pans the camera (it does) and no menu appears; a context menu only on a right-click without movement, and one with 3D-relevant items (camera presets, snapshot).",
+  "actual": "Camera pans, then on release the global app context menu (data-testid=app-context-menu, only item 'Settings Ctrl+,') opens over the board. The 3D canvas does not suppress contextmenu after a drag and offers no 3D items.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/035-3d-rightdrag-contextmenu.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/AppShell.tsx",
+    "line": 36,
+    "note": "global contextmenu handler"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 756,
+    "note": "Canvas has no onContextMenu preventDefault"
+   }
+  ],
+  "suggestedFix": "In Board3DCanvas wrapper add onContextMenu={e=>e.preventDefault()} (or suppress when the pointer moved > threshold), optionally a 3D scope menu (views, snapshot).",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.3d:rightdrag:context-menu",
+  "id": "Q5-016",
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced: right-button drag on the 3D board pans, then [data-testid=app-context-menu] ('OpenPCB · Settings Ctrl+,') is open over the canvas. Board3DCanvas has no onContextMenu suppression; the global AppShell handler catches it (K33). Same behaviour expected in Electron since the menu is React-rendered.",
+   "evidence": [
+    "shots/vq5/dark/015-3d-rightdrag-contextmenu.png"
+   ]
+  }
+ },
+ {
+  "area": "designer.3d",
+  "title": "3D Mechanical card truncates every value at 1440 px and mislabels counts ('Parts 16 · 0 traces · 0 vias')",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Open 'LED Indicators 5V' → 3D with the side panel (Assistant dock) open at 1440×900"
+  ],
+  "expected": "Values fully readable ('50.0 × 30.0 mm', '2 layer · 1.6 mm', '16 parts · 0 traces · 0 vias').",
+  "actual": "Fixed w-48 card with w-14 labels: 'Board 50.0 × 30.0…', 'Stackup 2 layer · 1…', 'Parts 16 · 0 trac…' — the numbers users need are cut, even at the primary viewport. The 'Parts' row also carries traces and vias. Status bar echoes raw ids in lower case ('iso', 'studio dark', 'persp'); 'Persp' preset is just another perspective angle (all presets are perspective, 'Top' is not orthographic).",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/020-3d-initial.png",
+    "shots/q5/dark/036-3d-thickness-ignores-design.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DOverlay.tsx",
+    "line": 272,
+    "note": "w-48 card"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DOverlay.tsx",
+    "line": 408,
+    "note": "w-14 label + truncate value"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DOverlay.tsx",
+    "line": 386,
+    "note": "raw preset/scene ids in status bar"
+   }
+  ],
+  "suggestedFix": "Stack label over value or widen to ~w-60 and split rows (Board / Stackup / Parts / Traces / Vias); map preset/scene ids to their labels in the status bar; rename 'Persp' to 'Perspective (default)' or add a real orthographic Top.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.3d:mechanical:truncated",
+  "id": "Q5-017",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced at 1440x900 with the Assistant dock open: 'Board 50.0 × 30.0…', 'Stackup 2 layer · 1…', 'Parts 16 · 0 trac…' (w-48 card + w-14 labels + truncate, Board3DOverlay.tsx:272, 296-310, 405-411; the code comment at :42-47 even acknowledges the truncation). Status bar shows raw 'iso' / 'studio dark'. PRESET_POSITIONS (Board3DCanvas.tsx:52-59) confirms 'Persp' and 'Top' are both perspective positions.",
+   "evidence": [
+    "shots/vq5/dark/011-3d-initial.png",
+    "shots/vq5/dark/012-3d-heatmap-legend.png"
+   ]
+  }
+ },
+ {
+  "area": "designer.3d",
+  "title": "3D view floods the console with THREE deprecation warnings (PCFSoftShadowMap ×31, Clock)",
+  "category": "console",
+  "severity": "S4",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Open a design → 3D, change a few display/scene options, orbit",
+   "console warning"
+  ],
+  "expected": "No warnings.",
+  "actual": "31× 'THREE.WebGLShadowMap: PCFSoftShadowMap has been deprecated. Using PCFShadowMap instead.' (one per re-render/shadow update) and 2× 'THREE.THREE.Clock: This module has been deprecated. Please use THREE.Timer instead.' (also emitted on the schematic/PCB canvases).",
+  "evidence": {
+   "console": [
+    "[WARNING] THREE.WebGLShadowMap: PCFSoftShadowMap has been deprecated. Using PCFShadowMap instead. (×31)",
+    "[WARNING] THREE.THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 758,
+    "note": "shadows=\"soft\" → PCFSoftShadowMap"
+   }
+  ],
+  "suggestedFix": "Use shadows=\"percentage\"/PCFShadowMap (or VSM) explicitly; the Clock warning comes from @react-three/fiber — upgrade or filter.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.3d:console:three-deprecations",
+  "id": "Q5-018",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced: after opening 3D and toggling a few options, console had 5x 'THREE.WebGLShadowMap: PCFSoftShadowMap has been deprecated' and 7x 'THREE.THREE.Clock: This module has been deprecated'. shadows=\"soft\" at Board3DCanvas.tsx:758.",
+   "evidence": [
+    "console warning: 5x PCFSoftShadowMap, 7x THREE.Clock (session vq5-dark)"
+   ]
+  }
+ },
+ {
+  "area": "designer.import",
+  "title": "KiCad project import silently drops parts (USB-C J1) and the wizard never shows the commit warnings",
+  "category": "data",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "70d12af0-c3c1-46e7-a9f7-d5b352df1eb0",
+  "repro": [
+   "Home → Import KiCad… → Choose ZIP… → fixtures/KiCad_Example_Project_USBtoUART.zip",
+   "Review shows 'SCH symbols 19', 'PCB footprints 19'; rename to QA-q5-USBtoUART → Import design",
+   "Wizard closes immediately and opens the design; inspect Schem outline / PCB / BOM",
+   "Response of POST /imports/kicad-project"
+  ],
+  "expected": "All 19 parts imported (mechanical/NPTH pads with empty numbers are normal in KiCad footprints), or at minimum a Done step listing what was skipped and why, with the imported design flagged.",
+  "actual": "Only 18 parts: J1 (Connector:USB_C_Receptacle_USB2.0_16P, footprint USB_C_Receptacle_HRO_TYPE-C-31-M-12) is dropped from schematic, PCB and BOM. The commit response contains warnings 'component_unresolved … has 2 pad(s) with empty number (indices: 0, 1). Every pad must have a non-empty number', 'schematic_part_skipped_no_component J1', 'pcb_placement_skipped_no_part J1', but onImported() closes the wizard in the same tick, so the DoneStage (warnings count, deferred list) is never rendered. Schematic keeps J1's dangling wires/labels; PCB traces run to an empty connector area; board shows '1 item outside outline'. Nothing tells the user the import is incomplete.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/044-import-review.png",
+    "shots/q5/dark/046-import-result.png",
+    "shots/q5/dark/049-import-schem-panned.png",
+    "shots/q5/dark/050-import-pcb.png",
+    "shots/q5/dark/051-import-bom.png"
+   ],
+   "network": [
+    "POST /api/modules/designer/imports/kicad-project → 201, warnings: component_unresolved J1 (empty pad numbers), schematic_part_skipped_no_component J1, pcb_placement_skipped_no_part J1, 65 synthetic net_portal anchors"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 1637,
+    "note": "onImported closes the wizard → DoneStage unreachable"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/KicadProjectImportWizard.tsx",
+    "line": 90,
+    "note": "setStage('done') then onImported(result)"
+   },
+   {
+    "path": "node_modules/@openpcb/kicad-import/dist/validate-pads.js",
+    "line": 19,
+    "note": "rejects footprints with unnumbered (mechanical) pads"
+   }
+  ],
+  "suggestedFix": "Let validate-pads accept unnumbered NPTH/mechanical pads (assign synthetic ids or keep them as non-electrical) in @openpcb/kicad-import; in the wizard keep the Done stage open (list warnings grouped by severity, 'Open design' button) and only navigate on user confirmation; mark skipped parts in the review step (inspect can predict validation failures).",
+  "fixScope": "shared-package",
+  "estimate": "M",
+  "dedupeKey": "designer.import:kicad-project:dropped-parts-hidden-warnings",
+  "id": "Q5-019",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Verified without a second commit (a commit on stack A would ingest library parts; library mutations are reserved for stack B): q5's imported design 70d12af0 has 18 schematic parts and 18 PCB placements with no J1 (183 traces, 44 vias). The fixture's J1 footprint USB_C_Receptacle_HRO_TYPE-C-31-M-12 has two np_thru_hole pads with empty numbers, which @openpcb/kicad-import validateFootprintPads rejects (dist/validate-pads.js:13-20). The wizard sets stage 'done' and calls onImported in the same tick (KicadProjectImportWizard.tsx:88-90) and Space.tsx:1637-1642 closes the wizard in onImported, so DoneStage (:152, :393) is unreachable. Re-inspecting the ZIP shows only the net-class warning in the review step — the J1 failure is not predicted. S2 kept.",
+   "evidence": [
+    "shots/vq5/light/006-import-review.png",
+    "api: GET …/70d12af0…/projection/schematic -> 18 parts, no J1; projection/pcb -> 18 placements, no J1",
+    "fixture: J1 pads ('', np_thru_hole) x2"
+   ]
+  }
+ },
+ {
+  "area": "designer.3d",
+  "title": "3D view of an imported KiCad board is empty — board rendered at KiCad coordinates (≈150,137 mm) while camera/grid stay at the origin",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "70d12af0-c3c1-46e7-a9f7-d5b352df1eb0",
+  "repro": [
+   "Import fixtures/KiCad_Example_Project_USBtoUART.zip (design QA-q5-USBtoUART)",
+   "Open 3D; try Iso/Top presets; zoom out with the wheel"
+  ],
+  "expected": "Board centred in view like native designs (outline centre 0,0).",
+  "actual": "Only the floor grid is visible; Mechanical still says 'Board 31.0 × 15.0…, 18 · 183 tr…'. Zooming far out reveals a sliver of green board at the top-right edge. The imported outline has centerMm {x:149.5, y:137}; presets use fixed positions around (0,0) and the 120 mm floor grid is centred at the origin. Every KiCad import (whose sheet origin is top-left of an A4 page) will hit this.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/052-import-3d.png",
+    "shots/q5/dark/053-import-3d-top.png",
+    "shots/q5/dark/054-import-3d-zoomout.png"
+   ],
+   "network": [
+    "GET …/70d12af0…/projection/pcb → board.outline.centerMm {x:149.5,y:137}; native design centre {0,0}"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 53,
+    "note": "PRESET_POSITIONS relative to origin"
+   },
+   {
+    "path": "src/modules/designer/backend/import/kicad-project/commit.ts",
+    "line": 247,
+    "note": "adjustBoardCenter used for placements only"
+   }
+  ],
+  "suggestedFix": "In Board3DScene translate the board group by -outline.centerMm (or set the orbit target/presets to the outline centre and scale preset distance by board size); alternatively recentre the outline at import time.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.3d:imported-board:off-origin",
+  "id": "Q5-020",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced: QA-q5-USBtoUART -> 3D shows only the floor grid (Iso and Top); Mechanical still reports 'Board 31.0 × 15.0…'. projection/pcb board.outline.centerMm = {x:149.5, y:137} while PRESET_POSITIONS (Board3DCanvas.tsx:52-59) and the 120 mm gridHelper are origin-centred. S2 kept (3D unusable for every KiCad import).",
+   "evidence": [
+    "shots/vq5/dark/016-import-3d-empty.png",
+    "shots/vq5/dark/017-import-3d-top.png",
+    "api: outline.centerMm {x:149.5,y:137}"
+   ]
+  }
+ },
+ {
+  "area": "designer.import",
+  "title": "KiCad import wizard copy is stale and alarming: claims only name/layers/outline import, lists every component as 'missing', shows raw warning codes",
+  "category": "copy",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": null,
+  "repro": [
+   "Home → Import KiCad…",
+   "Read the pick-stage footnote; choose KiCad_Example_Project_USBtoUART.zip; read review stage"
+  ],
+  "expected": "Accurate description of what gets imported; component status that reflects what the commit will do; human-readable warnings.",
+  "actual": "Footnote: 'v1 imports the project name, layer count, board outline and net classes. Schematic and PCB entity ingestion lands in the next iteration.' — false, the commit imports schematic, PCB placements, 183 traces, 44 vias and zones. Review header 'COMPONENTS (0 REUSE / 14 MISSING)' tags every footprint as amber 'missing'/'missing ×4' although the import ingests them into the library (the one that really fails, J1, is not distinguished). Warning list shows internal codes '[net_class_unknown_rules] … preserved as opaque metadata: bus_width, diff_pair_gap…'. File header comment in the component still says 'Schematic + PCB entities are surfaced as deferred'.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/040-import-pick.png",
+    "shots/q5/dark/044-import-review.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/KicadProjectImportWizard.tsx",
+    "line": 248,
+    "note": "stale v1 footnote"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/KicadProjectImportWizard.tsx",
+    "line": 318,
+    "note": "reuse/missing wording"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/KicadProjectImportWizard.tsx",
+    "line": 365,
+    "note": "raw [code]"
+   }
+  ],
+  "suggestedFix": "Replace footnote with what is imported (schematic, PCB, zones, net classes; new library parts created); rename 'missing' → 'new — will be added to library' vs 'reuse'; map warning codes to plain sentences, hide info-level ones behind 'Details'.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.import:copy:stale-v1",
+  "id": "Q5-021",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced (inspect only, no commit): pick stage footnote 'v1 imports the project name, layer count, board outline and net classes. Schematic and PCB entity ingestion lands in the next iteration.' (KicadProjectImportWizard.tsx:249-250) is false given the imported design has schematic, 183 traces and 44 vias; file header comment :10-12 is stale too. Review warning shows raw '[net_class_unknown_rules]' (:365-366). Nuance: on re-inspect after q5's import the header now reads 'Components (6 reuse / 8 missing)' (not 0/14), and the J1 footprint/symbol that will actually fail are tagged 'missing' exactly like parts that will be created, so the finding stands (status wording does not distinguish 'new' from 'will fail').",
+   "evidence": [
+    "shots/vq5/light/005-import-pick.png",
+    "shots/vq5/light/006-import-review.png"
+   ]
+  }
+ },
+ {
+  "area": "designer.import",
+  "title": "KiCad inspect returns 500 Internal Server Error for bad user archives; KiCad 5 legacy project gets an unhelpful message",
+  "category": "error-handling",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": null,
+  "repro": [
+   "Import KiCad… → choose fixtures/LM324N.zip (library zip, no project) → POST …/imports/kicad-project/inspect",
+   "Choose fixtures/geckonator-kicad.zip (KiCad 5: .sch + kicad_pcb version 4, no .kicad_pro)",
+   "Choose fixtures/sample.txt"
+  ],
+  "expected": "4xx problem+json for invalid input; for a legacy project: 'KiCad 5 projects (.pro/.sch) aren't supported yet — open the project in KiCad 6+ and save it, then import the ZIP'.",
+  "actual": "LM324N.zip and geckonator → HTTP 500 {type: …/problems/internal-error, detail: 'ZIP archive does not contain a .kicad_pro project file'} (console error 'Failed to load resource: 500'); UI shows the raw detail 'ZIP archive does not contain a .kicad_pro project file' with no hint about KiCad versions. sample.txt → 400 'file must have a .zip extension' (lower-case, fine functionally). Recovery works (Choose ZIP… again, Cancel/Esc close).",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/041-import-invalid-txt.png",
+    "shots/q5/dark/042-import-nonproject-zip.png",
+    "shots/q5/dark/055-import-kicad5.png"
+   ],
+   "network": [
+    "POST /imports/kicad-project/inspect → 400 (sample.txt)",
+    "POST /imports/kicad-project/inspect → 500 (LM324N.zip)",
+    "POST /imports/kicad-project/inspect → 500 (geckonator-kicad.zip)"
+   ],
+   "console": [
+    "[ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ …/imports/kicad-project/inspect"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/backend/import/kicad-project/inspect.ts",
+    "line": 63,
+    "note": "throw new Error(...) → 500; should be ValidationError"
+   }
+  ],
+  "suggestedFix": "Throw ValidationError (400/422) from resolveProjectFiles; detect .pro/.sch or kicad_pcb (version < 20211014) and return a dedicated 'legacy KiCad' problem type with conversion instructions.",
+  "fixScope": "backend-needed",
+  "estimate": "XS",
+  "dedupeKey": "designer.import:inspect:500-on-user-error",
+  "id": "Q5-022",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced via direct POST to the inspect endpoint: LM324N.zip and geckonator-kicad.zip -> HTTP 500 problem 'internal-error', detail 'ZIP archive does not contain a .kicad_pro project file'; sample.txt -> 400 'file must have a .zip extension'. Root cause inspect.ts:62-70 throws plain Error (-> 500) instead of ValidationError; no legacy-KiCad detection.",
+   "evidence": [
+    "curl: POST /api/modules/designer/imports/kicad-project/inspect LM324N.zip -> 500, geckonator-kicad.zip -> 500, sample.txt -> 400"
+   ]
+  }
+ },
+ {
+  "area": "designer.schematic",
+  "title": "'Fit schematic' cannot fit an imported KiCad sheet (zoom floor 20) — parts stay off-canvas; toolbar Zoom-out floor differs from wheel",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "70d12af0-c3c1-46e7-a9f7-d5b352df1eb0",
+  "repro": [
+   "Open imported QA-q5-USBtoUART → Schem (initial view already clips the left third)",
+   "Click 'Fit schematic' → nothing changes (readout 10%)",
+   "Click 'Zoom out' twice → still 10%",
+   "Mouse-wheel out → zoom goes to 2% and the whole sheet becomes visible"
+  ],
+  "expected": "Fit shows the whole drawing (all 18 parts) regardless of size; toolbar zoom-out and wheel share the same limits.",
+  "actual": "Fit schematic stops at zoom 10% (fitCamera floor camera.zoom >= 5), so a KiCad A4-scale sheet never fits the ~800 px canvas; D3–D5, J2 area and J1's leftover wires are clipped at the left edge. The Zoom-out button also floors at 5 (10%) while the wheel reaches 1%, so the button appears broken at 10%.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/047-import-schem-fit.png",
+    "shots/q5/dark/048-import-schem-zoomout.png",
+    "shots/q5/dark/056-import-schem-wheel-out.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/SchematicCanvas.tsx",
+    "line": 1154,
+    "note": "fitCamera clamps camera.zoom to >= 5 (readout 10%)"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/SchematicCanvas.tsx",
+    "line": 1239,
+    "note": "zoomOut() floor 5"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/SchematicCanvas.tsx",
+    "line": 1216,
+    "note": "frameBounds floor 20 (frame-to-selection / cross-probe) — separate, larger floor"
+   }
+  ],
+  "suggestedFix": "In SchematicCanvas.fitCamera (line 1154) and zoomOut (line 1239) use the same MIN_ZOOM as the wheel handler in @openpcb/r3f-eda-canvas (or compute the floor from content bounds); keep frameBounds' floor (line 1216) separate for selection framing; auto-fit imported designs on first open.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.schematic:fit:zoom-floor",
+  "id": "Q5-023",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced on QA-q5-USBtoUART: 'Fit schematic' -> zoom 10% with D3–D5/J2 area clipped at the left edge; 'Zoom out' x2 stays 10%; mouse wheel goes down to 1%. Root-cause correction: 'Fit schematic' calls fitCamera (SchematicCanvas.tsx:1121-1157) whose floor is Math.max(5, …) = 10% readout, not frameBounds' Math.max(20, …) at :1216 (that one only affects frameToBoundsMm/zoom-to-selection). zoomOut floor is also 5 (:1239) while the wheel (canvas package) has a lower limit.",
+   "evidence": [
+    "shots/vq5/dark/018-import-schem-fit.png",
+    "shots/vq5/dark/019-import-schem-wheel-out.png",
+    "dom: zoom readout 10% after Fit and after 2x Zoom out; 1% after wheel"
+   ]
+  }
+ },
+ {
+  "area": "designer.comments",
+  "knownRef": "K12",
+  "title": "PCB hotkeys fire while typing in the comment composer — letters vanish, tools toggle, and Backspace deletes the selected part",
+  "category": "data",
+  "severity": "S1",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Open 'LED Indicators 5V' → PCB, select R8 in the Components list",
+   "Add ▾ → Comment, click an empty board spot, click INTO the composer textarea (activeElement=TEXTAREA)",
+   "Type 'x' then press Backspace",
+   "Separately: type 'QA-q5 PCB comment: parts overlap at centre' and press ⌘Enter"
+  ],
+  "expected": "Keystrokes inside a textarea only edit the text; canvas shortcuts are suppressed.",
+  "actual": "PcbCanvas' window keydown handler only ignores <input> targets, so inside the <textarea> it preventDefaults and executes shortcuts: Backspace dispatched POST /commands {type:'pcb_delete_placement', placementId:'39243258…'} (R8 deleted → revision 71→72, re-synced as a new placement id 497fba3c…), while the 'x' stayed in the box (Backspace can't correct typos). Typing a sentence saved the comment as 'QA-q5 C cen: as vela a cene' (P,B,o,m,t,r,l,p… eaten), switched on Route mode, and 'B' twice sent pcb_set_active_layer B.Cu twice with baseRevision 70 → second answered REVISION_CONFLICT and a red 'Revision conflict. Please retry after refresh.' banner appeared. Same applies to the thread 'Reply to thread…' textarea on PCB.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/077-pcb-comment-thread.png",
+    "shots/q5/dark/079-pcb-comment-thread.png",
+    "shots/q5/dark/080-pcb-composer-backspace.png"
+   ],
+   "network": [
+    "POST …/370447e2…/commands {command:{type:'pcb_delete_placement',placementId:'39243258-7cfc-42f2-876c-e0fef976511a'}} → ok, revision 72 (issued from Backspace in the comment textarea)",
+    "POST …/commands pcb_set_active_layer B.Cu (baseRevision 70) → ok r71; second identical → {ok:false, code:'REVISION_CONFLICT'}"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 4342,
+    "note": "keymap guard only checks INPUT"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/comments/CommentComposerPopup.tsx",
+    "line": 86,
+    "note": "Textarea inside canvas overlay"
+   }
+  ],
+  "suggestedFix": "Use the shared isEditableShortcutTarget() guard (INPUT/TEXTAREA/SELECT/contenteditable) in the PCB keymap like SchematicCanvas does; additionally stopPropagation of keydown inside the comment popups; serialize PCB commands so rapid hotkeys use the latest revision.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:keymap:textarea",
+  "id": "Q5-024",
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced on own 370447e2: selected R8 in Components, Add -> Comment, clicked empty board, clicked into the composer textarea (activeElement TEXTAREA), typed 'x' then Backspace -> POST /commands {type:'pcb_delete_placement', placementId:'497fba3c…'} baseRevision 74 -> ok revision 75; the 'x' stayed in the textarea. R8 was re-created by schematic sync with a new id (3ec0cd1d) at its default position — in a placed/routed board the position/rotation/layer and the part's routing context would be lost. Root cause PcbCanvas.tsx:4342 `if (event.target instanceof HTMLInputElement) return;` (no TEXTAREA/SELECT/contenteditable), unlike SchematicCanvas/Space which use isEditableShortcutTarget. K12 confirmed. S1 kept: ordinary typo correction in a text box deletes a part.",
+   "evidence": [
+    "shots/vq5/dark/023-pcb-composer-backspace.png",
+    "network: POST …/370447e2…/commands {command:{type:'pcb_delete_placement',placementId:'497fba3c-feca-478d-83e9-d82db3c7da5f'}} -> ok r75 (issued from Backspace in the comment textarea)"
+   ]
+  }
+ },
+ {
+  "area": "designer.comments",
+  "title": "New-comment composer does not take focus — first keystrokes trigger canvas tools (G → GND placement, H → Hole)",
+  "category": "keyboard",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Schem: press C (or click Comment), click empty canvas → composer appears",
+   "document.activeElement is BODY; press 'g'",
+   "PCB: Add ▾ → Comment, click board → composer; press 'h'"
+  ],
+  "expected": "Composer textarea is focused immediately (placeholder even says '⌘/Ctrl+Enter to post'), so the user can type right away.",
+  "actual": "Focus stays on BODY (the canvas pointer-up steals it after the useEffect focus()). Typing 'good…' starts GND-port placement (hint 'Click to place · Esc cancel', ghost GND under the cursor); on PCB 'h' activates the Hole tool. Users must click into the box first; otherwise their text drives the editor.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/061-schem-comment-composer.png",
+    "shots/q5/dark/062-schem-composer-unfocused-g-hotkey.png",
+    "shots/q5/dark/076-pcb-composer-unfocused-h-hotkey.png"
+   ],
+   "console": [
+    "activeElement after composer open: BODY (schematic and PCB)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/comments/CommentComposerPopup.tsx",
+    "line": 44,
+    "note": "focus() in mount effect, lost to canvas pointerup"
+   }
+  ],
+  "suggestedFix": "Focus in requestAnimationFrame/setTimeout after the opening pointerup (or use autoFocus + preventDefault on the canvas pointerup in comment mode); while a draft exists, suspend canvas shortcuts.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.comments:composer:no-autofocus",
+  "id": "Q5-025",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced on both canvases: after the composer opens, document.activeElement is BODY (PCB and schematic). PCB: pressing 'h' switched the toolbar to 'Hole' with the composer still open. Schematic: pressing 'g' armed GND placement ('Click to place · Esc cancel'). CommentComposerPopup.tsx:47-49 focuses in a mount effect, which the canvas pointer-up steals back. Different root cause from Q5-024 (focus vs. keymap guard); both need fixing.",
+   "evidence": [
+    "shots/vq5/dark/020-pcb-composer-open-focus-body.png",
+    "shots/vq5/dark/021-pcb-composer-unfocused-h.png",
+    "shots/vq5/dark/024-schem-composer-unfocused-g.png"
+   ]
+  }
+ },
+ {
+  "area": "designer.comments",
+  "title": "Thread status menu (Todo / In progress / Done / Archive) does nothing when clicked — popup closes before the item fires",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Open comment thread #1 on the schematic",
+   "Click '…' (More) → click 'In progress' (or 'Todo', 'Archive thread')",
+   "GET …/comments?surface=schematic"
+  ],
+  "expected": "todoStatus becomes in_progress, header shows '· In progress', pin turns to the todo colour; popup stays open.",
+  "actual": "The popup's document mousedown click-away handler treats the portalled Radix menu as 'outside' and closes the popup; the menu unmounts before onSelect, so no command is sent — API still reports todoStatus 'none' after two attempts. Selecting the same item with the keyboard (↓↓ Enter) works (todoStatus → 'todo', header '2m · Todo'), proving the handler itself is fine.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/069-comment-more-menu.png",
+    "shots/q5/dark/070-comment-status-inprogress.png",
+    "shots/q5/dark/071-comment-reopened-todo.png"
+   ],
+   "network": [
+    "after mouse select: GET …/comments?surface=schematic → 2b9abcd6 resolved none",
+    "after keyboard select: → 2b9abcd6 resolved todo"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/comments/CommentThreadPopup.tsx",
+    "line": 199,
+    "note": "onDown click-away ignores portalled menu content"
+   }
+  ],
+  "suggestedFix": "Ignore mousedown targets inside [data-radix-popper-content-wrapper] / use Radix Popover's onInteractOutside, or render the menu with portal={false} inside the popup.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.comments:status-menu:click-away",
+  "id": "Q5-026",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced: thread #1 -> More -> mouse click 'In progress' -> popup closes, GET …/comments still todoStatus 'todo'. Same item via keyboard (focus + Enter) -> todoStatus 'in_progress'. Root cause CommentThreadPopup.tsx:199-201 document mousedown click-away treats the portalled Radix menu content as outside. Status restored to 'todo' afterwards.",
+   "evidence": [
+    "shots/vq5/dark/026-comment-more-menu.png",
+    "shots/vq5/dark/027-comment-status-click-noop.png",
+    "network: after mouse select todoStatus=todo; after keyboard select todoStatus=in_progress"
+   ]
+  }
+ },
+ {
+  "area": "designer.comments",
+  "knownRef": "K14",
+  "title": "Comment mode is sticky: Esc doesn't leave it (schematic or PCB), PCB 'C' shortcut advertised but dead; Esc/click-away silently discard drafts",
+  "category": "keyboard",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Schem: press C (button pressed), blur, press Esc → button still pressed",
+   "PCB (fresh reload): press C, click board → no composer (K14)",
+   "PCB: Add ▾ → Comment, press Esc, click board → composer opens again; toolbar shows 'Comment' pressed and clicking it only reopens the Add menu",
+   "Type a reply draft, press Esc (or click the canvas) → popup closes; reopen → reply box empty"
+  ],
+  "expected": "Esc cancels the comment tool like every other tool; C toggles it on PCB as the menu label 'Comment C' promises; drafts are kept (or confirmation asked) when the popup closes.",
+  "actual": "Schematic Escape handler has no commentMode branch; PCB keymap has no C binding; both keep the crosshair comment mode until C/menu toggles it or a comment is posted. Composer and reply drafts are dropped without warning on Esc or any outside mousedown. Status-bar hint stays 'Click to select · Shift+click to add · drag to box-select' in comment mode.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/060-schem-comment-mode.png",
+    "shots/q5/dark/082-pcb-comment-mode-toolbar.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/SchematicCanvas.tsx",
+    "line": 1745,
+    "note": "Escape branch excludes commentMode"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx",
+    "line": 467,
+    "note": "hotkey 'C' label with no keymap entry"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/comments/CommentThreadPopup.tsx",
+    "line": 197,
+    "note": "Esc closes, body state lost"
+   }
+  ],
+  "suggestedFix": "Add commentMode to both Escape handlers (close draft first, then exit mode); bind C in the PCB keymap; keep composer/reply text in the comments hook keyed by thread id (or confirm discard); show a comment-mode hint ('Click to place a comment · Esc to exit').",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.comments:mode:esc-sticky",
+  "id": "Q5-027",
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced: schematic C -> Esc leaves 'Comment' pressed (SchematicCanvas.tsx:1745-1756 Escape branch has no commentMode case). PCB: 'c' does nothing (K14; PcbTopToolbar.tsx:467 advertises 'C', no keymap entry); after Add -> Comment, 2x Esc closed the composer and cleared the selection but a board click opened a new composer (mode sticky); clicking the pressed 'Comment' toolbar button only reopens the Add menu. Status-bar hint stays 'Click to select · Shift+click to add · drag to box-select' in comment mode. Composer/reply bodies are local state of the popups, discarded on Esc/click-away (code). PLAN §9 lists the PCB Comment hotkey as a known follow-up; still unfixed.",
+   "evidence": [
+    "shots/vq5/dark/022-pcb-comment-mode-sticky-after-esc.png",
+    "snapshot: schematic 'Comment' [pressed] after C + Escape"
+   ]
+  }
+ },
+ {
+  "area": "designer.3d",
+  "knownRef": "K45",
+  "title": "3D left rail and Mechanical card are hard-coded dark slate/violet: unreadable in light theme, off-token native controls in dark",
+  "category": "visual",
+  "severity": "S2",
+  "themes": [
+   "light",
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Set theme Light, open 'LED Indicators 5V' → 3D",
+   "Compare with dark theme"
+  ],
+  "expected": "Rail uses kit tokens (PanelSectionHeader 24px, kit Checkbox/Select/Segmented control) and reads correctly in both themes; overlay cards use surface tokens without blur/shadow.",
+  "actual": "Light: Display labels (Components/Silkscreen/Refdes labels/Floor grid, text-slate-300) #c5c5ca on #f7f7f8 = contrast 1.61; inactive camera buttons (bg-slate-800/60) grey on grey = 1.84; Scene select is a black (#0c0c0d) native box; section dividers render as heavy dark lines; White swatch disappears on the panel; Mechanical card stays dark and its 'Min enclosure' label is #111114 on #0e1c22 (contrast 1.08, invisible). Both themes: native Chromium checkboxes (#99c8ff blue fill), native range with white #efefef track, 26 px native select, 9 px section titles (Camera/Display/Board color/Scene/Transparency/Tallest parts — K36), camera presets and colour swatches expose no aria-pressed, overlay cards with shadow-xl + backdrop-blur, floor grid lines slate-blue rgb(71,85,105)/rgb(30,41,59), (spinner/banner violet classes and rounded-lg render neutral/2px via the PLAN D1 remap).",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/light/102-3d.png",
+    "shots/q5/dark/021-3d-heatmap-stub-legend.png"
+   ],
+   "census": "census/3d-main-dark-1440.json",
+   "pixelProbes": [
+    {
+     "file": "shots/q5/light/102-3d.png",
+     "x": 100,
+     "y": 164,
+     "hex": "#c5c5ca",
+     "nearestToken": "text on --surface-panel #f7f7f8 (CR 1.61)",
+     "deltaE": 0
+    },
+    {
+     "file": "shots/q5/light/102-3d.png",
+     "x": 990,
+     "y": 240,
+     "hex": "#111114",
+     "nearestToken": "'Min enclosure' on #0e1c22 (CR 1.08)",
+     "deltaE": 0
+    },
+    {
+     "file": "shots/q5/dark/021-3d-heatmap-stub-legend.png",
+     "x": 318,
+     "y": 164,
+     "hex": "#99c8ff",
+     "nearestToken": "native checkbox accent (off-token)",
+     "deltaE": 0
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DOverlay.tsx",
+    "line": 88,
+    "note": "Section: border-slate-800, text-[9px] text-slate-500"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DOverlay.tsx",
+    "line": 110,
+    "note": "ToggleRow native checkbox, text-slate-300"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DOverlay.tsx",
+    "line": 163,
+    "note": "camera buttons bg-slate-800/60"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DOverlay.tsx",
+    "line": 222,
+    "note": "native select bg-slate-950"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DOverlay.tsx",
+    "line": 239,
+    "note": "accent-violet-500 range"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DOverlay.tsx",
+    "line": 272,
+    "note": "rounded-lg bg-slate-900/90 shadow-xl backdrop-blur"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 212,
+    "note": "THREE_D_THEME slate/violet"
+   }
+  ],
+  "suggestedFix": "Rebuild Board3DControls with kit PanelSectionHeader, Checkbox, SegmentedControl (aria-pressed), Select and a tokenised slider; restyle the Mechanical card/toolbar/status bar with --surface-panel/--border tokens (no blur/shadow, 2px radius); tokenise grid colours.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "designer.3d:overlay:off-token-light-unreadable",
+  "id": "Q5-028",
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Re-probed light 3D: 'Components' label #c5c5ca on #f7f7f8 = CR 1.61; inactive 'Persp' #a2a2a7 on #747476 = 1.84; 'Min enclosure' #111114 on #0e1c21 = 1.08; Scene select #0c0c0d. Dark: native checkbox fill #99c8ff, native range track #efefef, 9 px section titles. Corrections from the D1 remap (PLAN §2 D1 maps slate/violet ramps to neutral and radius-lg to 2px): the spinner 'border-t-violet-400', banner 'border-violet-500/60' and slider 'accent-violet-500' render neutral grey, and rounded-lg is 2px — not violet/rounded. Still off-token: shadow-xl + backdrop-blur cards and the raw rgb grid colours (THREE_D_SCENE_COLORS gridMajor/gridMinor rgb(71,85,105)/rgb(30,41,59)). 3D was 'token re-skin only' (§0, §9 follow-up), but D3 keeps light theme and §5 requires per-screen light checks, so an unreadable light rail is a defect. S2 kept (one theme unreadable).",
+   "evidence": [
+    "shots/vq5/light/001-3d.png",
+    "shots/vq5/dark/012-3d-heatmap-legend.png",
+    "probe: light Components #c5c5ca/#f7f7f8 CR 1.61; Persp CR 1.84; Min enclosure CR 1.08; dark checkbox #99c8ff; range #efefef"
+   ]
+  }
+ },
+ {
+  "area": "designer.import",
+  "knownRef": "K45",
+  "title": "KiCad import dialog is a hand-rolled always-dark modal: no focus management/trap, unlabelled name field, off-token slate/violet/amber/emerald styling",
+  "category": "a11y",
+  "severity": "S3",
+  "themes": [
+   "light",
+   "dark"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "designId": null,
+  "repro": [
+   "Light theme: Home → Import KiCad… (opens over the Designer)",
+   "Check document.activeElement, press Tab ×4",
+   "Choose the USBtoUART ZIP and inspect the review step"
+  ],
+  "expected": "Kit Dialog: themed surfaces, 2px radii, initial focus on 'Choose ZIP…', Tab trapped inside, return focus on close, 'Design name' label bound to its input, status chips via status tokens.",
+  "actual": "The modal (bg-slate-900, rounded-lg, shadow-xl, bg-slate-950/70 backdrop, emerald/amber chips, red-950 error box) stays dark in light theme (probe: dialog body #111113 on a light app). activeElement stays BODY; Tab goes to 'Close LED Indicators 5V', 'Close QA-q5-empty', 'New design', 'Schem' behind the aria-modal dialog. The name input's accessible name is its placeholder 'USB to UART converter' (label not associated). Stat cards use text-[10px] uppercase labels; chips text-[10px]. Esc and Cancel/Close do work.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/light/103-import-pick.png",
+    "shots/q5/light/104-import-review.png",
+    "shots/q5/light/105-import-review-1100.png",
+    "shots/q5/dark/044-import-review.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/q5/light/104-import-review.png",
+     "x": 720,
+     "y": 450,
+     "hex": "#111113",
+     "nearestToken": "--text-strong (used as dialog bg in light)",
+     "deltaE": 0.6
+    }
+   ],
+   "console": [
+    "activeElement after open: BODY; Tab → BUTTON Close LED Indicators 5V inDialog=false …"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/KicadProjectImportWizard.tsx",
+    "line": 111,
+    "note": "hand-rolled overlay + slate classes"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/KicadProjectImportWizard.tsx",
+    "line": 276,
+    "note": "label without htmlFor"
+   }
+  ],
+  "suggestedFix": "Port to the shared Dialog primitive (Radix: focus trap, initial focus, restore focus, Esc), use token classes/kit Button/Input/StatusChip, bind label via id/htmlFor.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.import:dialog:off-token-no-focus",
+  "id": "Q5-029",
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced in light: Home -> Import KiCad… opens the dialog over the Designer with activeElement BODY; Tab goes to 'Close LED Indicators 5V', 'New design', 'Schem', 'Assistant' (all inDialog=false) behind the aria-modal dialog. Dialog body probes #111113 in light theme (slate classes with no dark: variants; the D1 remap makes them fixed dark neutrals). Name textbox accessible name is its placeholder 'USB to UART converter' (label at :276 not bound). Correction: 'violet-600' buttons render neutral via the D1 remap; emerald/amber chips, red-950 error box and shadow-xl are genuinely off-token. Esc/Cancel close correctly. PLAN §9 lists the import wizard in the remap-stopgap follow-up bucket; the a11y/focus issues are independent of that.",
+   "evidence": [
+    "shots/vq5/light/005-import-pick.png",
+    "shots/vq5/light/006-import-review.png",
+    "probe: dialog body #111113 (light)",
+    "console: activeElement BODY; Tab -> BUTTON Close LED Indicators 5V inDialog=false …"
+   ]
+  }
+ },
+ {
+  "area": "designer.comments",
+  "knownRef": "K45",
+  "title": "Comment pins/popups use raw violet/orange/green/slate palette, rounded-xl + shadow-2xl cards and a '·' placeholder avatar",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Create a schematic comment (pin #1), open it; set status Todo; resolve; compare dark and light themes"
+  ],
+  "expected": "Pins and popups follow the neutral EDA tokens: selection/status tokens for state, 2px radii, 1px border, no drop shadows; a meaningful local-user avatar.",
+  "actual": "Pin fills are hard-coded hex in comment-style.ts: open #8b5cf6 (violet, ΔE 70 from nearest token), todo #fb923c (probed #f9913b), done #22c55e, resolved #64748b. Popups carry shadow-2xl (light: #caced4 shadow band under the card on the #f0f4fb canvas) and a raw white background in light theme; avatar initials render '·' when not signed in; author 'Local' repeated in header and first message; error text rose-500. (Radius and the violet avatar/link/Send classes render as 2px/neutral through the PLAN D1 remap.)",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/063-schem-comment-thread.png",
+    "shots/q5/dark/072-comment-offscreen-chip.png",
+    "shots/q5/light/107-schem-thread-popup.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/q5/dark/063-schem-comment-thread.png",
+     "x": 693,
+     "y": 404,
+     "hex": "#8a5bf4",
+     "nearestToken": "--status-info",
+     "deltaE": 70.0
+    },
+    {
+     "file": "shots/q5/light/107-schem-thread-popup.png",
+     "x": 700,
+     "y": 400,
+     "hex": "#f8903b",
+     "nearestToken": "--net-bus",
+     "deltaE": 25.7
+    },
+    {
+     "file": "shots/q5/light/107-schem-thread-popup.png",
+     "x": 876,
+     "y": 842,
+     "hex": "#caced4",
+     "nearestToken": "shadow band vs canvas #f0f4fb",
+     "deltaE": 0
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/comments/comment-style.ts",
+    "line": 8,
+    "note": "hex palette"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/comments/CommentThreadPopup.tsx",
+    "line": 268,
+    "note": "rounded-xl shadow-2xl slate classes"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/comments/CommentComposerPopup.tsx",
+    "line": 80,
+    "note": "rounded-xl shadow-2xl"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/comments/comment-format.ts",
+    "line": 29,
+    "note": "initialsFrom(null) → '·'"
+   }
+  ],
+  "suggestedFix": "Map pin states to tokens (open=--selection, todo=--status-warning, done=--status-success, resolved=--status-neutral); restyle popups with --menu-bg/--menu-border, 2px radius, no shadow; show a user glyph (e.g. lucide User) for the local author and drop the duplicated header author.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.comments:visual:off-token",
+  "id": "Q5-030",
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Partially re-scoped. Confirmed off-token: pin fills are raw hex in comment-style.ts:8-13 (open #8b5cf6 violet — the accent the redesign removed, todo #fb923c probed #f9913b in light, done #22c55e, resolved #64748b); popups carry shadow-2xl (computed '0 25px 50px -12px rgba(0,0,0,.25)', light probe #caced4 band on #f0f4fb canvas); light popup bg is raw white; avatar initials '·' for the local author (comment-format.ts:29); 'Local' repeated; error text rose-500. Refuted by the D1 remap (computed styles): popups are 2px radius (rounded-xl -> --radius-xl 2px), avatars/links/Send use remapped violet-600 = rgb(58,58,64) neutral, not violet.",
+   "evidence": [
+    "shots/vq5/dark/025-schem-thread-popup.png",
+    "shots/vq5/light/007-schem-thread-popup.png",
+    "computed: popup border-radius 2px, avatar bg rgb(58,58,64), box-shadow 0 25px 50px -12px rgba(0,0,0,0.25)",
+    "probe: light pin #f9913b"
+   ]
+  }
+ },
+ {
+  "area": "designer.comments",
+  "title": "Comment a11y/UX gaps: pins named only by number, unlabelled attachment-remove button, image-only reply impossible, recenter jumps zoom to 80%",
+  "category": "a11y",
+  "severity": "S4",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "Open thread → Attach image → choose a PNG → leave text empty",
+   "Inspect pin/offscreen chip accessible names",
+   "Pan until pin is off-screen, click the edge chip"
+  ],
+  "expected": "Pins announce 'Comment 1 by Local, 3 messages'; the attachment chip's remove button is labelled; an image can be posted without text; recenter keeps the current zoom.",
+  "actual": "Pins and edge chips expose only '1' (details are in title only); the attachment remove (X) button has no name; Send stays disabled with an image attached until text is typed (no hint); non-image files (sample.md) are rejected with 'Only PNG, JPEG, or WebP images.' (fine) but the attach button tooltip doesn't say so; clicking the off-screen chip recentres and changes zoom from 11% to 80%.",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/dark/064-comment-attach-md-rejected.png",
+    "shots/q5/dark/065-comment-attach-png-send-disabled.png",
+    "shots/q5/dark/073-comment-offscreen-recenter.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/comments/CommentPin.tsx",
+    "line": 58,
+    "note": "no aria-label (name '1', title only)"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/comments/CommentThreadPopup.tsx",
+    "line": 331,
+    "note": "attachment remove button unlabelled"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/comments/CommentThreadPopup.tsx",
+    "line": 231,
+    "note": "submit requires non-empty body even with a file"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/SchematicCanvas.tsx",
+    "line": 1011,
+    "note": "recenter forces zoom >= 40 and skips onZoomChange"
+   }
+  ],
+  "suggestedFix": "aria-label on pins/chips; aria-label='Remove attachment'; allow submit when file is set; keep zoom when recentring.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.comments:a11y:pins-attachments",
+  "id": "Q5-031",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Code + a11y tree confirmed: pin button accessible name '1' (title 'Local · 3 messages', no aria-label); attachment remove button has only an X icon (CommentThreadPopup.tsx:331-337); submit() returns early when body is empty even with a file (:231-233). Recenter: SchematicCanvas.tsx:1002-1015 forces camera.zoom >= 40 (80% readout) and does not call onZoomChange, so the status-bar zoom readout also goes stale. Attach-tooltip wording not re-checked (S4, accepted from q5 screenshots).",
+   "evidence": [
+    "shots/vq5/dark/025-schem-thread-popup.png",
+    "snapshot: button \"1\" title='Local · 3 messages'"
+   ]
+  }
+ },
+ {
+  "area": "designer.bom",
+  "knownRef": "K40",
+  "title": "BOM load/save errors: raw detail text with no retry while the footer still claims 'Synced with schematic'; failed autosave never retries",
+  "category": "error-handling",
+  "severity": "S3",
+  "themes": [
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "route **/designs/*/bom → 500 {detail:'boom'}; open BOM tab",
+   "unroute; route **/bom/refs/** → 500; type in Notes of line R1; unroute; wait; then clear the field"
+  ],
+  "expected": "An error panel ('Couldn't load the BOM' + detail + Retry) and a footer that doesn't claim sync; failed autosave offers Retry / retries on reconnect and clears when the draft matches the server.",
+  "actual": "Table shows only the raw problem detail 'boom' in red at the top-left; filters read 'All 0 / Missing MPN 0', totals '$0.00', footer '0 missing MPN · Synced with schematic r72', Export stays enabled, inspector 'No BOM row selected.' No retry except switching tabs. On save failure the footer shows 'Autosave failed' and stays so after the backend recovers (no retry); clearing the field back to the saved value still shows 'Autosave failed'. Where detail is absent the fetch helpers surface 'HTTP 500' (K40). Additionally, after a failure, editing the field back to the saved value leaves the footer on 'Saving…' forever (the effect returns early when the draft equals lastSaved without resetting saveState).",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/light/108-bom-error-500.png",
+    "shots/q5/light/109-bom-autosave-failed.png"
+   ],
+   "network": [
+    "GET …/bom → 500 (injected)",
+    "PATCH …/bom/refs/R1 → 500 (injected)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 387,
+    "note": "error rendered as plain text, rest of UI treats bom=null as empty"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 468,
+    "note": "'Synced with schematic' shown regardless of error"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+    "line": 617,
+    "note": "catch → error, no retry"
+   }
+  ],
+  "suggestedFix": "Render a kit error state with Retry (re-run getBom) and hide counts/footer sync claim while bom is null; add a 'Retry' action to AutosaveState and reset it when draft equals lastSaved.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "designer.bom:error-states",
+  "id": "Q5-032",
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced in light: GET …/bom routed to 500 {detail:'boom'} -> table shows only 'boom', filters 'All 0', footer '0 missing MPN · Synced with schematic r75', Export ▾ enabled, inspector 'No BOM row selected.'; no retry. PATCH …/bom/refs/** routed to 500 -> 'Autosave failed'; after unroute it stays failed (no retry). New detail: deleting the typed text back to the saved value left the footer on 'Saving…' permanently with no request sent — the autosave effect (DesignerBomView.tsx:597-611) returns early when nextKey === lastSaved without resetting saveState. K40 partial (raw detail shown; 'HTTP n' fallback path not hit).",
+   "evidence": [
+    "shots/vq5/light/003-bom-error-500.png",
+    "shots/vq5/light/004-bom-autosave-stuck-saving.png",
+    "network: PATCH …/bom/refs/D1 -> 500 (injected); no later PATCH after unroute"
+   ]
+  }
+ },
+ {
+  "area": "designer.3d",
+  "title": "3D error state floods the whole viewport with a maroon wash, no retry, empty left rail",
+  "category": "error-handling",
+  "severity": "S3",
+  "themes": [
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "designId": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "repro": [
+   "route **/projection/pcb → 500",
+   "Open the 3D tab"
+  ],
+  "expected": "A calm kit error state (status-danger text/icon on the canvas-well surface) with a Retry button; left rail shows controls disabled or a note.",
+  "actual": "The entire 800×866 canvas area turns #7a4e4f (bg-red-950/70 over the light surface) with a small red card '3D view unavailable / Internal error'; no retry (must leave and re-enter the tab); the left rail is blank white. Off-token colours (red-950/red-800/red-200).",
+  "evidence": {
+   "screenshots": [
+    "shots/q5/light/110-3d-error.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/q5/light/110-3d-error.png",
+     "x": 500,
+     "y": 300,
+     "hex": "#7a4e4f",
+     "nearestToken": "--text-secondary",
+     "deltaE": 20.5
+    }
+   ],
+   "network": [
+    "GET …/projection/pcb → 500 (injected)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 270,
+    "note": "Board3DStatePanel error variant fills container with errorBackground"
+   }
+  ],
+  "suggestedFix": "Keep the canvas-well background, show a tokenised error card with Retry (re-run getPcbProjection); render the rail with disabled controls.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.3d:error-state",
+  "id": "Q5-033",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq5",
+   "reason": "Reproduced in light: projection/pcb routed to 500 -> whole canvas #7a4e4f wash with small '3D view unavailable / Internal error' card, left rail blank #f7f7f8, no Retry. Unrouted afterwards.",
+   "evidence": [
+    "shots/vq5/light/002-3d-error.png",
+    "probe: wash #7a4e4f, rail #f7f7f8"
+   ]
+  }
+ }
+]

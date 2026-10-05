@@ -1,0 +1,215 @@
+{
+ "agent": "f1c",
+ "checklist": [
+  {
+   "item": "Settings → Libraries: install beta.1 (reinstall), beta.2 (upgrade), beta.1 (downgrade), beta.2 ×2 (idempotent): progress/feedback, core card version, sources table",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ],
+   "notes": "F1C-003. Idempotent reinstall is correct (reimport:true, no duplicates). Stack B core is left at 0.1.0-beta.2 (charter order), bundled is beta.1"
+  },
+  {
+   "item": "Library header counts/facets update without reload after install/remove",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "OK: Settings is a full-page route, so Library remounts and refetches (70 parts/4 sources after pack install, back to 67/3 after removal)"
+  },
+  {
+   "item": "Remove source (K06 native confirm → accept) and check Library list + existing design parts",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "Core cannot be removed. A custom team pack (qa.f1c.pack) was crafted and installed, 2 parts placed in QA-f1c-drop, then removed. F1C-004. Designs keep snapshots"
+  },
+  {
+   "item": "Crafted-pack edge cases: pack without kind, pack reusing core ids",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "F1C-001, F1C-002. Both cleaned up: core LED restored by reinstalling core beta.2, then the empty pack removed"
+  },
+  {
+   "item": "Invalid / tampered .opclib install errors",
+   "dark": "n/a",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "folded into F1C-003"
+  },
+  {
+   "item": "N2 / Library→design placement path: MIME code check + synthetic DragEvents (both MIMEs) + real HTML5 drag",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "F1C-006 (no reachable path; real drags always 'Drop not ready'), F1C-007 (N2 confirmed via synthetic drop). Theme-independent"
+  },
+  {
+   "item": "Long-text part via wizard (200-char name, 300-char description, 26 tags): table, grid, preview, detail, fullscreen, Cmd+K palette, inspector, BOM",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ],
+   "notes": "F1C-017. Long MPN (92) / manufacturer (132) set in the inspector because the wizard has no MPN/manufacturer fields (Q7-030) and library PATCH doesn't accept them"
+  },
+  {
+   "item": "Library true empty state (fetch shim {ok,data:{components:[]}} + empty facets)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ],
+   "notes": "F1C-015"
+  },
+  {
+   "item": "Library with 100 synthetic long-named items (table + grid)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "Renders fine (100 rows, SVG card previews). The preview for a mock id shows 'Component detail not found' as expected"
+  },
+  {
+   "item": "2.5 s delay shim: list, preview pane and detail loading states",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "F1C-015 (list), F1C-016 (stale preview). Detail page shows 'Loading component...', which is OK"
+  },
+  {
+   "item": "Detail save error: PATCH 500 (problem+json and empty body) and offline",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "F1C-014. The draft is preserved in all cases"
+  },
+  {
+   "item": "Keyboard-only wizard walk (Symbol → Footprints → 3D → Metadata → Import)",
+   "dark": "tested",
+   "light": "partial",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "F1C-009, F1C-010, F1C-011, F1C-012. Light: focus-ring spot-check plus the Enter-on-Back import reproduction"
+  },
+  {
+   "item": "Settings at scale: 10 providers with 126-char labels, default-provider select, 1100x720, cleanup",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ],
+   "notes": "F1C-018. The default provider's Delete is correctly disabled. All dummy providers deleted and default restored to oMLX. No keys displayed"
+  },
+  {
+   "item": "Library search consistency (found while navigating)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "F1C-013"
+  },
+  {
+   "item": "DOM census + console per screen",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "census/f1c-*.json. Console: known R3F 'addEventListener' TypeError (Q6-011), THREE.Clock deprecation, Radix DialogContent description warning (Q3-028); new: 404 …/designer/library/components/<orphan>/placement when selecting orphaned parts (in F1C-004)"
+  }
+ ],
+ "known": [
+  {
+   "ref": "N2",
+   "status": "confirmed",
+   "evidence": "Synthetic designer-MIME drops placed R2 (0,-4 mm) and C1 (-4,-8 mm) exactly on 2 mm, while palette placements landed at (7.0, 1.1) mm; the path is unreachable for users (F1C-006/F1C-007)"
+  },
+  {
+   "ref": "K06",
+   "status": "confirmed",
+   "evidence": "window.confirm on library source Remove (spy log ×3) and on wizard close ('Close the wizard? Unsaved changes will be lost.')"
+  },
+  {
+   "ref": "K43",
+   "status": "confirmed",
+   "evidence": "'Place in design' permanently disabled; there is also no drag path, which corrects the Q6-016 premise (F1C-006)"
+  },
+  {
+   "ref": "K40",
+   "status": "confirmed",
+   "evidence": "Detail save shows 'Update failed (HTTP 500)' for an empty-body 500 (F1C-014)"
+  },
+  {
+   "ref": "K21",
+   "status": "confirmed",
+   "evidence": "'Open in Library' on an orphaned part lands on the unfiltered list with no message (F1C-004)"
+  },
+  {
+   "ref": "K34",
+   "status": "partial",
+   "evidence": "Wizard controls use the UA focus ring (Q11-003), but the sr-only STEP input and the tag × buttons have no visible focus (F1C-010)"
+  },
+  {
+   "ref": "K36",
+   "status": "confirmed",
+   "evidence": "census: 9.5px source badges in the Library table, 9px LOCAL/DEFAULT pills in Settings → Assistant"
+  },
+  {
+   "ref": "K44",
+   "status": "confirmed",
+   "evidence": "Palette placements are off-grid (D1 y=1.1 mm, R1 x=7.0 mm)"
+  },
+  {
+   "ref": "K07",
+   "status": "confirmed",
+   "evidence": "'60 of 69/70' strips; searching 'R' can't reach the part named 'R' (F1C-013)"
+  },
+  {
+   "ref": "Q6-016 premise",
+   "status": "refuted",
+   "evidence": "Drag-and-drop from the Library table is NOT a working path: MIME mismatch, never co-visible, and native dragover getData() is empty (F1C-006)"
+  }
+ ],
+ "untested": [
+  {
+   "item": "Real cross-space drag from a Library row onto the schematic",
+   "reason": "Impossible by design: Library and Designer are separate full-screen spaces with no spring-loaded rail. Simulated with synthetic events and an injected native drag source instead"
+  },
+  {
+   "item": "Long MPN/manufacturer in the Library (table/detail)",
+   "reason": "Neither the wizard nor PATCH /components accepts manufacturer/MPN; tested on the placed instance (inspector/BOM) instead"
+  },
+  {
+   "item": "Light-theme repetition of the source-remove and synthetic drop flows",
+   "reason": "Theme-independent behaviour; the visual states were captured in dark"
+  }
+ ],
+ "artifactsLeftOnStackB": [
+  "design QA-f1c-drop (7c22a0f9-faf8-4d2d-9da7-95c117eac147) with D1/R1 (orphaned pack parts), R2, C1, R3",
+  "parts QA-f1c-LongName… (5cf27157…), QA-f1c-R-accidental (ea9ed02d…), QA-f1c-enter-on-back-test (e8252e42…)",
+  "core library now 0.1.0-beta.2 via manual-import"
+ ]
+}

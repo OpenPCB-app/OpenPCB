@@ -1,0 +1,1108 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "dark",
+ "vw": 1920,
+ "vh": 1080,
+ "docW": 1920,
+ "bands": [
+  {
+   "tag": "header",
+   "x": 80,
+   "y": 0,
+   "w": 1840,
+   "h": 34,
+   "text": "Library 27 parts \u00b7 3 sources / Table Gri",
+   "cls": "flex h-[34px] shrink-0 items-center gap-2 border-b border-border bg-surface-rail px-3",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(15, 15, 16)"
+  },
+  {
+   "tag": "label",
+   "x": 278,
+   "y": 6,
+   "w": 320,
+   "h": 22,
+   "text": "/",
+   "cls": "flex h-[22px] min-w-0 items-center gap-1.5 rounded-control border border-border-control bg-surface-input px-1.5 focus-within:border-selectio",
+   "n": 1,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(12, 12, 13)"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 34,
+   "w": 219,
+   "h": 24,
+   "text": "Source 3",
+   "cls": "flex shrink-0 items-center gap-1.5 border-y border-border bg-surface-section px-2 h-[24px]",
+   "n": 5,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(21, 21, 23)"
+  },
+  {
+   "tag": "div",
+   "x": 300,
+   "y": 34,
+   "w": 1620,
+   "h": 26,
+   "text": "27 of 27 Select All",
+   "cls": "flex h-[26px] shrink-0 items-center gap-2 border-b border-border px-2.5 text-2xs text-text-tertiary",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "label",
+   "x": 88,
+   "y": 156,
+   "w": 203,
+   "h": 22,
+   "cls": "flex h-[22px] min-w-0 items-center gap-1.5 rounded-control border border-border-control bg-surface-input px-1.5 focus-within:border-selectio",
+   "n": 2,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(12, 12, 13)"
+  }
+ ],
+ "rows": [
+  {
+   "parent": "mt-3 flex w-full flex-col items-center gap-2",
+   "px": 4,
+   "py": 137,
+   "child": "BUTTON.flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center g",
+   "n": 3,
+   "heights": {
+    "51": 3
+   },
+   "w": 72,
+   "sample": "Designer"
+  },
+  {
+   "parent": "flex-1",
+   "px": 80,
+   "py": 34,
+   "child": "SECTION.",
+   "n": 5,
+   "heights": {
+    "94": 1,
+    "116": 2,
+    "210": 2
+   },
+   "w": 219,
+   "sample": "Source 3 OpenPCB Core Library 17 Local L"
+  },
+  {
+   "parent": "py-0.5",
+   "px": 80,
+   "py": 58,
+   "child": "DIV.flex h-[22px] items-center gap-2 pl-3 pr-2",
+   "n": 3,
+   "heights": {
+    "22": 3
+   },
+   "w": 219,
+   "sample": "OpenPCB Core Library 17"
+  },
+  {
+   "parent": "py-0.5",
+   "px": 80,
+   "py": 152,
+   "child": "DIV.flex h-[22px] items-center gap-2 pl-3 pr-2",
+   "n": 6,
+   "heights": {
+    "22": 6
+   },
+   "w": 219,
+   "sample": "connector 4"
+  },
+  {
+   "parent": "py-0.5",
+   "px": 80,
+   "py": 362,
+   "child": "DIV.flex h-[22px] items-center gap-2 pl-3 pr-2",
+   "n": 4,
+   "heights": {
+    "22": 4
+   },
+   "w": 219,
+   "sample": "SMD 21"
+  },
+  {
+   "parent": "py-0.5",
+   "px": 80,
+   "py": 478,
+   "child": "DIV.flex h-[22px] items-center gap-2 pl-3 pr-2",
+   "n": 4,
+   "heights": {
+    "22": 4
+   },
+   "w": 219,
+   "sample": "sot-23 3"
+  },
+  {
+   "parent": "py-0.5",
+   "px": 80,
+   "py": 594,
+   "child": "DIV.flex h-[22px] items-center gap-2 pl-3 pr-2",
+   "n": 6,
+   "heights": {
+    "22": 6
+   },
+   "w": 219,
+   "sample": "imported-from-kicad 6"
+  }
+ ],
+ "btnHeights": {
+  "text:222": 27,
+  "text:51": 5,
+  "text:15": 5,
+  "text:22": 4,
+  "text:20": 2,
+  "icon:32": 1
+ },
+ "btnVariants": {
+  "h51 fs12px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 132) fw400": {
+   "n": 4,
+   "ex": [
+    "Home",
+    "Designer",
+    "Docs"
+   ]
+  },
+  "h51 fs12px r2px bg:rgb(28, 28, 31) bd:none fg:rgb(245, 245, 245) fw400": {
+   "n": 1,
+   "ex": [
+    "Library"
+   ]
+  },
+  "h20 fs10px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(168, 168, 173) fw400": {
+   "n": 1,
+   "ex": [
+    "Table"
+   ]
+  },
+  "h20 fs10px r0px bg:rgb(44, 44, 49) bd:none fg:rgb(245, 245, 245) fw500": {
+   "n": 1,
+   "ex": [
+    "Grid"
+   ]
+  },
+  "h22 fs11px r2px bg:rgba(0, 0, 0, 0) bd:rgb(42, 42, 46) fg:rgb(217, 217, 217) fw400": {
+   "n": 1,
+   "ex": [
+    "Import library\u2026"
+   ]
+  },
+  "h22 fs11px r2px bg:rgb(232, 232, 232) bd:none fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "New part"
+   ]
+  },
+  "h15 fs12px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(217, 217, 217) fw400": {
+   "n": 5,
+   "ex": [
+    "Source",
+    "Family",
+    "Mount"
+   ]
+  },
+  "h22 fs10px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(168, 168, 173) fw400": {
+   "n": 2,
+   "ex": [
+    "Show 20 more\u2026",
+    "Show 23 more\u2026"
+   ]
+  },
+  "h222 fs12px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(217, 217, 217) fw400": {
+   "n": 27,
+   "ex": [
+    "74HC00 Quad NAND SOIC-14",
+    "AMS1117-3.3 SOT-223\n\nAMS",
+    "ATMEGA16U4-AU\n\nAVR AVR\u00ae "
+   ]
+  }
+ },
+ "btnOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 137,
+   "w": 72,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 195,
+   "w": 64,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 1038,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 88,
+   "y": 39,
+   "w": 191,
+   "h": 15,
+   "text": "Source",
+   "cls": "flex min-w-0 flex-1 items-center gap-1.5 text-left outline-none",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 88,
+   "y": 133,
+   "w": 185,
+   "h": 15,
+   "text": "Family",
+   "cls": "flex min-w-0 flex-1 items-center gap-1.5 text-left outline-none",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 88,
+   "y": 343,
+   "w": 191,
+   "h": 15,
+   "text": "Mount",
+   "cls": "flex min-w-0 flex-1 items-center gap-1.5 text-left outline-none",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 88,
+   "y": 459,
+   "w": 191,
+   "h": 15,
+   "text": "Package",
+   "cls": "flex min-w-0 flex-1 items-center gap-1.5 text-left outline-none",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 88,
+   "y": 575,
+   "w": 185,
+   "h": 15,
+   "text": "Other",
+   "cls": "flex min-w-0 flex-1 items-center gap-1.5 text-left outline-none",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 313,
+   "y": 73,
+   "w": 254,
+   "h": 222,
+   "text": "74HC00 Quad NAND SOIC-14 74HC00 quad 2-i",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 581,
+   "y": 73,
+   "w": 254,
+   "h": 222,
+   "text": "AMS1117-3.3 SOT-223 AMS1117 fixed 3.3 V ",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 849,
+   "y": 73,
+   "w": 254,
+   "h": 222,
+   "text": "ATMEGA16U4-AU AVR AVR\u00ae ATmega Microcontr",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1117,
+   "y": 73,
+   "w": 254,
+   "h": 222,
+   "text": "ATMEGA8A-MU AVR AVR\u00ae ATmega Microcontrol",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1385,
+   "y": 73,
+   "w": 254,
+   "h": 222,
+   "text": "ATTINY13A-SU AVR AVR\u00ae ATtiny Microcontro",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1653,
+   "y": 73,
+   "w": 254,
+   "h": 222,
+   "text": "Capacitor Generic non-polarized capacito",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 313,
+   "y": 309,
+   "w": 254,
+   "h": 222,
+   "text": "Connector:Conn_01x05_Pin Imported from K",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 581,
+   "y": 309,
+   "w": 254,
+   "h": 222,
+   "text": "Device:C Imported from KiCad project (De",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 849,
+   "y": 309,
+   "w": 254,
+   "h": 222,
+   "text": "Device:LED Imported from KiCad project (",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1117,
+   "y": 309,
+   "w": 254,
+   "h": 222,
+   "text": "Device:R Imported from KiCad project (De",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1385,
+   "y": 309,
+   "w": 254,
+   "h": 222,
+   "text": "Generic Diode Generic two-pin diode with",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1653,
+   "y": 309,
+   "w": 254,
+   "h": 222,
+   "text": "Inductor Generic two-pin SMD inductor wi",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 313,
+   "y": 545,
+   "w": 254,
+   "h": 222,
+   "text": "Interface_USB:CP2102N-Axx-xQFN28 Importe",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 581,
+   "y": 545,
+   "w": 254,
+   "h": 222,
+   "text": "LED Generic two-pin indicator LED with c",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 849,
+   "y": 545,
+   "w": 254,
+   "h": 222,
+   "text": "LESD5D5.0CT1G:LESD5D5.0CT1G Imported fro",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1117,
+   "y": 545,
+   "w": 254,
+   "h": 222,
+   "text": "LM324N Quad 30-V 1.2-MHz operational amp",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1385,
+   "y": 545,
+   "w": 254,
+   "h": 222,
+   "text": "LM358 Dual Op-Amp LM358 dual operational",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1653,
+   "y": 545,
+   "w": 254,
+   "h": 222,
+   "text": "NE555 Timer SOIC-8 NE555 timer in SOIC-8",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 313,
+   "y": 781,
+   "w": 254,
+   "h": 222,
+   "text": "NMOS Transistor SOT-23 GSD Generic N-cha",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 581,
+   "y": 781,
+   "w": 254,
+   "h": 222,
+   "text": "NPN Transistor SOT-23 EBC Generic NPN BJ",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 849,
+   "y": 781,
+   "w": 254,
+   "h": 222,
+   "text": "Pin Header 1x02 2.54mm Two-pin single-ro",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1117,
+   "y": 781,
+   "w": 254,
+   "h": 222,
+   "text": "Pin Header 2x03 2.54mm Six-pin dual-row ",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1385,
+   "y": 781,
+   "w": 254,
+   "h": 222,
+   "text": "Pin Socket 1x02 2.54mm Two-pin single-ro",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1653,
+   "y": 781,
+   "w": 254,
+   "h": 222,
+   "text": "Pin Socket 2x03 2.54mm Six-pin dual-row ",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 313,
+   "y": 1017,
+   "w": 254,
+   "h": 222,
+   "text": "PNP Transistor SOT-23 EBC Generic PNP BJ",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 581,
+   "y": 1017,
+   "w": 254,
+   "h": 222,
+   "text": "Resistor Generic non-polarized resistor ",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 849,
+   "y": 1017,
+   "w": 254,
+   "h": 222,
+   "text": "Zener Diode Generic two-pin Zener diode ",
+   "cls": "flex h-full w-full flex-col text-left outline-none focus-visible:border-selection",
+   "fs": "12px"
+  }
+ ],
+ "inputs": [
+  {
+   "tag": "input",
+   "x": 303,
+   "y": 9,
+   "w": 276,
+   "h": 15,
+   "cls": "min-w-0 flex-1 bg-transparent text-xs text-text-strong outline-none placeholder:text-text-disabled [&::-webkit-search-cancel-button]:appeara",
+   "type": "search",
+   "ph": "Search name, MPN, package\u2026",
+   "fs": "11px",
+   "rad": "0px",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bd": "none",
+   "wrapH": 22,
+   "wrapRad": "2px",
+   "native": "auto"
+  },
+  {
+   "tag": "input",
+   "x": 113,
+   "y": 160,
+   "w": 171,
+   "h": 15,
+   "label": "Filter family options",
+   "cls": "min-w-0 flex-1 bg-transparent text-xs text-text-strong outline-none placeholder:text-text-disabled [&::-webkit-search-cancel-button]:appeara",
+   "type": "search",
+   "ph": "Filter family\u2026",
+   "fs": "11px",
+   "rad": "0px",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bd": "none",
+   "wrapH": 22,
+   "wrapRad": "2px",
+   "native": "auto"
+  },
+  {
+   "tag": "input",
+   "x": 113,
+   "y": 602,
+   "w": 171,
+   "h": 15,
+   "label": "Filter other options",
+   "cls": "min-w-0 flex-1 bg-transparent text-xs text-text-strong outline-none placeholder:text-text-disabled [&::-webkit-search-cancel-button]:appeara",
+   "type": "search",
+   "ph": "Filter other\u2026",
+   "fs": "11px",
+   "rad": "0px",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bd": "none",
+   "wrapH": 22,
+   "wrapRad": "2px",
+   "native": "auto"
+  }
+ ],
+ "tablists": [],
+ "segs": [
+  {
+   "tag": "div",
+   "x": 1581,
+   "y": 6,
+   "w": 110,
+   "h": 22,
+   "role": "group",
+   "label": "Result view",
+   "text": "Table Grid",
+   "cls": "inline-flex shrink-0 items-stretch overflow-hidden rounded-control border border-border-control h-[22px]",
+   "rad": "2px",
+   "bd": "rgb(42, 42, 46)",
+   "optFs": {
+    "10px": 2
+   },
+   "optH": {
+    "20": 2
+   },
+   "pressed": 2,
+   "activeBg": {
+    "rgb(44, 44, 49)": 1
+   }
+  }
+ ],
+ "radii": {
+  "2px": 34
+ },
+ "radEx": {},
+ "shadows": [],
+ "shadowCount": 0,
+ "blurs": [],
+ "grads": [],
+ "fontSizes": {
+  "10px": 58,
+  "11px": 54,
+  "12px": 24,
+  "13px": 1
+ },
+ "fontFam": {
+  "IBM Plex Sans": 106,
+  "IBM Plex Mono": 31
+ },
+ "weights": {
+  "400": 104,
+  "500": 33
+ },
+ "small": [],
+ "big": [],
+ "iconSizes": {
+  "12x12": 12,
+  "20x20": 5,
+  "18x18": 2,
+  "16x16": 1
+ },
+ "iconStroke": {
+  "2px/attr2": 12,
+  "1.5px/attr1.5": 8
+ },
+ "iconOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-layout-grid h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 137,
+   "w": 72,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-pen-tool h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 195,
+   "w": 64,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-box h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-book-open h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-bot h-5 w-5"
+  },
+  {
+   "tag": "a",
+   "x": 24,
+   "y": 998,
+   "w": 32,
+   "h": 32,
+   "label": "Report a bug or request a feature",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-circle-dot h-[18px] w-[18p"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 1038,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-settings h-[18px] w-[18px]"
+  }
+ ],
+ "otherSvgs": [],
+ "floats": [],
+ "alerts": [],
+ "headings": [
+  {
+   "tag": "h1",
+   "x": 92,
+   "y": 8,
+   "w": 42,
+   "h": 18,
+   "text": "Library",
+   "cls": "text-base font-medium text-text-strong",
+   "fs": "13px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 325,
+   "y": 197,
+   "w": 230,
+   "h": 15,
+   "text": "74HC00 Quad NAND SOIC-14",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 593,
+   "y": 197,
+   "w": 230,
+   "h": 15,
+   "text": "AMS1117-3.3 SOT-223",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 861,
+   "y": 197,
+   "w": 230,
+   "h": 15,
+   "text": "ATMEGA16U4-AU",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 1129,
+   "y": 197,
+   "w": 230,
+   "h": 15,
+   "text": "ATMEGA8A-MU",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 1397,
+   "y": 197,
+   "w": 230,
+   "h": 15,
+   "text": "ATTINY13A-SU",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 1665,
+   "y": 197,
+   "w": 230,
+   "h": 15,
+   "text": "Capacitor",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 325,
+   "y": 433,
+   "w": 230,
+   "h": 15,
+   "text": "Connector:Conn_01x05_Pin",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 593,
+   "y": 433,
+   "w": 230,
+   "h": 15,
+   "text": "Device:C",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 861,
+   "y": 433,
+   "w": 230,
+   "h": 15,
+   "text": "Device:LED",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 1129,
+   "y": 433,
+   "w": 230,
+   "h": 15,
+   "text": "Device:R",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 1397,
+   "y": 433,
+   "w": 230,
+   "h": 15,
+   "text": "Generic Diode",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 1665,
+   "y": 433,
+   "w": 230,
+   "h": 15,
+   "text": "Inductor",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 325,
+   "y": 669,
+   "w": 230,
+   "h": 15,
+   "text": "Interface_USB:CP2102N-Axx-xQFN28",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 593,
+   "y": 669,
+   "w": 230,
+   "h": 15,
+   "text": "LED",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 861,
+   "y": 669,
+   "w": 230,
+   "h": 15,
+   "text": "LESD5D5.0CT1G:LESD5D5.0CT1G",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 1129,
+   "y": 669,
+   "w": 230,
+   "h": 15,
+   "text": "LM324N",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 1397,
+   "y": 669,
+   "w": 230,
+   "h": 15,
+   "text": "LM358 Dual Op-Amp",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 1665,
+   "y": 669,
+   "w": 230,
+   "h": 15,
+   "text": "NE555 Timer SOIC-8",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 325,
+   "y": 905,
+   "w": 230,
+   "h": 15,
+   "text": "NMOS Transistor SOT-23 GSD",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 593,
+   "y": 905,
+   "w": 230,
+   "h": 15,
+   "text": "NPN Transistor SOT-23 EBC",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 861,
+   "y": 905,
+   "w": 230,
+   "h": 15,
+   "text": "Pin Header 1x02 2.54mm",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 1129,
+   "y": 905,
+   "w": 230,
+   "h": 15,
+   "text": "Pin Header 2x03 2.54mm",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 1397,
+   "y": 905,
+   "w": 230,
+   "h": 15,
+   "text": "Pin Socket 1x02 2.54mm",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  },
+  {
+   "tag": "h3",
+   "x": 1665,
+   "y": 905,
+   "w": 230,
+   "h": 15,
+   "text": "Pin Socket 2x03 2.54mm",
+   "cls": "truncate text-sm font-medium leading-tight text-text-strong",
+   "fs": "12px",
+   "fw": "500"
+  }
+ ],
+ "canvases": [],
+ "overflowX": [],
+ "clipped": []
+}

@@ -1,0 +1,26 @@
+[
+ {
+  "role": "menu",
+  "tid": "app-context-menu",
+  "label": null,
+  "text": "OpenPCB Settings Ctrl+,",
+  "x": 164,
+  "y": 17,
+  "w": 160,
+  "h": 65,
+  "bg": "rgb(247, 247, 248)",
+  "bd": "1px rgb(212, 212, 216)",
+  "rad": "3px",
+  "bs": "rgba(0, 0, 0, 0.1) 0px 10px 15px -3px, rgba(0, 0, 0, 0.1) 0px 4px 6px -4px",
+  "bf": "none",
+  "fs": "12px",
+  "pad": "6px 0px",
+  "itemH": {
+   "28": 1
+  },
+  "itemFs": {
+   "12px": 1
+  },
+  "cls": "fixed z-[60] min-w-[10rem] rounded-float border border-border bg-surface-panel py-1.5 shadow-lg outline-none"
+ }
+]

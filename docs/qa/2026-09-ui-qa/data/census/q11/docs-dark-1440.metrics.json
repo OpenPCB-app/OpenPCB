@@ -1,0 +1,309 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "dark",
+ "vw": 1440,
+ "vh": 900,
+ "docW": 1440,
+ "bands": [
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 0,
+   "w": 259,
+   "h": 49,
+   "cls": "flex items-center gap-1 border-b border-slate-200 p-2 dark:border-slate-800",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  }
+ ],
+ "rows": [
+  {
+   "parent": "mt-3 flex w-full flex-col items-center gap-2",
+   "px": 4,
+   "py": 137,
+   "child": "BUTTON.flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center g",
+   "n": 3,
+   "heights": {
+    "51": 3
+   },
+   "w": 72,
+   "sample": "Designer"
+  },
+  {
+   "parent": "p-2",
+   "px": 80,
+   "py": 82,
+   "child": "DIV.",
+   "n": 8,
+   "heights": {
+    "36": 8
+   },
+   "w": 243,
+   "sample": "QA-q9-B"
+  }
+ ],
+ "btnHeights": {
+  "icon:24": 16,
+  "icon:20": 10,
+  "text:51": 5,
+  "icon:32": 1,
+  "text:20": 1
+ },
+ "btnVariants": {
+  "h51 fs12px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 132) fw400": {
+   "n": 4,
+   "ex": [
+    "Home",
+    "Designer",
+    "Library"
+   ]
+  },
+  "h51 fs12px r2px bg:rgb(28, 28, 31) bd:none fg:rgb(245, 245, 245) fw400": {
+   "n": 1,
+   "ex": [
+    "Docs"
+   ]
+  },
+  "h20 fs11px r2px bg:rgb(232, 232, 232) bd:none fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "New page"
+   ]
+  }
+ },
+ "btnOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 137,
+   "w": 72,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 195,
+   "w": 72,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 254,
+   "w": 64,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 858,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "fs": "12px"
+  }
+ ],
+ "inputs": [
+  {
+   "tag": "input",
+   "x": 88,
+   "y": 8,
+   "w": 171,
+   "h": 32,
+   "cls": "h-8 w-full rounded-control border border-slate-300 bg-surface-input pl-8 pr-7 text-sm text-text-primary outline-none placeholder:text-text-t",
+   "type": "text",
+   "ph": "Search...",
+   "fs": "12px",
+   "rad": "2px",
+   "bg": "rgb(12, 12, 13)",
+   "bd": "rgb(44, 44, 49)",
+   "wrapH": 32,
+   "wrapRad": "0px",
+   "native": "auto"
+  }
+ ],
+ "tablists": [],
+ "segs": [],
+ "radii": {
+  "2px": 4
+ },
+ "radEx": {},
+ "shadows": [],
+ "shadowCount": 0,
+ "blurs": [],
+ "grads": [],
+ "fontSizes": {
+  "12px": 9,
+  "10px": 5,
+  "11px": 3
+ },
+ "fontFam": {
+  "IBM Plex Sans": 17
+ },
+ "weights": {
+  "400": 6,
+  "500": 10,
+  "600": 1
+ },
+ "small": [],
+ "big": [],
+ "iconSizes": {
+  "12x12": 16,
+  "16x16": 14,
+  "20x20": 5,
+  "18x18": 2,
+  "14x14": 1,
+  "40x40": 1
+ },
+ "iconStroke": {
+  "2px/attr2": 31,
+  "1.5px/attr1.5": 8
+ },
+ "iconOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-layout-grid h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 137,
+   "w": 72,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-pen-tool h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 195,
+   "w": 72,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-box h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 254,
+   "w": 64,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-book-open h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-bot h-5 w-5"
+  },
+  {
+   "tag": "a",
+   "x": 24,
+   "y": 818,
+   "w": 32,
+   "h": 32,
+   "label": "Report a bug or request a feature",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-circle-dot h-[18px] w-[18p"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 858,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-settings h-[18px] w-[18px]"
+  },
+  {
+   "tag": "div",
+   "x": 739,
+   "y": 340,
+   "w": 302,
+   "h": 221,
+   "text": "No page selected Select a page from the ",
+   "cls": "max-w-md rounded-card border border-dashed border-slate-300 bg-surface-card px-6 py-12 text-center dark:border-slate-700",
+   "svg": "40x40",
+   "sw": "2px",
+   "lc": "lucide lucide-file-text mx-auto h-10 w-1"
+  }
+ ],
+ "otherSvgs": [],
+ "floats": [],
+ "alerts": [],
+ "headings": [],
+ "canvases": [],
+ "overflowX": [],
+ "clipped": []
+}

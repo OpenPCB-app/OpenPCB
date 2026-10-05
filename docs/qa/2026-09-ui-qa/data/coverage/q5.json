@@ -1,0 +1,292 @@
+{
+ "agent": "q5",
+ "checklist": [
+  {
+   "item": "3D: load time (tab click → canvas/geometry mounted ~1.1 s incl. CLI latency)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "3D: camera presets Iso/Persp/Top/Front/Side/Back",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "3D: display toggles Components/Silkscreen/Refdes/Floor grid",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "3D: Height heatmap / Export STEP / Measure stubs, FPS/Zoom readout",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "3D: board colour swatches, scene select, transparency slider",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "3D: mechanical panel collapse/expand + persistence",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "3D: Snapshot (downloads <designId>-3d.png, 798x866)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "3D: orbit (left drag), wheel zoom, right-drag pan",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "3D: overlay visuals + board thickness + imported board + error state",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "BOM: filters All/Missing MPN/DNP, search, Esc clears search",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "BOM: row click → inspector, edit MPN/Manufacturer/Supplier/price/notes, autosave indicator, reload persistence",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "BOM: DNP bulk Mark/Clear, select all, sort, totals, order quantity",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "BOM: Export CSV/Copy TSV/JLC/PnP/KiCad CSV + Cmd+E (and suppressed in search)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "BOM: Show in schematic / PCB cross-probe",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "BOM: empty design (QA-q5-empty), error injection (GET 500, PATCH 500)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "BOM: keyboard-only navigation",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "BOM: layout at 1100x720",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1100x720"
+   ]
+  },
+  {
+   "item": "BOM ↔ schematic inspector sync (MPN/DNP both directions)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "KiCad import: open from Home, pick, review, name override, import, open result schematic/PCB/BOM/3D",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "KiCad import: legacy KiCad 5 (geckonator), non-project zip, sample.txt error UX, Esc/Cancel/Close",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "KiCad import: dialog focus/trap/labels/styling",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Comments: schematic C mode, composer, Cmd+Enter post",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Comments: PCB Add → Comment, C key, composer typing",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Comments: reply, resolve/reopen, status menu (mouse + keyboard), reactions, attachment (sample.md rejected, PNG accepted)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Comments: Esc handling (composer, popup, mode), draft loss",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Comments: pin visuals both themes, offscreen edge chip + recenter",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  }
+ ],
+ "known": [
+  {
+   "ref": "K12",
+   "status": "confirmed",
+   "evidence": "Q5-024: in PCB comment textarea Backspace dispatched pcb_delete_placement; typed text lost letters, 'B' sent pcb_set_active_layer twice → REVISION_CONFLICT"
+  },
+  {
+   "ref": "K14",
+   "status": "confirmed",
+   "evidence": "Q5-027: fresh reload, PCB, press C + click board → no composer; menu labels 'Comment C'"
+  },
+  {
+   "ref": "K27",
+   "status": "refuted",
+   "evidence": "3D Snapshot button has accessible name 'Snapshot' from its visible text (snapshot tree: button \"Snapshot\"); it downloads <designId>-3d.png (798x866 RGBA). Only feedback/filename issues remain."
+  },
+  {
+   "ref": "K31",
+   "status": "confirmed",
+   "evidence": "Q5-003 on QA-q5-empty: 'No BOM lines match the current filter.' with All 0"
+  },
+  {
+   "ref": "K33",
+   "status": "confirmed",
+   "evidence": "Q5-016: right-drag on 3D canvas opens app context menu with only Settings"
+  },
+  {
+   "ref": "K35",
+   "status": "confirmed",
+   "evidence": "Q5-008: BOM rows not in tab order; arrows/Enter inert"
+  },
+  {
+   "ref": "K36",
+   "status": "partial",
+   "evidence": "3D rail section titles 9px (census/3d-main-dark-1440.json smallTextCount 7); BOM had 0 sub-10px nodes"
+  },
+  {
+   "ref": "K40",
+   "status": "partial",
+   "evidence": "Q5-032: BOM shows raw problem detail ('boom'); HTTP-status fallback path not triggered in my flows"
+  },
+  {
+   "ref": "K43",
+   "status": "partial",
+   "evidence": "Q5-013: Export STEP and Measure are disabled stubs as stated, but Height heatmap is NOT disabled — it toggles a fake legend"
+  },
+  {
+   "ref": "K45",
+   "status": "confirmed",
+   "evidence": "Q5-028 (3D overlay, unreadable in light), Q5-029 (KiCad import dialog always dark), Q5-030 (comment pins/popups violet/orange + shadow-2xl)"
+  },
+  {
+   "ref": "K02",
+   "status": "confirmed",
+   "evidence": "Incidental (Q4 charter): PCB Text tool raised native prompt 'Overlay text:' (dialog spy prompt=1) while testing PCB hotkeys on 370447e2"
+  }
+ ],
+ "untested": [
+  {
+   "item": "Comment pin drag-to-reposition",
+   "reason": "not in charter checklist; time spent on higher-severity keymap/status bugs"
+  },
+  {
+   "item": "PCB comment thread popup in light theme",
+   "reason": "schematic popup covered light theme; PCB popup uses the same component"
+  },
+  {
+   "item": "3D transparency effect on a board with copper",
+   "reason": "only copper-bearing owned design is the imported board, which renders off-screen (Q5-020)"
+  },
+  {
+   "item": "BOM race when typing during an in-flight slow PATCH",
+   "reason": "no request-delay tool in playwright-cli; the deterministic redirect-to-other-line bug (Q5-001) already covers the data corruption path"
+  }
+ ],
+ "notes": "Design mutations made on owned designs only: LED Indicators 5V (BOM overrides on D1/D2/R1/R3/R4, schematic R4 DNP+MPN, PCB active layer B.Cu, R8 placement deleted+resynced by the K12 bug, 2 comment threads), QA-q5-empty (board thickness 0.8), QA-q5-USBtoUART (KiCad import, also ingested its components into stack-A library). Downloads moved to scratchpad/q5work/dl."
+}

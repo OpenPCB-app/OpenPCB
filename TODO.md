@@ -4,10 +4,35 @@
 > Open work only. Completed work lives in git history, not in this file.
 > Six programs: Route tool · Compiler agent · MCP integration · Release hardening · DRC · Backlog.
 
-## Now — handoff (2026-09-18, S15 committed `0f7c002` + source research `54b08f2`; tree clean)
+## Now — UI QA hardening (session 6 handoff, 2026-09-26; HEAD `47142ad`, pushed, tree clean)
 
-Session-resume block; `HANDOFF.md` is the entry point, `CURRENT_STATE.md` the snapshot.
-Everything below this block is the live program tracker and is unchanged.
+Session-resume block; `HANDOFF.md` is the entry point, `CURRENT_STATE.md` the snapshot. QA archive + fix kit:
+`docs/qa/2026-09-ui-qa/` (gitignored). Plan: `~/.claude/plans/act-as-senior-software-linked-squid.md`.
+
+- [x] Phase 0 — isolated QA stacks (A/B/C1), baselines, OpenRouter free model wired ($0 spent).
+- [x] Phase 1 — QA discovery (18 charters, 39 agents): 480 findings → 461 confirmed → 395 root causes.
+- [x] Phase 2 — triage checkpoint: 344 entries approved (`data/triage-approved.json`), 51 deferred
+      (`09-approved-scope.md`); archive written, gitignored.
+- [x] Wave A — F0a kit + tokens (`6f5fca1`), DB designer backend (`e64a464`), LB library backend
+      (`47142ad`); gates green; pushed.
+- [ ] **NEXT:** fold `fix/results/wave-a-crossowner.md` (35 hand-offs) into `fix/owners/*.md`.
+- [ ] Wave B — F0b app wiring (Toaster/DialogHost/ErrorBoundary mount, error handlers, native menu
+      in inputs, offline canvas font T-001, favicon) ∥ G grid snap (1.27 mm schem / 0.25 mm PCB,
+      Shift+S, N, status dropdown, backend constants, `grid-snap.spec.ts`); review loop; gates; commits.
+- [ ] Wave C — W2 owners C1 C2 D1 D2 D3a D3b D4 L1 K1 + W3 owners L2 L3 L4a L4b A1 A2 A3 (incl. P1–P5,
+      Tasks in rail, PCB C hotkey, Home Rename, Place in design, stub removal); review loop; gates.
+- [ ] Browser verification workflow (restart Stack A Vite first) — every addressed finding re-run in
+      dark + light; fix loops; per-area commits.
+- [ ] W4 — consistency sweep (T-009..T-021) + e2e frozen-name audit/spec updates; ratchet baseline to final.
+- [ ] Phase 4 — full gates, regression QA, C2 release-like smoke (prod bundle, dev flags off),
+      docs (design-tokens, PLAN follow-ups, CLAUDE.md UI invariant, grid release note, ROADMAP).
+- [ ] Dedicated follow-up sessions (release blockers, NOT this pass): T-317 Y-down KiCad footprints
+      (`@openpcb/kicad-import` + CoreLibrary rebuild + migration), T-244/T-245 KiCad project import
+      pads/nets, T-132 stable net identity; shared-package follow-ups (`06-shared-package-followups.md`).
+
+## PCB hardening — paused during the UI QA pass (S15 committed `0f7c002`; S15b next)
+
+Carried forward unchanged from the session-5 handoff; resume after the UI QA pass.
 
 - [ ] **NEXT: S15b — board stack-up model**, plan mode first (`/fable-orchestrator` +
       `/pcb-hardening-review`, Astra spec-attack xhigh): brief = contract 15 §4, source note =

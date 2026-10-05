@@ -1,0 +1,130 @@
+{
+ "triggerBefore": "Place component",
+ "afterOpen": "input \"Search component by name, description, o\"",
+ "container": {
+  "role": "dialog",
+  "modal": null,
+  "label": "radix-_r_1l_",
+  "x": 290,
+  "y": 108,
+  "w": 860,
+  "h": 720,
+  "bg": "rgb(28, 28, 31)",
+  "rad": "3px",
+  "bs": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+  "bd": "1px rgb(30, 30, 33)",
+  "inside": true
+ },
+ "tabs": [
+  {
+   "i": 1,
+   "inside": true,
+   "el": "button \"connector\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 2,
+   "inside": true,
+   "el": "button \"ic\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 3,
+   "inside": true,
+   "el": "button \"diode\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 4,
+   "inside": true,
+   "el": "button \"header\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 5,
+   "inside": true,
+   "el": "button \"passive\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 6,
+   "inside": true,
+   "el": "button \"transistor\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 7,
+   "inside": true,
+   "el": "button \"led\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 8,
+   "inside": true,
+   "el": "button \"capacitor\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 9,
+   "inside": true,
+   "el": "button \"inductor\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 10,
+   "inside": true,
+   "el": "button \"mosfet\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 11,
+   "inside": true,
+   "el": "button \"resistor\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 12,
+   "inside": true,
+   "el": "button \"sot-23\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  }
+ ],
+ "afterClose": "BODY",
+ "stillOpen": 0
+}

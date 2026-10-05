@@ -1,0 +1,480 @@
+F1A-001|conf|S1|designer.drc||Design rules 'Save & re-run DRC' silently throws away the edited rules when the save is rejected, then re-runs DRC with the old rules|DSG/pcb/use-pcb-design-rules-dialog.tsx:82|fron|['Q4-021', 'Q4-025', 'Q4-022', 'Q11-005']
+F1A-002|conf|S2|designer.bom||BOM sourcing edits are lost or truncated: switching line/view within the 650 ms autosave drops the value, and a returning save wipes text being typed |DSG/components/DesignerBomView.tsx:603|fron|['Q5-001', 'Q5-004', 'Q5-032']
+F1A-003|conf|S3|designer.pcb||A PCB edit made while the previous one is still saving is rejected with 'Revision conflict. Please retry after refresh.' and snaps back|DSG/hooks/useDesignerWorkspace.ts:505|fron|['Q4-011', 'Q3-021']
+F1A-004|conf|S2|designer.comments||A failed comment post silently discards the typed comment (uncaught TypeError) and leaves comment mode armed|DSG/Space.tsx:1177|fron|['Q5-027', 'Q9-012']
+F1A-005|conf|S2|designer.drc|K41|DRC view/dock swallow load failures: '0 DRC' + 'Run DRC to validate the board.' for a board with 33 violations, and unresolved '?.1 ↔ ?.2' / 'net pt:8|DSG/components/DesignerDrcView.tsx:114|fron|['Q4-047']
+F1A-006|conf|S3|designer.drc|K40|DRC/ERC run failures show only a bare 'Internal error' line; the stale error sticks above a good report, and Run DRC shows no pending state (double-cl|DSG/pcb/drc/use-drc-run.ts:230|fron|['Q4-047']
+F1A-007|conf|S4|designer.shell||Opening a design briefly shows 'No design open' + 'Empty design', and loading views show confident zeros ('0 DRC', 'All 0', '$0.00', 'Synced with sche|DSG/Space.tsx:522|fron|['F1D-002', 'Q4-047']
+F1A-008|conf|S4|home||Pressing N twice on Home while the first create is in flight creates two 'Untitled Design' designs|FE/screens/HomeScreen.tsx:296|fron|
+F1A-009|conf|S3|designer.shell|K10|Designer toast is off-token (raw red/amber, backdrop-blur, shadow), has no role/aria-live, lasts only 3 s even for errors and covers header controls|DSG/hooks/use-toast.tsx:81|fron|['Q10-004', 'Q6-035']
+F1A-010|conf|S3|designer.shell|K40|Failed designer commands show a context-free raw 'Internal error'/'Failed to fetch' up to three times; the header strip never clears and shifts the wh|DSG/Space.tsx:1303|fron|['Q3-025']
+F1A-011|conf|S3|designer.pcb|K40|Export and DXF import failures surface raw transport/parser text ('Failed to fetch' ×2, 'Ended on code undefined') that lingers after recovery|DSG/pcb/PcbExportDialog.tsx:139|fron|
+F1A-012|conf|S3|designer.pcb||If the PCB projection fails to load, PCB shows only grey 'PCB projection unavailable' with no reason or retry, and the workspace error is never render|DSG/pcb/PcbCanvas.tsx:6189|fron|['Q3-025']
+F1A-013|conf|S4|designer.pcb||No in-flight feedback for PCB commands: Undo/moves on a slow backend look like no-ops for seconds|DSG/pcb/usePcbWorkspace.ts:243|fron|['F1A-003']
+F1B-001|conf|S2|designer.pcb||PCB sidebar: with more than ~15 components the Layers list overflows onto the Components list at 1440×900 — clicks on component rows hit hidden layer |DSG/components/CollapsibleSection.tsx:63|fron|['Q4-042']
+F1B-002|conf|S2|designer.pcb||New schematic parts land on the PCB in only 24 fixed slots within 4 mm of the board centre — a 150-part design becomes one stacked blob of overlapping|src/modules/designer/backend/pcb/pcb-store.ts:1846|back|
+F1B-003|conf|S1|designer.drc||DRC view hangs the whole app for 10+ minutes on a large report — the violation list renders every row with no virtualization|DSG/components/DesignerDrcView.tsx:380|fron|
+F1B-004|conf|S2|designer.pcb||PCB canvas freezes with many DRC markers: one wheel notch ≈0.75 s, 10 notches 50 s, hovering 10 px >30 s (4 meshes + 4 materials per marker, rebuilt o|DSG/pcb/layers/DrcMarkerLayer.tsx:74|fron|
+F1B-005|conf|S2|designer.bom||BOM merges different components that share a footprint and have no Value — NPN, PNP and NMOS transistors become one 'Generic NPN BJT ×3' line (also in|src/modules/designer/backend/export/bom/writer.ts:269|back|
+F1B-006|conf|S3|designer.pcb||Design rules accept and persist impossible net-class values (width 0, width 999 mm, clearance −1) with no validation — the route tool then draws a 0 m|DSG/components/PcbDesignRulesDialog.tsx:136|fron|
+F1B-007|conf|S3|designer.pcb||Net classes are a fixed Default/Power/GND trio: no Add/rename/delete class and no per-class via size in Design rules|DSG/components/PcbDesignRulesDialog.tsx:360|fron|
+F1B-008|conf|S3|designer.pcb||Design rules net pickers don't scale: 353 unfilterable Net assignment selects in a 192 px box and 353 length-group chips in an 80 px box; selected mem|DSG/components/PcbDesignRulesDialog.tsx:527|fron|
+F1B-009|conf|S3|designer.drc||Built-in core footprints fail the default JLCPCB DRC preset out of the box: every placed part adds ~5 silkscreen warnings (0.12 mm silk width, silk 0.|src/shared/drc/checks/silkscreen.ts:137|desi|
+F1B-010|conf|S3|designer.pcb||Net count disagrees between views: schematic Summary 'Nets 60' vs PCB Board Summary 'Nets 353' for the same design (PCB counts every unconnected pin a|DSG/pcb/PcbBoardPanel.tsx:499|fron|
+F1B-011|dupl|S2|designer.schematic||'Delete all 150' deletes one part per request over ~8 s with no confirmation, and needs 150 Undo clicks (≈17 s) to restore|DSG/components/SelectionInspector/MultiPartInspectorPanel.tsx:45|back|
+F1B-012|conf|S4|designer.shell||Undo stays enabled after the last step; the extra click shows a red 'Nothing to undo' error strip that never goes away and shifts the canvas down 24 p|DSG/hooks/useDesignerWorkspace.ts:593|fron|['F1A-010', 'F1A-013']
+F1B-013|conf|S1|designer.pcb||PCB copper, net-class assignments and length groups are bound to ephemeral coordinate net ids: moving a schematic part (connectivity unchanged) orphan|src/modules/designer/backend/projection-world.ts:582|back|
+F1B-014|dupl|S3|designer.pcb||Fab bundle (all 14 Gerber/drill/CSV files, ZIP and .gbrjob ProjectId) is named after a truncated design UUID, never the design name (extends Q5-010 fr|src/sdks/designer/pcb-helpers.ts:13|fron|
+F1B-015|conf|S4|designer.pcb||Export of an empty board (no parts, no copper, default 50×30 outline) reports 'DRC passed — no errors · no warnings' and produces a full 14-file fab b|src/modules/designer/backend/export/preflight.ts:17|back|
+F1B-016|conf|S3|designer.bom||BOM/CPL exports write an empty Comment/Val for parts with no Value (and a currency with no price); DNP policy part already covered by Q5-010|src/modules/designer/backend/export/bom/writer.ts:90|back|['Q5-010', 'F1B-005']
+F1B-017|dupl|S4|designer.pcb|K30|Export dialog 'Include inner copper layers (4-layer boards only)' is enabled and checked by default on 2-layer boards and silently does nothing|DSG/pcb/PcbExportDialog.tsx:258|fron|
+F1B-018|conf|S3|designer.pcb||Design rules → Length match group row overflows the dialog: the 'Remove group' (trash) button is clipped to ~9 px at the dialog edge and '± tol' wraps|DSG/components/PcbDesignRulesDialog.tsx:460|fron|
+F1B-019|conf|S1|designer.bom||Renaming a reference designator in the schematic never reaches the PCB: the placement keeps the old refdes and the BOM/JLC BOM lists the part twice (o|src/modules/designer/backend/command-executor.ts:2466|back|
+F1B-020|conf|S4|designer.shell||Status-bar selection segment hard-clips long names mid-glyph with no ellipsis ('Text · Long PCB overlay text for silkscreen overlap Q')|DSG/components/DesignerStatusBar.tsx:144|fron|
+F1B-021|conf|S3|designer.pcb||DRC marker hover tooltip: long net names overflow the 280 px card (no wrap, no viewport clamp), and in light theme its 10 px message text is 2.8:1 on |DSG/pcb/PcbCanvas.tsx:6410|fron|
+F1B-022|conf|S3|designer.pcb||Tune HUD renders its key readouts in disabled/tertiary grey: the length delta ('13.68 mm short', 'in tolerance') is 2.5:1 in dark and ~2:1 in light; t|DSG/pcb/TuneHud.tsx:90|fron|
+F1B-023|dupl|S3|designer.comments||Light theme: PCB comment thread popup timestamps and meta text are 10 px slate-400 on white — 2.0–2.4:1 contrast (unreadable 'now' / '9m')|DSG/components/comments/CommentThreadPopup.tsx:105|fron|
+F1B-024|dupl|S4|designer.schematic||Schematic Outline row 'Actions' menu uses a fourth menu recipe (bg-surface-raised grey, border-border, 24 px items) — grey #e2e2e5 in light where kit ||fron|
+F1B-025|conf|S4|designer.pcb||PCB Layers panel swatches: Top and Bottom Solder Mask share #0a0d12 — invisible on the dark panel (1.03:1) and identical to the Drill black in light; |node_modules/@openpcb/r3f-eda-canvas/dist/layers.js:79|shar|['PLAN §9 canvas palette follow-up']
+F1B-026|conf|S2|designer.3d||3D view drops to 14–19 fps on a 150-part board: every orbit/zoom frame is a 55–90 ms long task (60 fps on a 5-part board)|DSG/three-d/Board3DCanvas.tsx:540|fron|
+F1B-027|conf|S4|designer.3d||3D status bar shows hard-coded 'FPS —' and 'Zoom —' placeholders that never update|DSG/three-d/Board3DOverlay.tsx:389|fron|
+F1B-028|conf|S2|designer.bom||At the 1100×720 minimum window the BOM 'Export ▾' button slides under the inspector and cannot be clicked — JLC BOM, PnP, KiCad CSV and Copy TSV becom|DSG/components/DesignerBomView.tsx:320|fron|['Q5-012']
+F1B-029|conf|S3|designer.schematic||Outline Parts 'REF' column leaves 24 px for the designator: every 4+ character refdes (R100, C101, LED1, SW10, TP1…) is cut to 'R1…'/'C1…' and reads a|DSG/components/OutlinePanel/OutlinePanel.tsx:66|fron|
+F1B-030|conf|S4|designer.schematic||Long Value / net-label text is drawn as one unbounded line across the whole schematic, ignored by 'Fit schematic', and a same-named net portal shows a|src/modules/designer/backend/projection-world.ts:556|fron|['Q3-013', 'Q5-023']
+F1B-031|conf|S3|designer.3d||3D view omits board-level silkscreen: PCB Text-tool overlay text (and overlay shapes) is exported to F_Silkscreen but never drawn on the 3D board|DSG/three-d/FootprintOverlayLayer.tsx:19|fron|
+F1B-032|conf|S3|designer.pcb||PCB editor draws the F.Cu copper pour over Top Overlay (F.SilkS) text — board silkscreen text disappears wherever it crosses a top zone|DSG/pcb/layers/CopperFillLayer.tsx:72|shar|
+F1B-033|conf|S3|designer.pcb||Arming Route (R) or Tune (U) inserts a 28 px parameter bar above the PCB canvas, so the board jumps ~14 px under the cursor; clicking a trace in Tune |DSG/Space.tsx:1314|desi|
+F1B-034|conf|S4|designer.pcb||Tune HUD wraps every readout mid-value when the row is full ('≈16.32 /' ⏎ '30.00 mm', 'A 2.00 · pitch' ⏎ '1.00') and never truncates a long length-gro|DSG/pcb/TuneHud.tsx:132|fron|
+F1B-035|conf|S2|designer.schematic||Every Schem → PCB/3D/BOM/DRC → Schem round-trip resets the schematic camera to 80 % at the origin (zoom/pan lost); the PCB camera is restored correctl|DSG/Space.tsx:576|fron|['Q3-004']
+F1C-001|conf|S2|library.import||A third-party .opclib silently takes over core parts that share its IDs; removing that pack then deletes the core parts|src/modules/library/backend/sync/opclib-importer.ts:691|back|
+F1C-002|conf|S2|settings||A .opclib that omits library.kind installs as an undeletable read-only 'core' source|src/modules/library/backend/sync/opclib-importer.ts:372|back|
+F1C-003|conf|S3|settings||Install from file gives no progress or result feedback, and silently downgrades the core library|FE/settings/panels/LibrariesPanel.tsx:186|back|
+F1C-004|conf|S3|settings|K06|Removing a library source never says its parts are placed in designs, and those parts quietly lose their library link|FE/settings/panels/LibrariesPanel.tsx:221|back|
+F1C-005|conf|S3|library.browse||Parts from an installed .opclib pack show as USER/KICAD, have no Source and are editable, so pack provenance is lost|LIB/detail-helpers.ts:170|back|
+F1C-006|conf|S3|designer.schematic|K43|No Library → design drag path exists: the MIME types don't match, Library and Designer are never on screen together, and real drags always end in 'Dro|LIB/lib/component-drag.ts:8|fron|
+F1C-007|conf|S4|designer.schematic|N2|Drag-dropped parts snap to the 2 mm grid while palette placement lands off-grid (latent: the drop path is unreachable, see F1C-006)|DSG/components/SchematicCanvas.tsx:3270|fron|
+F1C-008|conf|S3|designer.schematic||Unconnected pins show auto-named nets (Net_3, Net_4): Schematic summary says 0 nets while the PCB summary says 4|DSG/components/SelectionInspector/SelectionInspector.tsx:60|fron|
+F1C-009|conf|S2|library.wizard||Enter on any focused button in the part wizard runs Next/Import instead of that button: Enter on 'Back' at Metadata imports the part|LIB/import-wizard/ImportWizardPage.tsx:644|fron|
+F1C-010|conf|S3|library.wizard|K34|Keyboard-only part wizard: focus is never placed or moved on step change, controls are unnamed or invisibly focused, and Next/'Import component' sits |LIB/import-wizard/ImportWizardPage.tsx:665|fron|['F1C-011']
+F1C-011|dupl|S3|library.wizard||Next morphs into 'Import component' under the keyboard focus, and Shift+Tab from the first field lands on it, so one stray Space imports an unnamed pa|LIB/import-wizard/ImportWizardPage.tsx:698|fron|
+F1C-012|conf|S4|library.wizard||'Import component' wraps onto two lines inside the fixed 176 px wizard header action area|LIB/import-wizard/ImportWizardPage.tsx:686|fron|
+F1C-013|conf|S2|library.browse||Library search list and header/facets use different matching: 'passive' lists 43 parts under '0 sources' with an empty facet rail, and 'R' shows '60 o|src/modules/library/backend/queries.ts:851|back|
+F1C-014|conf|S3|library.detail|K40|Detail-page save errors show 'Internal error' / 'Update failed (HTTP 500)' / 'Failed to fetch' in a 10px box with no role=alert and no guidance|LIB/ComponentDetailPage.tsx:208|fron|
+F1C-015|conf|S4|library.browse||The true empty library and the loading list both render as 'No components match the current filters' / '0 parts · 0 sources', with no CTA or loading i|LIB/Space.tsx:726|fron|
+F1C-016|conf|S4|library.browse||Preview pane keeps showing the previously selected part while the new selection loads, and Open/actions then target a different part than the one disp|LIB/hooks/useComponentDetail.ts:58|fron|
+F1C-017|conf|S3|library.detail||Long part names break the detail header and can't be read in the preview pane, palette or inspector (no wrap, no name tooltip, name absent in the insp|LIB/ComponentDetailPage.tsx:339|fron|
+F1C-018|conf|S4|settings||Long provider labels are cut off in the provider list and the Default provider select, with no tooltip|FE/settings/panels/AssistantPanel.tsx:584|fron|
+F1D-001|conf|S3|assistant.space||Assistant shows hard-coded 'gpt-4o-mini · Cloud' (green dot) until settings load, and a send in that window creates the chat on 'openai'|AST/Space.tsx:184|fron|
+F1D-002|conf|S4|cross-cutting||Home paints '0 local' / All 0 / 'designs 0' / 'Select a design' next to the loading spinner on every visit; Assistant paints 'No chats yet.' while cha|FE/screens/HomeScreen.tsx:406|fron|['Q9-023', 'Q8-006', 'F1D-003']
+F1D-003|conf|S2|cross-cutting|K40|List load failures have no in-place retry (Home, Assistant chats, Settings › Libraries) and fall back to 'No designs yet' / 'No chats yet.' empty stat|AST/Space.tsx:724|fron|['Q1-003', 'Q2-014', 'Q9-012']
+F1D-004|conf|S3|assistant.space||Wide markdown tables and unbroken URLs overflow the message column — the whole chat thread scrolls horizontally|SH/markdown/MarkdownContent.tsx:101|fron|
+F1D-005|conf|S3|docs||Docs page tree is unreadable past ~5 levels: titles collapse to 1–3 characters in the fixed 260px sidebar, with no tooltip or resize|KN/components/Sidebar/TreeItem.tsx:156|fron|
+F1D-006|conf|S4|docs||Deep-page breadcrumbs truncate away the parent and push the editor meta line into 3-line columns ('edited / 1h / ago', '3 / words'), even at 1440px|KN/components/Editor/PageEditor.tsx:302|fron|['Q9-020']
+F1D-007|conf|S4|docs||Docs fetches the page tree twice on every visit (two usePageTree instances race)|KN/Space.tsx:23|fron|
+F1D-008|conf|S4|home||Home renders every design row/card with its SVG thumbnail at once: a 0.36–0.54 s main-thread block at 300 designs (no virtualization)|FE/screens/HomeScreen.tsx:383|fron|
+F1D-009|conf|S4|assistant.space||Assistant header gives the chat title the least room: at 1100px only ~12 chars show while the linked-design chip, tools badge and model pill keep full|AST/Space.tsx:1425|fron|
+F2A-001|conf|S2|designer.schematic|Q3-007|Ordinary L-shaped wire from a pin to an existing wire is rejected with 'wire path doubles back along its own segment' because the off-grid corner clic|DSG/components/SchematicCanvas.tsx:1708|fron|
+F2A-002|conf|S1|designer.schematic|Q3-013|GND/PWR port dropped onto a pin looks attached but is not connected: placement ignores the hit pin and uses the raw cursor position, so the port becom|DSG/components/SchematicCanvas.tsx:2319|fron|
+F2A-003|conf|S2|designer.pcb||A quick tap on a footprint leaves a hidden drag armed: the next click anywhere teleports that footprint to the click point (R3 jumped onto C2)|DSG/pcb/PcbCanvas.tsx:3731|fron|
+F2A-004|conf|S2|designer.pcb||Layers-panel copper-fill droplet is titled 'Show/Hide copper fills' but creates/enables a board-wide SOLID pour: it silently overrides the user's ther|DSG/pcb/PcbLayersPanel.tsx:517|fron|
+F2A-005|conf|S3|designer.pcb||'Remove redundant pour traces' is hidden for zones drawn with Z (only shown while a board zone is enabled) and gives no feedback — it returned ok with|DSG/pcb/PcbLayersPanel.tsx:625|fron|
+F2A-006|conf|S2|designer.pcb||Route tool ignores the name-based net class DRC uses: VCC/GND are routed at the Default 0.25 mm ('Class Default' in the route row) and the next DRC fl|DSG/pcb/PcbCanvas.tsx:3089|fron|
+F2A-007|conf|S3|designer.drc||Waiving one DRC violation adds a 'Show waived' checkbox to the DRC dock header that overflows the 300 px dock: the label is cut to 'Sho' and the 'Clos|DSG/components/DesignerDrcView.tsx:251|fron|
+F2A-008|dupl|S1|designer.pcb|Q6-023|Golden path ships a dead board: the core NE555 SOIC-8 lands mirrored (pin 1 GND bottom-left, pins counted clockwise), yet ERC/DRC are clean and the ex|node_modules/@openpcb/r3f-eda-canvas/dist/scene/footprint-render-layer.js:151|shar|
+F2A-009|conf|S4|designer.pcb||Routed traces end in sub-µm to 4 µm micro-segments at vias and pad terminations (45° + axis elbows built across a tiny residual offset)|DSG/pcb/tools/route-preview-geometry.ts:4|fron|
+F2A-010|conf|S2|designer.3d||3D view drops the body of a bottom-side part: C2 flipped to B.Cu shows only its pads and silkscreen, no capacitor model from any camera|DSG/three-d/transform-helpers.ts:65|fron|
+F2A-011|conf|S3|designer.3d||Core 'Pin Header 1x02 2.54mm' (footprint …_Vertical) renders in 3D as a header lying flat on the board with its pins pointing sideways|../CoreLibrary/3d/connector/pin-header-1x02-p2-54mm-vertical.model.json:1|shar|
+F2A-012|conf|S3|designer.3d||3D refdes labels are not occluded by the board: viewed from below, every top-side refdes (R1, R2, U1, D1, R3, C1) shows through the PCB, mirrored, nex|node_modules/@openpcb/r3f-eda-canvas/dist/primitives/EDAText.js:17|shar|
+F2A-013|conf|S3|designer.shell||Reload restores the open tab and undo history but not where you were: the app lands on Home, the design reopens on Schem (not PCB) and the PCB camera |DSG/stores/designer-tabs-store.ts:28|fron|
+F2A-014|dupl|S1|designer.pcb|F1B-013|Extension of F1B-013: the GND zone is NOT orphaned (it re-binds by netName) but its stitching vias and GND traces are — so after a schematic GND-port |src/modules/designer/backend/pcb/pcb-projection.ts:126|back|
+F2A-015|conf|S3|designer.schematic||Place-component palette: Enter places whatever row happens to be under the resting mouse pointer, not the top result (typed 'conn' + Enter → 6-pin 'Pi|DSG/components/ComponentCommandPalette.tsx:372|fron|
+F2A-016|conf|S3|designer.schematic||Core NE555 symbol renders KiCad markup '~{RST}' literally and prints top-edge pin names horizontally so 'CONT' and 'VCC' overprint into 'CONTVCC'; par|node_modules/@openpcb/rendering-core/dist/symbol-preview-builder.js:32|shar|
+F2A-017|conf|S3|designer.pcb||No 'routing complete' indicator: nothing shows how many connections are still unrouted — users must hunt for faint dashed ratsnest lines or run DRC|DSG/pcb/PcbBoardPanel.tsx:494|fron|
+F2A-018|conf|S3|designer.pcb||Traces on the non-active copper layer can't be clicked, silently — and the route tool leaves the active layer on B.Cu after a via, so the next click o|DSG/pcb/pcb-hit.ts:177|fron|
+F2A-019|reje|S3|designer.pcb||A drawn zone can only be selected by clicking exactly on its outline; clicking the pour does nothing, so Shift+Z 'Cutout' ('Select one unlocked polygo|DSG/pcb/tools/use-area-interactions.ts:3|fron|
+F2A-020|dupl|S2|designer.pcb|F1B-033|Extension of F1B-033/Q4-004: after the FIRST click of a route a second hint row ('Enter finish · V via + layer · W width …') is inserted, so the board|DSG/Space.tsx:1309|fron|
+F2A-021|conf|S3|designer.pcb|K37|Zone/Keepout options bar: 'Zone net' select is 43 px wide and shows 'GN' for GND (every net name is clipped), controls are 18/20 px tall native select|DSG/pcb/AreaToolOptionsBar.tsx:75|fron|
+F2A-022|conf|S4|designer.schematic||Place-component search ranks an imported KiCad 'Device:R' above the Core 'Resistor' for the query 'resistor' (Enter places the imported part)|src/modules/library/backend/queries.ts:868|back|
+F2B-001|conf|S1|designer.import||KiCad project import: every 90°/270°-rotated part gets pads 1/2 swapped under its imported traces, and the whole board comes in as a Y-mirror of the K|src/modules/designer/backend/import/kicad-project/insert-pcb.ts:143|back|
+F2B-002|conf|S1|designer.import||KiCad import leaves 78% of imported copper without a net: trace/via netName '/VBUS', 'Net-(D1-K)' never binds to the schematic's 'VBUS', 'Net_1' — DRC|src/modules/designer/backend/import/kicad-project/insert-pcb.ts:162|back|
+F2B-003|conf|S2|designer.import||Imported board rules contradict the imported net class: KiCad Default vias 0.6/0.3 but board minimum stays at OpenPCB's 0.8/0.4 — all 44 vias fail DRC|src/modules/designer/backend/import/kicad-project/commit.ts:373|back|
+F2B-004|conf|S2|designer.pcb||Route commit refused by the backend shows only 'Command failed' — INVALID_PCB_VIA/INVALID_PCB_* details are dropped, even with the DRC override on|DSG/hooks/useDesignerWorkspace.ts:521|fron|
+F2B-005|conf|S2|designer.pcb||On multilayer boards the active inner layer's copper pour is painted underneath the (dimmed) F.Cu pour — an In2 ground plane, or a zone just drawn on |DSG/pcb/layers/CopperFillLayer.tsx:55|fron|
+F2B-006|conf|S2|designer.pcb|K30|Unchecking 'Include inner copper layers' on a 4-layer board silently ships an unmanufacturable bundle: In1/In2 dropped while the job file still says 4|src/modules/designer/backend/export/index.ts:85|back|
+F2B-007|conf|S2|designer.pcb||6-layer boards: In3/In4 copper is invisible and unreachable — no layer tab, no Layers row, 'All copper' preset skips them, keys 3/4 go dead, and the l|DSG/pcb/PcbLayerTabStrip.tsx:17|fron|
+F2B-008|conf|S3|designer.pcb||S15 export refusals (6+ layers, blind/buried vias) surface as a developer sentence under a DRC gate and 'Export anyway' box; Download is silently disa|src/modules/designer/backend/export/index.ts:58|fron|
+F2B-009|conf|S3|designer.pcb||On 4+-layer boards the layer tab strip overflows even at 1440×900: 'Drill H…' is cut and the 'Viewing Top/Bottom' flip button is pushed out of view, w|DSG/pcb/PcbLayerTabStrip.tsx:83|fron|
+F2B-010|conf|S3|designer.pcb||At 1100×720 on a 4-layer board the route parameter row pushes the live route status (length, clear/N conflicts, warnings) off-screen; 'Standard 4L' wr|DSG/pcb/PcbTopToolbar.tsx:892|fron|
+F2B-011|conf|S3|designer.pcb||No trace/via inspector: selecting a via or trace shows only 'Contents · Vias 1' — a blind via (F.Cu–In1.Cu) looks and inspects exactly like a through |DSG/pcb/PcbPropertiesPanel.tsx:358|fron|
+F2B-012|conf|S3|designer.import||A 4/6-layer KiCad import opens with every inner layer hidden — the In2 ground plane and inner tracks look missing until the user finds the eye icons|src/modules/designer/backend/import/kicad-project/commit.ts:366|back|
+F2B-013|conf|S3|designer.pcb||Light theme: status-danger text on the danger-soft box fails AA — export refusal / DRC-gate text #c2402f on #dececf is 3.3:1|DSG/pcb/PcbExportDialog.tsx:224|desi|
+F2B-014|conf|S4|designer.pcb||Mid-Layer 1 (In1) is amber #f59e0b next to the amber Board Outline #fbbf24 — inner tracks near the edge read as outline; Mid-Layer 2 cyan vs Bottom Ov|node_modules/@openpcb/r3f-eda-canvas/dist/layers.js:102|shar|
+F2B-015|conf|S3|designer.import||KiCad import silently drops all board-level graphics: 7 silkscreen texts ('USB to UART', knockout 'Ampnics', GND/VCC/RX/TX/RST pin legends) never reac|src/modules/library/backend/infrastructure/parsers/kicad/kicad-pcb-parser.ts:43|back|
+F2B-016|conf|S4|designer.pcb||Pad-number labels rotate with the footprint: on 180°-rotated parts '1'/'2' are drawn upside-down|node_modules/@openpcb/r3f-eda-canvas/dist/scene/footprint-render-layer.js:185|shar|
+F2B-017|conf|S4|designer.pcb||Via preset menu offers 'Microvia 0.10 / 0.30 mm — HDI / BGA laser-drilled (Phase C)': internal roadmap copy, and picking it places a 0.1 mm THROUGH vi|src/modules/designer/backend/pcb/via-presets.ts:73|fron|
+F2C-001|conf|S2|assistant.space||An unreachable default provider ends every run with 'Retrying this answer in chat-only mode.' and nothing else — the connection error is swallowed, no|src/modules/assistant/backend/run-service.ts:762|back|
+F2C-002|conf|S2|assistant.dock||A hung local provider blocks the chat: provider calls have no timeout, and once the dock remounts mid-run (close/reopen or reload) a second send orpha|AST/DesignerChatDock.tsx:113|back|
+F2C-003|conf|S2|assistant.space||After 'Open in Assistant view', every chat-list refresh (run end, Stop, delete) snaps the Assistant space back to that chat|AST/Space.tsx:331|fron|
+F2C-004|conf|S3|assistant.space||Model pill lists keyless cloud providers (OpenAI) as selectable with no hint, although Settings says 'Needs API key to activate', and the resulting 'A|AST/components/ModelSelectorPill.tsx:25|fron|
+F2C-005|conf|S3|cross-cutting||When the OS theme changes while the schematic is open (Appearance = System, the default), the canvas keeps the previous palette: parts go invisible on|FE/providers/ThemeProvider.tsx:49|fron|
+F2C-006|conf|S3|library.browse|K08|If the Library list request fails, the table becomes a bare red 'HTTP 500' line with '0 of 76' — no message, no Retry. It recovers only after you chan|LIB/Space.tsx:511|fron|
+F2C-007|conf|S3|library.browse||A failed /facets request is silent: the filter rail disappears and the header claims '60 parts · 0 sources' / '60 of 60' while the library has 76 part|LIB/Space.tsx:434|fron|
+F2C-008|conf|S2|designer.comments||If the comment list fails to load, every pin silently disappears; you can still post, and the new comment shows as '1' — no error, no Retry|DSG/hooks/useDesignerComments.ts:78|fron|
+F2C-009|conf|S3|designer.comments||Posting a reply in a long comment thread gives no visible confirmation: the list stays scrolled at the top and the reply lands ~2400 px below the fold|DSG/components/comments/CommentThreadPopup.tsx:314|fron|
+F2C-010|conf|S3|designer.comments||Comment pins near the canvas edge are half-clipped instead of becoming edge chips, and nearby pins stack unreadably (no clustering)|DSG/components/comments/CanvasCommentLayer.tsx:101|fron|
+F2C-011|conf|S3|assistant.dock||Dock header row overflows at the default dock width: with a local model name the tools badge is cut off at the window edge and the 'just now' timestam|AST/DesignerChatDock.tsx:854|fron|
+F2C-012|conf|S4|assistant.space||'New' chat reuses the last-viewed chat's provider/model and ignores Settings › Assistant › Default provider|AST/Space.tsx:828|desi|
+Q1-001|conf|S2|home||Design 'More actions' menu stays open after Archive/Delete: delete modal is inert on first click and the menu re-targets the next design|FE/screens/home/DesignCard.tsx:134|fron|
+Q1-002|conf|S2|home|K26|Delete Design modal: no dialog role, Esc does nothing, no focus trap, unlabelled close X, and global N/Enter hotkeys fire behind it|FE/screens/HomeScreen.tsx:58|fron|
+Q1-003|conf|S2|home|K32|Designs load failure shows 'No designs yet — Create your first design' under a raw 'HTTP 500' strip with no Retry|FE/screens/HomeScreen.tsx:138|fron|
+Q1-004|conf|S3|home||Home 'N' hotkey creates a design from inside open menus and with any modifier (Cmd+Shift+N, sort-menu typeahead)|FE/screens/HomeScreen.tsx:296|fron|
+Q1-005|conf|S2|home||At the 1100×720 minimum window the Home list collapses the Name column to 0px and clips the star column — design names are invisible|FE/screens/home/DesignListRow.tsx:7|fron|
+Q1-006|conf|S3|shell|K33|Right-click anywhere (incl. text inputs) shows only an 'OpenPCB › Settings' menu — no Cut/Copy/Paste, steals focus, shortcut label says Ctrl+, on macO|FE/AppShell.tsx:36|fron|
+Q1-007|conf|S3|shell||App context menu is styled unlike every kit menu (panel bg, 28px rows, 12px text vs menu-bg, 22px rows, 11px)|FE/components/AppContextMenu.tsx:155|fron|
+Q1-008|conf|S3|home|K25|List header always shows 'Modified ▾' regardless of sort; headers are not clickable and sort direction cannot be changed|FE/screens/HomeScreen.tsx:379|fron|
+Q1-009|conf|S3|home||Home counts disagree with the lists: Starred/Archived include archived & deleted designs, header 'N local' includes archived|FE/screens/HomeScreen.tsx:313|fron|
+Q1-010|conf|S4|home||Home view (List/Grid), sort and filter reset on every reload and every time you leave Home|FE/screens/HomeScreen.tsx:117|fron|
+Q1-011|conf|S3|home|K35|Home design list and grid cards are not keyboard operable (rows/cards unreachable by Tab, no arrow-key selection)|FE/screens/home/DesignListRow.tsx:28|fron|
+Q1-012|conf|S3|home|K34|No visible keyboard focus on Home filter buttons, star toggles, '…' More-actions triggers and the List/Grid segmented control|FE/screens/home/HomeSidebar.tsx:91|fron|
+Q1-013|conf|S3|home||Unstarred star icon is nearly invisible (1.05–1.4:1) and filter counts are low-contrast (2.2–2.5:1)|FE/screens/home/DesignCard.tsx:183|fron|
+Q1-014|conf|S3|home|K43|Card/detail 'More actions' shows Rename, Duplicate, Export… permanently disabled; the 'Coming soon' tooltip can never appear and Rename/Export already|FE/screens/home/DesignCard.tsx:122|fron|
+Q1-015|conf|S3|shell||Left rail inconsistencies: Settings has no tooltip, Home has none while module items get native title tooltips, active item is narrower (64px vs 72px)|FE/components/LeftSidebar.tsx:15|fron|
+Q1-016|conf|S3|home||'Import KiCad…' on Home dumps the user into Designer; cancelling the wizard does not return to Home and focus is not moved into the dialog|FE/screens/HomeScreen.tsx:438|fron|
+Q1-017|reje|S3|home||Design thumbnails are hard-coded dark slate art (#131313 bg, slate-400 wires) that ignore theme and tokens — and don't match the light schematic|FE/screens/home/SchematicThumbnail.tsx:14|fron|
+Q1-018|conf|S3|home||Grid view has no selection, yet the detail panel keeps showing a hidden 'selected' design (first row) that Enter will open|FE/screens/HomeScreen.tsx:357|fron|
+Q1-019|conf|S4|shell||Rail 'local' glyph says 'Local only — not signed in' even when cloud is disabled and sign-in is impossible|FE/components/LeftSidebar.tsx:32|fron|
+Q1-020|conf|S4|home||Archive, unarchive and delete give no feedback and no undo|FE/screens/HomeScreen.tsx:209|fron|
+Q1-021|conf|S4|home||Deleting a design that is open in a Designer tab fires 404s for it when Designer is reopened|DSG/Space.tsx:510|fron|
+Q1-022|conf|S4|settings||Theme toggle (Settings › General › Appearance) is a hand-rolled control: no aria-pressed, 35px tall, grows to 53px when 'System' is active|FE/components/ThemeToggle.tsx:38|fron|
+Q1-023|conf|S4|home||Long design names can't be read in full on Home (no tooltip in list/grid, detail panel only truncates)|FE/screens/home/DesignListRow.tsx:40|fron|
+Q1-024|conf|S4|home||Empty/first-run Home offers only 'New design' (no Import KiCad…), keeps a 300px 'Select a design' panel and 'Enter to open' hint; no-results state has|FE/screens/HomeScreen.tsx:318|fron|
+Q1-025|conf|S4|shell||No favicon: /favicon.ico 404 on every load (tab shows the generic icon)|src/core/frontend/index.html:6|fron|
+Q1-026|conf|S4|home||Right-clicking a design row/card shows the generic 'OpenPCB › Settings' menu instead of design actions|FE/AppShell.tsx:63|fron|
+Q10-001|conf|S1|cross-cutting||Schematic, PCB and 3D canvases render fully black when the machine has no internet (canvas text fonts fetched from cdn.jsdelivr.net)|node_modules/@openpcb/r3f-eda-canvas/dist/primitives/EDAText.js:9|shar|
+Q10-002|conf|S2|cloud||Sign out does nothing while the cloud is unreachable — session stays, no feedback|FE/cloud/AuthProvider.tsx:198|fron|
+Q10-003|conf|S2|designer.pcb||Auto Layout with cloud unreachable says the service 'does not support Auto Layout. Route Board is still available.'|src/modules/designer/backend/autolayout/register-routes.ts:98|back|
+Q10-004|conf|S3|cloud|K40|Cloud connection failures surface Bun's raw 'Unable to connect. Is the computer able to access the url?' (and 'Failed to fetch' / 'HTTP 500') across e|src/modules/designer/backend/autoroute/client.ts:34|back|
+Q10-005|conf|S3|designer.pcb||Route Board… and Auto Place… run while signed out and show 'Cloud sign-in required: x-cloud-bearer header missing'|DSG/pcb/PcbCanvas.tsx:6259|fron|
+Q10-006|conf|S2|cloud||No offline state anywhere: 'Cloud sync on' and a perpetual 'cloud: …' (Syncing to cloud…) badge while the cloud is unreachable|DSG/components/CloudSyncBadge.tsx:124|fron|
+Q10-007|conf|S2|settings||Account 'Sync projects to cloud' switch knob is mispositioned: sits on the right when OFF and overflows the track/card when ON|FE/settings/panels/account/AccountSignedIn.tsx:83|fron|
+Q10-008|conf|S4|cloud||Realtime websocket reconnect loop logs a console error every ~10 s forever while a linked design is open offline|FE/cloud/use-presence.ts:47|fron|
+Q10-009|conf|S4|designer.comments||Comment list for a cloud-linked design blocks on an un-timed cloud fetch (12 s per request when the cloud host doesn't answer)|src/modules/designer/backend/routes.ts:3062|back|
+Q10-010|conf|S4|cloud|K45|'Open from Cloud' dialog offline: raw 'Failed to fetch' above a contradictory empty state pointing to a non-existent 'Link to Cloud' button; no retry,|DSG/components/CloudDesignBrowser.tsx:230|fron|
+Q10-011|conf|S3|settings||'Sign in to OpenPCB Cloud' gives no feedback and no way out when the cloud is unreachable|FE/cloud/AuthProvider.tsx:172|fron|
+Q10-012|conf|S3|designer.pcb||Auto Layout dialog: signed-out notice is a dead end (no Sign in action); aria-modal dialog doesn't take focus; option segments lack aria-pressed|DSG/pcb/autolayout/AutoLayoutDialog.tsx:168|fron|
+Q10-013|conf|S3|settings|K45|Account page uses raw emerald/amber/red palette, pill badges and 36 px buttons; 'OpenPCB AI Cloud — Coming soon' contradicts the shipped OpenPCB Cloud|FE/settings/panels/AccountPanel.tsx:62|fron|
+Q10-014|conf|S3|designer.pcb||Cloud layout entry points float over the canvas with shadows at 25 px, and the Auto-route/Auto-place panels cover the dock, layer strip, status bar an|DSG/pcb/PcbCanvas.tsx:6207|fron|
+Q10-015|conf|S3|assistant.space||Switching the chat provider to 'OpenPCB Cloud' keeps the previous provider's model ('big-pickle') and shows a healthy green dot while the cloud is unr|AST/Space.tsx:751|fron|
+Q10-016|conf|S2|assistant.dock||Designer chat dock shows 'Working… / Stop' forever when a run ends in status 'paused' (e.g. OpenPCB Cloud unreachable) — error never shown, even after|AST/DesignerChatDock.tsx:141|fron|
+Q10-017|conf|S2|library.browse||At the 1100×720 minimum window the Library table's Name column collapses to 13 px — part names are unreadable and the NAME/FAMILY headers overprint|LIB/components/LibraryTable.tsx:35|fron|
+Q10-018|conf|S4|designer.shell||Designer cloud status is developer-style text ('cloud: …', 'cloud: rev 33', 'cloud: error (1×)') and neither it nor the signed-out 'Local' chip is act|DSG/components/CloudSyncBadge.tsx:104|fron|
+Q11-001|conf|S3|cross-cutting||Focus ring on ToolbarButton / IconButton / canvas zoom buttons never renders: `outline-none` cancels `focus-visible:outline` under Tailwind v4|SH/ui/toolbar.tsx:58|fron|
+Q11-002|conf|S3|cross-cutting|K34|Kit tabs, dock tabs, segmented controls, section-header toggles, primary/ghost buttons, Home filter rows and Library cards show no keyboard focus indi|SH/ui/segmented-control.tsx:58|fron|
+Q11-003|conf|S3|cross-cutting||Non-kit controls fall back to the browser's default blue focus ring (#005fcc light / #99c8ff dark) — off-token and a fourth, inconsistent focus style|FE/index.css:10|fron|
+Q11-004|conf|S3|cross-cutting||Hover-revealed row actions receive keyboard focus while fully transparent (opacity 0) — focus disappears|DSG/components/OutlinePanel/OutlineRow.tsx:159|fron|
+Q11-005|conf|S2|cross-cutting||Modal dialogs don't manage focus: PCB Design rules and Export never take focus, Tab walks the page behind aria-modal dialogs, focus is not restored on|DSG/components/PcbDesignRulesDialog.tsx:284|fron|
+Q11-006|conf|S3|home||Home 'More actions → Delete' leaves the menu open above the Delete modal; first click on Cancel/Delete only dismisses the menu|FE/screens/home/DesignCard.tsx:150|fron|
+Q11-007|conf|S3|cross-cutting|K39|Top header bar height differs per screen: 34px on Home/Library/Designer vs 39 (Library detail), 49 (Docs), 52 (Settings), 56 (Assistant), 57 (part wiz|FE/screens/SettingsScreen.tsx:53|fron|
+Q11-008|conf|S3|cross-cutting||Inspector title bars, card headers and table rows use off-spec heights: 28 vs 34px panel titles, 39/31px Library detail card headers, 20px Pins rows, |DSG/pcb/PcbPropertiesPanel.tsx:88|fron|
+Q11-009|conf|S3|cross-cutting|K37|Search fields come in five variants: kit 22/20px vs Assistant 29px rounded-lg, Docs and Settings 32px hand-rolled inputs|AST/Space.tsx:1174|fron|
+Q11-010|conf|S3|cross-cutting||Segmented/toggle groups have 7 implementations with different heights, radii and active colours (primary black, surface-control, selection-soft cyan, |DSG/components/DesignerDrcView.tsx:237|fron|
+Q11-011|conf|S3|cross-cutting||Button sizes/variants drift outside the kit: 22px kit buttons next to 23–41px hand-rolled ones, and mixed footer buttons (OK 22px vs text-link Cancel |LIB/import-wizard/ImportWizardPage.tsx:700|fron|
+Q11-012|conf|S3|cross-cutting||Menus/popovers use three different recipes: kit dropdown (22px items, --menu-bg) vs app context menu (28px items, 12px, --surface-panel) vs PCB toolba|FE/components/AppContextMenu.tsx:193|fron|
+Q11-013|conf|S4|cross-cutting||Modal surfaces use four recipes: overlay 40% vs 50%, panel --surface-panel vs --surface-raised, shadow-xl/2xl/lg, title 12px/600 vs 12px/500|FE/components/ui/dialog.tsx:47|fron|
+Q11-014|conf|S3|cross-cutting|K36|Sub-10px text still ships on 4 top-level screens (9px 3D panel labels, 9.5px Library source badges, 9px Assistant/Settings chips)|DSG/three-d/Board3DOverlay.tsx:89|fron|
+Q11-015|conf|S3|cross-cutting||Radius flattening leaks: bare `rounded` still renders 4px, Assistant bubbles 10px, and rounded-full pills are used for non-status labels that are squa|FE/index.css:35|fron|
+Q11-016|conf|S4|cross-cutting|K45|Shadow / backdrop-blur / gradient leftovers on docked surfaces: 3D overlay cards, Assistant composer and fade, part-wizard canvas bar, glowing status |DSG/three-d/Board3DOverlay.tsx:272|fron|
+Q11-017|conf|S4|cross-cutting||Icon stroke widths mix 1.5px (kit), 1.8px (Settings) and 2px (Lucide default) on the same screens|FE/settings/panels/AboutPanel.tsx:88|fron|
+Q11-018|conf|S4|cross-cutting||Typography scale drifts between screens: 11px body on kit screens vs 12–14px on Settings/Docs/Assistant; page/panel titles 13/500, 13/600, 15/600, 20/|FE/index.css:19|fron|
+Q11-019|conf|S3|cross-cutting||Status badges and banners are inconsistent: info notes painted as amber warnings, cyan selection colour used as 'success', the same 'core' badge rende|FE/settings/panels/GeneralPanel.tsx:19|fron|
+Q11-020|conf|S4|cross-cutting||Empty states use six different patterns (icon+text, text-only, bordered card+button, left-aligned stack, rounded box) with no shared component|FE/screens/HomeScreen.tsx:322|fron|
+Q11-021|conf|S3|cross-cutting|K35|Home list rows / grid cards and BOM rows are not keyboard reachable — Tab skips from the filters straight to the ★ buttons / row checkboxes|FE/screens/home/DesignListRow.tsx:32|fron|
+Q11-022|conf|S3|cross-cutting||Tab widgets behave three different ways and PCB Layers costs ~40 Tab stops: dock tabs/layer strip lack arrow keys & roving tabindex, view tablist unna|SH/ui/dock-tabs.tsx:49|fron|
+Q2-001|CONF|S2|settings|K11|API keys are stored in plaintext while Settings claims they are 'encrypted locally'|FE/settings/panels/AssistantPanel.tsx:328|back|
+Q2-002|CONF|S2|settings||Provider Re-test failure is shown with a green success check|FE/settings/panels/AssistantPanel.tsx:310|fron|
+Q2-003|CONF|S2|settings||Clicking Tool calling Auto/On/Off (or Remove key) silently discards unsaved provider edits incl. a typed API key|FE/settings/panels/AssistantPanel.tsx:166|fron|
+Q2-004|CONF|S2|settings|K06|Library 'Remove' uses a native window.confirm|FE/settings/panels/LibrariesPanel.tsx:221|fron|
+Q2-005|CONF|S2|settings||Settings lets the user remove 'Local Library' (user.local), wiping every custom/imported part|FE/settings/panels/LibrariesPanel.tsx:421|back|
+Q2-006|CONF|S2|settings|K20|MCP section is shown and persisted regardless of the mcp.server feature flag|FE/settings/panels/AssistantPanel.tsx:431|fron|
+Q2-007|CONF|S3|settings|K39|Settings header is 52px with a 32px hand-rolled search and 36px nav rows (other screens: 34px header, 22px controls)|FE/screens/SettingsScreen.tsx:53|fron|
+Q2-008|CONF|S3|settings|K45|Settings banners, chips and checkboxes use raw amber/red/emerald/blue palette instead of status tokens|FE/settings/panels/GeneralPanel.tsx:19|fron|
+Q2-009|CONF|S3|settings||Settings controls are hand-rolled with inconsistent heights (23–43px) instead of kit components|FE/components/ThemeToggle.tsx:44|fron|
+Q2-010|CONF|S3|settings||Settings status/error banners render at the top of the page, off-screen from the action, never clear and can show success+error together|FE/settings/panels/AssistantPanel.tsx:332|fron|
+Q2-011|CONF|S3|settings||No visible keyboard focus on Assistant settings selects/inputs; toggles expose no pressed state|FE/settings/panels/AssistantPanel.tsx:951|fron|
+Q2-012|CONF|S3|settings||Esc closes Settings from anywhere — while typing in search, editing a provider (unsaved edits lost) or dismissing the context menu|FE/settings/hooks/useSettingsHotkeys.ts:21|fron|
+Q2-013|CONF|S3|settings||Settings search only matches the five tab names ('theme', 'mcp', 'api key', 'provider', 'update' → No matches)|FE/settings/SettingsSidebar.tsx:32|fron|
+Q2-014|CONF|S3|settings||Libraries: a failed sources fetch leaves the core card and table on 'Loading…' forever with no retry|FE/settings/panels/LibrariesPanel.tsx:173|fron|
+Q2-015|CONF|S3|settings||Install from URL: developer-facing errors far from the input, Enter does nothing, no label/cancel/progress|FE/settings/panels/LibrariesPanel.tsx:324|fron|
+Q2-016|CONF|S3|settings||Core library card: dead-end 'Download <version>' for bundled updates, silent 'Check for updates', misleading 'Latest stable'|FE/settings/panels/LibrariesPanel.tsx:460|fron|
+Q2-017|CONF|S3|settings||Delete provider and Remove API key act immediately with no confirmation or undo|FE/settings/panels/AssistantPanel.tsx:263|fron|
+Q2-018|CONF|S3|settings||Re-test / Models / Refresh models silently save unsaved provider edits; unreachable server returns HTTP 500|FE/settings/panels/AssistantPanel.tsx:297|back|
+Q2-019|CONF|S3|settings||'Add provider' instantly persists an 'Active' placeholder provider; new card not scrolled/focused; untested providers labelled Active|FE/settings/panels/AssistantPanel.tsx:248|fron|
+Q2-020|CONF|S3|settings||Privacy 'SECURITY.md' link is a 404 and Settings/rail links point to the old andrejvysny/OpenPCB repo|FE/settings/panels/PrivacyPanel.tsx:107|fron|
+Q2-021|CONF|S3|settings||Privacy copy claims no design data ever leaves the computer, contradicting BYOK cloud providers and MCP|FE/settings/panels/PrivacyPanel.tsx:49|desi|
+Q2-022|CONF|S3|settings||Settings panels use inconsistent title sizes and section styles|FE/settings/panels/GeneralPanel.tsx:229|fron|
+Q2-023|CONF|S3|settings|K36|9px text in Settings (DEFAULT/LOCAL pills, 'Advanced', 'Caution')|FE/settings/panels/AssistantPanel.tsx:425|fron|
+Q2-024|CONF|S4|settings|K43|Every provider form shows a placeholder 'This month' usage block with '—' tiles and a disabled 'View details →'|FE/settings/panels/AssistantPanel.tsx:874|fron|
+Q2-025|CONF|S3|designer.shell||Returning from Settings (Back/Esc) resets the Designer to the Schematic view|DSG/hooks/useDesignerWorkspace.ts:167|fron|
+Q2-026|DUPL|S4|shell||App context menu shows 'Ctrl+,' for Settings on macOS|FE/AppShell.tsx:77|fron|
+Q2-027|CONF|S4|settings||'Show key hint' duplicates the last 4 chars and never changes its label|FE/settings/panels/AssistantPanel.tsx:718|fron|
+Q2-028|CONF|S4|settings||Provider form: changing Type doesn't update Base URL or key requirement; 'local/self-hosted' hint shown for cloud endpoints; Replace has no Cancel|FE/settings/panels/AssistantPanel.tsx:668|fron|
+Q2-029|REJE|S4|settings||Enabling MCP in a non-Electron build shows no connection details or explanation|FE/settings/panels/McpSection.tsx:94|fron|
+Q3-001|conf|S2|designer.shell||App-level 'Settings' context menu hijacks right-click: design-tab menu never opens, outline rows open two overlapping menus|FE/AppShell.tsx:36|fron|
+Q3-002|conf|S3|designer.shell|K19|Designer no-tabs empty state never offers 'Import KiCad project…'|DSG/Space.tsx:1381|fron|
+Q3-003|conf|S3|designer.shell||With no design open, Designer still shows view tabs, the Outline 'Empty design' panel and dead 'Place component / Add net label' buttons|DSG/Space.tsx:1342|fron|
+Q3-004|conf|S3|designer.schematic||First design opened after app load is not fitted — schematic shows a random 80% close-up around the origin|DSG/components/SchematicCanvas.tsx:889|fron|
+Q3-005|conf|S2|designer.schematic|K17|Schematic has no Cmd/Ctrl+Z undo or Cmd+Shift+Z / Ctrl+Y redo hotkeys (toolbar only)|DSG/components/SchematicCanvas.tsx:1860|fron|
+Q3-006|conf|S3|designer.shell||Active design tab revision badge goes stale after edits (shows r0 while design is at r3)|DSG/components/DesignTabs.tsx:40|fron|
+Q3-007|conf|S2|designer.schematic|K44|Schematic has no grid and no snapping: parts, wires and corners land at arbitrary sub-mm coordinates, creating 10 µm wire jogs|DSG/Space.tsx:1166|shar|
+Q3-008|conf|S3|designer.schematic|N1|Wire-segment drag snaps its shift to 2 mm while everything else is free — dragged wires stay off-grid and create collinear overlaps|src/shared/schematic-routing/segment-drag.ts:91|fron|
+Q3-009|conf|S3|designer.schematic||Junction dots are 0.2 mm — barely wider than the wire, so T-connections look identical to crossing wires|DSG/components/SchematicCanvas.tsx:3661|fron|
+Q3-010|conf|S3|designer.schematic|K28|Rotate labels are inverted: 'Rotate 90° clockwise (R)' turns the part counter-clockwise (and Shift+R 'counter-clockwise' turns it clockwise)|DSG/components/SchematicCanvas.tsx:2657|fron|
+Q3-011|conf|S2|designer.schematic||Deleting a multi-selection creates one undo step per entity — one Delete needs 8 Undo clicks to restore|DSG/hooks/useDesignerWorkspace.ts:559|back|
+Q3-012|conf|S3|designer.schematic||Esc does not clear the schematic selection although the context menu advertises 'Clear selection · Esc'|DSG/components/SchematicCanvas.tsx:1745|fron|
+Q3-013|conf|S2|designer.schematic||Net label tool (L) cannot connect anything: places an un-named 'NET' text that only joins a wire at a nanometre-exact vertex, and same-named labels st|DSG/components/SchematicCanvas.tsx:1907|back|
+Q3-014|conf|S2|designer.schematic||ERC shows green 'No ERC violations' for a schematic with unconnected pins and floating power/GND ports, portals and labels|src/modules/designer/backend/erc/erc-engine.ts:99|back|
+Q3-015|conf|S1|designer.schematic||Placing a multi-unit IC (74HC00, LM358) stacks every unit on one origin — gate pins coincide and are auto-shorted (ERC: 4 outputs driven together)|src/modules/designer/backend/projection-world.ts:989|back|
+Q3-016|conf|S2|designer.schematic|K21|Inspector 'Open in Library' lands on the Library list with an unrelated part (74HC00) previewed instead of the selected component|DSG/Space.tsx:1536|fron|
+Q3-017|conf|S3|designer.schematic|K43|Part inspector ships stubs: footprint-variant list is all disabled ('Per-instance override coming soon') and 'Replace component' is permanently disabl|DSG/components/SelectionInspector/SelectionInspector.tsx:186|fron|
+Q3-018|conf|S3|designer.schematic||Inspector inputs have inconsistent keyboard semantics: Esc never reverts, Tolerance/X/Y ignore Enter differently from Value|DSG/components/SelectionInspector/PartInspectorPanel.tsx:449|fron|
+Q3-019|conf|S3|designer.schematic||Multi-select batch Value skips unit parsing/normalisation and allows one value across mixed components|DSG/components/SelectionInspector/MultiPartInspectorPanel.tsx:30|fron|
+Q3-020|conf|S3|designer.schematic||Duplicate drops the copy 2.54 mm diagonal from the original; overlapping bounding boxes then make the copy unselectable by clicking|DSG/components/OutlinePanel/OutlinePanel.tsx:274|fron|
+Q3-021|conf|S2|designer.schematic||Delete on a focused Outline row dispatches the delete twice and shows 'Revision conflict. Please retry after refresh.' after a successful delete|DSG/components/OutlinePanel/OutlineRow.tsx:131|fron|
+Q3-022|conf|S3|designer.schematic||Selected power/GND ports and net portals have no inspector, no status-bar entry, and ignore the R / Shift+R keys their menu advertises|DSG/components/SchematicCanvas.tsx:1860|fron|
+Q3-023|conf|S3|designer.comments|K45|Schematic comment pins/popups use raw violet/slate/orange/green hex instead of tokens (open pin renders #8b5cf6 violet)|DSG/components/comments/comment-style.ts:9|fron|
+Q3-024|conf|S4|designer.schematic||Wheel zoom-out goes down to 1% where the whole schematic vanishes, while the −/+ buttons clamp at 10%|node_modules/@openpcb/r3f-eda-canvas/dist/camera/use-eda-camera.js:46|shar|
+Q3-025|conf|S2|designer.schematic|K09|Schematic load failure leaves 'Loading schematic...' forever, raw 'Internal error' strip without retry, and an Outline that claims the design is empty|DSG/Space.tsx:1151|fron|
+Q3-026|conf|S2|designer.shell||Design tab strip overflows silently: at 1100×720 with 4 open designs the ACTIVE tab and the '+' New design button are scrolled out of view with no ind|DSG/components/DesignerHeader.tsx:42|fron|
+Q3-027|conf|S3|designer.schematic||Place-component palette exposes internal metadata tags as filter chips ('kicad-footprint-id:capacitor_smd:c_020…', 'kicad-derived', 'imported-from-kic|DSG/components/ComponentCommandPalette.tsx:99|fron|
+Q3-028|conf|S4|designer.schematic||Console noise on every schematic session: Radix 'Missing Description for DialogContent' per palette open and THREE.Clock deprecation per canvas mount|DSG/components/ComponentCommandPalette.tsx:291|fron|
+Q3-029|conf|S3|designer.schematic|K38|Schematic canvas background is blue-tinted in both themes (#f0f4fb light, #0e1116 dark) instead of the neutral surface tokens|DSG/components/SchematicCanvas.tsx:941|fron|
+Q3-030|conf|S3|designer.schematic||Schematic canvas palette ignores the neutral redesign: violet selection (light) vs amber selection (dark) vs cyan UI --selection, violet net portals, |node_modules/@openpcb/r3f-eda-canvas/dist/theme/canvasTheme.js:4|shar|
+Q3-031|reje|S3|designer.schematic||Place-component palette symbol preview stays black (#131313) in light theme while the schematic canvas is light|DSG/components/ComponentCommandPalette.tsx:17|fron|
+Q3-032|conf|S3|designer.shell||Designer empty-state 'Open existing' list squashes rows to 15 px (declared 22 px), hides overflow without cue, and is not sorted by recency|DSG/components/DesignerEmptyState.tsx:57|fron|
+Q3-033|conf|S3|designer.shell|K34|Designer shell/schematic keyboard a11y gaps: design tabs unreachable, no focus ring on view/dock tabs, unnamed tablist/separators, palette & outline l|DSG/components/DesignTabs.tsx:194|fron|
+Q3-034|dupl|S4|designer.schematic||Canvas context menus use off-kit styling (28 px rows, shadow-lg, panel bg) and show 'Ctrl+A' on macOS|FE/components/AppContextMenu.tsx:155|fron|
+Q3-035|conf|S4|designer.schematic||Symbol text rendering glitches: LED pin names 'K'/'A' drawn inside the diode body, rotated parts overlap refdes and value, port text rotates to vertic|DSG/components/SchematicCanvas.tsx:3600|shar|
+Q3-036|conf|S4|designer.shell||Minor shell state issues: left sidebar width not persisted (dock width is), status bar keeps the previous design's cursor X/Y|DSG/Space.tsx:437|fron|
+Q3-037|conf|S4|designer.schematic||Toolbar icon semantics: 'Zoom to selection' uses a '#' Frame glyph that reads as a grid toggle; GND uses a double-chevron|DSG/components/DesignerFloatingToolbar.tsx:93|fron|
+Q3-038|conf|S4|designer.schematic||Small schematic feedback gaps: DNP parts look unchanged, 'View on PCB' does not frame the part, filtering all ERC severities shows a blank list, Outli|DSG/components/OutlinePanel/OutlinePanel.tsx:112|fron|
+Q3-039|dupl|S2|home||Home list hides every design name at 1100×720 (Name column collapses to 29 px while the 220 px preview column stays)|FE/screens/HomeScreen.tsx:379|fron|
+Q4-001|conf|S2|designer.pcb|spike|DRC count differs between toolbar (errors only) and dock tab / status bar (errors+warnings)|DSG/pcb/PcbCanvas.tsx:606|fron|
+Q4-002|conf|S3|designer.pcb||Ctrl+H activates the Hole tool instead of cycling the layer display mode|DSG/pcb/PcbCanvas.tsx:4391|fron|
+Q4-003|conf|S3|designer.pcb||Status-bar hint shows 'Click to select…' while Hole/Pad/Text/Zone/Keepout/Tune/Cutout tools are armed|DSG/pcb/PcbCanvas.tsx:5474|fron|
+Q4-004|conf|S2|designer.pcb||Board jumps 14 px under the cursor each time a route/notice row appears (canvas resizes mid-gesture)|DSG/Space.tsx:1314|fron|
+Q4-005|conf|S3|designer.pcb||Route refusal notices show raw DRC codes (NET_SHORT_CIRCUIT, COPPER_OFF_BOARD…) and a developer tooltip|DSG/pcb/PcbCanvas.tsx:549|fron|
+Q4-006|conf|S3|designer.pcb||PCB status-bar zoom readout is frozen (shows the schematic's zoom, never updates on PCB)|DSG/Space.tsx:1202|fron|
+Q4-007|conf|S3|designer.pcb||PCB toolbar dropdowns (Add, View, width, via) have no menu semantics or keyboard support; Esc does not close them|DSG/pcb/PcbTopToolbar.tsx:139|fron|
+Q4-008|conf|S2|designer.pcb|K03|Trace width / via diameter / via drill 'Custom…' use native window.prompt with no validation|DSG/pcb/PcbTopToolbar.tsx:207|fron|
+Q4-009|conf|S3|designer.pcb||Via size shown in three different orders/symbols (preset list drill/diameter vs chips Ø diameter ⌀ drill vs status diameter/drill)|DSG/pcb/PcbTopToolbar.tsx:231|fron|
+Q4-010|conf|S3|designer.pcb||Flipping to bottom view mirrors about the world origin, pushing the board half off-screen|DSG/pcb/PcbCanvas.tsx:2685|fron|
+Q4-011|conf|S2|designer.pcb||Alt+click layer solo fails with 'Revision conflict. Please retry after refresh.' (two commands sent with same baseRevision)|DSG/pcb/PcbCanvas.tsx:6590|fron|
+Q4-012|conf|S3|designer.pcb||Layers panel pour row: 'pad connection' select is crushed to 10 px, value unreadable|DSG/pcb/PcbLayersPanel.tsx:590|fron|
+Q4-013|conf|S3|designer.pcb||Inactive-layer display mode 'Normal' dims other layers to 22% once a layer is focused; 'Normal' and 'Dim' look identical|DSG/pcb/pcb-visual-state.ts:30|fron|
+Q4-014|conf|S2|designer.pcb||Deleting a footprint on PCB silently re-spawns it at an auto position overlapping another part|src/modules/designer/backend/command-executor.ts:1689|back|
+Q4-015|conf|S3|designer.pcb|K15|PCB empty-canvas context menu advertises 'X' for route mode (real key R) and overflows the viewport bottom|DSG/pcb/PcbCanvas.tsx:4150|fron|
+Q4-016|conf|S2|designer.pcb||Vias under a trace end can't be picked: click/right-click always hit the trace, and the Alt+click overlap picker closes the instant it opens|DSG/pcb/pcb-hit.ts:396|fron|
+Q4-017|conf|S3|designer.pcb||Raw internal net/item IDs shown to users (status bar 'Trace · 51272803:15620728', DRC list 'trace 4f0646 ↔ net -10160 ↔ net -10277')|DSG/pcb/PcbCanvas.tsx:5503|fron|
+Q4-018|conf|S3|designer.pcb|K18|Cmd/Ctrl+A on PCB selects nothing on the board and instead text-highlights the entire app chrome|DSG/pcb/PcbCanvas.tsx:4340|fron|
+Q4-019|conf|S1|designer.pcb|K12|PCB hotkeys fire while typing in textareas: Assistant/comment text is mangled and Backspace deletes the selected board item|DSG/pcb/PcbCanvas.tsx:4342|fron|
+Q4-020|conf|S3|designer.pcb|K14|PCB Add menu advertises 'Comment  C' but C does nothing, and Esc does not exit the Comment tool|DSG/pcb/PcbTopToolbar.tsx:463|fron|
+Q4-021|conf|S2|designer.pcb||Design rules 'Save & re-run DRC' opened from Board properties saves but never re-runs DRC|DSG/pcb/PcbCanvas.tsx:5556|fron|
+Q4-022|conf|S3|designer.pcb||Design rules dialog: no Esc, no focus move/trap, unnamed dialog and selects, and PCB hotkeys fire from its <select>s|DSG/components/PcbDesignRulesDialog.tsx:284|fron|
+Q4-023|conf|S2|designer.pcb||DRC 'out of date' banner is inverted after PCB edits (missing while stale, shown right after a fresh run); tab revision frozen|DSG/components/DesignerDrcView.tsx:162|fron|
+Q4-024|conf|S3|designer.pcb|K30|Export dialog offers a checked 'Include inner copper layers (4-layer boards only)' on a 2-layer board; ZIP named by UUID; sloppy warning copy|DSG/pcb/PcbExportDialog.tsx:259|fron|
+Q4-025|conf|S2|designer.pcb||Layer visibility / active-layer / view clicks are recorded as undoable document edits (revision bump, DRC stale) and their undo is a silent no-op|DSG/pcb/PcbCanvas.tsx:6580|back|
+Q4-026|conf|S2|designer.pcb||Board panel shows un-applied typed size as the board's real size after 'Done' (e.g. 'Circle 80 × 60' for a 60 mm circle)|DSG/pcb/PcbBoardPanel.tsx:418|fron|
+Q4-027|conf|S3|designer.pcb||Board-outline modals (Fillet/Chamfer corner, Set vertex position, Set edge length, Import DXF) lack dialog semantics; Esc only works from the input (D|DSG/pcb/CornerOpModal.tsx:50|fron|
+Q4-028|conf|S2|designer.pcb||'Fit to parts' ignores free pads/holes (cuts them off the board) and on an empty board silently resizes to a hard-coded 80 × 56 mm|DSG/pcb/usePcbWorkspace.ts:229|fron|
+Q4-029|conf|S3|designer.pcb||Board panel buttons use raw Unicode glyphs ('✏ Draw custom shape', '⭳ Import DXF…'); ⭳ renders as a tofu box|DSG/pcb/PcbBoardPanel.tsx:309|fron|
+Q4-030|conf|S2|designer.pcb|K02|PCB Text tool asks for the label with a native window.prompt('Overlay text:')|DSG/pcb/PcbCanvas.tsx:2996|fron|
+Q4-031|conf|S3|designer.pcb||Text tool drops text onto a hidden silkscreen layer with no feedback — placed text is invisible|DSG/pcb/PcbCanvas.tsx:2998|fron|
+Q4-032|conf|S3|designer.pcb||Free-hole inspector shows X/Y as raw 15-digit floats and read-only, although holes can be dragged|DSG/pcb/PcbSelectionInspector.tsx:157|fron|
+Q4-033|conf|S2|designer.pcb||Pad/text Rotation field silently rejects 0° and negative angles (can't rotate back to 0); 360 stored un-normalised|DSG/pcb/PcbSelectionInspector.tsx:71|fron|
+Q4-034|conf|S3|designer.pcb||Measure / sketch dimension labels are world-sized, off-token cyan and drawn under board items — the measured distance can be unreadable|DSG/pcb/layers/MeasureOverlayLayer.tsx:15|fron|
+Q4-035|conf|S4|designer.pcb|K13|Tune (U) and Measure are hotkey-only and Bundle routing is unreachable: no toolbar/menu entry exposes them|DSG/pcb/PcbTopToolbar.tsx:646|fron|
+Q4-036|conf|S3|designer.pcb||Footprint Properties are read-only: X/Y/Rotation/Side cannot be typed; multi-selection panel offers no actions|DSG/pcb/PcbPropertiesPanel.tsx:306|desi|
+Q4-037|conf|S4|designer.pcb||Components panel: Shift/Cmd+click does not multi-select and instead leaves a native text-selection highlight across rows|DSG/pcb/PcbComponentsPanel.tsx:1|fron|
+Q4-038|conf|S3|designer.pcb|K38|PCB canvas clear colour is hard-coded #0e1116 (blue-cast) instead of --surface-canvas-well #08090a, in both themes|DSG/pcb/PcbCanvas.tsx:5922|fron|
+Q4-039|conf|S3|designer.pcb||Export dialog checkboxes render in browser-default blue (#0075ff light), off the neutral token palette|DSG/pcb/PcbExportDialog.tsx:234|fron|
+Q4-040|conf|S2|designer.pcb||PCB hotkeys stay live behind the Export dialog: Delete removes the selected item, R/B switch tool/layer under the modal|DSG/pcb/PcbCanvas.tsx:4342|fron|
+Q4-041|conf|S3|designer.pcb||At the 1100×720 minimum window the PCB canvas is squeezed to 458 px; layer tab strip overflows with a hidden scroll and the board is not re-fitted|DSG/pcb/PcbLayerTabStrip.tsx:1|fron|
+Q4-042|conf|S3|designer.pcb||At 1100×720 the Layers list spills over the Components section while routing (rows and headers drawn on top of each other)|DSG/pcb/PcbLayersPanel.tsx:1|fron|
+Q4-043|conf|S3|designer.pcb||DRC markers are fixed-size screen diamonds that bury the board at fit zoom (106 markers cover every pad)|DSG/pcb/drc:1|fron|
+Q4-044|conf|S3|designer.drc||DRC messages expose internal rule keys ('pthAnnularRingMm', 'minNpthDrillMm') and repeat the numbers with an orphaned 'mm'|src/shared/drc/fab-presets.ts:357|fron|
+Q4-045|conf|S3|designer.pcb|K16|In Route mode before the first click, B switches to bottom copper but T quits Route and arms the Text tool (keymap advertises T/B = layer)|DSG/pcb/PcbCanvas.tsx:4490|fron|
+Q4-046|conf|S3|designer.pcb||Selection filter covers only Traces/Vias/Pads/Components — zones, keepouts, free holes/pads, text and outline can't be filtered|DSG/pcb/PcbSelectionFilter.tsx:28|fron|
+Q4-047|conf|S3|designer.drc||Before DRC has ever run, the DRC view is a blank page and every DRC indicator reads '0' as if the board were clean|DSG/components/DesignerDrcView.tsx:1|fron|
+Q4-048|conf|S4|designer.pcb||Selection filter panel ignores Esc and survives view switches; only F or its × closes it|DSG/pcb/PcbSelectionFilter.tsx:46|fron|
+Q4-049|conf|S2|designer.pcb||Layer solo state leaks across design tabs; exiting it writes the other design's layer visibility into the current design|DSG/pcb/pcb-view-store.ts:219|fron|
+Q4-050|conf|S3|designer.pcb|K37|PCB control heights are all over the place: 18 px inspector/board inputs, 18 px route segments vs 20 px chips, 32 px modal inputs, 13 px checkboxes (k|DSG/pcb/PcbBoardPanel.tsx:34|fron|
+Q4-051|conf|S4|designer.pcb||PCB toolbar tooltips incomplete: Flip part/Fit board omit hotkeys, disabled Flip gives no reason, 'Add' tooltip omits Comment, DRC tooltip is just 'DR|DSG/pcb/PcbTopToolbar.tsx:650|fron|
+Q5-001|conf|S1|designer.bom||BOM sourcing edits on a grouped line write to only the first designator, split the line, and redirect further typing into a different line|DSG/components/DesignerBomView.tsx:247|fron|
+Q5-002|conf|S2|designer.bom||BOM Unit price field cannot accept decimals — typing 0.05 saves 5|DSG/components/DesignerBomView.tsx:726|fron|
+Q5-003|conf|S3|designer.bom|K31|Empty design BOM says 'No BOM lines match the current filter.' with filter=All, and Export stays enabled|DSG/components/DesignerBomView.tsx:404|fron|
+Q5-004|conf|S3|designer.bom||BOM autosave indicator shows 'Saved' for ~4 ms, then snaps back to 'Autosaves changes'|DSG/components/DesignerBomView.tsx:587|fron|
+Q5-005|conf|S2|designer.bom||'Show in schematic' selects the part but leaves the canvas on an unrelated area; 'PCB' does not frame the part either|DSG/Space.tsx:866|fron|
+Q5-006|conf|S2|designer.bom||BOM match tiers and counters contradict each other (no-MPN lines tagged 'Suggested', typed MPN tagged 'verified', Missing-MPN counts differ)|DSG/components/DesignerBomView.tsx:83|desi|
+Q5-007|conf|S3|designer.bom||BOM inspector keeps showing a line that the active filter hides (or silently jumps to row 1)|DSG/components/DesignerBomView.tsx:129|fron|
+Q5-008|conf|S3|designer.bom|K35|BOM rows are not keyboard reachable — Tab only visits row checkboxes, arrows/Enter do nothing|DSG/components/DesignerBomView.tsx:501|fron|
+Q5-009|conf|S4|designer.bom||Only the Designators column sorts; Value/Footprint/Qty/MPN headers are inert (dead sort keys in code)|DSG/components/DesignerBomView.tsx:368|fron|
+Q5-010|conf|S3|designer.bom||BOM exports: no feedback for Copy TSV / downloads, filenames use a truncated design UUID, CSV silently drops DNP lines while keeping a DNP column|DSG/api.ts:716|fron|
+Q5-011|conf|S2|designer.bom||BOM sourcing/DNP edits are not reflected in the schematic part inspector (two unsynced sources of truth)|src/modules/designer/backend/routes.ts:3158|back|
+Q5-012|conf|S3|designer.bom||BOM table overflows at 1100×720: header 'UNIT/EXT.' draws over the inspector, price columns and totals are cut off; '@ 1' hint clipped at all sizes|DSG/components/DesignerBomView.tsx:42|fron|
+Q5-013|conf|S3|designer.3d|K43|3D 'Height heatmap' is an enabled checkbox that shows a fabricated 0–12 mm legend while the board is unchanged|DSG/three-d/Board3DOverlay.tsx:189|fron|
+Q5-014|conf|S2|designer.3d||3D view ignores the design's board thickness (always 1.6 mm in the Mechanical panel and the rendered board)|DSG/three-d/Board3DCanvas.tsx:832|fron|
+Q5-015|conf|S3|designer.3d||3D Transparency slider has no visible effect|DSG/three-d/BoardGeometry.tsx:34|fron|
+Q5-016|conf|S3|designer.3d|K33|Right-drag pan in the 3D view pops the app context menu ('OpenPCB · Settings') on release|FE/AppShell.tsx:36|fron|
+Q5-017|conf|S3|designer.3d||3D Mechanical card truncates every value at 1440 px and mislabels counts ('Parts 16 · 0 traces · 0 vias')|DSG/three-d/Board3DOverlay.tsx:272|fron|
+Q5-018|conf|S4|designer.3d||3D view floods the console with THREE deprecation warnings (PCFSoftShadowMap ×31, Clock)|DSG/three-d/Board3DCanvas.tsx:758|fron|
+Q5-019|conf|S2|designer.import||KiCad project import silently drops parts (USB-C J1) and the wizard never shows the commit warnings|DSG/Space.tsx:1637|shar|
+Q5-020|conf|S2|designer.3d||3D view of an imported KiCad board is empty — board rendered at KiCad coordinates (≈150,137 mm) while camera/grid stay at the origin|DSG/three-d/Board3DCanvas.tsx:53|fron|
+Q5-021|conf|S3|designer.import||KiCad import wizard copy is stale and alarming: claims only name/layers/outline import, lists every component as 'missing', shows raw warning codes|DSG/components/KicadProjectImportWizard.tsx:248|fron|
+Q5-022|conf|S3|designer.import||KiCad inspect returns 500 Internal Server Error for bad user archives; KiCad 5 legacy project gets an unhelpful message|src/modules/designer/backend/import/kicad-project/inspect.ts:63|back|
+Q5-023|conf|S3|designer.schematic||'Fit schematic' cannot fit an imported KiCad sheet (zoom floor 20) — parts stay off-canvas; toolbar Zoom-out floor differs from wheel|DSG/components/SchematicCanvas.tsx:1154|fron|
+Q5-024|conf|S1|designer.comments|K12|PCB hotkeys fire while typing in the comment composer — letters vanish, tools toggle, and Backspace deletes the selected part|DSG/pcb/PcbCanvas.tsx:4342|fron|
+Q5-025|conf|S2|designer.comments||New-comment composer does not take focus — first keystrokes trigger canvas tools (G → GND placement, H → Hole)|DSG/components/comments/CommentComposerPopup.tsx:44|fron|
+Q5-026|conf|S2|designer.comments||Thread status menu (Todo / In progress / Done / Archive) does nothing when clicked — popup closes before the item fires|DSG/components/comments/CommentThreadPopup.tsx:199|fron|
+Q5-027|conf|S3|designer.comments|K14|Comment mode is sticky: Esc doesn't leave it (schematic or PCB), PCB 'C' shortcut advertised but dead; Esc/click-away silently discard drafts|DSG/components/SchematicCanvas.tsx:1745|fron|
+Q5-028|conf|S2|designer.3d|K45|3D left rail and Mechanical card are hard-coded dark slate/violet: unreadable in light theme, off-token native controls in dark|DSG/three-d/Board3DOverlay.tsx:88|fron|
+Q5-029|conf|S3|designer.import|K45|KiCad import dialog is a hand-rolled always-dark modal: no focus management/trap, unlabelled name field, off-token slate/violet/amber/emerald styling|DSG/components/KicadProjectImportWizard.tsx:111|fron|
+Q5-030|conf|S3|designer.comments|K45|Comment pins/popups use raw violet/orange/green/slate palette, rounded-xl + shadow-2xl cards and a '·' placeholder avatar|DSG/components/comments/comment-style.ts:8|fron|
+Q5-031|conf|S4|designer.comments||Comment a11y/UX gaps: pins named only by number, unlabelled attachment-remove button, image-only reply impossible, recenter jumps zoom to 80%|DSG/components/comments/CommentPin.tsx:58|fron|
+Q5-032|conf|S3|designer.bom|K40|BOM load/save errors: raw detail text with no retry while the footer still claims 'Synced with schematic'; failed autosave never retries|DSG/components/DesignerBomView.tsx:387|fron|
+Q5-033|conf|S3|designer.3d||3D error state floods the whole viewport with a maroon wash, no retry, empty left rail|DSG/three-d/Board3DCanvas.tsx:270|fron|
+Q6-001|conf|S2|library.browse||Mount facet filters don't match the list: SMD shows 3 of 17, THT shows 0 parts, Family+Mount always 0|src/modules/library/backend/queries.ts:880|back|
+Q6-002|conf|S2|library.browse|K07|Library list silently truncates at 60 parts — later parts (incl. core Resistor/Zener) unreachable without searching|LIB/Space.tsx:111|back|
+Q6-003|conf|S2|library.browse|K08|A failed delete or failed ZIP import wipes the whole component list and leaves a bare error line with no retry/dismiss|LIB/Space.tsx:290|fron|
+Q6-004|conf|S2|library.browse|K06|Deleting library parts uses a native window.confirm that doesn't name the part|LIB/Space.tsx:266|fron|
+Q6-005|conf|S2|library.detail||'Duplicate to edit' drops footprint options, pin map and part metadata from the copy|src/modules/library/backend/queries.ts:1450|back|
+Q6-006|conf|S3|library.browse||A part's 'source' is shown four different ways (facet vs table badge vs detail row vs provenance chip)|LIB/detail-helpers.ts:170|back|
+Q6-007|conf|S3|library.browse|K24|Library search shows a '/' shortcut hint that does nothing, and the search box has no accessible name|LIB/Space.tsx:615|fron|
+Q6-008|conf|S3|library.browse||Mount/pin-type values leak raw enum keys and mixed casing ('SMD' vs 'smd' vs 'through_hole' vs 'unknown')|LIB/components/LibraryPreviewPane.tsx:217|fron|
+Q6-009|conf|S3|library.browse||No-results search state says 'Import a component to get started', zeroes the header counts and empties the facet rail|LIB/Space.tsx:564|fron|
+Q6-010|conf|S3|library.browse||Library table keyboard/selection model is incomplete: no Home/End/PgUp/PgDn, no Shift/Cmd multi-select, no Delete key, focus looks like hover, rows ha|LIB/components/LibraryTable.tsx:113|fron|
+Q6-011|conf|S3|library.browse||Every search keystroke / facet toggle blanks the table to 'Loading components...' and remounts the preview canvases (2× TypeError each time)|LIB/Space.tsx:724|fron|
+Q6-012|conf|S3|library.browse||Preview 'No symbol/footprint preview' and 'Loading preview…' overlays use un-generated slate classes → bright button-like outline boxes|node_modules/@openpcb/r3f-eda-canvas/dist/preview/PreviewCanvasShell.js:35|shar|
+Q6-013|dupl|S2|library.detail||Multi-unit symbols (74HC00, LM358) render all units and the De Morgan body superimposed in the preview pane, detail card and fullscreen|node_modules/@openpcb/r3f-eda-canvas/src/scene/symbol-render-layer.tsx:1|shar|
+Q6-014|conf|S3|library.detail||Fullscreen symbol/footprint preview modal doesn't take or trap focus|LIB/components/PreviewModal.tsx:16|fron|
+Q6-015|conf|S3|library.detail||After saving an edit on the detail page, Back returns to a stale list (old name, old facets)|LIB/Space.tsx:570|fron|
+Q6-016|conf|S3|library.detail|K43|'Place in design' is a permanently disabled stub whose tooltip and banner copy contradict it|LIB/ComponentDetailPage.tsx:352|fron|
+Q6-017|conf|S3|library.detail||Detail page hides MPN/manufacturer, truncates Details labels and cannot edit part metadata|LIB/components/DetailsCard.tsx:25|fron|
+Q6-018|conf|S3|library.detail||Tag editor exposes internal tags (kicad-derived, user, builtin, system) and its input/suggestions lack accessible semantics|LIB/ComponentDetailPage.tsx:170|fron|
+Q6-019|conf|S2|library.detail||Upload STEP on a duplicated part always fails after conversion with 'Cannot update built-in components … use Duplicate to my library'|LIB/ComponentDetailPage.tsx:331|back|
+Q6-020|conf|S2|library.import||ZIP import reuses another part's footprint by content hash and overwrites that part's 3D model state|src/modules/library/backend/import/commit-kicad.ts:197|back|
+Q6-021|conf|S2|library.import||Import warnings are never visible: the 'Imported with warnings' notice is replaced by 3D-conversion notices within milliseconds and '+N more' can't be|LIB/Space.tsx:347|fron|
+Q6-022|conf|S3|library.import||Re-importing an archive silently creates a duplicate part with the same name, or re-converts the 3D model without saying the part already existed|src/modules/library/backend/import/commit-kicad.ts:262|back|
+Q6-023|dupl|S1|library.import||KiCad footprints are stored Y-down in a Y-up board: every imported/core footprint is mirrored — confirmed in Gerber F.Cu (SOIC-8 pins numbered clockwi|node_modules/@openpcb/kicad-import/dist/build-preview-models.js:121|shar|
+Q6-024|conf|S2|library.detail|K41|Re-import destroys a part's working 3D model up front; if the GLB upload fails the swallowed PATCH leaves it stuck on 'Converting 3D model…' forever w|LIB/three-d/model-conversion.ts:101|back|
+Q6-025|conf|S2|library.detail||'Upload STEP' button in the 3D card's empty state does nothing (dead primary button)|LIB/three-d/ThreeDComponentPreview.tsx:146|fron|
+Q6-026|conf|S3|library.detail||3D conversion failure UI is off-token and unhelpful: saturated red panel + big red Retry, message shown twice, 'OCCT' jargon, Retry offered for files |LIB/three-d/ThreeDComponentPreview.tsx:121|fron|
+Q6-027|conf|S3|library.detail||3D upload error/status is never reset: it survives Cancel, and leaks onto a different part when the detail page switches component|LIB/ComponentDetailPage.tsx:84|fron|
+Q6-028|conf|S3|library.detail||Library 3D preview shows most models lying on their side (Z-up models in a Y-up viewer)|LIB/three-d/ThreeDComponentPreview.tsx:174|fron|
+Q6-029|conf|S3|library.detail||Footprint previews are framed around invisible F.Fab text, so imported footprints sit off-centre and small|node_modules/@openpcb/r3f-eda-canvas/dist/preview/FootprintPreviewCanvas.js:22|fron|
+Q6-030|dupl|S2|library.browse||At 1100×720 (Electron minimum) the Library table is squeezed to 420 px: names collapse to one character and column headers overlap|LIB/components/LibraryTable.tsx:35|fron|
+Q6-031|conf|S3|library.detail||Unsaved part edits are discarded silently on Back or rail navigation (no dirty guard)|LIB/Space.tsx:576|fron|
+Q6-032|conf|S3|library.browse||Facet options reorder and vanish as you tick them (sorted by live counts), so the next click lands on a different option|src/modules/library/backend/queries.ts:1829|fron|
+Q6-033|conf|S3|library.browse|K36|Library table/preview use 9.5px source badges and near-invisible facet counts (text-disabled, ≈1.9:1 contrast)|LIB/components/LibraryTable.tsx:227|fron|
+Q6-034|conf|S3|library.detail||Light theme: messages inside the always-dark canvas wells use light-theme tokens (dark text, light borders) — low contrast, glaring boxes|LIB/three-d/ThreeDComponentPreview.tsx:86|fron|
+Q6-035|conf|S3|library.browse||Library notice toast sits on top of the header actions (Import library…, New part) for 5 s and uses a drop shadow|LIB/Space.tsx:131|fron|
+Q6-036|conf|S4|library.detail||Every STEP conversion floods the console with ~200 'GLTFExporter: Use MeshStandardMaterial…' warnings|node_modules/@openpcb/step-to-glb/dist/category-materials.js:52|shar|
+Q6-037|conf|S4|library.detail||Detail page copy nits: fullscreen title upper-cases identifiers; missing part shows a bare 'Component detail not found' box|LIB/components/PreviewModal.tsx:39|fron|
+Q7-001|conf|S2|library.wizard|K06|Part wizard close uses native window.confirm ('Close the wizard? Unsaved changes will be lost.')|LIB/import-wizard/ImportWizardPage.tsx:577|fron|
+Q7-002|conf|S3|library.wizard||Grid never renders in any wizard/preview canvas: GridShader's uPixelsPerUnit uniform is stuck at 1 so every fragment is discarded; symbol-import Grid |node_modules/@openpcb/r3f-eda-canvas/dist/primitives/GridShader.js:56|shar|
+Q7-003|conf|S2|library.wizard||Multi-unit symbol import renders all units superimposed with no unit selector (pins 3/5, 2/6, 1/7 overlap)|LIB/import-wizard/steps/SymbolStep.tsx:108|fron|
+Q7-004|conf|S3|library.wizard||Invalid symbol file: error shown only in far-right panel while left/centre claim nothing was imported|LIB/import-wizard/steps/SymbolStep.tsx:257|fron|
+Q7-005|conf|S4|library.wizard||Symbol import copy: '(1 pins)', literal '~' pin name, duplicate warnings for one construct|LIB/import-wizard/steps/SymbolStep.tsx:222|shar|
+Q7-006|conf|S2|library.symbol-editor|K29|Esc while drawing a shape also fires the wizard's Esc=close: closes the whole wizard (no confirm) or pops the discard confirm|LIB/import-wizard/ImportWizardPage.tsx:640|fron|
+Q7-007|conf|S3|library.import||Inspect endpoint returns HTTP 500 Internal Server Error for an invalid user file|src/modules/library/backend/routes.ts:1428|back|
+Q7-008|conf|S2|library.symbol-editor||Text tool unusable in both symbol and footprint editors: the inline input opens and is blurred/removed within the same click|LIB/import-wizard/editor/tools/text-tool.ts:26|fron|
+Q7-009|conf|S2|library.symbol-editor||Pin tool auto-numbering reuses an existing number after a pin is deleted (duplicate pin numbers, no validation)|LIB/import-wizard/editor/tools/pin-tool.ts:21|fron|
+Q7-010|conf|S3|library.symbol-editor||Selection highlight in symbol/footprint editors is raw pink-400 and a selected pin is almost invisible|LIB/import-wizard/editor/SelectionOverlay.tsx:9|fron|
+Q7-011|conf|S3|library.symbol-editor||Arc tool: 2nd click is an on-arc point (undocumented), preview is a straight polyline, some inputs commit a degenerate stub|LIB/import-wizard/editor/tools/arc-tool.ts:26|fron|
+Q7-012|conf|S3|library.symbol-editor||Pin tool gives no orientation preview (dot only); default 180° makes left-side pins inside-out|LIB/import-wizard/editor/tools/pin-tool.ts:46|fron|
+Q7-013|conf|S1|library.footprint-editor||IPC preset generator emits wrong land patterns: every SOT size has the wrong pad count/layout and QFN exposed pad overlaps (shorts) all signal pads|node_modules/@openpcb/rendering-core/dist/ipc7351b/family-presets.js:74|shar|
+Q7-014|conf|S3|library.footprint-editor||Preset size/density changes don't regenerate: UI shows SOT-323 + 'C (Least)' pressed while the footprint to be saved is still SOT-23 nominal|LIB/import-wizard/useImportWizardStore.ts:247|fron|
+Q7-015|conf|S2|library.footprint-editor||Footprint editor cannot place pads precisely: no X/Y fields, fixed 0.635 mm grid, no zoom-to-fit|LIB/import-wizard/footprint-editor/PadPropertyPanel.tsx:110|fron|
+Q7-016|conf|S2|library.wizard||Garbage STEP is accepted with a green 'will be converted' message and then fails silently after import|LIB/three-d/model-conversion.ts:69|fron|
+Q7-017|conf|S2|library.wizard||Pin/pad mismatch is a soft warning in the wizard but a hard 400 on Import; no pin↔pad mapping UI; error names internal 'U'/'FP'|LIB/import-wizard/steps/MetadataStep.tsx:201|fron|
+Q7-018|conf|S3|library.wizard||Enter in a property field commits, a second Enter silently advances the wizard step|LIB/import-wizard/ImportWizardPage.tsx:644|fron|
+Q7-019|conf|S3|library.wizard|K06|Leaving the wizard via the rail has no unsaved-work guard; 'New part' later silently resumes the stale draft|LIB/Space.tsx:184|fron|
+Q7-020|conf|S3|library.detail||Imported part gets wrong auto tags / package from the footprint (R symbol tagged 'capacitor', package '1608' vs '0603')|src/modules/library/backend/import/commit-kicad.ts:220|back|
+Q7-021|conf|S2|library.wizard||Esc discards footprint/preset/metadata work without any confirm (dirty check only looks at symbol file, STEP file and drawn symbol)|LIB/import-wizard/ImportWizardPage.tsx:571|fron|
+Q7-022|conf|S1|library.footprint-editor||KiCad-derived footprints (wizard imports AND CoreLibrary) keep KiCad's Y-down coordinates in OpenPCB's Y-up world: previews, PCB and Gerber get a mirr|node_modules/@openpcb/kicad-import/dist/build-preview-models.js:121|shar|
+Q7-023|conf|S3|library.wizard|K45|Part wizard and both editors are an unmigrated surface: raw slate/violet/emerald/amber/pink palette, native file inputs/selects/checkboxes, floating b|LIB/import-wizard/editor/EditorToolbar.tsx:102|fron|
+Q7-024|conf|S3|library.wizard|K36|Wizard property panels use 9px uppercase labels (pin and pad rows) — 2.1–2.3:1 contrast in light|LIB/import-wizard/editor/PinPropertyPanel.tsx:96|fron|
+Q7-025|conf|S3|library.wizard|K37|Wizard input heights are 15/24/28/32/36 px (kit standard 22px); pin 'Type' select truncated to 'Pa'|LIB/import-wizard/editor/PinPropertyPanel.tsx:150|fron|
+Q7-026|conf|S3|library.wizard||Editors don't fit at 1100×720 (and footprint toolbar already overflows at 1440): floating toolbar covers the right panel|LIB/import-wizard/layout/CanvasStepLayout.tsx:103|fron|
+Q7-027|conf|S3|library.wizard||Successful 'Import component' gives no feedback and doesn't reveal the new part (not even listed when the library has >60 parts)|LIB/import-wizard/ImportWizardPage.tsx:532|fron|
+Q7-028|conf|S3|library.browse||R3F 'Cannot read properties of null (reading addEventListener)' thrown when the wizard closes after import|node_modules/@react-three/fiber/dist/react-three-fiber.esm.js:86|fron|
+Q7-029|conf|S3|library.footprint-editor||Footprint import: a second import replaces the first, variant naming inconsistent, garbled placeholder copy|LIB/import-wizard/steps/FootprintStep.tsx:1|fron|
+Q7-030|conf|S3|library.wizard||Metadata step lacks core part fields (value, MPN, manufacturer, datasheet); reference prefix only editable for drawn symbols|LIB/import-wizard/steps/MetadataStep.tsx:1|back|
+Q7-031|conf|S3|library.symbol-editor||Symbol previews overprint pin names/numbers on the pin line and don't rotate labels for vertical pins; fit ignores text (REF** clipped/under toolbar)|node_modules/@openpcb/rendering-core/dist/symbol-preview-builder.js:1|shar|
+Q7-032|conf|S4|library.symbol-editor||Editor keyboard/a11y gaps: Ctrl+Y redo missing, toggles lack aria-pressed, focus dropped to <body> after Remove / field commit, Esc doesn't deselect|node_modules/@openpcb/r3f-eda-canvas/dist/utils/keyboard-shortcuts.js:14|fron|
+Q7-033|conf|S4|cross-cutting||Console noise: THREE.Clock deprecation + 'WebGLRenderer: Context Lost' logged on every preview canvas mount/unmount; favicon 404||shar|
+Q7-034|conf|S3|designer.schematic|K28|Schematic labels R as 'Rotate 90° clockwise' but R rotates counter-clockwise (symbol/footprint editors correctly say CCW)|DSG/components/SchematicCanvas.tsx:2657|fron|
+Q7-035|conf|S3|library.wizard||3D Model step has no 3D preview, placement or orientation controls — model is attached blind|LIB/import-wizard/steps/ModelStep.tsx:1|fron|
+Q7-036|conf|S4|library.wizard||Wizard steps are laid out inconsistently (section header styles, sidebar widths, which side holds the pin/pad list, toolbar off-centre)|LIB/import-wizard/steps/FootprintStep.tsx:1|fron|
+Q8-001|conf|S2|assistant.space||Model pill silently swaps the provider's default (free) model for the first model in the list (paid aion-labs/aion-2.0); new chats persist it|AST/Space.tsx:750|fron|
+Q8-002|conf|S2|assistant.space||Every tool call renders twice — a 'requested' card stuck on 'running…' spinner forever plus the real result; tool count doubled|src/modules/assistant/backend/run-service.ts:1065|back|
+Q8-003|conf|S2|assistant.space||Settings 'Tool policy: Auto read · confirm writes' is ignored — assistant write proposals auto-apply without confirmation|src/modules/assistant/backend/assistant-service.ts:118|desi|
+Q8-004|conf|S2|assistant.space||Assistant reports 'R99 has been added' but the part got reference R6 — placement tool can't set a reference and its result omits the assigned one|src/modules/assistant/backend/tools/designer-tools.ts:1813|back|
+Q8-005|conf|S3|assistant.space|K23|'Pinned' chat filter is permanently empty — no Pin action exists anywhere; empty state then says 'No chats yet.'|AST/components/useChatUserState.ts:49|fron|
+Q8-006|conf|S3|assistant.space||Chat list says 'No chats yet.' for any empty filter or search miss|AST/Space.tsx:1351|fron|
+Q8-007|conf|S3|assistant.space||Model picker popover: 460-entry native <select> with no search or free/paid hint, unlabeled comboboxes, Esc does not close it|AST/components/ModelSelectorPill.tsx:132|fron|
+Q8-008|conf|S2|assistant.space||'Configure providers' button in the model pill does nothing (onOpenSettings never wired) in Assistant space and dock|AST/components/ModelSelectorPill.tsx:223|fron|
+Q8-009|conf|S3|assistant.space||Mermaid 'Fullscreen' shows the diagram smaller than inline; overlay ignores Esc, has no dialog role, drops focus to <body>|SH/markdown/MermaidDiagram.tsx:368|fron|
+Q8-010|conf|S3|assistant.space||Mermaid diagrams use a hard-coded violet/navy theme (#A78BFA borders, #0A0E14 bg) off the neutral tokens; chat prose hr/borders use Tailwind gray (blu|SH/markdown/MermaidDiagram.tsx:154|fron|
+Q8-011|conf|S3|assistant.space||Multi-step answers glue each iteration's text together with no separator ('…LED components.The design…', '…brightness)?Let me examine…')|src/modules/assistant/backend/run-service.ts:1014|back|
+Q8-012|conf|S4|assistant.space||Inline HTML from the model (e.g. V<sub>F</sub>) is shown as literal tags in chat tables/lists|SH/markdown/MarkdownContent.tsx:1|fron|
+Q8-013|conf|S2|assistant.space|K05|Assistant space row 'Rename chat' uses native window.prompt (header rename is inline) |AST/Space.tsx:893|fron|
+Q8-014|conf|S2|assistant.space|K06|Assistant space chat delete (row menu, header menu, bulk 'Delete selected') all use native window.confirm|AST/Space.tsx:852|fron|
+Q8-015|conf|S3|assistant.space||Header 'Chat actions' menu stays open after Archive / Export / Delete and blocks the whole page (body pointer-events:none)|AST/Space.tsx:1500|fron|
+Q8-016|conf|S3|assistant.space||Multi-select keeps chats selected across filters; 'Delete selected' deletes hidden (e.g. archived) chats the user can't see|AST/Space.tsx:1216|fron|
+Q8-017|conf|S2|assistant.space||Send failures are invisible: the error alert renders at the top of the thread (≈3800px above the viewport) and says only 'Internal error'|AST/Space.tsx:1609|fron|
+Q8-018|conf|S3|assistant.space||Chat row keeps the pulsing 'run active' dot after a run is cancelled (Stop)|AST/Space.tsx:1305|fron|
+Q8-019|conf|S3|assistant.space|K22|Clicking an @page mention in a chat message opens Docs with 'No page selected' instead of the page|KN/Space.tsx:12|fron|
+Q8-020|conf|S3|assistant.space||Composer shows raw mention markup '@[design:<uuid>|Name]' after picking a mention (and exports it verbatim)|AST/components/ChatComposer.tsx:134|fron|
+Q8-021|conf|S3|assistant.space||Slash quick-actions menu is mouse-only; Enter on '/' sends a literal '/' message to the LLM|AST/components/ChatComposer.tsx:210|fron|
+Q8-022|conf|S3|assistant.space||@-mention autocomplete uses emoji icons (🛠️ 🔌 📄), no group headers or listbox semantics; duplicate-named designs indistinguishable|AST/components/MentionAutocomplete.tsx:133|fron|
+Q8-023|conf|S1|assistant.dock|K12|Typing in the Assistant dock on the PCB view fires PCB hotkeys: letters are swallowed, tools switch, selected parts rotate/flip/delete, Cmd+Z undoes t|DSG/pcb/PcbCanvas.tsx:4342|fron|
+Q8-024|conf|S3|assistant.dock||After a page reload an in-flight run shows no 'Working…'/Stop, and a run that ends with an empty answer shows no 'No answer — Retry' (just tool chips |AST/DesignerChatDock.tsx:466|fron|
+Q8-025|conf|S3|assistant.dock||Dock chrome polish: composer hint row wraps into a cramped 3-line block, thread-menu Rename/Delete are 10px/15px-tall text links, preset list shows ra|AST/components/ChatComposer.tsx:264|fron|
+Q8-026|conf|S3|assistant.space|K45|Assistant space/dock is not on the redesign kit: raw sky/amber/red/emerald palette, shadow-xl + gradient composer, 56px header, 10px bubble radii, han|AST/components/GenericProposalCard.tsx:231|fron|
+Q8-027|conf|S3|assistant.space||Light theme: Mermaid nodes styled with the prompt-mandated dark palette render as black boxes on a white diagram|src/modules/assistant/backend/prompt-service.ts:18|fron|
+Q8-028|conf|S3|assistant.space||Light theme: composer hint row, footer meta and kbd hints are ~1.5–2.7:1 contrast (10px text)|AST/components/ChatComposer.tsx:264|fron|
+Q8-029|conf|S3|designer.shell||Designer with no design open still shows the Outline 'Empty design' panel whose Place component / Add net label buttons do nothing, plus active view t|DSG/Space.tsx:1344|fron|
+Q8-030|conf|S3|assistant.space||Chat list rows trap keyboard: nested checkbox and '…' button can't be activated (row keydown swallows Enter/Space) and the '…' button stays invisible |AST/Space.tsx:1267|fron|
+Q8-031|conf|S2|assistant.space||'Retry' on a stopped/cancelled run does nothing (dead button)|AST/Space.tsx:1014|fron|
+Q8-032|conf|S3|assistant.space||Proposal cards: applied/rejected cards keep disabled Apply/Reject/Allow buttons and no Undo; operations show raw nanometres and deletions don't name t|AST/components/GenericProposalCard.tsx:328|fron|
+Q8-033|conf|S4|assistant.space||Chats are never auto-titled and 'New' immediately persists an empty 'New chat' row (list fills with identical 'New chat' entries)|AST/Space.tsx:828|back|
+Q8-034|conf|S2|assistant.space||@-mentions of built-in library components render as raw '@[library-component:openpcb.core.passive.resistor|Resistor]' — mention regex rejects '.' in i|AST/lib/mention-utils.ts:3|back|
+Q8-035|conf|S2|assistant.dock|K04|Dock thread menu 'Rename' uses native window.prompt and 'Delete' native window.confirm|AST/DesignerChatDock.tsx:725|fron|
+Q9-001|conf|S1|docs||Title save wipes unsaved body text typed in the same second (editor reset to stale server content)|KN/components/Editor/PageEditor.tsx:161|fron|
+Q9-002|conf|S2|docs||Page title edits are silently dropped when switching page or leaving Docs within 1 s; no save feedback for titles|KN/components/Editor/PageEditor.tsx:202|fron|
+Q9-003|conf|S2|docs||Page tree does not refresh after New page (sidebar +), Add subpage, Delete from tree, or drag-move|KN/components/Sidebar/Sidebar.tsx:88|fron|
+Q9-004|conf|S2|docs||Page tree order is scrambled: tree sorts order keys with localeCompare but keys are ASCII base62|src/modules/knowledge/backend/db/repositories/page-repository.ts:346|back|
+Q9-005|conf|S3|docs||Editor toolbar active/disabled states go stale (Bold stays highlighted outside bold text; Undo/Redo lag)|KN/components/Editor/TiptapEditor.tsx:50|fron|
+Q9-006|conf|S3|docs||Task list renders broken: bullet + checkbox on one line, item text on the next|KN/components/Editor/tiptap-extensions.ts:25|fron|
+Q9-007|conf|S3|docs|K45|Editor prose uses Tailwind Typography default gray (blue-slate cast) and adds literal backticks around inline code|KN/components/Editor/TiptapEditor.tsx:60|fron|
+Q9-008|conf|S1|docs|K01|App white-screens when opening a text page after a PDF page or after deleting the open page (FixedToolbar uses destroyed Tiptap editor)|KN/components/Editor/PageEditor.tsx:67|fron|
+Q9-009|conf|S2|docs||Single click on a link in the editor opens it in a new window (duplicate Link extension overrides openOnClick:false)|KN/components/Editor/tiptap-extensions.ts:18|fron|
+Q9-010|conf|S3|docs||Link dialog: Save with a collapsed caret silently does nothing; Esc drops focus to <body>; Remove always shown|KN/components/Editor/LinkDialog.tsx:26|fron|
+Q9-011|conf|S2|docs||Failed body save shows a bare 'Error' pill, never retries, and the edit is silently discarded on page switch|KN/hooks/useAutosave.ts:64|fron|
+Q9-012|conf|S2|docs|K40|Docs failures are silent or show raw codes: import/create/delete/move errors only console.error; tree error shows 'HTTP_500' in raw red|KN/components/Sidebar/Sidebar.tsx:130|fron|
+Q9-013|conf|S3|docs|K34|Docs page tree is not keyboard operable: rows unfocusable, chevrons nameless, row actions focusable while invisible, ghost buttons show no focus|KN/components/Sidebar/TreeItem.tsx:160|fron|
+Q9-014|conf|S3|docs||Editor meta line is stale: word count carries over from the previous page and 'edited Xm ago' never updates after saves|KN/components/Editor/PageEditor.tsx:106|fron|
+Q9-015|conf|S3|docs|K37|Docs search field is a 32px hand-rolled input (kit search fields are 22px in a 34px header)|KN/components/Sidebar/Sidebar.tsx:150|fron|
+Q9-016|conf|S4|docs|K45|Docs (and Tasks) still use raw palette classes and hand-rolled controls instead of tokens/kit|KN/Space.tsx:99|fron|
+Q9-017|conf|S4|docs||Docs layout ignores shell metrics: no 34px module header, 36px tree rows, inverted surfaces, misaligned header borders, 3 'New page' CTAs|KN/Space.tsx:98|desi|
+Q9-018|conf|S3|docs||Docs forgets the open page and tree expansion when leaving the module or reloading; search results don't reveal nested pages|KN/Space.tsx:17|fron|
+Q9-019|conf|S3|docs||Docs search only matches titles — body text and imported .md/.txt content are not searchable|src/modules/knowledge/backend/services/search-service.ts:7|back|
+Q9-020|conf|S3|docs||At 1100 px the editor meta line wraps ('edited 3m / ago', '0 / words') when a breadcrumb is present|KN/components/Editor/PageEditor.tsx:299|fron|
+Q9-021|conf|S4|tasks|K42|Tasks module is unreachable from the UI (hidden from rail; no menu/shortcut)|src/modules/tasks/manifest.json:13|desi|
+Q9-022|conf|S3|tasks|K01|Tasks space white-screens the app when /tasks returns an error JSON (tasks.map is not a function)|src/modules/tasks/frontend/Space.tsx:13|fron|
+Q9-023|conf|S4|tasks|K45|Tasks list is clipped (36 of 50 rows unreachable), has no loading state, and is styled with raw palette (light-pink error box in dark theme)|src/modules/tasks/frontend/Space.tsx:26|fron|
+Q9-024|conf|S3|docs||Clearing a page title saves an empty title: tree shows a blank, unlabeled row; Enter in the title does nothing|KN/components/Editor/PageEditor.tsx:149|fron|
+Q9-025|conf|S2|docs|K06|Docs page delete uses native window.confirm (tree + editor), doesn't mention subpages that are deleted too, and offers no undo|KN/components/Sidebar/TreeItem.tsx:80|fron|
+Q9-026|conf|S3|docs||Merely opening a page (first after load / new page) writes it back: spurious PATCH bumps revision and 'edited' time|KN/components/Editor/TiptapEditor.tsx:86|fron|
+Q9-027|conf|S2|docs|K33|Right-click in the Docs editor shows only the app menu ('Settings') — no Cut/Copy/Paste or spelling suggestions|FE/AppShell.tsx:36|fron|
+Q9-028|conf|S1|docs||Undo after switching pages pastes the previous page's content into the current page and autosaves it (history shared across pages)|KN/components/Editor/TiptapEditor.tsx:72|fron|

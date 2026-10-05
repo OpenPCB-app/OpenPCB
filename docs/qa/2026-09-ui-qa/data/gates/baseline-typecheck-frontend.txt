@@ -1,0 +1,9 @@
+
+> openpcb@0.1.1-beta typecheck:frontend
+> npm run lint --workspace src/core/frontend --if-present
+
+
+> openpcb-core-frontend@0.1.0-beta.5 lint
+> tsc --noEmit --pretty false --project tsconfig.json
+
+exit 0

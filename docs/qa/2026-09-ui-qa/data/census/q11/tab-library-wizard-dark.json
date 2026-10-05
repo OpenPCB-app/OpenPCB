@@ -1,0 +1,470 @@
+[
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Home",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 74,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 1
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Designer",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 137,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 2
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Library",
+  "tid": "",
+  "region": "nav",
+  "x": 8,
+  "y": 195,
+  "w": 64,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(181, 214, 252)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 3
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Docs",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 254,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(149, 188, 235)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 4
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Assistant",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 312,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 5
+ },
+ {
+  "tag": "a",
+  "role": "",
+  "name": "Report a bug or request a feature",
+  "tid": "",
+  "region": "aside",
+  "x": 24,
+  "y": 818,
+  "w": 32,
+  "h": 32,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(149, 188, 235)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 6
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Settings",
+  "tid": "",
+  "region": "aside",
+  "x": 24,
+  "y": 858,
+  "w": 32,
+  "h": 32,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(149, 188, 235)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 7
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "",
+  "tid": "",
+  "region": "main",
+  "x": 100,
+  "y": 16,
+  "w": 24,
+  "h": 24,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(153, 200, 255)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 8
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "1. Symbol",
+  "tid": "",
+  "region": "main",
+  "x": 259,
+  "y": 20,
+  "w": 240,
+  "h": 17,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(153, 200, 255)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 9
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Import file",
+  "tid": "",
+  "region": "aside",
+  "x": 95,
+  "y": 72,
+  "w": 117,
+  "h": 27,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(178, 211, 250)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 10
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Draw symbol",
+  "tid": "",
+  "region": "aside",
+  "x": 212,
+  "y": 72,
+  "w": 117,
+  "h": 27,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(158, 190, 230)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 11
+ },
+ {
+  "tag": "input",
+  "role": "",
+  "name": "",
+  "tid": "",
+  "region": "aside",
+  "x": 105,
+  "y": 152,
+  "w": 213,
+  "h": 37,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(153, 200, 255)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 12
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Grid",
+  "tid": "",
+  "region": "main",
+  "x": 505,
+  "y": 76,
+  "w": 39,
+  "h": 28,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(155, 195, 242)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 13
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Home",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 74,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 14
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Designer",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 137,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 15
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Library",
+  "tid": "",
+  "region": "nav",
+  "x": 8,
+  "y": 195,
+  "w": 64,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(168, 207, 253)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 16
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Docs",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 254,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 17
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Assistant",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 312,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 18
+ }
+]

@@ -1,0 +1,148 @@
+{
+ "agent": "f1d",
+ "method": "In-page window.fetch shim (scripts/f1d-shim.js): 2.5–8 s latency, synthetic list mocks, synthetic 500s, and every non-GET /api request blocked (no data mutation; nothing sent to the LLM). Flash detection via MutationObserver (scripts/f1d-watch.js); PerformanceObserver longtask/layout-shift; rAF scroll probe. fetch restored and both sessions closed at the end.",
+ "checklist": [
+  {
+   "item": "Latency 2.5 s + in-memory nav Home→Docs→Assistant→Settings General/Libraries/About→Tasks, first-render screenshots",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Flashes of misleading empty states / missing spinners / layout jumps",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "result": "F1D-002; Docs skeleton OK; Assistant/Home/Tasks misleading"
+  },
+  {
+   "item": "Assistant send before config load (captured+blocked POST)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "result": "F1D-001"
+  },
+  {
+   "item": "Home 300 designs: list+grid render, rAF scroll FPS, sort (Name), search, filters, detail panel, status count",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720",
+    "1920x1080"
+   ],
+   "result": "F1D-008; scroll 60fps; K25/Q1-005/Q1-009/Q1-023 re-confirmed"
+  },
+  {
+   "item": "Assistant 200 chats + 120-msg chat: sidebar scroll, filters, multi-select bar, header truncation, 'Loading older messages' pagination (3 pages), 10k msg/wide code/30-col table",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ],
+   "result": "pagination OK: prepends, keeps scroll anchor, stops at hasMore=false; dividers correct. F1D-004, F1D-009"
+  },
+  {
+   "item": "Docs 300 pages 8 deep: tree scroll, indentation vs truncation, expand/collapse, search results, breadcrumb",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ],
+   "result": "F1D-005, F1D-006, F1D-007; scroll 60fps; toggle with all 300 expanded 79 ms"
+  },
+  {
+   "item": "Recovery without reload after 500 on Home / Docs tree / Assistant chats / Settings sources",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "result": "F1D-003 (only Docs has Retry)"
+  },
+  {
+   "item": "Census on mocked many-item screens",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ],
+   "result": "census/f1d-*.json: Assistant 9–10 px text (linked-design chips 9px, 'Strict' 9px; K36), Docs 23 nameless chevron buttons (Q9-013), Home 0 small text"
+  },
+  {
+   "item": "Console errors",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "result": "only noise + tiptap duplicate 'link' warning (Q9-009) + the shim's own blocked-write error"
+  },
+  {
+   "item": "Native dialog calls",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "result": "0 prompt/confirm/alert during this charter"
+  }
+ ],
+ "known": [
+  {
+   "ref": "K40",
+   "status": "confirmed",
+   "evidence": "Home 'Failed to load designs: HTTP 500' (shots/f1d/dark/050-err500-home.png), Docs 'HTTP_500' (051); filed under F1D-003"
+  },
+  {
+   "ref": "K32",
+   "status": "confirmed",
+   "evidence": "Home 500 shows 'No designs yet / Create your first design' under the error strip, no retry (050, 152). Already Q1-003"
+  },
+  {
+   "ref": "K25",
+   "status": "confirmed",
+   "evidence": "Sorted by Name, header still 'Modified ▾' (shots/f1d/light/125-home300-sort-name.png). Already Q1-008"
+  },
+  {
+   "ref": "K36",
+   "status": "confirmed",
+   "evidence": "census/f1d-asst200-dark-1440.json: 9px linked-design chips + 'Strict' in the Assistant sidebar/pill"
+  },
+  {
+   "ref": "K42",
+   "status": "confirmed",
+   "evidence": "Tasks reachable only via navigateToModule eval. About lists the Tasks module (012)"
+  },
+  {
+   "ref": "K45",
+   "status": "partial",
+   "evidence": "Docs skeleton pixels map to tokens (#dcdce0 --divider light, #1c1c1f --surface-raised dark), but Assistant multi-select bar/Delete use raw red/slate (036)"
+  }
+ ],
+ "notes": [
+  "The earlier 'Assistant thread not scrolled to bottom under latency' observation was refuted: it came from measuring the chat-list scroller. The thread reaches the bottom (sampled 485/1329/844) with and without latency.",
+  "Q9-026 re-observed: opening a Docs page issues PATCH /pages/{id}/content immediately (blocked by the shim)",
+  "Q1-005 re-observed with 300 designs at 1100px (Name column 0px): shots/f1d/dark/025-home300-list-1100.png",
+  "Library first render under latency showed full data immediately and a later 'Loading…' at +2.7 s (preview pane); not in charter, not investigated"
+ ],
+ "untested": [
+  {
+   "item": "Tasks 500 recovery",
+   "reason": "known white-screen (Q9-022); skipped to avoid a React crash mid-session"
+  },
+  {
+   "item": "Physical wheel/trackpad scrolling of the assistant thread",
+   "reason": "playwright-cli mousewheel dispatched no wheel events in this setup; programmatic scrollTop used instead (same IntersectionObserver path)"
+  }
+ ]
+}

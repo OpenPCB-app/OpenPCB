@@ -1,0 +1,319 @@
+{
+ "agent": "q2",
+ "checklist": [
+  {
+   "item": "Reach Settings via rail gear",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Reach Settings via Cmd+, and Ctrl+, (from Home and Designer)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Reach Settings via app right-click menu (Home + Designer)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Back returns to previous screen (Home, Designer) — Designer view resets (Q2-025)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Esc returns to previous screen; Esc in search/form/context menu (Q2-012)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Settings search + 'No matches' + Enter (Q2-013)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Header height/style vs Home/Library (K39, Q2-007)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "General: theme Light/Dark/System, System subtitle, persistence",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "General: desktop-only notes (Updates, Files & logs)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Libraries: core library card, Check for updates, error + mocked bundled-update state (Q2-016)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Libraries: sources table, Remove -> native confirm dismissed (K06, Q2-004/005)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Libraries: Install from URL error paths (bogus host, 404, invalid, http) (Q2-015)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Libraries: Install from file chooser (cancelled by uploading non-opclib sample.txt -> rejected, nothing installed)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Libraries: sources fetch 500 injection (Q2-014)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Account (cloud off): tab hidden by cloud.auth gate; forced openSettings('account') falls back to General",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Assistant: default provider / prompt preset / context size / tool policy / raw tool data save + reload persistence",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Assistant: MCP section toggles, writes disabled when server off, snippets text (K20, Q2-006, Q2-029)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Assistant: add provider with dummy key, save, key badge (K11, Q2-001, Q2-019)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Assistant: Re-test error surfacing (unreachable, keyless) (Q2-002)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Assistant: Models refresh error (Q2-010, Q2-018)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Assistant: edit/save, tool calling mode, draft loss (Q2-003)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Assistant: key show/replace/remove (Q2-027, Q2-028, Q2-017)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Assistant: delete provider (Q2-017)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Assistant: keyboard focus walk (Q2-011)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Privacy panel copy, checkbox, SECURITY.md link (Q2-020, Q2-021)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "About: modules list, release notes (opens GitHub releases tab), links, Privacy settings link",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Visual: control heights, kit vs hand-rolled, raw banners (K45) with pixel probes",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Layout at 1100x720 (all 5 visible tabs, no horizontal overflow)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720"
+   ]
+  },
+  {
+   "item": "DOM census (General dark, Assistant dark/light, provider form dark, Libraries light, Privacy light)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Console errors (only injected 4xx/5xx + favicon 404)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  }
+ ],
+ "known": [
+  {
+   "ref": "K06",
+   "status": "confirmed",
+   "evidence": "LibrariesPanel Remove -> native confirm 'Remove library \"user.local\"…' (dialog spy confirm=1) — Q2-004"
+  },
+  {
+   "ref": "K11",
+   "status": "confirmed",
+   "evidence": "UI 'keys stored encrypted locally' / 'Saved · encrypted locally'; DB boolean check api_key == dummy -> 1 (plaintext) — Q2-001"
+  },
+  {
+   "ref": "K20",
+   "status": "confirmed",
+   "evidence": "Code: McpSection rendered unconditionally (AssistantPanel.tsx:431) while backend gates /mcp on mcp.server (routes.ts:468); not reproducible visually on dev stack where flag is on — Q2-006"
+  },
+  {
+   "ref": "K39",
+   "status": "confirmed",
+   "evidence": "Settings header 52px vs Home/Library 34px; search input 32px native type=search; nav rows 36px — Q2-007"
+  },
+  {
+   "ref": "K45",
+   "status": "confirmed",
+   "evidence": "Pixel probes: amber desktop notes (#fffbeb/#311b0f), red banner text #c3080f dE18.5, emerald border #004f3b dE27.6, Chromium checkbox blue #0075ff dE46 — Q2-008"
+  },
+  {
+   "ref": "K36",
+   "status": "confirmed",
+   "evidence": "Census: 5×9px text in Assistant settings (Advanced, Caution, LOCAL, DEFAULT) — Q2-023"
+  },
+  {
+   "ref": "K43",
+   "status": "partial",
+   "evidence": "AssistantPanel usage tiles 'coming soon' confirmed (Q2-024); AiCloudTeaser not reachable because Account tab hidden on stack B"
+  },
+  {
+   "ref": "K33",
+   "status": "partial",
+   "evidence": "Observed right-click in Settings search input shows only 'Settings' (no Cut/Copy/Paste); owned by shell agent — not filed separately"
+  }
+ ],
+ "untested": [
+  {
+   "item": "Account tab contents (signed-out card, AiCloudTeaser, CloudValueCard)",
+   "reason": "cloud.auth forced off on stack B (tab hidden); stack C1 URL http://127.0.0.1:1720 is blocked by Chromium ERR_UNSAFE_PORT in playwright, so could not view read-only"
+  },
+  {
+   "item": "Updates / Files & logs / telemetry toggle functional paths",
+   "reason": "Electron-only APIs (window.updater, electronAPI) absent in browser stack"
+  },
+  {
+   "item": "MCP snippets content and Copy buttons",
+   "reason": "require Electron getMcpConfig"
+  },
+  {
+   "item": "Actual .opclib install / core library update download",
+   "reason": "charter: q6 owns library content; no remote release available"
+  },
+  {
+   "item": "Include completion in test / successful provider test",
+   "reason": "no reachable LLM server or real key on stack B"
+  }
+ ]
+}

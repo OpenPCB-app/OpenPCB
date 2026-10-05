@@ -1,0 +1,1292 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "light",
+ "vw": 1440,
+ "vh": 900,
+ "docW": 1440,
+ "bands": [
+  {
+   "tag": "header",
+   "x": 80,
+   "y": 0,
+   "w": 1360,
+   "h": 34,
+   "text": "GUIDE-VALIDATE r15 Schem PCB 3D BOM DRC ",
+   "cls": "grid h-[34px] shrink-0 grid-cols-[1fr_auto_1fr] items-stretch border-b border-border bg-surface-rail",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(236, 236, 238)"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 34,
+   "w": 1360,
+   "h": 30,
+   "label": "PCB tools",
+   "text": "Add \u25be Export\u2026 DRC 1 View 3 \u25be",
+   "cls": "flex h-[30px] shrink-0 items-center gap-0.5 border-b border-border bg-surface-panel px-1.5 text-text-secondary",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(247, 247, 248)"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 64,
+   "w": 259,
+   "h": 24,
+   "text": "Layers Preset: Custom",
+   "cls": "flex shrink-0 items-center gap-1.5 border-y border-border bg-surface-section px-2 h-[24px]",
+   "n": 2,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(235, 235, 237)"
+  },
+  {
+   "tag": "div",
+   "x": 1141,
+   "y": 64,
+   "w": 299,
+   "h": 24,
+   "role": "tablist",
+   "label": "Side panel",
+   "text": "Properties DRC 21 Assistant",
+   "cls": "flex h-[24px] shrink-0 items-stretch border-b border-border bg-surface-rail",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(236, 236, 238)"
+  },
+  {
+   "tag": "div",
+   "x": 1141,
+   "y": 88,
+   "w": 299,
+   "h": 28,
+   "text": "Board Nothing selected",
+   "cls": "flex h-[28px] shrink-0 items-center gap-1.5 border-b border-border px-2",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "div",
+   "x": 1141,
+   "y": 116,
+   "w": 299,
+   "h": 22,
+   "text": "OUTLINE",
+   "cls": "flex shrink-0 items-center gap-1.5 border-y border-border bg-surface-section px-2 h-[22px]",
+   "n": 4,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(235, 235, 237)"
+  },
+  {
+   "tag": "div",
+   "x": 1237,
+   "y": 138,
+   "w": 203,
+   "h": 22,
+   "text": "Rectangle",
+   "cls": "flex h-[22px] min-w-0 items-center gap-1.5 border-b border-border-subtle px-2 text-xs text-text-strong",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "div",
+   "x": 1237,
+   "y": 160,
+   "w": 203,
+   "h": 22,
+   "text": "50 mm",
+   "cls": "flex h-[22px] min-w-0 items-center gap-1.5 border-b border-border-subtle px-2 text-xs text-text-strong font-mono",
+   "n": 10,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 418,
+   "w": 259,
+   "h": 24,
+   "text": "Inactive layers Normal Dim Hide",
+   "cls": "flex h-[24px] items-center gap-2 border-t border-border px-2",
+   "n": 1,
+   "bb": false,
+   "bt": true,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 466,
+   "w": 259,
+   "h": 22,
+   "text": "REF FOOTPRINT VALUE",
+   "cls": "sticky top-0 z-10 grid h-[22px] items-center gap-2 border-b border-border bg-surface-panel px-[10px] text-2xs uppercase tracking-[.04em] tex",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(247, 247, 248)"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 488,
+   "w": 259,
+   "h": 22,
+   "tid": "pcb-component-row-855cdf6d-6851-42a7-a90c-0c23d5c3ef04",
+   "text": "C1 C_0603_1608Metric",
+   "cls": "grid items-center gap-2 border-b border-border-subtle px-[10px] text-xs text-text hover:bg-surface-hover cursor-pointer",
+   "n": 4,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "div",
+   "x": 341,
+   "y": 856,
+   "w": 798,
+   "h": 22,
+   "role": "tablist",
+   "label": "PCB layers",
+   "text": "Top Copper Bottom Copper Top Overlay Bot",
+   "cls": "flex h-[22px] shrink-0 items-stretch overflow-x-auto border-t border-border bg-surface-panel text-2xs",
+   "n": 1,
+   "bb": false,
+   "bt": true,
+   "bg": "rgb(247, 247, 248)"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 878,
+   "w": 1360,
+   "h": 22,
+   "text": "X \u2014 Y \u2014 zoom 36% Top Copper F.Cu Click t",
+   "cls": "flex h-[22px] shrink-0 items-center overflow-hidden border-t border-border bg-surface-rail font-mono text-2xs text-text-secondary",
+   "n": 1,
+   "bb": false,
+   "bt": true,
+   "bg": "rgb(236, 236, 238)"
+  }
+ ],
+ "rows": [
+  {
+   "parent": "mt-3 flex w-full flex-col items-center gap-2",
+   "px": 4,
+   "py": 137,
+   "child": "BUTTON.flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center g",
+   "n": 3,
+   "heights": {
+    "51": 3
+   },
+   "w": 72,
+   "sample": "Library"
+  },
+  {
+   "parent": "tablist",
+   "px": 633,
+   "py": 0,
+   "child": "BUTTON.inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs tran",
+   "n": 5,
+   "heights": {
+    "34": 5
+   },
+   "w": 62,
+   "sample": "Schem"
+  },
+  {
+   "parent": "PCB tools",
+   "px": 80,
+   "py": 34,
+   "child": "BUTTON.inline-flex shrink-0 items-center justify-center rounded-control transition-colors outline-none focus-visible:out",
+   "n": 6,
+   "heights": {
+    "24": 6
+   },
+   "w": 24,
+   "sample": ""
+  },
+  {
+   "parent": "PCB tools",
+   "px": 80,
+   "py": 34,
+   "child": "SPAN.mx-1 h-4 w-px shrink-0 bg-divider",
+   "n": 3,
+   "heights": {
+    "16": 3
+   },
+   "w": 1,
+   "sample": ""
+  },
+  {
+   "parent": "flex-1 overflow-y-auto",
+   "px": 80,
+   "py": 88,
+   "child": "DIV.",
+   "n": 13,
+   "heights": {
+    "22": 13
+   },
+   "w": 259,
+   "sample": "Metadata Metadata"
+  },
+  {
+   "parent": "",
+   "px": 80,
+   "py": 466,
+   "child": "DIV.grid items-center gap-2 border-b border-border-subtle px-[10px] text-xs text-text hover:bg-surface-hover cursor-poin",
+   "n": 4,
+   "heights": {
+    "22": 4
+   },
+   "w": 259,
+   "sample": "C1 C_0603_1608Metric"
+  },
+  {
+   "parent": "absolute right-2 top-2 z-10 flex flex-col gap-0.5 border bor",
+   "px": 1103,
+   "py": 72,
+   "child": "BUTTON.flex h-[22px] w-[22px] items-center justify-center hover:bg-surface-hover hover:text-text-strong cursor-pointer o",
+   "n": 3,
+   "heights": {
+    "22": 3
+   },
+   "w": 22,
+   "sample": ""
+  },
+  {
+   "parent": "tablist",
+   "px": 341,
+   "py": 856,
+   "child": "BUTTON.inline-flex shrink-0 items-center gap-1.5 border-r border-border px-2 whitespace-nowrap transition-colors outline",
+   "n": 5,
+   "heights": {
+    "21": 5
+   },
+   "w": 84,
+   "sample": "Top Overlay"
+  },
+  {
+   "parent": "flex flex-col",
+   "px": 1141,
+   "py": 116,
+   "child": "DIV.flex shrink-0 items-center gap-1.5 border-y border-border bg-surface-section px-2 h-[22px]",
+   "n": 4,
+   "heights": {
+    "22": 4
+   },
+   "w": 299,
+   "sample": "OUTLINE"
+  },
+  {
+   "parent": "flex flex-col",
+   "px": 1141,
+   "py": 116,
+   "child": "DIV.grid grid-cols-[96px_1fr]",
+   "n": 4,
+   "heights": {
+    "44": 2,
+    "66": 1,
+    "88": 1
+   },
+   "w": 299,
+   "sample": "Shape Rectangle Width 50 mm Height 30 mm"
+  },
+  {
+   "parent": "grid grid-cols-[96px_1fr]",
+   "px": 1141,
+   "py": 138,
+   "child": "DIV.flex h-[22px] min-w-0 items-center border-b border-border px-2 text-xs text-text-tertiary",
+   "n": 3,
+   "heights": {
+    "22": 3
+   },
+   "w": 96,
+   "sample": "Shape"
+  },
+  {
+   "parent": "grid grid-cols-[96px_1fr]",
+   "px": 1141,
+   "py": 328,
+   "child": "DIV.flex h-[22px] min-w-0 items-center border-b border-border px-2 text-xs text-text-tertiary",
+   "n": 4,
+   "heights": {
+    "22": 4
+   },
+   "w": 96,
+   "sample": "Clearance"
+  },
+  {
+   "parent": "grid grid-cols-[96px_1fr]",
+   "px": 1141,
+   "py": 328,
+   "child": "DIV.flex h-[22px] min-w-0 items-center gap-1.5 border-b border-border-subtle px-2 text-xs text-text-strong font-mono",
+   "n": 4,
+   "heights": {
+    "22": 4
+   },
+   "w": 203,
+   "sample": "0.25 mm"
+  },
+  {
+   "parent": "flex h-[22px] shrink-0 items-center overflow-hidden border-t",
+   "px": 80,
+   "py": 878,
+   "child": "DIV.flex h-full items-center gap-2 border-r border-border px-[10px] last:border-r-0",
+   "n": 5,
+   "heights": {
+    "21": 5
+   },
+   "w": 69,
+   "sample": "X \u2014 Y \u2014"
+  }
+ ],
+ "btnHeights": {
+  "icon:16": 33,
+  "text:22": 14,
+  "text:21": 8,
+  "text:34": 6,
+  "icon:24": 6,
+  "text:51": 5,
+  "text:24": 5,
+  "text:18": 5,
+  "icon:22": 4,
+  "text:23": 3,
+  "text:15": 2,
+  "text:20": 2,
+  "icon:32": 1,
+  "icon:20": 1
+ },
+ "btnVariants": {
+  "h51 fs12px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 134) fw400": {
+   "n": 4,
+   "ex": [
+    "Home",
+    "Library",
+    "Docs"
+   ]
+  },
+  "h51 fs12px r2px bg:rgb(230, 230, 233) bd:none fg:rgb(17, 17, 20) fw400": {
+   "n": 1,
+   "ex": [
+    "Designer"
+   ]
+  },
+  "h34 fs11px r0px bg:rgb(242, 242, 243) bd:none fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "GUIDE-VALIDATE\nr15"
+   ]
+  },
+  "h34 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 134) fw400": {
+   "n": 4,
+   "ex": [
+    "Schem",
+    "3D",
+    "BOM"
+   ]
+  },
+  "h34 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "PCB"
+   ]
+  },
+  "h24 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 134) fw400": {
+   "n": 1,
+   "ex": [
+    "Assistant"
+   ]
+  },
+  "h24 fs11px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(85, 85, 92) fw400": {
+   "n": 4,
+   "ex": [
+    "Add\n\u25be",
+    "Export\u2026",
+    "DRC\n1"
+   ]
+  },
+  "h15 fs12px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(38, 38, 43) fw400": {
+   "n": 2,
+   "ex": [
+    "Layers",
+    "Components"
+   ]
+  },
+  "h18 fs10px r2px bg:rgba(0, 0, 0, 0) bd:rgb(207, 207, 212) fg:rgb(85, 85, 92) fw400": {
+   "n": 2,
+   "ex": [
+    "Preset: Custom",
+    "Viewing Top"
+   ]
+  },
+  "h22 fs12px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(38, 38, 43) fw400": {
+   "n": 13,
+   "ex": [
+    "Metadata\nMetadata",
+    "Board Outline\nEdge.Cuts",
+    "Drill Holes\nDrill"
+   ]
+  },
+  "h18 fs10px r0px bg:rgb(214, 214, 218) bd:none fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "Normal"
+   ]
+  },
+  "h18 fs10px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(85, 85, 92) fw400": {
+   "n": 2,
+   "ex": [
+    "Dim",
+    "Hide"
+   ]
+  },
+  "h21 fs10px r0px bg:rgb(214, 214, 218) bd:none fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "Top Copper"
+   ]
+  },
+  "h21 fs10px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(85, 85, 92) fw400": {
+   "n": 2,
+   "ex": [
+    "Bottom Copper",
+    "21\nDRC"
+   ]
+  },
+  "h21 fs10px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 134) fw400": {
+   "n": 5,
+   "ex": [
+    "Top Overlay",
+    "Bottom Overlay",
+    "Top Courtyard"
+   ]
+  },
+  "h23 fs11px r0px bg:rgb(247, 247, 248) bd:none fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "Properties"
+   ]
+  },
+  "h23 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 134) fw400": {
+   "n": 2,
+   "ex": [
+    "DRC\n21",
+    "Assistant"
+   ]
+  },
+  "h20 fs11px r2px bg:rgba(0, 0, 0, 0) bd:rgb(207, 207, 212) fg:rgb(38, 38, 43) fw400": {
+   "n": 2,
+   "ex": [
+    "Edit",
+    "Fit to parts"
+   ]
+  },
+  "h22 fs11px r2px bg:rgba(0, 0, 0, 0) bd:rgb(207, 207, 212) fg:rgb(38, 38, 43) fw400": {
+   "n": 1,
+   "ex": [
+    "Edit rules\u2026"
+   ]
+  }
+ },
+ "btnOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 137,
+   "w": 64,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 195,
+   "w": 72,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 858,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "fs": "12px"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 0,
+   "w": 170,
+   "h": 34,
+   "role": "tab",
+   "tid": "design-tab-b5a31f3e-de4f-434a-9922-a6ba9fcf1c8c",
+   "text": "GUIDE-VALIDATE r15",
+   "cls": "group relative flex min-w-[120px] max-w-[200px] cursor-pointer select-none items-center gap-1.5 px-2 text-xs transition-colors self-stretch ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 225,
+   "y": 9,
+   "w": 16,
+   "h": 16,
+   "label": "Close GUIDE-VALIDATE",
+   "cls": "flex h-4 w-4 shrink-0 items-center justify-center rounded-control text-text-tertiary transition-opacity hover:bg-surface-hover hover:text-te",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 633,
+   "y": 0,
+   "w": 62,
+   "h": 34,
+   "role": "tab",
+   "text": "Schem",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 695,
+   "y": 0,
+   "w": 49,
+   "h": 34,
+   "role": "tab",
+   "text": "PCB",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 744,
+   "y": 0,
+   "w": 42,
+   "h": 34,
+   "role": "tab",
+   "tid": "designer-view-3d",
+   "text": "3D",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 786,
+   "y": 0,
+   "w": 52,
+   "h": 34,
+   "role": "tab",
+   "text": "BOM",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 838,
+   "y": 0,
+   "w": 49,
+   "h": 34,
+   "role": "tab",
+   "text": "DRC",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 88,
+   "y": 69,
+   "w": 140,
+   "h": 15,
+   "text": "Layers",
+   "cls": "flex min-w-0 flex-1 items-center gap-1.5 text-left outline-none",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 234,
+   "y": 68,
+   "w": 97,
+   "h": 18,
+   "label": "Layer visibility preset",
+   "text": "Preset: Custom",
+   "cls": "inline-flex h-[18px] cursor-pointer items-center gap-1 rounded-control border border-border-control px-1.5 text-2xs text-text-secondary tran",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 293,
+   "y": 91,
+   "w": 16,
+   "h": 16,
+   "label": "Toggle opacity slider",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 315,
+   "y": 91,
+   "w": 16,
+   "h": 16,
+   "label": "Hide layer",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong disabled:cursor-not-allow",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 293,
+   "y": 113,
+   "w": 16,
+   "h": 16,
+   "label": "Toggle opacity slider",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 315,
+   "y": 113,
+   "w": 16,
+   "h": 16,
+   "label": "Hide layer",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong disabled:cursor-not-allow",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 293,
+   "y": 135,
+   "w": 16,
+   "h": 16,
+   "label": "Toggle opacity slider",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 315,
+   "y": 135,
+   "w": 16,
+   "h": 16,
+   "label": "Hide layer",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong disabled:cursor-not-allow",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 88,
+   "y": 157,
+   "w": 16,
+   "h": 16,
+   "label": "Collapse group",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 315,
+   "y": 157,
+   "w": 16,
+   "h": 16,
+   "label": "Show all",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 293,
+   "y": 179,
+   "w": 16,
+   "h": 16,
+   "label": "Toggle opacity slider",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 315,
+   "y": 179,
+   "w": 16,
+   "h": 16,
+   "label": "Hide layer",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong disabled:cursor-not-allow",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 293,
+   "y": 201,
+   "w": 16,
+   "h": 16,
+   "label": "Toggle opacity slider",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 315,
+   "y": 201,
+   "w": 16,
+   "h": 16,
+   "label": "Show layer",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong disabled:cursor-not-allow",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 293,
+   "y": 223,
+   "w": 16,
+   "h": 16,
+   "label": "Toggle opacity slider",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 315,
+   "y": 223,
+   "w": 16,
+   "h": 16,
+   "label": "Show layer",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong disabled:cursor-not-allow",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 271,
+   "y": 245,
+   "w": 16,
+   "h": 16,
+   "label": "Toggle opacity slider",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 293,
+   "y": 245,
+   "w": 16,
+   "h": 16,
+   "tid": "copper-fill-toggle-F.Cu",
+   "label": "Show copper fills",
+   "cls": "relative shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 315,
+   "y": 245,
+   "w": 16,
+   "h": 16,
+   "label": "Hide layer",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong disabled:cursor-not-allow",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 293,
+   "y": 267,
+   "w": 16,
+   "h": 16,
+   "label": "Toggle opacity slider",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 315,
+   "y": 267,
+   "w": 16,
+   "h": 16,
+   "label": "Show layer",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong disabled:cursor-not-allow",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 88,
+   "y": 289,
+   "w": 16,
+   "h": 16,
+   "label": "Collapse group",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 315,
+   "y": 289,
+   "w": 16,
+   "h": 16,
+   "label": "Show all",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 271,
+   "y": 311,
+   "w": 16,
+   "h": 16,
+   "label": "Toggle opacity slider",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 293,
+   "y": 311,
+   "w": 16,
+   "h": 16,
+   "tid": "copper-fill-toggle-B.Cu",
+   "label": "Show copper fills",
+   "cls": "relative shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 315,
+   "y": 311,
+   "w": 16,
+   "h": 16,
+   "label": "Hide layer",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong disabled:cursor-not-allow",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 293,
+   "y": 333,
+   "w": 16,
+   "h": 16,
+   "label": "Toggle opacity slider",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 315,
+   "y": 333,
+   "w": 16,
+   "h": 16,
+   "label": "Show layer",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong disabled:cursor-not-allow",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 293,
+   "y": 355,
+   "w": 16,
+   "h": 16,
+   "label": "Toggle opacity slider",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 315,
+   "y": 355,
+   "w": 16,
+   "h": 16,
+   "label": "Show layer",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong disabled:cursor-not-allow",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 293,
+   "y": 377,
+   "w": 16,
+   "h": 16,
+   "label": "Toggle opacity slider",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 315,
+   "y": 377,
+   "w": 16,
+   "h": 16,
+   "label": "Show layer",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong disabled:cursor-not-allow",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 293,
+   "y": 399,
+   "w": 16,
+   "h": 16,
+   "label": "Toggle opacity slider",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 315,
+   "y": 399,
+   "w": 16,
+   "h": 16,
+   "label": "Show layer",
+   "cls": "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3 text-text-tertiary hover:text-text-strong disabled:cursor-not-allow",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 209,
+   "y": 422,
+   "w": 50,
+   "h": 18,
+   "label": "Display mode: Normal (Ctrl+H)",
+   "text": "Normal",
+   "cls": "inline-flex items-center gap-1 px-2 text-2xs whitespace-nowrap transition-colors outline-none disabled:cursor-not-allowed disabled:opacity-5",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 259,
+   "y": 422,
+   "w": 34,
+   "h": 18,
+   "label": "Display mode: Dim (Ctrl+H)",
+   "text": "Dim",
+   "cls": "inline-flex items-center gap-1 px-2 text-2xs whitespace-nowrap transition-colors outline-none disabled:cursor-not-allowed disabled:opacity-5",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 293,
+   "y": 422,
+   "w": 37,
+   "h": 18,
+   "label": "Display mode: Hide (Ctrl+H)",
+   "text": "Hide",
+   "cls": "inline-flex items-center gap-1 px-2 text-2xs whitespace-nowrap transition-colors outline-none disabled:cursor-not-allowed disabled:opacity-5",
+   "fs": "10px"
+  }
+ ],
+ "inputs": [],
+ "tablists": [
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 0,
+   "w": 196,
+   "h": 34,
+   "role": "tablist",
+   "label": "Open designs",
+   "text": "GUIDE-VALIDATE r15",
+   "cls": "flex min-w-0 items-stretch overflow-x-auto",
+   "tabs": 1,
+   "tabH": {
+    "34": 1
+   },
+   "tabFs": {
+    "11px": 1
+   },
+   "roving": 1
+  },
+  {
+   "tag": "div",
+   "x": 633,
+   "y": 0,
+   "w": 254,
+   "h": 34,
+   "role": "tablist",
+   "text": "Schem PCB 3D BOM DRC",
+   "cls": "inline-flex items-stretch justify-center rounded-none bg-transparent text-text-tertiary data-[orientation=vertical]:h-auto data-[orientation",
+   "tabs": 5,
+   "tabH": {
+    "34": 5
+   },
+   "tabFs": {
+    "11px": 5
+   },
+   "roving": 4
+  },
+  {
+   "tag": "div",
+   "x": 341,
+   "y": 856,
+   "w": 798,
+   "h": 22,
+   "role": "tablist",
+   "label": "PCB layers",
+   "text": "Top Copper Bottom Copper Top Overlay Bot",
+   "cls": "flex h-[22px] shrink-0 items-stretch overflow-x-auto border-t border-border bg-surface-panel text-2xs",
+   "tabs": 7,
+   "tabH": {
+    "21": 7
+   },
+   "tabFs": {
+    "10px": 7
+   },
+   "roving": 0
+  },
+  {
+   "tag": "div",
+   "x": 1141,
+   "y": 64,
+   "w": 299,
+   "h": 24,
+   "role": "tablist",
+   "label": "Side panel",
+   "text": "Properties DRC 21 Assistant",
+   "cls": "flex h-[24px] shrink-0 items-stretch border-b border-border bg-surface-rail",
+   "tabs": 3,
+   "tabH": {
+    "23": 3
+   },
+   "tabFs": {
+    "11px": 3
+   },
+   "roving": 0
+  }
+ ],
+ "segs": [
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 34,
+   "w": 1360,
+   "h": 30,
+   "label": "PCB tools",
+   "text": "Add \u25be Export\u2026 DRC 1 View 3 \u25be",
+   "cls": "flex h-[30px] shrink-0 items-center gap-0.5 border-b border-border bg-surface-panel px-1.5 text-text-secondary",
+   "rad": "0px",
+   "bd": "none",
+   "optFs": {
+    "12px": 6,
+    "11px": 2
+   },
+   "optH": {
+    "24": 8
+   },
+   "pressed": 3,
+   "activeBg": {}
+  },
+  {
+   "tag": "div",
+   "x": 208,
+   "y": 421,
+   "w": 123,
+   "h": 20,
+   "role": "group",
+   "label": "Display mode",
+   "text": "Normal Dim Hide",
+   "cls": "inline-flex shrink-0 items-stretch overflow-hidden rounded-control border border-border-control h-[20px] ml-auto",
+   "rad": "2px",
+   "bd": "rgb(207, 207, 212)",
+   "optFs": {
+    "10px": 3
+   },
+   "optH": {
+    "18": 3
+   },
+   "pressed": 3,
+   "activeBg": {
+    "rgb(214, 214, 218)": 1
+   }
+  }
+ ],
+ "radii": {
+  "2px": 8
+ },
+ "radEx": {},
+ "shadows": [],
+ "shadowCount": 0,
+ "blurs": [],
+ "grads": [],
+ "fontSizes": {
+  "11px": 71,
+  "10px": 62,
+  "12px": 1
+ },
+ "fontFam": {
+  "IBM Plex Sans": 79,
+  "IBM Plex Mono": 55
+ },
+ "weights": {
+  "400": 121,
+  "500": 13
+ },
+ "small": [],
+ "big": [],
+ "iconSizes": {
+  "12x12": 42,
+  "14x14": 13,
+  "20x20": 5,
+  "18x18": 2,
+  "16x16": 1,
+  "10x10": 1,
+  "11x11": 1,
+  "13x13": 1
+ },
+ "iconStroke": {
+  "2px/attr2": 44,
+  "1.5px/attr1.5": 14,
+  "1.5px/attr2": 8
+ },
+ "iconOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-layout-grid h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 137,
+   "w": 64,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-pen-tool h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 195,
+   "w": 72,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-box h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-book-open h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-bot h-5 w-5"
+  },
+  {
+   "tag": "a",
+   "x": 24,
+   "y": 818,
+   "w": 32,
+   "h": 32,
+   "label": "Report a bug or request a feature",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-circle-dot h-[18px] w-[18p"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 858,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-settings h-[18px] w-[18px]"
+  }
+ ],
+ "otherSvgs": [],
+ "floats": [],
+ "alerts": [],
+ "headings": [],
+ "canvases": [
+  [
+   341,
+   64,
+   1139,
+   856
+  ]
+ ],
+ "overflowX": [],
+ "clipped": []
+}

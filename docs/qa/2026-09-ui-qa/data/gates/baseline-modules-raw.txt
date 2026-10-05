@@ -1,0 +1,33 @@
+src/modules/assistant/backend/assistant-service.ts(216,9): error TS2367: This comparison appears to be unintentional because the types 'AiProviderKind | undefined' and '"openpcb-cloud"' have no overlap.
+src/modules/assistant/backend/assistant-service.ts(223,9): error TS2367: This comparison appears to be unintentional because the types 'AiProviderKind | undefined' and '"openpcb-cloud"' have no overlap.
+src/modules/assistant/backend/assistant-service.ts(274,17): error TS2367: This comparison appears to be unintentional because the types 'AiProviderKind' and '"openpcb-cloud"' have no overlap.
+src/modules/assistant/backend/assistant-service.ts(716,9): error TS2367: This comparison appears to be unintentional because the types 'AiProviderKind' and '"openpcb-cloud"' have no overlap.
+src/modules/assistant/backend/cloud/copilot-client.ts(20,3): error TS2305: Module '"@openpcb/contracts"' has no exported member 'WalletBalance'.
+src/modules/assistant/backend/cloud/remote-tool.ts(32,15): error TS2305: Module '"@openpcb/contracts"' has no exported member 'ToolManifestEntry'.
+src/modules/assistant/backend/cloud/remote-tool.ts(469,7): error TS2353: Object literal may only specify known properties, and 'timeoutMs' does not exist in type 'AiToolDefinition'.
+src/modules/assistant/backend/proposals/proposal-apply-service.ts(50,3): error TS2322: Type '{ proposalId: string; status: "applied"; designId: string; applied: { componentId: string; componentName: string; partId: string | null; revision: number; }[]; skipped: AssistantPlacementProposalSkipped[]; results: DesignerDispatchResult[]; }' is not assignable to type 'AssistantPlacementApplyResult | SchematicApplyResult'.
+  Type '{ proposalId: string; status: "applied"; designId: string; applied: { componentId: string; componentName: string; partId: string | null; revision: number; }[]; skipped: AssistantPlacementProposalSkipped[]; results: DesignerDispatchResult[]; }' is not assignable to type 'AssistantPlacementApplyResult'.
+    Types of property 'results' are incompatible.
+      Type 'import("/Users/andrejvysny/workspace/openpcb/OpenPCB/src/sdks/designer/types").DesignerDispatchResult[]' is not assignable to type 'import("/Users/andrejvysny/workspace/openpcb/OpenPCB/node_modules/@openpcb/contracts/dist/sdks/designer/types").DesignerDispatchResult[]'.
+        Type 'import("/Users/andrejvysny/workspace/openpcb/OpenPCB/src/sdks/designer/types").DesignerDispatchResult' is not assignable to type 'import("/Users/andrejvysny/workspace/openpcb/OpenPCB/node_modules/@openpcb/contracts/dist/sdks/designer/types").DesignerDispatchResult'.
+          Type '{ ok: false; code: "PCB_COPPER_ILLEGAL"; detail: string; violations: DrcViolation[]; refusedCount: number; }' is not assignable to type 'DesignerDispatchResult'.
+            Type '{ ok: false; code: "PCB_COPPER_ILLEGAL"; detail: string; violations: DrcViolation[]; refusedCount: number; }' is not assignable to type '{ ok: false; code: "REVISION_CONFLICT"; conflict: { expected: number | null; actual: number; }; } | { ok: false; code: "COMPONENT_NOT_FOUND"; componentId: string; } | { ok: false; code: "COMPONENT_NOT_WIREABLE"; componentId: string; reason: "NO_PINS"; } | ... 19 more ... | { ...; }'.
+              Type '{ ok: false; code: "PCB_COPPER_ILLEGAL"; detail: string; violations: DrcViolation[]; refusedCount: number; }' is not assignable to type '{ ok: false; code: "INVALID_PCB_OVERLAY"; detail: string; }'.
+                Types of property 'code' are incompatible.
+                  Type '"PCB_COPPER_ILLEGAL"' is not assignable to type '"INVALID_PCB_OVERLAY"'.
+src/modules/assistant/backend/provider-store.ts(91,3): error TS2322: Type '"openpcb-cloud"' is not assignable to type 'AiProviderKind'.
+src/modules/assistant/backend/provider-store.ts(199,38): error TS2345: Argument of type '"openpcb-cloud"' is not assignable to parameter of type 'AiProviderKind'.
+src/modules/assistant/backend/provider-store.ts(500,38): error TS2367: This comparison appears to be unintentional because the types '"openai" | "openrouter" | "openai-compatible" | "lmstudio" | undefined' and '"openpcb-cloud"' have no overlap.
+src/modules/assistant/backend/providers/openpcb-provider-factory.ts(29,5): error TS2353: Object literal may only specify known properties, and 'extraHeaders' does not exist in type 'OpenAiCompatibleClientOptions'.
+src/modules/assistant/backend/run-service.ts(513,9): error TS2367: This comparison appears to be unintentional because the types 'AiProviderKind' and '"openpcb-cloud"' have no overlap.
+src/modules/assistant/backend/run-service.ts(572,9): error TS2367: This comparison appears to be unintentional because the types 'AiProviderKind' and '"openpcb-cloud"' have no overlap.
+src/modules/assistant/frontend/DesignerChatDock.tsx(384,28): error TS2367: This comparison appears to be unintentional because the types 'AiProviderKind | undefined' and '"openpcb-cloud"' have no overlap.
+src/modules/assistant/frontend/DesignerChatDock.tsx(652,29): error TS2367: This comparison appears to be unintentional because the types 'AiProviderKind | undefined' and '"openpcb-cloud"' have no overlap.
+src/modules/assistant/frontend/Space.tsx(581,28): error TS2367: This comparison appears to be unintentional because the types 'AiProviderKind | undefined' and '"openpcb-cloud"' have no overlap.
+src/modules/assistant/frontend/Space.tsx(936,29): error TS2367: This comparison appears to be unintentional because the types 'AiProviderKind | undefined' and '"openpcb-cloud"' have no overlap.
+src/modules/assistant/frontend/Space.tsx(1040,11): error TS2367: This comparison appears to be unintentional because the types 'AiProviderKind | undefined' and '"openpcb-cloud"' have no overlap.
+src/modules/library/backend/sync/opclib-importer.ts(707,29): error TS2551: Property 'subcategory' does not exist on type 'OpclibComponentEntry'. Did you mean 'category'?
+src/modules/library/backend/sync/opclib-importer.ts(708,30): error TS2339: Property 'datasheet' does not exist on type 'OpclibComponentEntry'.
+src/modules/library/backend/sync/opclib-importer.ts(709,30): error TS2339: Property 'keywords' does not exist on type 'OpclibComponentEntry'.
+src/modules/library/backend/sync/opclib-importer.ts(710,28): error TS2339: Property 'keywords' does not exist on type 'OpclibComponentEntry'.
+exit 2

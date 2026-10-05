@@ -1,0 +1,1083 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "light",
+ "vw": 1920,
+ "vh": 1080,
+ "docW": 1920,
+ "bands": [
+  {
+   "tag": "header",
+   "x": 80,
+   "y": 0,
+   "w": 1840,
+   "h": 34,
+   "text": "Library 27 parts \u00b7 3 sources / Table Gri",
+   "cls": "flex h-[34px] shrink-0 items-center gap-2 border-b border-border bg-surface-rail px-3",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(236, 236, 238)"
+  },
+  {
+   "tag": "label",
+   "x": 278,
+   "y": 6,
+   "w": 320,
+   "h": 22,
+   "text": "/",
+   "cls": "flex h-[22px] min-w-0 items-center gap-1.5 rounded-control border border-border-control bg-surface-input px-1.5 focus-within:border-selectio",
+   "n": 1,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(255, 255, 255)"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 34,
+   "w": 219,
+   "h": 24,
+   "text": "Source 3",
+   "cls": "flex shrink-0 items-center gap-1.5 border-y border-border bg-surface-section px-2 h-[24px]",
+   "n": 5,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(235, 235, 237)"
+  },
+  {
+   "tag": "div",
+   "x": 300,
+   "y": 34,
+   "w": 1240,
+   "h": 26,
+   "text": "27 of 27 Select All",
+   "cls": "flex h-[26px] shrink-0 items-center gap-2 border-b border-border px-2.5 text-2xs text-text-tertiary",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "header",
+   "x": 1541,
+   "y": 34,
+   "w": 379,
+   "h": 34,
+   "text": "74HC00 Quad NAND SOIC-14 CORE Open",
+   "cls": "sticky top-0 z-10 flex h-[34px] shrink-0 items-center gap-2 border-b border-border bg-surface-panel px-2",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(247, 247, 248)"
+  },
+  {
+   "tag": "div",
+   "x": 300,
+   "y": 60,
+   "w": 1240,
+   "h": 22,
+   "text": "NAME \u25b4 FAMILY PACKAGE MOUNT PINS SOURCE",
+   "cls": "sticky top-0 z-10 grid h-[22px] items-center gap-2 border-b border-border bg-surface-panel px-[10px] text-2xs uppercase tracking-[.04em] tex",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(247, 247, 248)"
+  },
+  {
+   "tag": "div",
+   "x": 300,
+   "y": 82,
+   "w": 1240,
+   "h": 22,
+   "tid": "library-component-row-openpcb.core.ic.74hc00-soic-14",
+   "text": "74HC00 Quad NAND SOIC-14 \u00b7 74HC00 quad 2",
+   "cls": "grid items-center gap-2 border-b border-border-subtle px-[10px] text-xs hover:bg-surface-hover bg-surface-selected text-text-strong shadow-[",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(226, 226, 229)"
+  },
+  {
+   "tag": "div",
+   "x": 300,
+   "y": 104,
+   "w": 1240,
+   "h": 22,
+   "tid": "library-component-row-openpcb.core.ic.ams1117-3v3-sot-223",
+   "text": "AMS1117-3.3 SOT-223 \u00b7 AMS1117 fixed 3.3 ",
+   "cls": "grid items-center gap-2 border-b border-border-subtle px-[10px] text-xs text-text hover:bg-surface-hover cursor-pointer outline-none focus-v",
+   "n": 26,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "label",
+   "x": 88,
+   "y": 156,
+   "w": 203,
+   "h": 22,
+   "cls": "flex h-[22px] min-w-0 items-center gap-1.5 rounded-control border border-border-control bg-surface-input px-1.5 focus-within:border-selectio",
+   "n": 2,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(255, 255, 255)"
+  },
+  {
+   "tag": "div",
+   "x": 1541,
+   "y": 219,
+   "w": 379,
+   "h": 22,
+   "text": "PART",
+   "cls": "flex shrink-0 items-center gap-1.5 border-y border-border bg-surface-section px-2 h-[22px]",
+   "n": 4,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(235, 235, 237)"
+  },
+  {
+   "tag": "div",
+   "x": 1637,
+   "y": 241,
+   "w": 283,
+   "h": 22,
+   "text": "74HC00 Quad NAND SOIC-14",
+   "cls": "flex h-[22px] min-w-0 items-center gap-1.5 border-b border-border-subtle px-2 text-xs text-text-strong font-mono",
+   "n": 4,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "div",
+   "x": 1637,
+   "y": 263,
+   "w": 283,
+   "h": 22,
+   "text": "74HC00 quad 2-input NAND gate in SOIC-14",
+   "cls": "flex h-[22px] min-w-0 items-center gap-1.5 border-b border-border-subtle px-2 text-xs text-text-strong",
+   "n": 3,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "div",
+   "x": 1541,
+   "y": 329,
+   "w": 379,
+   "h": 22,
+   "text": "SOIC-14_3.9x8.7mm_P1.27mm smd DEFAULT",
+   "cls": "flex h-[22px] items-center gap-2 border-b border-border-subtle px-2 text-xs",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "div",
+   "x": 1541,
+   "y": 373,
+   "w": 379,
+   "h": 20,
+   "text": "# NAME TYPE",
+   "cls": "grid h-[20px] grid-cols-[28px_1fr_80px] items-center gap-2 border-b border-border px-2 text-2xs uppercase tracking-[.04em] text-text-caps",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "div",
+   "x": 1541,
+   "y": 393,
+   "w": 379,
+   "h": 20,
+   "text": "1 \u2014 input",
+   "cls": "grid h-[20px] grid-cols-[28px_1fr_80px] items-center gap-2 border-b border-border-subtle px-2 text-2xs",
+   "n": 14,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  }
+ ],
+ "rows": [
+  {
+   "parent": "mt-3 flex w-full flex-col items-center gap-2",
+   "px": 4,
+   "py": 137,
+   "child": "BUTTON.flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center g",
+   "n": 3,
+   "heights": {
+    "51": 3
+   },
+   "w": 72,
+   "sample": "Designer"
+  },
+  {
+   "parent": "flex-1",
+   "px": 80,
+   "py": 34,
+   "child": "SECTION.",
+   "n": 5,
+   "heights": {
+    "94": 1,
+    "116": 2,
+    "210": 2
+   },
+   "w": 219,
+   "sample": "Source 3 OpenPCB Core Library 17 Local L"
+  },
+  {
+   "parent": "py-0.5",
+   "px": 80,
+   "py": 58,
+   "child": "DIV.flex h-[22px] items-center gap-2 pl-3 pr-2",
+   "n": 3,
+   "heights": {
+    "22": 3
+   },
+   "w": 219,
+   "sample": "OpenPCB Core Library 17"
+  },
+  {
+   "parent": "py-0.5",
+   "px": 80,
+   "py": 152,
+   "child": "DIV.flex h-[22px] items-center gap-2 pl-3 pr-2",
+   "n": 6,
+   "heights": {
+    "22": 6
+   },
+   "w": 219,
+   "sample": "connector 4"
+  },
+  {
+   "parent": "py-0.5",
+   "px": 80,
+   "py": 362,
+   "child": "DIV.flex h-[22px] items-center gap-2 pl-3 pr-2",
+   "n": 4,
+   "heights": {
+    "22": 4
+   },
+   "w": 219,
+   "sample": "SMD 21"
+  },
+  {
+   "parent": "py-0.5",
+   "px": 80,
+   "py": 478,
+   "child": "DIV.flex h-[22px] items-center gap-2 pl-3 pr-2",
+   "n": 4,
+   "heights": {
+    "22": 4
+   },
+   "w": 219,
+   "sample": "sot-23 3"
+  },
+  {
+   "parent": "py-0.5",
+   "px": 80,
+   "py": 594,
+   "child": "DIV.flex h-[22px] items-center gap-2 pl-3 pr-2",
+   "n": 6,
+   "heights": {
+    "22": 6
+   },
+   "w": 219,
+   "sample": "imported-from-kicad 6"
+  },
+  {
+   "parent": "min-h-0 flex-1 overflow-auto",
+   "px": 300,
+   "py": 60,
+   "child": "DIV.grid items-center gap-2 border-b border-border-subtle px-[10px] text-xs text-text hover:bg-surface-hover cursor-poin",
+   "n": 26,
+   "heights": {
+    "22": 26
+   },
+   "w": 1240,
+   "sample": "AMS1117-3.3 SOT-223 \u00b7 AMS1117 fixed 3.3 "
+  },
+  {
+   "parent": "sticky top-0 z-10 grid h-[22px] items-center gap-2 border-b ",
+   "px": 300,
+   "py": 60,
+   "child": "SPAN.",
+   "n": 4,
+   "heights": {
+    "14": 4
+   },
+   "w": 90,
+   "sample": "FAMILY"
+  },
+  {
+   "parent": "Component preview",
+   "px": 1540,
+   "py": 34,
+   "child": "DIV.flex shrink-0 items-center gap-1.5 border-y border-border bg-surface-section px-2 h-[22px]",
+   "n": 4,
+   "heights": {
+    "22": 4
+   },
+   "w": 379,
+   "sample": "PART"
+  },
+  {
+   "parent": "grid grid-cols-[96px_1fr]",
+   "px": 1541,
+   "py": 241,
+   "child": "DIV.flex h-[22px] min-w-0 items-center border-b border-border px-2 text-xs text-text-tertiary",
+   "n": 3,
+   "heights": {
+    "22": 3
+   },
+   "w": 96,
+   "sample": "Name"
+  },
+  {
+   "parent": "",
+   "px": 1541,
+   "py": 373,
+   "child": "DIV.grid h-[20px] grid-cols-[28px_1fr_80px] items-center gap-2 border-b border-border-subtle px-2 text-2xs",
+   "n": 14,
+   "heights": {
+    "20": 14
+   },
+   "w": 379,
+   "sample": "1 \u2014 input"
+  },
+  {
+   "parent": "grid grid-cols-[96px_1fr]",
+   "px": 1541,
+   "py": 695,
+   "child": "DIV.flex h-[22px] min-w-0 items-center border-b border-border px-2 text-xs text-text-tertiary",
+   "n": 4,
+   "heights": {
+    "22": 4
+   },
+   "w": 96,
+   "sample": "Package"
+  },
+  {
+   "parent": "grid grid-cols-[96px_1fr]",
+   "px": 1541,
+   "py": 695,
+   "child": "DIV.flex h-[22px] min-w-0 items-center gap-1.5 border-b border-border-subtle px-2 text-xs text-text-strong font-mono",
+   "n": 3,
+   "heights": {
+    "22": 3
+   },
+   "w": 283,
+   "sample": "SOIC-14 3.9x8.7mm P1.27mm"
+  }
+ ],
+ "btnHeights": {
+  "text:51": 5,
+  "text:22": 5,
+  "text:15": 5,
+  "text:20": 2,
+  "icon:32": 1,
+  "icon:22": 1
+ },
+ "btnVariants": {
+  "h51 fs12px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 134) fw400": {
+   "n": 4,
+   "ex": [
+    "Home",
+    "Designer",
+    "Docs"
+   ]
+  },
+  "h51 fs12px r2px bg:rgb(230, 230, 233) bd:none fg:rgb(17, 17, 20) fw400": {
+   "n": 1,
+   "ex": [
+    "Library"
+   ]
+  },
+  "h20 fs10px r0px bg:rgb(214, 214, 218) bd:none fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "Table"
+   ]
+  },
+  "h20 fs10px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(85, 85, 92) fw400": {
+   "n": 1,
+   "ex": [
+    "Grid"
+   ]
+  },
+  "h22 fs11px r2px bg:rgba(0, 0, 0, 0) bd:rgb(207, 207, 212) fg:rgb(38, 38, 43) fw400": {
+   "n": 1,
+   "ex": [
+    "Import library\u2026"
+   ]
+  },
+  "h22 fs11px r2px bg:rgb(28, 28, 31) bd:none fg:rgb(245, 245, 245) fw500": {
+   "n": 1,
+   "ex": [
+    "New part"
+   ]
+  },
+  "h15 fs12px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(38, 38, 43) fw400": {
+   "n": 5,
+   "ex": [
+    "Source",
+    "Family",
+    "Mount"
+   ]
+  },
+  "h22 fs10px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(85, 85, 92) fw400": {
+   "n": 2,
+   "ex": [
+    "Show 20 more\u2026",
+    "Show 23 more\u2026"
+   ]
+  },
+  "h22 fs11px r2px bg:rgb(214, 214, 218) bd:rgb(207, 207, 212) fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "Open"
+   ]
+  }
+ },
+ "btnOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 137,
+   "w": 72,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 195,
+   "w": 64,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 1038,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 88,
+   "y": 39,
+   "w": 191,
+   "h": 15,
+   "text": "Source",
+   "cls": "flex min-w-0 flex-1 items-center gap-1.5 text-left outline-none",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 88,
+   "y": 133,
+   "w": 185,
+   "h": 15,
+   "text": "Family",
+   "cls": "flex min-w-0 flex-1 items-center gap-1.5 text-left outline-none",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 88,
+   "y": 343,
+   "w": 191,
+   "h": 15,
+   "text": "Mount",
+   "cls": "flex min-w-0 flex-1 items-center gap-1.5 text-left outline-none",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 88,
+   "y": 459,
+   "w": 191,
+   "h": 15,
+   "text": "Package",
+   "cls": "flex min-w-0 flex-1 items-center gap-1.5 text-left outline-none",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 88,
+   "y": 575,
+   "w": 185,
+   "h": 15,
+   "text": "Other",
+   "cls": "flex min-w-0 flex-1 items-center gap-1.5 text-left outline-none",
+   "fs": "12px"
+  }
+ ],
+ "inputs": [
+  {
+   "tag": "input",
+   "x": 303,
+   "y": 9,
+   "w": 276,
+   "h": 15,
+   "cls": "min-w-0 flex-1 bg-transparent text-xs text-text-strong outline-none placeholder:text-text-disabled [&::-webkit-search-cancel-button]:appeara",
+   "type": "search",
+   "ph": "Search name, MPN, package\u2026",
+   "fs": "11px",
+   "rad": "0px",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bd": "none",
+   "wrapH": 22,
+   "wrapRad": "2px",
+   "native": "auto"
+  },
+  {
+   "tag": "input",
+   "x": 113,
+   "y": 160,
+   "w": 171,
+   "h": 15,
+   "label": "Filter family options",
+   "cls": "min-w-0 flex-1 bg-transparent text-xs text-text-strong outline-none placeholder:text-text-disabled [&::-webkit-search-cancel-button]:appeara",
+   "type": "search",
+   "ph": "Filter family\u2026",
+   "fs": "11px",
+   "rad": "0px",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bd": "none",
+   "wrapH": 22,
+   "wrapRad": "2px",
+   "native": "auto"
+  },
+  {
+   "tag": "input",
+   "x": 113,
+   "y": 602,
+   "w": 171,
+   "h": 15,
+   "label": "Filter other options",
+   "cls": "min-w-0 flex-1 bg-transparent text-xs text-text-strong outline-none placeholder:text-text-disabled [&::-webkit-search-cancel-button]:appeara",
+   "type": "search",
+   "ph": "Filter other\u2026",
+   "fs": "11px",
+   "rad": "0px",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bd": "none",
+   "wrapH": 22,
+   "wrapRad": "2px",
+   "native": "auto"
+  }
+ ],
+ "tablists": [],
+ "segs": [
+  {
+   "tag": "div",
+   "x": 1581,
+   "y": 6,
+   "w": 110,
+   "h": 22,
+   "role": "group",
+   "label": "Result view",
+   "text": "Table Grid",
+   "cls": "inline-flex shrink-0 items-stretch overflow-hidden rounded-control border border-border-control h-[22px]",
+   "rad": "2px",
+   "bd": "rgb(207, 207, 212)",
+   "optFs": {
+    "10px": 2
+   },
+   "optH": {
+    "20": 2
+   },
+   "pressed": 2,
+   "activeBg": {
+    "rgb(214, 214, 218)": 1
+   }
+  }
+ ],
+ "radii": {
+  "2px": 9
+ },
+ "radEx": {},
+ "shadows": [],
+ "shadowCount": 0,
+ "blurs": [],
+ "grads": [],
+ "fontSizes": {
+  "10px": 156,
+  "11px": 155,
+  "9.5px": 28,
+  "13px": 2
+ },
+ "fontFam": {
+  "IBM Plex Sans": 221,
+  "IBM Plex Mono": 120
+ },
+ "weights": {
+  "400": 330,
+  "500": 11
+ },
+ "small": [
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 85,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 107,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 129,
+   "w": 110,
+   "h": 15,
+   "text": "USER",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 151,
+   "w": 110,
+   "h": 15,
+   "text": "USER",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 173,
+   "w": 110,
+   "h": 15,
+   "text": "USER",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 195,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 217,
+   "w": 110,
+   "h": 15,
+   "text": "USER",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 239,
+   "w": 110,
+   "h": 15,
+   "text": "USER",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 261,
+   "w": 110,
+   "h": 15,
+   "text": "USER",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 283,
+   "w": 110,
+   "h": 15,
+   "text": "USER",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 305,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 327,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 349,
+   "w": 110,
+   "h": 15,
+   "text": "USER",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 371,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 393,
+   "w": 110,
+   "h": 15,
+   "text": "USER",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 415,
+   "w": 110,
+   "h": 15,
+   "text": "USER",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 437,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 459,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 481,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 503,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 525,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 547,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 569,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 591,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 613,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 635,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1420,
+   "y": 657,
+   "w": 110,
+   "h": 15,
+   "text": "CORE",
+   "cls": "truncate text-[9.5px] uppercase tracking-[.06em] text-text-tertiary",
+   "fs": "9.5px"
+  },
+  {
+   "tag": "span",
+   "x": 1734,
+   "y": 42,
+   "w": 38,
+   "h": 16,
+   "text": "CORE",
+   "cls": "shrink-0 border border-border-control px-[5px] text-[9.5px] uppercase tracking-[.06em] text-text-secondary",
+   "fs": "9.5px"
+  }
+ ],
+ "big": [],
+ "iconSizes": {
+  "14x14": 27,
+  "12x12": 13,
+  "20x20": 5,
+  "18x18": 2,
+  "16x16": 1
+ },
+ "iconStroke": {
+  "1.5px/attr1.5": 35,
+  "2px/attr2": 13
+ },
+ "iconOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-layout-grid h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 137,
+   "w": 72,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-pen-tool h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 195,
+   "w": 64,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-box h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-book-open h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-bot h-5 w-5"
+  },
+  {
+   "tag": "a",
+   "x": 24,
+   "y": 998,
+   "w": 32,
+   "h": 32,
+   "label": "Report a bug or request a feature",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-circle-dot h-[18px] w-[18p"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 1038,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-settings h-[18px] w-[18px]"
+  }
+ ],
+ "otherSvgs": [],
+ "floats": [],
+ "alerts": [],
+ "headings": [
+  {
+   "tag": "h1",
+   "x": 92,
+   "y": 8,
+   "w": 42,
+   "h": 18,
+   "text": "Library",
+   "cls": "text-base font-medium text-text-strong",
+   "fs": "13px",
+   "fw": "500"
+  }
+ ],
+ "canvases": [
+  [
+   1541,
+   68,
+   1730,
+   218
+  ],
+  [
+   1731,
+   68,
+   1920,
+   218
+  ]
+ ],
+ "overflowX": [],
+ "clipped": []
+}

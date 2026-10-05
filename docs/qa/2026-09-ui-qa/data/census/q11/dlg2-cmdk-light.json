@@ -1,0 +1,29 @@
+{
+ "trigger": "button \"Place component\"",
+ "focusOnOpen": "input \"Search component by name, descriptio\" {in-dialog}",
+ "panel": null,
+ "tabs": [
+  "OUT button \"connector\" {in-dialog}",
+  "OUT button \"ic\" {in-dialog}",
+  "OUT button \"diode\" {in-dialog}",
+  "OUT button \"header\" {in-dialog}",
+  "OUT button \"passive\" {in-dialog}",
+  "OUT button \"transistor\" {in-dialog}",
+  "OUT button \"led\" {in-dialog}",
+  "OUT button \"capacitor\" {in-dialog}",
+  "OUT button \"inductor\" {in-dialog}",
+  "OUT button \"mosfet\" {in-dialog}",
+  "OUT button \"resistor\" {in-dialog}",
+  "OUT button \"sot-23\" {in-dialog}",
+  "OUT button \"soic-14\" {in-dialog}",
+  "OUT button \"soic-8\" {in-dialog}"
+ ],
+ "shiftTabs": [
+  "OUT button \"soic-14\" {in-dialog}",
+  "OUT button \"sot-23\" {in-dialog}",
+  "OUT button \"resistor\" {in-dialog}"
+ ],
+ "openAfterEsc": false,
+ "openAfterClose": false,
+ "focusAfterClose": "BODY"
+}

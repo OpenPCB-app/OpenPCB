@@ -1,0 +1,278 @@
+{
+ "agent": "q1",
+ "checklist": [
+  {
+   "item": "boot / initial Home render, console",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "rail items, active state, tooltips, aria-current",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "right-click empty area + inside Home search input (K33)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "theme switching Settings→General Light/Dark/System + persistence across reload",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Home List/Grid toggle + persistence across reload/navigation",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "filters All/Recent/Starred/Archived + count accuracy",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "star/unstar + persistence across reload",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "archive/unarchive via grid card More actions + Archived filter",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "archive via detail panel actions menu",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "search via '/' and Cmd/Ctrl+K, filtering, Esc clears, no-results state",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "sort Modified/Created/Name + header indicator (K25)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "row click → detail panel; dblclick opens; Enter opens selected; detail Open button",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "N creates design (renamed QA-q1-alpha) then deleted",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "N hotkey edge cases (modifiers, open menu, behind modal)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Import KiCad… opens wizard (open/close only)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "delete flow via More actions → Delete (K26: role, Esc, focus trap, close label, N/Enter behind modal)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "grid card menu stubs (K43)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "status bar + sync footer text with cloud off",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "keyboard-only list operation (K35) + focus visibility (K34)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "load error 500 then reload (K32), create error 500",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "empty-state via mocked {designs:[]}",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "120-char design name truncation: list, grid, detail, designer tab, delete modal",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "deleting a design open in a designer tab",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "1100x720 layout (list + grid)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720"
+   ]
+  },
+  {
+   "item": "DOM census Home list/grid both themes, Settings General light",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "pixel probes: star/count contrast, thumbnails, error strip",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  }
+ ],
+ "known": [
+  {
+   "ref": "K25",
+   "status": "confirmed",
+   "evidence": "Q1-008: sort=Name/Created, header still 'MODIFIED ▾' (shots/q1/dark/010-sort-name.png)"
+  },
+  {
+   "ref": "K26",
+   "status": "confirmed",
+   "evidence": "Q1-002: no role=dialog, Esc ignored, Tab escapes to rail, X unnamed, Enter behind modal opened design, N behind modal created a design (shots/q1/dark/025,027)"
+  },
+  {
+   "ref": "K32",
+   "status": "confirmed",
+   "evidence": "Q1-003: 500 → 'Failed to load designs: HTTP 500' strip + 'No designs yet / Create your first design' (shots/q1/dark/032, light/063)"
+  },
+  {
+   "ref": "K33",
+   "status": "confirmed",
+   "evidence": "Q1-006: right-click in search input → only 'OpenPCB › Settings Ctrl+,'; focus lost to body after Esc (shots/q1/dark/006)"
+  },
+  {
+   "ref": "K34",
+   "status": "partial",
+   "evidence": "Q1-012: segmented control confirmed without focus style on Home; also Home filters/star/More actions. Kit tabs/dock tabs/chip/status segment not on my screens"
+  },
+  {
+   "ref": "K35",
+   "status": "confirmed",
+   "evidence": "Q1-011: Tab log never reaches rows/cards; rows have no tabindex/role; ArrowDown no-op (BOM rows not tested — other charter)"
+  },
+  {
+   "ref": "K40",
+   "status": "partial",
+   "evidence": "Home shows raw 'Failed to load designs: HTTP 500' / 'Failed to create design: HTTP 500' (in Q1-003); other 40 places not in charter"
+  },
+  {
+   "ref": "K43",
+   "status": "confirmed",
+   "evidence": "Q1-014: Rename/Duplicate/Export… disabled; 'Coming soon' title unreachable (pointer-events none); PATCH rename endpoint exists"
+  }
+ ],
+ "untested": [
+  {
+   "item": "System theme following a live OS light↔dark change",
+   "reason": "headless Chromium: cannot flip prefers-color-scheme via playwright-cli; System resolved to Light as expected"
+  },
+  {
+   "item": "Electron-only surfaces (TitleBar, app version status segment, Settings Updates/Files)",
+   "reason": "browser stack only"
+  },
+  {
+   "item": "Theme flash on boot (no inline pre-React theme script in index.html)",
+   "reason": "not observable reliably in Vite dev; not filed"
+  },
+  {
+   "item": "K34 remaining kit components (tabs, dock tabs, chip, status segment, section header)",
+   "reason": "outside Home/shell charter"
+  }
+ ]
+}

@@ -1,0 +1,166 @@
+{
+ "triggerBefore": "Export\u2026",
+ "afterOpen": "button \"Export\u2026\"",
+ "container": {
+  "role": "dialog",
+  "modal": "true",
+  "label": "pcb-export-dialog-title",
+  "x": 0,
+  "y": 0,
+  "w": 1440,
+  "h": 900,
+  "bg": "oklab(0 0 0 / 0.4)",
+  "rad": "0px",
+  "bs": "none",
+  "bd": "0px rgb(217, 217, 217)",
+  "inside": false
+ },
+ "tabs": [
+  {
+   "i": 1,
+   "inside": false,
+   "el": "button \"DRC\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 2,
+   "inside": false,
+   "el": "button \"View\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 3,
+   "inside": false,
+   "el": "button \"Layers\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 4,
+   "inside": false,
+   "el": "button \"Layer visibility preset\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 5,
+   "inside": false,
+   "el": "button \"Metadata \u00b7 Alt+click to solo\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 6,
+   "inside": false,
+   "el": "button \"Toggle opacity slider\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 7,
+   "inside": false,
+   "el": "button \"Hide layer\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 8,
+   "inside": false,
+   "el": "button \"Board Outline \u00b7 Alt+click to solo\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 9,
+   "inside": false,
+   "el": "button \"Toggle opacity slider\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 10,
+   "inside": false,
+   "el": "button \"Hide layer\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 11,
+   "inside": false,
+   "el": "button \"Drill Holes \u00b7 Alt+click to solo\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 12,
+   "inside": false,
+   "el": "button \"Toggle opacity slider\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 13,
+   "inside": false,
+   "el": "button \"Hide layer\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 14,
+   "inside": false,
+   "el": "button \"Collapse group\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 15,
+   "inside": false,
+   "el": "button \"Show all\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 16,
+   "inside": false,
+   "el": "button \"Top Overlay \u00b7 Alt+click to solo\"",
+   "vis": true,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  }
+ ],
+ "afterClose": "button \"Top Overlay \u00b7 Alt+click to solo\"",
+ "stillOpen": 0
+}

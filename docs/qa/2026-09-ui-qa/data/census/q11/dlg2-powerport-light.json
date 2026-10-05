@@ -1,0 +1,29 @@
+{
+ "trigger": "button \"Place power port\"",
+ "focusOnOpen": "input \"Custom rail (e.g. +1V8)\" {in-dialog}",
+ "panel": null,
+ "tabs": [
+  "OUT button \"Cancel\" {in-dialog}",
+  "OUT BODY",
+  "OUT button \"Home\"",
+  "OUT button \"Designer\"",
+  "OUT button \"Library\"",
+  "OUT button \"Docs\"",
+  "OUT button \"Assistant\"",
+  "OUT a \"Report a bug or request a feature\"",
+  "OUT button \"Settings\"",
+  "OUT button \"Close GUIDE-VALIDATE\"",
+  "OUT button \"New design\"",
+  "OUT button[tab] \"Schem\"",
+  "OUT button \"Open the assistant (\u2318/Ctrl+I)\"",
+  "OUT button \"Toggle side panel\""
+ ],
+ "shiftTabs": [
+  "OUT button \"Open the assistant (\u2318/Ctrl+I)\"",
+  "OUT button[tab] \"Schem\"",
+  "OUT button \"New design\""
+ ],
+ "openAfterEsc": false,
+ "openAfterClose": false,
+ "focusAfterClose": "button \"New design\""
+}

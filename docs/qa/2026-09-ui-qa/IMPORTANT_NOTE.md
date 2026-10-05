@@ -1,0 +1,1 @@
+./raw-run/ and ./evidence/ folders are excluded from git history due to large file size. They are available locally on Mac.

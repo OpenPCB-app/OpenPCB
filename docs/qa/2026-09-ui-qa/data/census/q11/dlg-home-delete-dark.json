@@ -1,0 +1,112 @@
+{
+ "triggerBefore": "More actions (detail panel) > Delete",
+ "afterOpen": "div[menuitem] \"Delete\"",
+ "container": {
+  "role": null,
+  "modal": null,
+  "label": null,
+  "x": 0,
+  "y": 0,
+  "w": 1440,
+  "h": 900,
+  "bg": "oklab(0 0 0 / 0.5)",
+  "rad": "0px",
+  "bs": "none",
+  "bd": "0px rgb(217, 217, 217)",
+  "inside": false
+ },
+ "tabs": [
+  {
+   "i": 1,
+   "inside": false,
+   "el": "div[menuitem] \"Delete\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 2,
+   "inside": false,
+   "el": "div[menuitem] \"Delete\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 3,
+   "inside": false,
+   "el": "div[menuitem] \"Delete\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 4,
+   "inside": false,
+   "el": "div[menuitem] \"Delete\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 5,
+   "inside": false,
+   "el": "div[menuitem] \"Delete\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 6,
+   "inside": false,
+   "el": "div[menuitem] \"Delete\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 7,
+   "inside": false,
+   "el": "div[menuitem] \"Delete\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 8,
+   "inside": false,
+   "el": "div[menuitem] \"Delete\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 9,
+   "inside": false,
+   "el": "div[menuitem] \"Delete\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  },
+  {
+   "i": 10,
+   "inside": false,
+   "el": "div[menuitem] \"Delete\"",
+   "vis": false,
+   "fw": null,
+   "op": 1,
+   "inView": true
+  }
+ ],
+ "afterClose": "button \"More actions\"",
+ "stillOpen": 1
+}

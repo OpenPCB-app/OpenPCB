@@ -1,0 +1,624 @@
+[
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Home",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 74,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 1
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Designer",
+  "tid": "",
+  "region": "nav",
+  "x": 8,
+  "y": 137,
+  "w": 64,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(181, 214, 252)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 2
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Library",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 195,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 3
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Docs",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 254,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(149, 188, 235)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 4
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Assistant",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 312,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 5
+ },
+ {
+  "tag": "a",
+  "role": "",
+  "name": "Report a bug or request a feature",
+  "tid": "",
+  "region": "aside",
+  "x": 24,
+  "y": 818,
+  "w": 32,
+  "h": 32,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(151, 194, 245)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 6
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Settings",
+  "tid": "",
+  "region": "aside",
+  "x": 24,
+  "y": 858,
+  "w": 32,
+  "h": 32,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 7
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "New design",
+  "tid": "",
+  "region": "tablist",
+  "x": 84,
+  "y": 6,
+  "w": 22,
+  "h": 22,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 8
+ },
+ {
+  "tag": "button",
+  "role": "tab",
+  "name": "Schem",
+  "tid": "",
+  "region": "tablist",
+  "x": 633,
+  "y": 0,
+  "w": 62,
+  "h": 34,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": null,
+  "fvCls": "",
+  "tabindex": "0",
+  "i": 9
+ },
+ {
+  "tag": "input",
+  "role": "",
+  "name": "Filter outline",
+  "tid": "",
+  "region": "aside",
+  "x": 113,
+  "y": 63,
+  "w": 81,
+  "h": 15,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": "focus-within:border-selection",
+  "fvCls": "",
+  "tabindex": null,
+  "i": 10
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Parts",
+  "tid": "",
+  "region": "aside",
+  "x": 208,
+  "y": 62,
+  "w": 40,
+  "h": 18,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 11
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Nets",
+  "tid": "",
+  "region": "aside",
+  "x": 248,
+  "y": 62,
+  "w": 37,
+  "h": 18,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 12
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Labels",
+  "tid": "",
+  "region": "aside",
+  "x": 285,
+  "y": 62,
+  "w": 45,
+  "h": 18,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 13
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Place component \u2318K",
+  "tid": "",
+  "region": "aside",
+  "x": 92,
+  "y": 151,
+  "w": 235,
+  "h": 22,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": null,
+  "fvCls": "focus-visible:border-selection",
+  "tabindex": null,
+  "i": 14
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Add net label",
+  "tid": "",
+  "region": "aside",
+  "x": 92,
+  "y": 177,
+  "w": 235,
+  "h": 22,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "bc"
+  ],
+  "fdetail": {
+   "bc": "1px rgb(42, 42, 46)|1px rgb(42, 42, 46)|1px rgb(42, 42, 46) -> 1px rgb(48, 158, 191)|1px rgb(48, 158, 191)|1px rgb(48, 158, 191)"
+  },
+  "fw": null,
+  "fvCls": "focus-visible:border-selection",
+  "tabindex": null,
+  "i": 15
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Browse library",
+  "tid": "",
+  "region": "aside",
+  "x": 92,
+  "y": 203,
+  "w": 235,
+  "h": 22,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "bc"
+  ],
+  "fdetail": {
+   "bc": "1px rgb(42, 42, 46)|1px rgb(42, 42, 46)|1px rgb(42, 42, 46) -> 1px rgb(48, 158, 191)|1px rgb(48, 158, 191)|1px rgb(48, 158, 191)"
+  },
+  "fw": null,
+  "fvCls": "focus-visible:border-selection",
+  "tabindex": null,
+  "i": 16
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "New design",
+  "tid": "",
+  "region": "main",
+  "x": 692,
+  "y": 333,
+  "w": 398,
+  "h": 28,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": null,
+  "fvCls": "focus-visible:border-selection",
+  "tabindex": null,
+  "i": 17
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Dual LED Blinker r510",
+  "tid": "",
+  "region": "main",
+  "x": 692,
+  "y": 399,
+  "w": 398,
+  "h": 15,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(173, 205, 243)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 18
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Untitled Design r25",
+  "tid": "",
+  "region": "main",
+  "x": 692,
+  "y": 414,
+  "w": 398,
+  "h": 15,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(173, 205, 243)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 19
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "DRC Demo r0",
+  "tid": "",
+  "region": "main",
+  "x": 692,
+  "y": 429,
+  "w": 398,
+  "h": 15,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(163, 203, 249)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 20
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "DRC Demo r11",
+  "tid": "",
+  "region": "main",
+  "x": 692,
+  "y": 444,
+  "w": 398,
+  "h": 15,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(173, 205, 243)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 21
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "555 Timer LED Blinker r33",
+  "tid": "",
+  "region": "main",
+  "x": 692,
+  "y": 459,
+  "w": 398,
+  "h": 15,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(173, 205, 243)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 22
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "GUIDE-VALIDATE r15",
+  "tid": "",
+  "region": "main",
+  "x": 692,
+  "y": 474,
+  "w": 398,
+  "h": 15,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(173, 205, 243)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 23
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Untitled Design r0",
+  "tid": "",
+  "region": "main",
+  "x": 692,
+  "y": 489,
+  "w": 398,
+  "h": 15,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(173, 205, 243)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 24
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "S3 Smoke \u2014 5 LED indicators (v2) r40",
+  "tid": "",
+  "region": "main",
+  "x": 692,
+  "y": 504,
+  "w": 398,
+  "h": 15,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(173, 205, 243)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 25
+ }
+]

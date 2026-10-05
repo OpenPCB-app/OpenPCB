@@ -1,0 +1,286 @@
+{
+ "agent": "q9",
+ "checklist": [
+  {
+   "item": "Docs sidebar search (results, breadcrumb, <2 chars, no results)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "New page (sidebar +, empty-state card, editor header +)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Title edit + save debounce + page switch",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Saving\u2026/Saved/Error indicator (content + title)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Reload persistence (content/title, selected page)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Toolbar Undo/Redo",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Toolbar Bold/Italic/Strike/Inline code",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Toolbar H1-H3, bullet/numbered/task list, quote, code block",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Link dialog (selection+Enter, Esc, collapsed selection, Remove, click on link)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Markdown shortcuts (# ## ### - 1. [ ] > ``` --- ** ~~ ` * _)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Task checkbox toggle persistence",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Page tree: Add subpage, expand/collapse",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Page tree: drag to move (before/after/inside)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Delete from tree + from editor (K06 native confirm)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Import sample.md / sample.txt / sample.pdf / invalid pdf",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "PDF viewer zoom in/out limits, scrolling, download link present",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Empty states (no pages, no page selected, no search results)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Long titles (tree truncation, breadcrumb, 1100 wrap), empty title",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Error states: tree 500, create 500, content save 500, offline, deleted page",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Keyboard: Tab order through tree/toolbar, focus visibility",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Visual consistency vs Home/Library (K37 search, surfaces, metrics, raw colours K45) + pixel probes",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Cross-page undo, module switch persistence, context menu in editor",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "1100x720 layout Docs editor/PDF",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Tasks (K42): list, empty/loading/error states, scroll, styling",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "DOM census Docs/Tasks",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Handoff page QA-q9-mention-target for Q8",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  }
+ ],
+ "known": [
+  {
+   "ref": "K01",
+   "status": "confirmed",
+   "evidence": "Docs FixedToolbar TypeError blanks #root (Q9-008, both themes); Tasks tasks.map TypeError blanks #root (Q9-022)"
+  },
+  {
+   "ref": "K06",
+   "status": "confirmed",
+   "evidence": "dialog spy: confirm 'Delete \"Untitled\"?' (TreeItem) and 'Delete this page?' (PageEditor) (Q9-025)"
+  },
+  {
+   "ref": "K37",
+   "status": "confirmed",
+   "evidence": "Docs search input 32px vs Home/Library 22px wrapper (Q9-015, census docs-editor-dark-1440)"
+  },
+  {
+   "ref": "K45",
+   "status": "confirmed",
+   "evidence": "raw slate/violet/red/white classes in knowledge + tasks; red-600 #e6000b, prose gray #364153, Tasks bg-red-50 in dark (Q9-007, Q9-016, Q9-023)"
+  },
+  {
+   "ref": "K42",
+   "status": "confirmed",
+   "evidence": "Tasks hidden from rail, only reachable via navigateToModule eval (Q9-021)"
+  },
+  {
+   "ref": "K40",
+   "status": "confirmed",
+   "evidence": "Docs tree error shows 'HTTP_500'; page error 'PAGE_NOT_FOUND' (Q9-012)"
+  },
+  {
+   "ref": "K34",
+   "status": "confirmed",
+   "evidence": "kit ghost buttons in Docs have border 0 + outline none when focused (Q9-013)"
+  },
+  {
+   "ref": "K33",
+   "status": "confirmed",
+   "evidence": "right-click in Docs editor shows only 'Settings' (Q9-027)"
+  },
+  {
+   "ref": "K22",
+   "status": "partial",
+   "evidence": "Docs Space ignores navigation params (selectedPageId is local state, no pageId prop read) so an @page mention cannot open a page; click-through itself is Q8's scope (Q9-018)"
+  }
+ ],
+ "untested": [
+  {
+   "item": "Tree/page loading skeleton visuals",
+   "reason": "route cannot add latency; loading states reviewed in code only (PageTree skeleton bg-slate-200 rounded-md, 'Loading page...')"
+  },
+  {
+   "item": "PDF Download link actual file save",
+   "reason": "headless download not verified; link href/download attrs present"
+  },
+  {
+   "item": "Large multi-hundred-page PDF performance",
+   "reason": "only 5-page fixture; viewer renders all pages at once (code)"
+  },
+  {
+   "item": "Drag-to-move visual drop indicators",
+   "reason": "HTML5 DnD indicator not captured mid-drag in headless; move results verified via API"
+  },
+  {
+   "item": "Project-scoped docs (designId) tree",
+   "reason": "Docs rail entry uses workspace scope; no UI path found to open project-scoped docs"
+  }
+ ]
+}

@@ -1,0 +1,2523 @@
+[
+ {
+  "id": "Q6-001",
+  "area": "library.browse",
+  "title": "Mount facet filters don't match the list: SMD shows 3 of 17, THT shows 0 parts, Family+Mount always 0",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, Library (Table view), no search",
+   "Facet sidebar: tick Mount › SMD (facet count 16)",
+   "Observe list shows '3 of 17' — only 3 user parts (those that literally carry an 'smd' tag); the 13 SMD core parts are missing",
+   "Clear all, tick Mount › THT (count 4)",
+   "Observe '0 of 0', header '0 parts · 0 sources', every facet section except 'Other' disappears, chip reads 'Tag: through_hole'",
+   "Clear all, tick Family › ic (4) then Mount › SMD (4): header says '4 parts', list '0 of 4' + 'No components match the current filters'"
+  ],
+  "expected": "Ticking a Mount option shows exactly the parts counted next to it (SMD → 16 parts, THT → 4 pin headers/sockets), combinable with other facets.",
+  "actual": "List filter matches mount tokens against the freeform component tags only, while the facet counts come from the default footprint's mountType; THT's raw key 'through_hole' isn't even recognised as a mount tag, so the facets endpoint itself returns total 0. API: GET /components?tags=smd → 3 rows vs /facets?tags=smd total 17; /components?tags=through_hole → 0 and /facets?tags=through_hole → total 0; /components?tags=ic,smd → 0 vs facets total 4. Re-confirmed later: Source Core + Mount SMD + Package sot-23 + Family transistor → every facet count says 3 and header \"3 parts\", list \"0 of 3\" with \"No components match\".",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/003-facets-ic-smd.png",
+    "shots/q6/dark/004-facet-smd-only.png",
+    "shots/q6/dark/005-facet-tht-only.png",
+    "shots/q6/dark/032-active-chips.png"
+   ],
+   "network": [
+    "GET /api/modules/library/components?limit=60&tags=smd → 3 components",
+    "GET /api/modules/library/facets?tags=smd → total 17",
+    "GET /api/modules/library/components?limit=60&tags=through_hole → 0",
+    "GET /api/modules/library/facets?tags=through_hole → total 0, mount []"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/backend/queries.ts",
+    "line": 880,
+    "note": "searchComponents: non-source filters matched only against row.tagsJson; footprint mountType never consulted"
+   },
+   {
+    "path": "src/modules/library/backend/queries.ts",
+    "line": 1712,
+    "note": "computeFacets adds default-footprint mountType to the mount set — list and facets disagree"
+   },
+   {
+    "path": "src/modules/library/backend/tag-bucketing.ts",
+    "line": 13,
+    "note": "MOUNT_TAGS has 'through-hole'/'tht' but not 'through_hole' (the footprint mountType key emitted by the facet), so the THT token is bucketed as 'other'"
+   }
+  ],
+  "suggestedFix": "Share one predicate between searchComponents and computeFacets: bucket each filter token with bucketTag (add 'through_hole' to MOUNT_TAGS or normalise mountType keys), and match mount tokens against tags ∪ {default footprint mountType} in searchComponents (the row already carries footprintDataJson). Add a backend test asserting /components count == facet count for every facet option.",
+  "fixScope": "backend-needed",
+  "estimate": "S",
+  "dedupeKey": "library.browse:facets:mount-filter-mismatch",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced on stack B (vq6-dark). Mount›SMD: header '61 parts', strip '8 of 61', 8 rows (only parts carrying a literal 'smd' tag). Mount›THT: '0 parts · 0 sources', '0 of 0', only the 'Other' facet section left, chip 'Tag: through_hole'. Family›ic + Mount›SMD: header '7 parts', list '2 of 7'. API agrees: /components?tags=smd → 8 rows vs /facets?tags=smd total 61; tags=through_hole → 0 rows and facets total 0. Code: searchComponents (queries.ts:880-897) matches non-source tokens only against tagsJson, while normalizeForFacets (queries.ts:1712) adds the default footprint's mountType; tag-bucketing.ts MOUNT_TAGS lacks 'through_hole', so the THT token is bucketed as 'other' in computeFacets. Not intentional (Run 2 added mount facet labels expecting them to filter). S2 kept: a primary filter returns wrong results.",
+   "evidence": [
+    "shots/vq6/dark/001-mount-smd.png",
+    "shots/vq6/dark/002-mount-tht.png",
+    "shots/vq6/dark/003-ic-smd.png",
+    "GET /components?limit=100&tags=smd → 8; /facets?tags=smd → total 61",
+    "GET /components?tags=through_hole → 0; /facets?tags=through_hole → total 0, mount []"
+   ]
+  }
+ },
+ {
+  "id": "Q6-002",
+  "knownRef": "K07",
+  "area": "library.browse",
+  "title": "Library list silently truncates at 60 parts — later parts (incl. core Resistor/Zener) unreachable without searching",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B: library with 69 components (45 QA-Q6-bulk-* clones created via POST /components/{id}/clone)",
+   "Open Library (Table view), no filters",
+   "Read counters and scroll table to the end"
+  ],
+  "expected": "All 69 parts are browsable (paging / infinite scroll / virtualised list), or a clear 'Showing 60 of 69 — refine search / Load more' affordance.",
+  "actual": "Header says '69 parts', result strip says '60 of 69'; table ends at 'QA-Q6-bulk-40' with no load-more, no message. Alphabetically-later parts (QA-q7-*, core 'Resistor', 'Zener Diode') are not in the list at all; Select All only selects the 60 loaded rows. Backend clamps limit to [1,100] with no offset/total, so even raising the frontend limit fails at 101 parts. Light re-check: header '67 parts', strip '60 of 67' (library grew as other agents added parts).",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/020-library-69parts.png",
+    "shots/q6/dark/021-library-60cap-bottom.png",
+    "shots/q6/light/002-library-table-start.png"
+   ],
+   "network": [
+    "GET /api/modules/library/components?limit=60 → 60 rows (69 in DB)"
+   ],
+   "console": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 111,
+    "note": "url.searchParams.set('limit','60')"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 683,
+    "note": "'{components.length} of {totalCount}' is the only hint"
+   },
+   {
+    "path": "src/modules/library/backend/queries.ts",
+    "line": 819,
+    "note": "limit clamped to 100, no offset/cursor, no total in response"
+   }
+  ],
+  "suggestedFix": "Add offset/cursor + total to GET /components (queries.ts searchComponents) and load pages on scroll in LibraryTable/grid (or virtualise and fetch all ids). Until then, render a footer row 'Showing 60 of 69 — refine the search to see more' and make Select All say it selects only loaded rows.",
+  "fixScope": "backend-needed",
+  "estimate": "M",
+  "dedupeKey": "library.browse:list:limit-60-truncation",
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced: library has 67-68 parts; strip '60 of 68', exactly 60 rows, last row QA-Q6-bulk-38, no load-more/refine hint; core 'Resistor' and 'Zener Diode' are not among the rows (reachable only via search). Space.tsx:111 limit=60; queries.ts:819 clamps to 100 with no offset/total. Known K07. S2 kept (parts unreachable from browse; search is the workaround).",
+   "evidence": [
+    "shots/vq6/dark/004-list-end-60cap.png",
+    "rows=60, last=[QA-Q6-bulk-36,37,38], hasResistor=false, hasZener=false"
+   ]
+  }
+ },
+ {
+  "id": "Q6-003",
+  "knownRef": "K08",
+  "area": "library.browse",
+  "title": "A failed delete or failed ZIP import wipes the whole component list and leaves a bare error line with no retry/dismiss",
+  "category": "error-handling",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, Library table, select custom part QA-Q6-bulk-02",
+   "route '**/api/modules/library/components/delete' → 500 application/problem+json {title:'Internal error'}",
+   "Preview pane ⋯ Component actions → Delete → accept the confirm",
+   "Observe list; then unroute and wait",
+   "Second path (ZIP import): Library → Import library… → choose fixtures/sample.txt (the file picker's accept='.zip' can be overridden with 'All files')",
+   "Observe the list area"
+  ],
+  "expected": "List stays intact; an error toast/inline banner says 'Couldn't delete QA-Q6-bulk-02 — Internal error' with Retry; the row remains selectable.",
+  "actual": "All 60 rows disappear and are replaced by a single red 'Internal error' line under the chip row; the counter still says '60 of 69' and the preview pane still shows the part. No retry, no dismiss; the error persists after the backend recovers (unroute) until the user edits the search/filters or reloads. Same setError() path is used for ZIP-import failures. Re-confirmed for ZIP import (2nd session): POST /imports/kicad/zip → 400 and all rows are replaced by the lowercase backend string 'file must have a .zip extension'; the counter still reads '60 of 63', facets and the preview pane (74HC00) stay populated, so the screen contradicts itself. The only recovery is changing search/filters or reloading. Light re-check (bulk delete of 9 QA-Q6-bulk-3x parts, route **/api/modules/library/components/* → 500 text/plain): the list is replaced by the raw fallback 'Delete failed (HTTP 500)' (K40 wording) while the bulk bar still says '9 selected · Delete · Clear' and the facets still count 9 parts. After the sample.txt import error, re-applying the same (empty) search did not refetch — the error line stayed until the query text actually changed.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/028-delete-500.png",
+    "shots/q6/dark/051-import-sample-txt.png",
+    "shots/q6/dark/052-import-sample-txt-notice.png",
+    "shots/q6/light/026-bulk-delete-500.png",
+    "shots/q6/light/027-import-sample-txt.png"
+   ],
+   "network": [
+    "POST /api/modules/library/components/delete → 500 (injected)",
+    "POST /api/modules/library/imports/kicad/zip → 400 (sample.txt)",
+    "light: POST /api/modules/library/components/delete → 500 text/plain (routed) → list shows 'Delete failed (HTTP 500)'"
+   ],
+   "console": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 290,
+    "note": "deleteComponents catch → setError(message) (the list-load error slot)"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 748,
+    "note": "table only renders when !error — any action error hides the list"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 405,
+    "note": "ZIP import failure also calls setError → same list wipe"
+   }
+  ],
+  "suggestedFix": "Keep the fetch error (`error`) for list loading only; route action failures (delete, ZIP import) to the existing NoticeViewport (variant error, no auto-dismiss) or an inline dismissible banner with Retry. Never gate the table on action errors.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.browse:delete:error-wipes-list",
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced both paths in dark and light. (1) route POST …/components/delete → 500 problem+json, delete QA-Q6-bulk-02 via ⋯ → Delete → accept: rows 60 → 0, a single red 'Internal error' line, strip still '60 of 67', preview pane still shows bulk-02; after unroute + 3 s the error line stays and there is no retry/dismiss control (0 buttons). The part was NOT deleted (detail still 200). (2) Import library… → fixtures/sample.txt: POST /imports/kicad/zip 400 → rows replaced by 'file must have a .zip extension' while strip reads '60 of 68' (also shown in the toast). Code: Space.tsx:290 and :405 call setError (the list-load slot) and the table renders only when !error (Space.tsx:747). Known K08. S2 kept.",
+   "evidence": [
+    "shots/vq6/dark/006-delete-500-list-wiped.png",
+    "shots/vq6/dark/016-import-sample-txt.png",
+    "shots/vq6/light/007-import-notice-covers-header.png",
+    "POST /api/modules/library/components/delete → 500 (routed)",
+    "POST /api/modules/library/imports/kicad/zip → 400"
+   ]
+  }
+ },
+ {
+  "id": "Q6-004",
+  "knownRef": "K06",
+  "area": "library.browse",
+  "title": "Deleting library parts uses a native window.confirm that doesn't name the part",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, Library table, select custom part QA-Q6-bulk-01",
+   "Preview pane ⋯ Component actions → Delete"
+  ],
+  "expected": "In-app confirmation dialog (kit modal, focus-trapped, Esc/Enter) naming the part(s): 'Delete QA-Q6-bulk-01? Its symbol/footprint are removed if unused.' followed by a success notice.",
+  "actual": "Browser-native confirm 'Delete 1 component? This will also remove orphaned symbols and footprints.' (dialog spy: confirm=1). The part name is not shown, the style is OS-native (breaks the Electron look / can be suppressed), and after accepting there is no success feedback — the preview silently jumps to the first row of the list instead of the next neighbour. Same confirm is used for bulk delete.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/027-actions-menu-custom.png",
+    "shots/q6/light/024-actions-menu.png"
+   ],
+   "console": [
+    "window.__qaDialogCalls = {confirm:1, log:['confirm: Delete 1 component? This will also remove orphaned symbols and footprints.']}",
+    "light: dialog spy confirm=1 'Delete 1 component? This will also remove orphaned symbols and footprints.' (QA-Q6-bulk-39); bulk: 'Delete 9 components? …'"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 266,
+    "note": "window.confirm in deleteComponents"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 287,
+    "note": "success path: only clears selection + refresh, no notice"
+   }
+  ],
+  "suggestedFix": "Replace window.confirm with the kit confirmation dialog (same one Home uses for design delete once fixed), include part names (first 3 + 'and N more'), then setNotice({variant:'success', title:'Deleted', message:name}) and select the next row.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.browse:delete:native-confirm",
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced: ⋯ Component actions → Delete opens a browser-native confirm; dialog spy {confirm:1, log:['confirm: Delete 1 component? This will also remove orphaned symbols and footprints.']} — part name not shown. Code Space.tsx:266 window.confirm; success path (:287-288) only clears selection + refreshTick, no notice. Known K06 (this site). Native confirm = S2 per protocol.",
+   "evidence": [
+    "shots/vq6/dark/005-actions-menu.png",
+    "__qaDialogCalls={confirm:1, log:['confirm: Delete 1 component? This will also remove orphaned symbols and footprints.']}"
+   ]
+  }
+ },
+ {
+  "id": "Q6-005",
+  "area": "library.detail",
+  "title": "'Duplicate to edit' drops footprint options, pin map and part metadata from the copy",
+  "category": "data",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, Library → open core 'Resistor' (9 footprint options 0402…2512, each with a pin map)",
+   "Click 'Duplicate to edit'",
+   "Inspect the copy's detail page (Footprint options, Pins card) — or GET /components/{copyId}/detail",
+   "Repeat with 74HC00 Quad NAND SOIC-14"
+  ],
+  "expected": "The copy is a faithful editable duplicate: same footprint options (with variant labels + pin maps), MPN/manufacturer/datasheet/LCSC/keywords.",
+  "actual": "The copy has exactly 1 footprint option (the default) with no pin map: Resistor clone → 1 variant 'R_0603_1608Metric' (pinMap null) vs 9 on the original; 74HC00 (Copy) Pins card says 'No pin map for this footprint.' and the variant label becomes the raw footprint name 'SOIC-14_3.9x8.7mm_P1.27mm'. Manufacturer/MPN/LCSC/datasheet/keywords/supplier/subcategory are not copied either. The Details 'Source' row becomes '—'.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/011-detail-builtin-scrolled.png",
+    "shots/q6/dark/012-after-duplicate.png"
+   ],
+   "network": [
+    "GET /components/openpcb.core.passive.resistor/detail → 9 footprintVariants, pinMap set",
+    "GET /components/{clone}/detail → 1 footprintVariant, pinMap null"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/backend/queries.ts",
+    "line": 1450,
+    "note": "cloneComponent inserts only the components row (name/description/symbolId/footprintId/tags); component-footprint option rows (pin maps, variant labels) and metadata columns are not copied"
+   }
+  ],
+  "suggestedFix": "In cloneComponent copy the component_footprints rows (variant label, isDefault, pinMap) and all metadata columns (manufacturer, MPN, LCSC, supplier, subcategory, datasheetUrl, keywords, provenance) inside one transaction; add a backend test comparing detail payloads of source and clone.",
+  "fixScope": "backend-needed",
+  "estimate": "S",
+  "dedupeKey": "library.detail:clone:drops-footprint-options",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced via API on a fresh clone (POST /components/openpcb.core.ic.lm358/clone, renamed QA-vq6-…, deleted afterwards): original LM358 detail has 2 footprint options (SOIC-8 + DIP-8, both with pinMap) and manufacturer 'Texas Instruments' / MPN 'LM358DR'; the clone has 1 option 'SOIC-8_3.9x4.9mm_P1.27mm' with pinMap=false and manufacturer/MPN null. Existing q6 copy of 74HC00 likewise: variant label raw footprint name, pinMap false. Code queries.ts:1450-1510 cloneComponent inserts only the components row (no component_footprints rows, no metadata columns). S2 kept (the copy silently loses data the user duplicated it for).",
+   "evidence": [
+    "POST /components/openpcb.core.ic.lm358/clone → 201; GET /components/<clone>/detail → 1 variant, pinMap null, MPN null",
+    "GET /components/8c098cbd…/detail → variant SOIC-14_3.9x8.7mm_P1.27mm pinMap null"
+   ]
+  }
+ },
+ {
+  "id": "Q6-006",
+  "area": "library.browse",
+  "title": "A part's 'source' is shown four different ways (facet vs table badge vs detail row vs provenance chip)",
+  "category": "consistency",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, Library table",
+   "Compare Source facet options with the SOURCE column for user parts",
+   "Select '74HC00 Quad NAND SOIC-14 (Copy)' then open it; open core '74HC00 Quad NAND SOIC-14'"
+  ],
+  "expected": "One source vocabulary everywhere (e.g. Core / Local / Imported-KiCad) derived from one field.",
+  "actual": "Facet lists 'Local Library' (49) and 'User' (3) but the table shows USER for both; the duplicated 74HC00 is 'Local Library' in the facet, 'KICAD' badge in table + preview, 'Source —' in the detail Details card, plus a dashed 'Imported from KiCad' chip. Core parts carry the same 'Imported from KiCad' chip while Details says 'Core library'. Users cannot tell what 'Local Library' vs 'User' means.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/022-copy-row-selected.png",
+    "shots/q6/dark/010-detail-builtin.png",
+    "shots/q6/dark/012-after-duplicate.png",
+    "shots/q6/light/025-bulk-select.png"
+   ],
+   "network": [
+    "GET /components?tags=source:user → ATMEGA16U4-AU, ATMEGA8A-MU, ATTINY13A-SU",
+    "GET /components?tags=source:user.local → 74HC00 (Copy), LM324N, QA-* parts"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/detail-helpers.ts",
+    "line": 170,
+    "note": "componentSourceKey: badge from tags (kicad-derived → 'kicad')"
+   },
+   {
+    "path": "src/modules/library/frontend/detail-helpers.ts",
+    "line": 83,
+    "note": "formatSourceLabel: Details row from provenance → '—' for clones"
+   },
+   {
+    "path": "src/modules/library/frontend/detail-helpers.ts",
+    "line": 64,
+    "note": "splitTags: 'kicad-derived' → 'Imported from KiCad' chip even on core parts"
+   },
+   {
+    "path": "src/modules/library/backend/queries.ts",
+    "line": 1497,
+    "note": "clone sets sourceId 'user.local' (facet 'Local Library')"
+   }
+  ],
+  "suggestedFix": "Derive a single `sourceLabel` server-side (from sourceId + provenance) and put it on the list DTO; use it for the facet label, the table/preview badge and the Details row. Merge 'user' and 'user.local' into one 'Local' bucket; don't show the KiCad-provenance chip on core parts (or phrase it 'Derived from KiCad library').",
+  "fixScope": "backend-needed",
+  "estimate": "S",
+  "dedupeKey": "library.browse:source:inconsistent-labels",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced: facet Source lists 'Local Library 48 / OpenPCB Core Library 17 / User 3', but the SOURCE column shows USER for both ATMEGA* (sourceId 'user') and QA-Q6-bulk-* (user.local), KICAD for the 74HC00 copy, CORE for core; core detail pages show the dashed 'Imported from KiCad' chip while Details → Source reads 'Core library'. Code: componentSourceKey (detail-helpers.ts:170-183) derives the badge from isBuiltin/tags, formatSourceLabel (:83) from provenance ('—' for clones), facets from sourceId. S3 kept.",
+   "evidence": [
+    "shots/vq6/dark/008-preview-detail-500.png",
+    "shots/vq6/dark/010-detail-74hc00.png",
+    "table rows: ATMEGA16U4-AU … USER, QA-Q6-bulk-02 … USER, QA-Q6-74HC00-edited … KICAD"
+   ]
+  }
+ },
+ {
+  "id": "Q6-007",
+  "knownRef": "K24",
+  "area": "library.browse",
+  "title": "Library search shows a '/' shortcut hint that does nothing, and the search box has no accessible name",
+  "category": "a11y",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, Library, click empty space so nothing is focused (activeElement = BODY)",
+   "Press '/'",
+   "Inspect the search box in the accessibility snapshot"
+  ],
+  "expected": "'/' focuses the search (as Home's search does) and the input is announced as 'Search library'.",
+  "actual": "'/' does nothing (activeElement stays BODY). Accessibility tree shows an unnamed `searchbox` (no aria-label; the wrapping <label> only contains the aria-hidden '/' hint). Facet filter boxes are correctly named ('Filter family options').",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/024-no-results.png"
+   ],
+   "console": [
+    "activeElement after '/' = BODY; input aria-label=null, labels=['/']"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 615,
+    "note": "SearchField with shortcutHint='/' but no key handler and no aria-label"
+   },
+   {
+    "path": "src/shared/frontend/ui/search-field.tsx",
+    "line": 35,
+    "note": "hint rendered aria-hidden inside the label"
+   }
+  ],
+  "suggestedFix": "Add aria-label='Search library' and a window keydown handler for '/' (ignored while typing in inputs/textarea/contenteditable) that focuses + selects the search input; Esc in the field already clears.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "library.browse:search:slash-hint-dead",
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced: with activeElement BODY, pressing '/' leaves focus on BODY. Accessibility snapshot shows an unnamed 'searchbox'; input aria-label=null, its wrapping <label> text is only the aria-hidden '/' hint. search-field.tsx renders the hint but no component wires a '/' handler for Library (Space.tsx:614-620). Known K24. S3 kept.",
+   "evidence": [
+    "activeElement after '/' = BODY; input aria-label=null, labels=['/']"
+   ]
+  }
+ },
+ {
+  "id": "Q6-008",
+  "area": "library.browse",
+  "title": "Mount/pin-type values leak raw enum keys and mixed casing ('SMD' vs 'smd' vs 'through_hole' vs 'unknown')",
+  "category": "copy",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, Library table",
+   "Look at the MOUNT column (SMD/THT)",
+   "Select 'LM358 Dual Op-Amp' → preview Footprints list and Specs",
+   "Open the part → Footprint card 'Mount'",
+   "Select LM324N"
+  ],
+  "expected": "One display vocabulary: SMD / THT / Mixed / Unknown everywhere (the facet already maps keys via MOUNT_LABELS).",
+  "actual": "Table shows 'SMD'/'THT'; preview Footprints shows 'smd' and 'through_hole'; preview Specs + detail Footprint card show 'smd'; LM324N shows '—' in the table but the facet lists it as 'Unknown' and the detail 'unknown'. Package column is '—' for most parts (derived from tags only) while the preview Specs shows the real package (e.g. Capacitor '0402 (1005 metric) SMD'). The active-filter chip for the Mount facet also shows the raw key (\"Mount: smd\") while the checkbox says \"SMD\" (shots/q6/dark/032-active-chips.png).",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/023-search-lm358.png",
+    "shots/q6/dark/001-library-table.png",
+    "shots/q6/dark/011-detail-builtin-scrolled.png",
+    "shots/q6/dark/032-active-chips.png",
+    "shots/q6/light/002-library-table-start.png",
+    "shots/q6/light/015-upload-minimal-step-card.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/components/LibraryPreviewPane.tsx",
+    "line": 217,
+    "note": "variant.mountType raw"
+   },
+   {
+    "path": "src/modules/library/frontend/components/LibraryPreviewPane.tsx",
+    "line": 272,
+    "note": "Specs Mount raw"
+   },
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 654,
+    "note": "detail Mount raw"
+   },
+   {
+    "path": "src/modules/library/frontend/components/FacetSidebar.tsx",
+    "line": 41,
+    "note": "MOUNT_LABELS exists but only used by the facet"
+   },
+   {
+    "path": "src/modules/library/frontend/components/LibraryTable.tsx",
+    "line": 219,
+    "note": "Package column from tags only"
+   }
+  ],
+  "suggestedFix": "Export a formatMountType() (MOUNT_LABELS) from detail-helpers and use it in LibraryTable, LibraryPreviewPane (footprints + specs) and ComponentDetailPage; fill the table Package column from the default footprint's variantLabel/packageCode when no package tag exists (server DTO).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.browse:mount:raw-enum-casing",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced: table MOUNT column shows 'SMD'/'THT' (server displayMountType), but the preview Footprints row and Specs show raw 'smd', the detail Footprint card 'Mount smd', LM324N shows '—' in the table while the facet says 'Unknown', and the active chip reads 'Mount: smd' next to the 'SMD' checkbox. Package column '—' for Capacitor/bulk parts while Specs show '1608'. Code: LibraryPreviewPane.tsx:217 and :272, ComponentDetailPage.tsx:654 render raw mountType; MOUNT_LABELS (FacetSidebar.tsx:41) is used only by the facet; LibraryTable.tsx:218 package from tags only. S3 kept.",
+   "evidence": [
+    "shots/vq6/dark/005-actions-menu.png",
+    "shots/vq6/dark/009-74hc00-preview.png",
+    "shots/vq6/dark/015-op07cd-detail.png",
+    "chip aria-label 'Remove filter Mount: smd'"
+   ]
+  }
+ },
+ {
+  "id": "Q6-009",
+  "area": "library.browse",
+  "title": "No-results search state says 'Import a component to get started', zeroes the header counts and empties the facet rail",
+  "category": "copy",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, Library (69 parts)",
+   "Type 'zzqx-nomatch' in search"
+  ],
+  "expected": "'No parts match \"zzqx-nomatch\"' with a Clear search action; header keeps the library size (69 parts) or says '0 of 69'; facet rail keeps its sections (with 0 counts) or shows a short note.",
+  "actual": "Header reads 'Library 0 parts · 0 sources' (as if the library were empty), body says 'No components match the current filters.' + 'Import a component to get started.' (the 'Try clearing some filters' hint only appears for facet filters, never for search), the table header disappears and the facet rail is blank with no message. Preview says 'Select a part to preview'.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/024-no-results.png",
+    "shots/q6/dark/002-search-no-results.png",
+    "shots/q6/light/005-no-results.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 564,
+    "note": "header count = filtered facets.total"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 741,
+    "note": "hint only considers activeTags, not the query"
+   },
+   {
+    "path": "src/modules/library/frontend/components/FacetSidebar.tsx",
+    "line": 68,
+    "note": "sections with 0 options return null → blank rail"
+   }
+  ],
+  "suggestedFix": "Keep an unfiltered total for the header; branch the empty state on query/tags: search miss → 'No parts match “q”' + [Clear search]; facet miss → 'Try clearing some filters' + [Clear all]; truly empty library → Import CTA. Render a muted 'No filters for this result' line in the rail.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.browse:empty:search-miss-copy",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced with 'zzqx-nomatch': header '0 parts · 0 sources', strip '0 of 0', body 'No components match the current filters.' + 'Import a component to get started.', facet rail completely blank (0 sections), preview 'Select a part to preview'. Code Space.tsx:564 totalCount from filtered facets.total; :741-743 hint only checks activeTags. S3 kept.",
+   "evidence": [
+    "shots/vq6/dark/007-no-results.png"
+   ]
+  }
+ },
+ {
+  "id": "Q6-010",
+  "area": "library.browse",
+  "title": "Library table keyboard/selection model is incomplete: no Home/End/PgUp/PgDn, no Shift/Cmd multi-select, no Delete key, focus looks like hover, rows have no roles",
+  "category": "keyboard",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, Library table: click 'AMS1117-3.3 SOT-223'",
+   "ArrowDown ×2 (works: ATMEGA8A-MU selected + focused)",
+   "Press End, PageDown, Home",
+   "Shift/Cmd+click another row; press Delete on a custom row",
+   "Tab from the search box towards the table"
+  ],
+  "expected": "Grid/listbox semantics (role=grid/row, aria-selected), Home/End/PageUp/PageDown move the selection, Shift/Cmd-click or Space toggles bulk selection, Delete deletes the selected custom part(s) (with confirm), a distinct focus indicator.",
+  "actual": "End/PageDown only scroll the container (focused row ATMEGA8A-MU scrolls out of view, selection unchanged); no multi-select gesture exists in table view — the checkbox column only appears after 'Select All'; Delete does nothing. Rows have no role/aria-selected (screen readers get plain text). focus-visible uses the same bg as hover (#… surface-hover), so the keyboard row is indistinguishable from the mouse-hover row. Reaching the table by Tab requires tabbing through every facet checkbox (~40 stops). Light: the keyboard-selected row (ATMEGA8A-MU after 2× ArrowDown) is #e6e6e9 = --surface-hover, i.e. focus-visible overrides the selected fill (#e2e2e5) and is pixel-identical to a mouse-hovered row. Focus is not restored after returning from the detail page: Enter opens the part, Back → document.activeElement = BODY (selection kept); same after opening a Grid card and Back — keyboard users must Tab through ~40 facet checkboxes again. Selection model also differs by view: Grid shows a checkbox on every custom card at all times (45 of 60 cards), Table only shows the checkbox column after Select All.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/025-keyboard-focus-row.png",
+    "shots/q6/dark/008-keyboard-nav.png",
+    "shots/q6/light/006-keyboard-row.png",
+    "shots/q6/light/003-grid.png"
+   ],
+   "console": [
+    "after End: activeElement still 'ATMEGA8A-MU', table scrolled to QA-Q6-bulk-40"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/q6/light/006-keyboard-row.png",
+     "x": 700,
+     "y": 158,
+     "hex": "#e6e6e9",
+     "nearestToken": "--surface-hover",
+     "deltaE": 0.0
+    },
+    {
+     "file": "shots/q6/light/006-keyboard-row.png",
+     "x": 700,
+     "y": 300,
+     "hex": "#e6e6e9",
+     "nearestToken": "--surface-hover",
+     "deltaE": 0.0
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/components/LibraryTable.tsx",
+    "line": 113,
+    "note": "handleKeyDown handles only ArrowUp/ArrowDown/Enter"
+   },
+   {
+    "path": "src/modules/library/frontend/components/LibraryTable.tsx",
+    "line": 182,
+    "note": "focus-visible:bg-surface-hover (same as hover)"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 221,
+    "note": "selectionMode only when selectedIds.size>0 — no way to start it from a row"
+   }
+  ],
+  "suggestedFix": "Give the table role=grid/rows role=row + aria-selected; handle Home/End/PageUp/PageDown in handleKeyDown; add Space/Cmd-click to toggle bulk selection and Shift-click ranges; Delete/Backspace → deleteComponents for custom rows; use an inset 1px selection outline for focus-visible; add a skip target (e.g. ArrowDown from the search box focuses the first row).",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "library.browse:table:keyboard-selection-model",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced: click AMS1117 row, ArrowDown ×2 selects+focuses ATMEGA8A-MU; End/PageDown only scroll (focused row top -354 px, selection unchanged); rows have role=null/aria-selected=null; no multi-select gesture in table view; Back from detail leaves activeElement=BODY. Light pixel probe: keyboard-focused selected row #e6e6e9 and the mouse-hovered row #e6e6e9 are identical (--surface-hover, ΔE 0). Code LibraryTable.tsx:113-131 handles only ArrowUp/ArrowDown/Enter; :182 focus-visible:bg-surface-hover. S3 kept.",
+   "evidence": [
+    "shots/vq6/light/008-keyboard-focus-vs-hover.png",
+    "after End/PageDown activeElement still 'ATMEGA8A-MU', rect.top=-354",
+    "probe 700,158 #e6e6e9 --surface-hover; 700,300 (hovered) #e6e6e9"
+   ]
+  }
+ },
+ {
+  "id": "Q6-011",
+  "area": "library.browse",
+  "title": "Every search keystroke / facet toggle blanks the table to 'Loading components...' and remounts the preview canvases (2× TypeError each time)",
+  "category": "console",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, Library table with a row selected",
+   "Install a MutationObserver (or watch closely) and type 'capa' in search / toggle any facet",
+   "Check console"
+  ],
+  "expected": "Previous rows stay visible (dimmed) while the refetch runs; preview pane keeps its canvases; no console errors.",
+  "actual": "All rows unmount and 'Loading components...' text replaces the table on every debounced query/filter change (observer: 'loading' + 'norows' recorded), causing a visible flash and scroll reset. When the selected row leaves/re-enters the result set the preview pane unmounts/remounts both R3F canvases; each remount logs 2× 'TypeError: Cannot read properties of null (reading \\'addEventListener\\') at Object.connect … onCreated' followed by 'THREE.WebGLRenderer: Context Lost'.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/023-search-lm358.png"
+   ],
+   "console": [
+    "TypeError: Cannot read properties of null (reading 'addEventListener') at Object.connect (@react-three/fiber) at onCreated — ×2 per preview remount",
+    "[LOG] THREE.WebGLRenderer: Context Lost. ×2",
+    "light: 2× TypeError: Cannot read properties of null (reading 'addEventListener') after typing/clearing 'zzqx-nomatch'"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 724,
+    "note": "loading replaces the list"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 543,
+    "note": "selection dropped when row leaves result set → preview canvases unmount"
+   },
+   {
+    "path": "node_modules/@openpcb/r3f-eda-canvas/dist/interaction/EdaCanvas.js",
+    "line": 60,
+    "note": "onCreated → events.connect on a null target during remount"
+   }
+  ],
+  "suggestedFix": "Keep rendering the previous `components` while loading (show a thin progress bar in the chip row instead); keep the preview pane on the last part until a new one is chosen. In @openpcb/r3f-eda-canvas guard events.connect when the event source element is gone (or pass eventSource explicitly).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.browse:list:loading-flash-canvas-remount",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced: MutationObserver while typing 'capa' recorded ['loading/rows=0','/rows=3'] — every refetch unmounts all rows behind 'Loading components...'. Typing a no-match query and clearing it (selected row leaves/re-enters the set) added 2 more 'TypeError: Cannot read properties of null (reading 'addEventListener') at Object.connect … onCreated' and 2 'THREE.WebGLRenderer: Context Lost' logs. Code Space.tsx:723-727 (loading replaces list) and :543-549 (selection dropped → preview canvases unmount). Note: the TypeError itself is the same R3F onCreated race already verified as Q7-028 (stack is R3F's internal Canvas onCreated, not EdaCanvas.js); this finding's distinct defect is the list flash/remount. S3 kept.",
+   "evidence": [
+    "__lf=['loading/rows=0','/rows=3'] while typing 'capa'",
+    "console: addEventListener TypeError count 4 → 6, Context Lost 6 after one clear"
+   ]
+  }
+ },
+ {
+  "id": "Q6-012",
+  "area": "library.browse",
+  "title": "Preview 'No symbol/footprint preview' and 'Loading preview…' overlays use un-generated slate classes → bright button-like outline boxes",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, Library table",
+   "route '**/api/modules/library/components/*/detail' → 500 (or select any part whose detail has no preview)",
+   "Select 'Generic Diode'",
+   "Pixel-probe the empty-state boxes"
+  ],
+  "expected": "Muted text on the canvas well (text-tertiary, no box) matching the kit empty states; loading/error overlays on tokens.",
+  "actual": "'No symbol preview' / 'No footprint preview' render as rounded boxes with a bright #c4c4c9 1px outline on a #131313 canvas — they look like buttons. Cause: the overlay classes (border-slate-700/60, bg-slate-900/55, text-slate-300, rounded-md; loading overlay bg-slate-900 + slate spinner; error boundary red-800/red-950) live in @openpcb/r3f-eda-canvas, which Tailwind does not scan, so the border colour falls back to currentColor. Preview canvases are also hardcoded #131313 (not --surface-canvas-well #08090a / schematic well #101012). The preview pane error itself is a bare 'Internal error' line with header 'Component' and no retry.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/031-preview-detail-500.png",
+    "shots/q6/light/034-preview-detail-500.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/q6/dark/031-preview-detail-500.png",
+     "x": 1096,
+     "y": 143,
+     "hex": "#c4c4c9",
+     "nearestToken": "(slate-300 remap / currentColor)",
+     "deltaE": 0
+    },
+    {
+     "file": "shots/q6/dark/031-preview-detail-500.png",
+     "x": 1080,
+     "y": 100,
+     "hex": "#131313",
+     "nearestToken": "--surface-panel",
+     "deltaE": 1.4
+    }
+   ],
+   "network": [
+    "GET /components/*/detail → 500 (injected)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "node_modules/@openpcb/r3f-eda-canvas/dist/preview/PreviewCanvasShell.js",
+    "line": 35,
+    "note": "EmptyStateOverlay: border-slate-700/60 bg-slate-900/55 text-slate-300 (alpha variants not generated)"
+   },
+   {
+    "path": "node_modules/@openpcb/r3f-eda-canvas/dist/preview/PreviewCanvasShell.js",
+    "line": 32,
+    "note": "CanvasLoadingOverlay 'Loading preview...' bg-slate-900 + slate spinner"
+   },
+   {
+    "path": "src/core/frontend/src/index.css",
+    "line": 3,
+    "note": "@source covers ../../../modules and ../../../shared only"
+   },
+   {
+    "path": "src/modules/library/frontend/components/LibraryPreviewPane.tsx",
+    "line": 138,
+    "note": "preview error rendered as bare text, no retry"
+   }
+  ],
+  "suggestedFix": "In @openpcb/r3f-eda-canvas replace slate/red palette classes with semantic token classes (text-text-tertiary, no box; status-danger for errors) and default backgroundColor to var(--surface-canvas-well); meanwhile add `@source \"../../../../node_modules/@openpcb/r3f-eda-canvas/dist\"` in index.css so its classes are generated. Show a Retry link in the preview pane on detail errors.",
+  "fixScope": "shared-package",
+  "estimate": "S",
+  "dedupeKey": "library.preview:canvas-overlays:off-token",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced (route …/components/*/detail → 500, select Generic Diode): the 'No symbol preview' box has classes 'rounded-md border border-slate-700/60 bg-slate-900/55 text-slate-300' but computed border = rgb(196,196,201) (currentColor, the slate-300 remap) and background transparent — the /60 and /55 alpha variants are not generated because @openpcb/r3f-eda-canvas is outside the Tailwind @source list (index.css:3-4). Pixel: border #c4c4c9 on #131313 well. Preview pane error is a bare 'Internal error' line under header 'Component', no retry. Correction: the #131313 well colour itself is the package's PREVIEW default and part of the deferred canvas-palette work (PLAN §0 non-goal / §9), so only the unrendered overlay classes + no-retry error are counted here. Code refs corrected to dist paths. S3 kept.",
+   "evidence": [
+    "shots/vq6/dark/008-preview-detail-500.png",
+    "computed: border rgb(196,196,201) 1px, bg rgba(0,0,0,0) on overlay div",
+    "probe 1150,129 #c4c4c9; 1150,100 #131313"
+   ]
+  }
+ },
+ {
+  "id": "Q6-013",
+  "area": "library.detail",
+  "title": "Multi-unit symbols (74HC00, LM358) render all units and the De Morgan body superimposed in the preview pane, detail card and fullscreen",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, Library table → select core '74HC00 Quad NAND SOIC-14' (preview pane Symbol cell)",
+   "Double-click → detail page Symbol card → 'Open symbol full screen'",
+   "Compare with Grid view card (server SVG) for the same part",
+   "Repeat for 'LM358 Dual Op-Amp'"
+  ],
+  "expected": "Preview shows one unit (unit A) with a unit selector / 'Unit 1 of 5' badge, or lays the units out side by side — like the Grid card's server-rendered SVG, which draws a single clean NAND gate.",
+  "actual": "The R3F symbol preview draws all 5 units of 74HC00 plus the alternate (De Morgan) body on top of each other: pin numbers overprint ('1/4/9/12' → '19', '3/6/8/11' → '81'), an OR-shape and a huge circle overlap the AND body, VCC/GND labels overprint the filled power-unit box. LM358 shows both op-amp units overprinted (pins 3/5, 2/6, 1/7). Symbol payload: unitCount 5, pins carry `unit`, but symbol-render-layer ignores units. Pins table ordering is also unsorted (1,2,3,4,5,6,8,…,13,7,14).",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/035-fullscreen-symbol-74hc00.png",
+    "shots/q6/dark/010-detail-builtin.png",
+    "shots/q6/dark/033-grid.png",
+    "shots/q6/dark/023-search-lm358.png",
+    "shots/q6/light/010-edit-mode.png",
+    "shots/q6/light/002-library-table-start.png"
+   ],
+   "network": [
+    "GET /components/openpcb.core.ic.74hc00-soic-14/detail → symbol.preview.unitCount=5, 14 pins with unit 1..5, 33 graphics"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "node_modules/@openpcb/r3f-eda-canvas/src/scene/symbol-render-layer.tsx",
+    "line": 1,
+    "note": "no unit / body-style filtering"
+   },
+   {
+    "path": "src/modules/library/frontend/components/LibraryPreviewPane.tsx",
+    "line": 138,
+    "note": "SymbolPreviewCanvas fed the whole multi-unit model"
+   },
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 557,
+    "note": "same in detail + PreviewModal"
+   }
+  ],
+  "suggestedFix": "In @openpcb/rendering-core's symbol preview builder (or the render layer) filter graphics/pins/labels to one unit + body style 1 (plus the shared unit 0), expose unitCount, and add a small 'Unit A ▾' selector / 'A of 5' badge in the preview header; the schematic placement path should be checked for the same superimposition.",
+  "fixScope": "shared-package",
+  "estimate": "M",
+  "dedupeKey": "library.preview:symbol:multi-unit-superimposed",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "duplicate",
+  "duplicateOf": "Q7-003",
+  "verification": {
+   "verdict": "duplicate",
+   "by": "vq6",
+   "reason": "Reproduced (74HC00 preview pane, detail card and fullscreen draw all 5 units + De Morgan body superimposed: pins '19'/'81' overprint, OR-shape + circle over the AND body; pins list unsorted 1..6,8..13,7,14). Same root cause as Q7-003 (verified: symbol preview/render path has no unit/body-style filtering anywhere; wizard import shows LM358 units stacked). Fold the affected surfaces (Library preview pane, detail Symbol card, PreviewModal, core 74HC00/LM358) and the unsorted Pins table into Q7-003; the placement consequence is Q3-015 (S1).",
+   "evidence": [
+    "shots/vq6/dark/009-74hc00-preview.png",
+    "shots/vq6/dark/010-detail-74hc00.png",
+    "shots/vq6/dark/011-fullscreen-symbol-74hc00.png"
+   ]
+  }
+ },
+ {
+  "id": "Q6-014",
+  "area": "library.detail",
+  "title": "Fullscreen symbol/footprint preview modal doesn't take or trap focus",
+  "category": "a11y",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, open core part detail (74HC00)",
+   "Click 'Open symbol full screen'",
+   "Check document.activeElement, then press Tab"
+  ],
+  "expected": "Focus moves into the dialog (close button), Tab cycles inside it, Esc closes and focus returns to the trigger.",
+  "actual": "Focus stays on the 'Open symbol full screen' button behind the overlay; Tab moves to 'Open footprint full screen' behind the aria-modal dialog. Esc and backdrop click do close it. The overlay is a hand-rolled div (rounded-float + shadow-lg) instead of the kit dialog; canvas has no zoom controls/fit button or hint in fullscreen. Light re-check (Resistor footprint fullscreen): dialog aria-modal=true labelled 'R_0603_1608Metric — Footprint', but activeElement stays 'Open footprint full screen' behind it; Esc closes.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/035-fullscreen-symbol-74hc00.png",
+    "shots/q6/light/009-fullscreen-footprint.png"
+   ],
+   "console": [
+    "activeElement after open = BUTTON 'Open symbol full screen' (inDialog=false); after Tab = 'Open footprint full screen' (inDialog=false)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/components/PreviewModal.tsx",
+    "line": 16,
+    "note": "only a window Esc listener; no initial focus / trap / restore"
+   }
+  ],
+  "suggestedFix": "Build PreviewModal on the kit/Radix Dialog (focus trap, initial focus on Close, restore focus) and add the CanvasZoomCluster (zoom in/out/fit) in the modal header.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.detail:preview-modal:focus",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced: 'Open symbol full screen' on 74HC00 → dialog aria-modal=true labelled '74HC00 Quad NAND SOIC-14 — Symbol', but activeElement stays the trigger (inDialog=false); Tab moves to 'Open footprint full screen' behind the modal (inDialog=false). Esc closes. PreviewModal.tsx:16-24 has only a window Esc listener, no initial focus/trap/restore. S3 kept.",
+   "evidence": [
+    "shots/vq6/dark/011-fullscreen-symbol-74hc00.png",
+    "activeElement after open = 'Open symbol full screen' (inDialog=false); after Tab = 'Open footprint full screen' (inDialog=false)"
+   ]
+  }
+ },
+ {
+  "id": "Q6-015",
+  "area": "library.detail",
+  "title": "After saving an edit on the detail page, Back returns to a stale list (old name, old facets)",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, Library → double-click custom part '74HC00 Quad NAND SOIC-14 (Copy)' → Edit",
+   "Change name to 'QA-Q6-74HC00-edited', description, remove tag 'logic', add 'passive' → Save",
+   "Click Back"
+  ],
+  "expected": "The list row, facets and counts reflect the saved name/tags.",
+  "actual": "The table row still reads '74HC00 Quad NAND SOIC-14 (Copy)' (selected) while the preview pane next to it says 'QA-Q6-74HC00-edited'; facet counts still count the old tags (passive 41, logic unchanged). Only a reload or a search/filter change refetches. Search for the new name works server-side, so the user sees two names for one part.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/041-list-stale-after-edit.png"
+   ],
+   "network": [
+    "PATCH /api/modules/library/components/8c098cbd… → 200 (no subsequent GET /components)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 570,
+    "note": "ComponentDetailPage rendered without onUpdated → refreshTick never bumped after save"
+   },
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 215,
+    "note": "onUpdated?.(updated) is optional and unused by LibrarySpace"
+   }
+  ],
+  "suggestedFix": "Pass onUpdated={() => setRefreshTick(v => v + 1)} from LibrarySpace (and dispatch 'openpcb:library-updated' so designer palettes refresh too).",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "library.detail:edit:stale-list-after-save",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced on my own clone: Edit → rename to 'QA-vq6-LM358-edited' → Save → Back: the table row still reads 'QA-vq6-LM358-clone-check' while the preview pane shows 'QA-vq6-LM358-edited'. No save notice. Space.tsx:571-580 renders ComponentDetailPage without onUpdated, so refreshTick is never bumped. Severity S2 → S3: the save persisted correctly (API returns the new name), nothing is lost, and any search/filter change or reload refetches; it is a stale-cache inconsistency with a one-line fix.",
+   "evidence": [
+    "shots/vq6/dark/012-stale-list-after-edit.png",
+    "rows=['QA-vq6-LM358-clone-check …'], preview names ['QA-vq6-LM358-edited']"
+   ]
+  }
+ },
+ {
+  "id": "Q6-016",
+  "knownRef": "K43",
+  "area": "library.detail",
+  "title": "'Place in design' is a permanently disabled stub whose tooltip and banner copy contradict it",
+  "category": "stub",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, open design 'Dual LED Blinker' in Designer (tab open)",
+   "Go to Library → open core 'Capacitor'",
+   "Look at header button + read-only banner"
+  ],
+  "expected": "With a design open the button places the part (or opens the schematic in place mode); without one the tooltip says why.",
+  "actual": "Button is disabled (disabled=true) even with a design tab open; its tooltip says 'Open a design to place' — which the user already did — and the built-in banner says 'Duplicate to make an editable copy. Placing is allowed.' There is no place action anywhere in Library (preview pane menu has only Open/Delete). Drag-and-drop from the table is the only path and isn't hinted.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/042-place-in-design-disabled-with-open-design.png",
+    "shots/q6/dark/010-detail-builtin.png",
+    "shots/q6/light/007-detail-builtin-resistor.png"
+   ],
+   "console": [
+    "button 'Place in design': disabled=true title='Open a design to place' (design tab 'Dual LED Blinker' open)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 352,
+    "note": "<Button disabled title='Open a design to place'>"
+   },
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 431,
+    "note": "'Placing is allowed.' copy"
+   }
+  ],
+  "suggestedFix": "Either wire it (navigate to Designer active tab + start schematic placement with this componentId via the navigation store) or remove the button and change the banner to 'Drag from the library table onto a schematic to place'.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "library.detail:place-in-design:stub",
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Confirmed: 'Place in design' is disabled with title 'Open a design to place' on every detail page; ComponentDetailPage.tsx:352-359 hard-codes `disabled` (no condition), so it stays disabled even with a design open, while the banner (:431) says 'Placing is allowed.' This is exactly the kind of disabled placeholder PLAN D6 says to omit (and K43). S3 kept.",
+   "evidence": [
+    "shots/vq6/dark/010-detail-74hc00.png",
+    "button 'Place in design': disabled=true title='Open a design to place'"
+   ]
+  }
+ },
+ {
+  "id": "Q6-017",
+  "area": "library.detail",
+  "title": "Detail page hides MPN/manufacturer, truncates Details labels and cannot edit part metadata",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, Library → select 'LM358 Dual Op-Amp' (preview pane shows MPN LM358DR, Manufacturer Texas Instruments)",
+   "Open it (detail page)",
+   "Duplicate any part → Edit"
+  ],
+  "expected": "Detail page is the superset of the preview pane: MPN, manufacturer, LCSC, supplier, datasheet, keywords; labels readable; edit form covers those fields.",
+  "actual": "Details card shows only Component name / Default footprint / Footprint options / Source — no MPN or manufacturer (text 'LM358DR' absent on the page) — and its 96px label column truncates to 'Component n…', 'Default footpr…', 'Footprint opti…'. The card stretches to the Symbol card height leaving ~300px of empty panel. Edit mode only offers Name/Description/Tags, so MPN/manufacturer/datasheet can't be set on custom parts (BOM sourcing relies on them).",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/036-detail-lm358-top.png",
+    "shots/q6/dark/023-search-lm358.png",
+    "shots/q6/dark/038-edit-mode.png",
+    "shots/q6/light/007-detail-builtin-resistor.png",
+    "shots/q6/light/010-edit-mode.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/components/DetailsCard.tsx",
+    "line": 25,
+    "note": "only 4 rows"
+   },
+   {
+    "path": "src/shared/frontend/ui/property-grid.tsx",
+    "line": 11,
+    "note": "grid-cols-[96px_1fr] too narrow for these labels"
+   },
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 436,
+    "note": "edit form: name/description/tags only"
+   }
+  ],
+  "suggestedFix": "Add MPN, Manufacturer, LCSC, Supplier, Subcategory, Datasheet rows to DetailsCard (reuse the preview pane's Part/Specs rows), widen the label column (e.g. PropertyGrid labelWidth 140px here), drop the flex-1 filler, and extend the edit form + PATCH with those fields.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "library.detail:details-card:missing-metadata",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced: LM358 detail Details card lists only Component name / Default footprint / Footprint options / Source — 'LM358DR' and 'Texas Instruments' absent from the page although the API and preview pane carry them; labels truncate to 'Component n…', 'Default footpr…', 'Footprint opti…' (PropertyGrid grid-cols-[96px_1fr]); card stretches with ~300 px empty. Edit form (ComponentDetailPage.tsx:436-485) offers Name/Description/Tags only. S3 kept.",
+   "evidence": [
+    "shots/vq6/dark/010-detail-74hc00.png",
+    "LM358 detail: hasMPN=false, hasTI=false"
+   ]
+  }
+ },
+ {
+  "id": "Q6-018",
+  "area": "library.detail",
+  "title": "Tag editor exposes internal tags (kicad-derived, user, builtin, system) and its input/suggestions lack accessible semantics",
+  "category": "a11y",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, open custom part 'QA-Q6-74HC00-edited' (a duplicate) → Edit",
+   "Look at the Tags field; type 'pa' in it",
+   "Open core 'Capacitor' in view mode and look at the tag chips",
+   "Clear the Name field and click Save"
+  ],
+  "expected": "Only user-facing tags are editable; provenance/system tags are hidden or read-only; the input is labelled 'Tags' and suggestions are a combobox/listbox with options; validation errors sit under the offending field with aria-invalid.",
+  "actual": "Edit mode lists 'kicad-derived' and 'user' as removable chips (removing them silently changes the part's source badge/facet); view mode shows 'builtin' and 'system' as ordinary tag chips on Capacitor and 'user' on the duplicate. The tag textbox has no accessible name (the 'Tags' caption is a <span>); the suggestion list is role=listbox containing listitem>button (no role=option / aria-activedescendant), so arrow-key highlighting isn't announced. Empty-name error 'Name must not be empty' appears below the Tags field, focus stays on Save, no aria-invalid on the Name input. Save succeeds with no confirmation notice. Light re-check: chips kicad-derived/user still removable; ArrowDown+Enter in the suggestion list adds the tag (works); Save again produced no notice (notice spy empty).",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/038-edit-mode.png",
+    "shots/q6/dark/039-tag-suggestions.png",
+    "shots/q6/dark/040-edit-empty-name.png",
+    "shots/q6/dark/042-place-in-design-disabled-with-open-design.png",
+    "shots/q6/light/010-edit-mode.png",
+    "shots/q6/light/012-tag-suggestions.png",
+    "shots/q6/light/013-after-save.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 170,
+    "note": "setDraftTags([...detail.component.tags]) — includes provenance/system tags"
+   },
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 474,
+    "note": "'Tags' is a span, not a label"
+   },
+   {
+    "path": "src/modules/library/frontend/components/TagTokenInput.tsx",
+    "line": 195,
+    "note": "listbox > li > button, no option role"
+   },
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 485,
+    "note": "saveError rendered after the tags block"
+   }
+  ],
+  "suggestedFix": "Split tags with splitTags() before editing (edit only semantic tags, re-append provenance/system on save), add 'builtin','system','user' to SYSTEM_TAGS; give TagTokenInput an aria-label/id+label and combobox semantics (role=combobox, aria-expanded, options role=option, aria-activedescendant); render field-level errors with aria-invalid + focus the field; show a 'Saved' notice.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.detail:tags:internal-tags-editable",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced on my clone in Edit mode (light): tag chips include 'kicad-derived' and 'user' with 'Remove tag …' buttons; the tag textbox has aria-label=null and no id/label ('Tags' is a span, ComponentDetailPage.tsx:474); typing 'pa' opens role=listbox whose children are LI (no role) > BUTTON, 0 role=option. View mode: SYSTEM_TAGS in detail-helpers.ts:43 only contains 'placeholder-footprint', so Capacitor's 'builtin'/'system' tags render as semantic chips. beginEdit copies all tags (:170). saveError renders after the tags block (:485). S3 kept.",
+   "evidence": [
+    "shots/vq6/light/009-tag-editor-internal-tags.png",
+    "listbox children ['LI/null>BUTTON',…], options=0; tag input aria-label=null"
+   ]
+  }
+ },
+ {
+  "id": "Q6-019",
+  "knownRef": null,
+  "area": "library.detail",
+  "title": "Upload STEP on a duplicated part always fails after conversion with 'Cannot update built-in components … use Duplicate to my library'",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, Library → open core '74HC00 Quad NAND SOIC-14' → 'Duplicate to edit' (copy here: QA-Q6-74HC00-edited)",
+   "On the copy click Edit → 3D model card 'Upload STEP'",
+   "Choose a valid STEP (OP07CD.step extracted from fixtures/OP07CD.zip)"
+  ],
+  "expected": "The user's own copy can get its own 3D model (or the Upload STEP affordance is not offered / explains the footprint is shared with a built-in part and offers to fork it).",
+  "actual": "The file is converted client-side ('Converting 3D model…' → 'Uploading GLB…'), then POST /footprints/openpcb.core.footprint.package.soic-14-…/model → 400 and the card shows: 'Cannot update built-in components (74HC00 Quad NAND SOIC-14). Use \"Duplicate to my library\" to create an editable copy.' The user IS on the duplicate; there is no 'Duplicate to my library' button (the real label is 'Duplicate to edit'). Cause: cloneComponent only inserts a new components row pointing at the built-in footprint, so every duplicate shares the core footprint and the backend guard rejects any model change. Dead end: duplicates can never get a 3D model.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/062-clone-upload-valid-step-refused.png"
+   ],
+   "network": [
+    "POST /api/modules/library/footprints/openpcb.core.footprint.package.soic-14-3-9x8-7mm-p1-27mm/model → 400"
+   ],
+   "console": [
+    "notice spy: library-3d-upload-progress 'Converting 3D model…' → 'Uploading GLB…' → library-3d-upload-error 'Cannot update built-in components (74HC00 Quad NAND SOIC-14). Use \"Duplicate to my library\"…'"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 331,
+    "note": "canUploadStep = !isBuiltin && !isPlaceholderFootprint && editing — ignores that the footprint belongs to a built-in"
+   },
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 288,
+    "note": "uploads to footprintId: effectiveSelectedId (the shared core footprint)"
+   },
+   {
+    "path": "src/modules/library/backend/routes.ts",
+    "line": 1605,
+    "note": "assertFootprintNotBuiltinComponent rejects"
+   },
+   {
+    "path": "src/modules/library/backend/queries.ts",
+    "line": 1410,
+    "note": "guard message references 'Duplicate to my library'"
+   }
+  ],
+  "suggestedFix": "Either make Duplicate fork the footprint (copy footprint row + component_footprints) so the copy owns it, or have the detail DTO expose `footprintShared/readOnly` and hide Upload STEP with an explanation; fix the guard copy to match the real button label ('Duplicate to edit').",
+  "fixScope": "backend-needed",
+  "estimate": "M",
+  "dedupeKey": "library.detail:step-upload:clone-shares-builtin-footprint",
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Confirmed: a duplicate keeps the core footprintId (clone of LM358 → openpcb.core.footprint.package.soic-8-…); in Edit mode its 3D card offers 'Upload STEP' (canUploadStep = !isBuiltin && !isPlaceholderFootprint && editing, ComponentDetailPage.tsx:331). POST /footprints/openpcb.core.footprint.package.soic-8-3-9x4-9mm-p1-27mm/model → 400 'Cannot update built-in components (LM358 Dual Op-Amp, NE555 Timer SOIC-8). Use \"Duplicate to my library\"…' (routes.ts:1605, queries.ts:1410) — the real button is 'Duplicate to edit'. Duplicates can therefore never get their own 3D model. S2 kept.",
+   "evidence": [
+    "POST /api/modules/library/footprints/openpcb.core.footprint.package.soic-8-3-9x4-9mm-p1-27mm/model → 400 (guard message above)",
+    "clone edit mode shows 'Upload STEP' label"
+   ]
+  }
+ },
+ {
+  "id": "Q6-020",
+  "knownRef": null,
+  "area": "library.import",
+  "title": "ZIP import reuses another part's footprint by content hash and overwrites that part's 3D model state",
+  "category": "data",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B: part 'QA-q7-R0603-import' exists (footprint 3c416239…, model/meta status 'missing')",
+   "Library → Import library… → fixtures/kicad-with-step.zip (C_0603_1608Metric + simple_capacitor + minimal.step)",
+   "GET /api/modules/library/footprints/3c416239-8f14-45c3-98d0-c2033c168cf9/model/meta"
+  ],
+  "expected": "A new import either gets its own footprint row, or, if it deliberately reuses an identical footprint, never replaces/marks another part's existing 3D model without asking.",
+  "actual": "A new component 'C' (2f8b35b3…) is created that points at the SAME footprint row as QA-q7-R0603-import. The import then stores minimal.step as the pending source of that shared footprint, the client conversion fails and PATCHes it to status 'failed' — so the other part's 3D card now shows the red 'OCCT could not read the STEP file / Retry conversion' state (it was 'missing' before). Nothing in the UI says a footprint was reused. The same path means a re-imported archive with a different/broken STEP silently replaces the 3D model of every part sharing that footprint; when the import resolves to an existing part (reused:true) the STEP is re-converted and re-uploaded anyway (POST …/model 201 on the 3rd LM324N import).",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/056-import-kicad-with-step.png",
+    "shots/q6/dark/059-c-3d-failed-after-retry.png"
+   ],
+   "network": [
+    "POST /api/modules/library/imports/kicad/zip → 201 (component C, footprintId 3c416239…)",
+    "GET …/footprints/3c416239…/model/source → 200",
+    "PATCH …/footprints/3c416239…/model → 200 (status failed)",
+    "GET …/footprints/3c416239…/model/meta → {status:'failed', sourceFilename:'minimal.step', errorMessage:'OCCT could not read the STEP file'}",
+    "components?q=… → C and QA-q7-R0603-import both footprintId 3c416239-8f14-45c3-98d0-c2033c168cf9"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/backend/import/commit-kicad.ts",
+    "line": 197,
+    "note": "findExistingFootprintId reuses any footprint with same name+sourceHash, even if owned by another component"
+   },
+   {
+    "path": "src/modules/library/backend/import/commit-kicad-zip.ts",
+    "line": 627,
+    "note": "persistPendingSourceStep runs on the (possibly shared / reused) footprint regardless of result.reused"
+   },
+   {
+    "path": "src/modules/library/frontend/three-d/model-conversion.ts",
+    "line": 86,
+    "note": "markPendingModelConversionFailed PATCHes the shared footprint to failed"
+   }
+  ],
+  "suggestedFix": "Only attach/replace a 3D model on a footprint that the new component exclusively owns (or that has no model yet); when reusing a footprint that already has a model, skip persistPendingSourceStep and surface 'footprint reused from <part>' in the import result.",
+  "fixScope": "backend-needed",
+  "estimate": "M",
+  "dedupeKey": "library.import:footprint-dedupe:overwrites-shared-model",
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Confirmed from live state + code: component 'C' (from kicad-with-step.zip) and QA-q7-R0603-import both point at footprint 3c416239-8f14-45c3-98d0-c2033c168cf9; its model meta is {status:'failed', sourceFilename:'minimal.step', errorMessage:'OCCT could not read the STEP file'}, so q7's part now shows the failed 3D state from q6's import. commit-kicad.ts:197 findExistingFootprintId reuses any footprint with the same hash/name regardless of owner, and commit-kicad-zip.ts:627 persistPendingSourceStep deletes/replaces that footprint's model row unconditionally (also when result.reused). Nothing in the UI mentions reuse. Related to Q6-024 (same persistPendingSourceStep replace-before-success). S2 kept.",
+   "evidence": [
+    "GET /components/2f8b35b3… and /ab68b38d… → footprintId 3c416239… for both",
+    "GET /footprints/3c416239…/model/meta → status failed, minimal.step"
+   ]
+  }
+ },
+ {
+  "id": "Q6-021",
+  "knownRef": null,
+  "area": "library.import",
+  "title": "Import warnings are never visible: the 'Imported with warnings' notice is replaced by 3D-conversion notices within milliseconds and '+N more' can't be opened",
+  "category": "error-handling",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B, Library → Import library… → fixtures/OP07CD.zip (or kicad-with-step.zip)",
+   "Watch the top-right notice (a MutationObserver on [role=status] records every text)"
+  ],
+  "expected": "Import warnings (e.g. '3D model reference … was not found', 'model associated by filename') stay visible until dismissed and the full list can be reviewed; progress/success notices don't overwrite them.",
+  "actual": "Recorded sequence for OP07CD.zip: t=89254ms 'Imported with warnings — 3D model was associated by symbol/archive filename…' → t=89257 (3 ms later) 'Converting 3D model' → 'Uploading GLB…' → '3D model ready / Ready'. For kicad-with-step.zip: 'Imported with warnings — 3D model reference C_0603_1608Metric.step was not found in the import payload +3 more' → 90 ms later '3D model conversion failed'. There is a single notice slot, so the warnings are overwritten before a human can read them; the other 3 warnings are only a '+3 more' count with no way to view them, and the part's detail page shows nothing about warnings. Progress ('Converting 3D model') uses the success (green) variant; everything auto-dismisses after 5 s. The import also jumps straight to the detail page, so the list context is lost.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/053-import-op07cd.png",
+    "shots/q6/dark/056-import-kicad-with-step.png"
+   ],
+   "console": [
+    "window.__notices = [{t:'status: Imported with warnings3D model was associated by symbol/archive filename…', at:89254},{t:'status: Converting 3D modelConverting 3D model...', at:89257},{t:'status: Converting 3D modelUploading GLB...', at:89438},{t:'status: 3D model readyReady', at:89445}]",
+    "kicad-with-step: [{'Imported with warnings3D model reference C_0603_1608Metric.step was not found in the import payload +3 more', at:308976},{'3D model conversion failedOCCT could not read the STEP file', at:309067}]",
+    "light (LM324N.zip import): 'Imported with warnings — 3D model was associated by symbol/archive filename…' t=648383 → 'Converting 3D model' t=648387 (4 ms later)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 347,
+    "note": "conversion onProgress calls setNotice and clobbers the warnings notice set at :378"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 378,
+    "note": "only warnings[0] + '+N more' shown"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 553,
+    "note": "notice auto-dismiss 5000 ms"
+   }
+  ],
+  "suggestedFix": "Keep import warnings in a persistent place (e.g. a dismissible 'Imported with N warnings' banner on the new part's detail page listing all warnings, reuse WarningsPanel from the wizard); use a separate progress indicator for 3D conversion (the 3D card already has one) instead of the shared notice slot.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.import:notice:warnings-overwritten",
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced by re-importing fixtures/OP07CD.zip with the notice spy: 'Imported with warnings — 3D model was associated by symbol/archive filename…' at t=698850 → 'Converting 3D model' at t=698852 (2 ms later) → 'Uploading GLB…' → '3D model ready'. Same with LM324N.zip (4 ms). Code Space.tsx:336-380: one notice slot; onProgress setNotice clobbers the warning; only warnings[0] + '+N more' is ever shown; 5 s auto-dismiss (:553); progress uses variant 'success'. No other surface lists import warnings. S2 kept (warnings are effectively never shown).",
+   "evidence": [
+    "shots/vq6/dark/017-import-op07cd-notice.png",
+    "__notices=[{Imported with warnings…,698850},{Converting 3D model,698852},{Uploading GLB…,699027},{3D model ready,699034}]"
+   ]
+  }
+ },
+ {
+  "id": "Q6-022",
+  "knownRef": null,
+  "area": "library.import",
+  "title": "Re-importing an archive silently creates a duplicate part with the same name, or re-converts the 3D model without saying the part already existed",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack B: 'LM324N' already exists (imported earlier from LM324N.zip)",
+   "Library → Import library… → fixtures/LM324N.zip",
+   "Search 'LM324'",
+   "Import LM324N.zip once more"
+  ],
+  "expected": "The user is told the part already exists ('Existing component opened' / 'Import as a copy?') and no duplicate row with an identical name appears.",
+  "actual": "First re-import → 201 Created, a second 'LM324N' (f0ab345c…) with its own footprint but the SAME symbol row; the list now has two identical 'LM324N' rows (only distinguishable by footprint id). The notice shown is just '3D model ready'. Second re-import → 200 reused, yet the user again only sees '3D model ready' (the 'Existing component opened' notice is suppressed whenever a STEP conversion runs) and the model is re-converted and re-uploaded.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/058-import-lm324n-reimport.png"
+   ],
+   "network": [
+    "POST /imports/kicad/zip → 201 (new LM324N f0ab345c…, footprint c8cdca5a…, symbolId f231856c… shared with existing LM324N 35721acb…)",
+    "POST /imports/kicad/zip → 200 (reused) then POST /footprints/c8cdca5a…/model → 201"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/backend/import/commit-kicad.ts",
+    "line": 262,
+    "note": "reuse only when BOTH symbol and footprint hashes match; otherwise a new same-named component is created"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 394,
+    "note": "'Existing component opened' only when !hasPendingModelConversion"
+   }
+  ],
+  "suggestedFix": "On import, detect an existing component with the same name/MPN and ask (open existing / import as copy / replace); when result.reused, show 'Existing component opened' and skip the model conversion.",
+  "fixScope": "backend-needed",
+  "estimate": "S",
+  "dedupeKey": "library.import:reimport:silent-duplicate",
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced the reused path: re-importing OP07CD.zip → POST /imports/kicad/zip 200 (reused, still one OP07CD row), then model/source GET and POST …/footprints/9d1e3971…/model 201 — the model is re-converted and re-uploaded; the user only sees warnings → '3D model ready', never 'Existing component opened' (Space.tsx:390 requires !hasPendingModelConversion and no warnings). Duplicate path confirmed from state: two 'LM324N' rows (35721acb…, f0ab345c…) share symbol f231856c… with different footprints; commit-kicad.ts:262 reuses only when BOTH hashes match. S3 kept.",
+   "evidence": [
+    "POST /imports/kicad/zip → 200; POST /footprints/9d1e3971…/model → 201",
+    "GET /components/35721acb… and f0ab345c… → same symbolId f231856c…, footprints ff4ccf37… vs c8cdca5a…"
+   ]
+  }
+ },
+ {
+  "id": "Q6-023",
+  "knownRef": null,
+  "area": "library.import",
+  "title": "KiCad footprints are stored Y-down in a Y-up board: every imported/core footprint is mirrored — confirmed in Gerber F.Cu (SOIC-8 pins numbered clockwise) and in the 3D view",
+  "category": "data",
+  "severity": "S1",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "B",
+  "designId": "3f9e4e24-dc31-4931-a8ed-f8cd6d1ec0f3",
+  "repro": [
+   "Stack B, Library → core 'NE555 Timer SOIC-8' (or imported OP07CD): footprint preview shows pad 1 bottom-left, pads 1→4 going UP the left side, 5 top-right, 8 bottom-right",
+   "GET /api/modules/library/components/openpcb.core.ic.ne555-soic-8/detail → pads 1..4 at (-2.475, -1.905…+1.905), 5..8 at (+2.475, +1.905…-1.905) = KiCad's raw Y-down coordinates, no negation",
+   "Open design '555 Timer LED Blinker' (3f9e4e24) → PCB: U1 shows pad 1 bottom-left with the silkscreen pin-1 triangle bottom-left ('Viewing Top')",
+   "3D tab → Top camera: the IC model's pin-1 dot is at the TOP-left of the body while the footprint's silk triangle is at the BOTTOM-left",
+   "POST /api/modules/designer/designs/3f9e4e24…/exports/gerber → F_Cu.gbr: %TO.P,U1,1% X-5.575 Y-1.905, U1,4 Y+1.905, U1,5 X-0.625 Y+1.905, U1,8 Y-1.905 (Gerber is Y-up); F_Silkscreen pin-1 triangle at (-5.7,-2.47…-2.8)"
+  ],
+  "expected": "Datasheet/KiCad top view of SOIC-8: pin 1 top-left, pins numbered counter-clockwise (1-4 down the left, 5-8 up the right). Imported .kicad_mod geometry (Y-down) must be negated into OpenPCB's Y-up board space (the PnP writer documents board space as Cartesian Y-up with no flip), exactly as the in-house IPC generator already does (QA-q7 QFN-16 preset: pin 1 top-left, CCW).",
+  "actual": "KiCad-derived footprints keep KiCad's Y-down coordinates, so in the Y-up board space and in the exported Gerber the land pattern is a vertical mirror image: SOIC-8 pins run clockwise from a bottom-left pin 1. A real IC placed on this copper has pins 1↔4, 2↔3, 5↔8, 6↔7 swapped; SOT-23 transistors get pins 1/2 swapped; polarised parts get their marks on the wrong side. The app itself exposes the contradiction: in 3D the (correctly-oriented) model's pin-1 dot sits over copper pad 4. IPC-generated/drawn footprints use the opposite (correct) convention, so a library mixes both handednesses. Same root cause as Q7-022 (reported S2 'needs PCB/Gerber verification') — this is that verification: the manufacturing output is affected, which makes it S1.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/light/040-pcb-555.png",
+    "shots/q6/dark/066-3d-555-top.png",
+    "shots/q6/dark/066b-3d-u1-pin1-dot-vs-silk-triangle.png",
+    "shots/q6/dark/065-pcb-555-compare.png",
+    "shots/q6/dark/067-op07cd-footprint-framing.png",
+    "shots/q6/light/020-dead-upload-step-view.png"
+   ],
+   "network": [
+    "GET /api/modules/library/components/openpcb.core.ic.ne555-soic-8/detail → pad1 centerMm {x:-2.475,y:-1.905}, pad5 {x:2.475,y:1.905}",
+    "GET …/components/3b59b251…(OP07CD)/detail → pad1 {x:-2.47,y:-1.905} (raw .kicad_mod value)",
+    "POST /api/modules/designer/designs/3f9e4e24-dc31-4931-a8ed-f8cd6d1ec0f3/exports/gerber → F_Cu: U1 p1 (-5.575,-1.905) p4 (-5.575,1.905) p5 (-0.625,1.905) p8 (-0.625,-1.905)"
+   ],
+   "console": []
+  },
+  "codeRefs": [
+   {
+    "path": "node_modules/@openpcb/kicad-import/dist/build-preview-models.js",
+    "line": 121,
+    "note": "footprint geometry copied without y negation (per Q7-022)"
+   },
+   {
+    "path": "src/modules/designer/backend/export/pnp/writer.ts",
+    "line": 19,
+    "note": "documents board space as Cartesian Y-up, no Y-flip at export"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 568,
+    "note": "3D places Z-up models correctly, so model and copper disagree"
+   }
+  ],
+  "suggestedFix": "Negate Y (and mirror arc sweep/pad & text rotation angles) when converting .kicad_mod into the normalized footprint in @openpcb/kicad-import, re-pack CoreLibrary footprints, and add a migration that flips already-imported KiCad-provenance footprints (and their placed instances' pad geometry). Add golden tests: SOIC-8 pin order CCW, SOT-23 pin 3 on top, CP_Elec '+' top-left; plus a Gerber regression test on a SOIC footprint.",
+  "fixScope": "shared-package",
+  "estimate": "L",
+  "dedupeKey": "library.import:kicad-mod:y-axis-mirrored",
+  "status": "duplicate",
+  "duplicateOf": "Q7-022",
+  "verification": {
+   "verdict": "duplicate",
+   "by": "vq6",
+   "reason": "Verified independently: POST /designs/3f9e4e24…/exports/gerber (stack B) → F_Cu.gbr (%MOMM, Y-up) U1 pads 1(-5.575,-1.905) 2(-5.575,-0.635) 3(-5.575,0.635) 4(-5.575,1.905) 5(-0.625,1.905) … 8(-0.625,-1.905): pins run clockwise viewed from the top on F.Cu, which no rotation can produce → mirrored land pattern in the manufacturing output. Library previews show the same (74HC00 pads 7/8 at the top; OP07CD pin 1 bottom-left with the model's pin-1 dot at the top). Same root cause and dedupeKey as Q7-022, which vq7 already confirmed at S1; this Gerber dump is additional evidence to attach there.",
+   "evidence": [
+    "shots/vq6/dark/010-detail-74hc00.png",
+    "shots/vq6/dark/015-op07cd-detail.png",
+    "POST /api/modules/designer/designs/3f9e4e24-dc31-4931-a8ed-f8cd6d1ec0f3/exports/gerber → F_Cu U1 p1 X-5575000Y-1905000, p4 X-5575000Y1905000, p5 X-625000Y1905000, p8 X-625000Y-1905000"
+   ]
+  }
+ },
+ {
+  "id": "Q6-024",
+  "knownRef": "K41",
+  "area": "library.detail",
+  "title": "Re-import destroys a part's working 3D model up front; if the GLB upload fails the swallowed PATCH leaves it stuck on 'Converting 3D model…' forever with no retry",
+  "category": "error-handling",
+  "severity": "S2",
+  "themes": [
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "B",
+  "designId": null,
+  "repro": [
+   "Stack B: LM324N (f0ab345c…, footprint c8cdca5a…) has a ready model (GET …/footprints/c8cdca5a…/model/meta → status ready, hasModel true)",
+   "Library → route '**/api/modules/library/footprints/*/model' → 500 (simulates a failed GLB upload + a failed status PATCH)",
+   "Import library… → fixtures/LM324N.zip (resolves to the existing part)",
+   "Unroute, reload, open LM324N → 3D model card"
+  ],
+  "expected": "The previous model is kept until a new GLB is uploaded; on failure the card shows an error with Retry (and the footprint row is marked failed even if the first PATCH fails).",
+  "actual": "POST /imports/kicad/zip → 200 immediately deletes the existing footprint_models row and writes status 'pending_client_conversion' (hasModel false). Client conversion runs, POST …/model → 500, PATCH …/model (mark failed) → 500 and is swallowed by `.catch(() => undefined)`. Notice sequence: 'Imported with warnings' → 4 ms later 'Converting 3D model' → 'Uploading GLB…' → '3D model conversion failed / Internal error'. After reload the server still reports pending_client_conversion; the card shows a permanent 'Converting 3D model…' box (checked after 12 s and after reload) with no Retry (canRetryConversion requires status failed) — the previously working model is gone. (Restored by Edit → Upload STEP with the extracted LM324N.step.) A non-JSON 500 on the upload would also surface the raw fallback 'Model upload failed (HTTP 500)'.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/light/022-import-upload-500.png",
+    "shots/q6/light/023-stuck-converting-after-reload.png"
+   ],
+   "network": [
+    "POST /api/modules/library/imports/kicad/zip → 200",
+    "POST /api/modules/library/footprints/c8cdca5a-17f7-4970-93d2-e8f78d9ef358/model → 500 (routed)",
+    "PATCH /api/modules/library/footprints/c8cdca5a-…/model → 500 (routed, swallowed)",
+    "GET …/c8cdca5a-…/model/meta after reload → {status:'pending_client_conversion', hasModel:false}"
+   ],
+   "console": [
+    "notice spy: 'Imported with warnings…' t=648383 → 'Converting 3D model' t=648387 → 'Uploading GLB…' t=648824 → '3D model conversion failed Internal error' t=648832"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/three-d/model-conversion.ts",
+    "line": 101,
+    "note": "markPendingModelConversionFailed: .catch(() => undefined) swallows the failed PATCH (K41)"
+   },
+   {
+    "path": "src/modules/library/frontend/three-d/model-conversion.ts",
+    "line": 154,
+    "note": "response.json().catch(() => null) → raw 'Model upload failed (HTTP n)' fallback"
+   },
+   {
+    "path": "src/modules/library/backend/import/commit-kicad-zip.ts",
+    "line": 396,
+    "note": "deletes the existing footprint_models row and inserts pending_client_conversion before any conversion succeeded"
+   },
+   {
+    "path": "src/modules/library/frontend/three-d/ThreeDComponentPreview.tsx",
+    "line": 290,
+    "note": "canRetryConversion only for status failed → pending state has no retry"
+   }
+  ],
+  "suggestedFix": "Backend: keep the existing ready GLB (store the new STEP as a candidate) until a new GLB is committed; treat pending_client_conversion older than N minutes as failed in /model/meta. Frontend: retry/queue the failed PATCH and surface it; offer 'Retry conversion' for stale pending states in ThreeDComponentPreview.",
+  "fixScope": "backend-needed",
+  "estimate": "M",
+  "dedupeKey": "library.detail:3d-model:stuck-pending-after-failed-upload",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced end-to-end on q6's LM324N (f0ab345c…, footprint c8cdca5a…, model ready): routed …/footprints/*/model → 500, Import library… → LM324N.zip: POST /imports/kicad/zip 200, POST …/model 500, PATCH …/model 500 (swallowed); notices 'Imported with warnings' → 'Converting 3D model' (3 ms) → 'Uploading GLB…' → '3D model conversion failed / Internal error'. After unroute + reload, meta = {status:'pending_client_conversion', hasModel:false} (the previously ready GLB is gone) and the card shows 'Converting 3D model…' after 12 s with no Retry. Restored afterwards via Edit → Upload STEP (LM324N.step, sha 5a15097a…) → status ready, same glbSha256 56c64007…. Code: commit-kicad-zip.ts:396 deletes the model row before conversion; model-conversion.ts:101 .catch(() => undefined); ThreeDComponentPreview.tsx:290 retry only for 'failed'. K41 confirmed. S2 kept.",
+   "evidence": [
+    "shots/vq6/dark/018-stuck-converting-after-reload.png",
+    "POST …/footprints/c8cdca5a…/model → 500; PATCH → 500 (routed)",
+    "GET …/c8cdca5a…/model/meta after reload → pending_client_conversion, hasModel false",
+    "restored: meta → ready, glbSha256 56c64007…"
+   ]
+  }
+ },
+ {
+  "id": "Q6-025",
+  "knownRef": null,
+  "area": "library.detail",
+  "title": "'Upload STEP' button in the 3D card's empty state does nothing (dead primary button)",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "B",
+  "designId": null,
+  "repro": [
+   "Stack B, Library → open a custom part without a 3D model (e.g. QA-q7-light-QFN16-preset, /model/meta status 'missing')",
+   "Without entering Edit, click the centred 'Upload STEP' button in the 3D model card"
+  ],
+  "expected": "Opens the STEP file chooser (entering edit mode if required), or the empty state says 'Click Edit to upload a STEP model'.",
+  "actual": "Nothing happens — no file chooser, no focus change, no message. The button (data-testid library-3d-upload-step) has no onClick and no file input; the working 'Upload STEP' label only exists in the card header while editing. In light theme the button is --primary #1a1a1d on the #08090a canvas well, so its shape is almost invisible.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/light/020-dead-upload-step-view.png",
+    "shots/q6/dark/063-missing-model-dead-upload.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/q6/light/020-dead-upload-step-view.png",
+     "x": 1056,
+     "y": 576,
+     "hex": "#1a1a1d",
+     "nearestToken": "--primary",
+     "deltaE": 1.0
+    },
+    {
+     "file": "shots/q6/light/020-dead-upload-step-view.png",
+     "x": 900,
+     "y": 576,
+     "hex": "#08090a",
+     "nearestToken": "--surface-canvas-well",
+     "deltaE": 0.0
+    }
+   ],
+   "console": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/three-d/ThreeDComponentPreview.tsx",
+    "line": 146,
+    "note": "<button data-testid='library-3d-upload-step'> without onClick"
+   },
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 331,
+    "note": "canUploadStep only while editing — the header label is the only real upload control"
+   }
+  ],
+  "suggestedFix": "Pass an onUpload callback into ThreeDComponentPreview/ThreeDPreviewStatePanel that triggers the same hidden file input as the header (entering edit mode first), or replace the button with helper text; use a secondary/outline style inside the dark well.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.detail:3d-card:dead-upload-step-button",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced: on QA-q7-light-QFN16-preset (no model) clicking the centred 'Upload STEP' (data-testid library-3d-upload-step) does nothing — no file chooser, no edit mode, 0 file inputs on the page. ThreeDComponentPreview.tsx:145-151 renders the button with no onClick. Light probe: button #1c1c1f (--primary) on #08090a well. S2 kept (dead primary action; workaround Edit → header Upload STEP).",
+   "evidence": [
+    "shots/vq6/dark/013-dead-upload-step.png",
+    "shots/vq6/light/002-dead-upload-step-in-well.png",
+    "probe 1060,558 #1c1c1f --primary; 1040,558 #08090a --surface-canvas-well"
+   ]
+  }
+ },
+ {
+  "id": "Q6-026",
+  "knownRef": null,
+  "area": "library.detail",
+  "title": "3D conversion failure UI is off-token and unhelpful: saturated red panel + big red Retry, message shown twice, 'OCCT' jargon, Retry offered for files that can never parse",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "B",
+  "designId": null,
+  "repro": [
+   "Stack B, Library → open part 'C' (imported from kicad-with-step.zip, model status failed) — or Edit a custom part → Upload STEP → fixtures/garbage.step / minimal.step",
+   "Look at the 3D model card; click Retry conversion",
+   "Upload a .txt via 'All files' (wrong extension)"
+  ],
+  "expected": "Token-based error state (status-danger text / soft bg, kit button), one message in user language ('This STEP file could not be read — it may be empty or corrupt'), Retry only when a retry can help, and 'Upload another STEP' as the recovery.",
+  "actual": "The card becomes a dark-red block (#340809, bg-red-950/70) with a 36px rounded-lg saturated #e7000b 'Retry conversion' button — identical in both themes and far outside the flat neutral kit. While editing, the same text also appears in a bordered error line above ('OCCT could not read the STEP file' twice). 'OCCT' is an internal library name. Retry re-runs the same conversion on the same bytes and fails again (minimal.step has an empty MANIFOLD_SOLID_BREP; garbage.step is plain text). Uploading a wrong extension shows 'Select a STEP file (.step or .stp).' above the still-red 'OCCT could not read…' panel, so two different errors are on screen at once.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/light/021-3d-failed-panel.png",
+    "shots/q6/dark/060-upload-garbage-step.png",
+    "shots/q6/dark/061-upload-wrong-ext.png",
+    "shots/q6/light/015-upload-minimal-step-card.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/q6/light/021-3d-failed-panel.png",
+     "x": 900,
+     "y": 450,
+     "hex": "#340809",
+     "nearestToken": "--primary",
+     "deltaE": 24.1
+    },
+    {
+     "file": "shots/q6/light/021-3d-failed-panel.png",
+     "x": 1092,
+     "y": 560,
+     "hex": "#e7000b",
+     "nearestToken": "--net-power",
+     "deltaE": 30.7
+    }
+   ],
+   "console": [
+    "notice spy (light): 'library-3d-upload-progress: Converting 3D model…' → 62 ms → 'library-3d-upload-error: OCCT could not read the STEP file' (garbage.step and minimal.step)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/three-d/ThreeDComponentPreview.tsx",
+    "line": 121,
+    "note": "bg-red-950/70 text-red-200 panel"
+   },
+   {
+    "path": "src/modules/library/frontend/three-d/ThreeDComponentPreview.tsx",
+    "line": 130,
+    "note": "h-9 rounded-lg bg-red-600 border-red-400 Retry button"
+   },
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 716,
+    "note": "second copy of the error in the card header area"
+   }
+  ],
+  "suggestedFix": "Restyle the failed state with tokens (text-status-danger on bg-surface-canvas-well or status-danger-soft, kit Button size sm), show the message once, map converter errors to user copy, and only show Retry when the stored source might succeed (e.g. network/upload failures); offer 'Upload a different STEP' instead.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.detail:3d-card:failed-state-offtoken-copy",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced on part 'C' (failed model): panel bg #340809 (bg-red-950/70), Retry button #e7000b (bg-red-600) 36 px tall; message 'OCCT could not read the STEP file'. Correction: the button radius computes to 2px (rounded-lg is flattened by the D1 radius remap), not a rounded pill. Red palette is not part of the D1 slate/violet remap, so this is off-token on a redesigned target screen (Library detail). Retry re-runs the same bytes (minimal.step can never parse). S3 kept.",
+   "evidence": [
+    "shots/vq6/dark/014-3d-failed-panel.png",
+    "probe 780,391 #340809; 1040,570 #e7000b; button h=36 radius=2px"
+   ]
+  }
+ },
+ {
+  "id": "Q6-027",
+  "knownRef": null,
+  "area": "library.detail",
+  "title": "3D upload error/status is never reset: it survives Cancel, and leaks onto a different part when the detail page switches component",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "B",
+  "designId": null,
+  "repro": [
+   "Stack B, open custom part LM324N → Edit → 3D card 'Upload STEP' → choose a non-STEP file (or garbage.step)",
+   "Error line appears; click Cancel (leave edit mode)",
+   "While the detail page is open, navigate to another part via a component link (e.g. Assistant @component mention / ComponentResultCard, which calls navigateToModule('library', undefined, {componentId}))"
+  ],
+  "expected": "Leaving edit mode clears upload status/errors; opening another component shows that component's own state.",
+  "actual": "After Cancel the red 'Select a STEP file (.step or .stp).' line stays in view mode (no Upload control to act on it). Navigating to OP07CD and then to QA-q7-light-QFN16-preset keeps showing the same LM324N error; earlier the 74HC00 copy's error 'Cannot update built-in components (74HC00…)' appeared on the QFN16 part. After a successful upload a stale 'Ready' label also stays under the header until the page unmounts.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/light/017-error-after-cancel.png",
+    "shots/q6/light/018-stale-upload-error-other-part.png",
+    "shots/q6/light/020-dead-upload-step-view.png",
+    "shots/q6/dark/064-upload-error-persists-after-cancel.png",
+    "shots/q6/dark/063-missing-model-dead-upload.png"
+   ],
+   "console": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 84,
+    "note": "uploadStatus/uploadError state not reset on componentId change"
+   },
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 175,
+    "note": "cancelEdit clears saveError only"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 570,
+    "note": "<ComponentDetailPage> not keyed by componentId; navRoute effect (line 194) swaps the id in place"
+   }
+  ],
+  "suggestedFix": "Key ComponentDetailPage by componentId in Space.tsx (key={detailComponentId}) and clear uploadError/uploadStatus in cancelEdit and after success (fade 'Ready' → idle).",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "library.detail:3d-card:stale-upload-error",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced (light, my clone): Edit → Upload STEP → sample.txt → 'Select a STEP file (.step or .stp).'; Cancel → edit mode off but the error stays; navigateToModule('library', …, {componentId: OP07CD}) → OP07CD page still shows the same error. uploadStatus/uploadError (ComponentDetailPage.tsx:84-85) are never reset on componentId change or in cancelEdit (:175-178); Space.tsx:571 does not key the page by componentId. S3 kept.",
+   "evidence": [
+    "shots/vq6/light/004-upload-error-after-cancel.png",
+    "shots/vq6/light/005-stale-upload-error-other-part.png"
+   ]
+  }
+ },
+ {
+  "id": "Q6-028",
+  "knownRef": null,
+  "area": "library.detail",
+  "title": "Library 3D preview shows most models lying on their side (Z-up models in a Y-up viewer)",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "stack": "B",
+  "designId": null,
+  "repro": [
+   "Stack B, Library → core 'Resistor' → detail 3D model card (default Iso camera)",
+   "Pick footprint option 2512 (6332 metric)",
+   "Open OP07CD or the 74HC00 copy (SOIC)"
+  ],
+  "expected": "Parts shown resting on the board plane (top face up), as in the designer 3D view.",
+  "actual": "The 0603/2512 chip resistors stand on their long edge with the dark resistive top facing sideways; SOIC-8/14 bodies stand upright with the leads sticking out horizontally. GLB bbox check: core SOIC-14 GLB has its 1.75 mm height on Z, OP07CD's root node maps height to Z — the library canvas uses a Y-up camera with no Z-up→Y-up group rotation (the designer's Board3DCanvas wraps models in rotation [-π/2,0,0]). The imported LM324N GLB happens to be Y-up and looks upright here, so parts disagree with each other too. There is also no reset-view/fit control.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/light/033-option-2512.png",
+    "shots/q6/light/008-detail-resistor-scrolled.png",
+    "shots/q6/dark/067-op07cd-footprint-framing.png",
+    "shots/q6/light/010-edit-mode.png"
+   ],
+   "network": [
+    "GET /footprints/openpcb.core.footprint.package.soic-14-3-9x8-7mm-p1-27mm/model → mesh extents 6 × 8.7 × 1.75 (Z = height)",
+    "GET /footprints/9d1e3971…(OP07CD)/model → root matrix maps height to Z",
+    "GET /footprints/c8cdca5a…(LM324N)/model → height on Y (8.26)"
+   ],
+   "console": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/three-d/ThreeDComponentPreview.tsx",
+    "line": 174,
+    "note": "camera position [3,3,3], default Y-up, no Z-up→Y-up group"
+   },
+   {
+    "path": "src/modules/designer/frontend/three-d/Board3DCanvas.tsx",
+    "line": 568,
+    "note": "designer wraps Z-up content in rotation [-Math.PI/2,0,0]"
+   }
+  ],
+  "suggestedFix": "Wrap <ComponentGLB> in the same Z-up→Y-up group as Board3DCanvas (or set camera.up=[0,0,1] and position the orbit target accordingly); normalise imported GLBs to the same convention at conversion time; add a 'Reset view' button.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.detail:3d-preview:z-up-models-on-side",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced: 74HC00 and OP07CD 3D cards show the SOIC body standing on its edge with the leads sticking out sideways. ThreeDComponentPreview.tsx:174 uses a default Y-up camera [3,3,3] with no Z-up→Y-up group, while Board3DCanvas.tsx:568 wraps content in rotation [-π/2,0,0]. Not the designer orientation rule from memory (models must not be re-rotated per part) — this is the missing world-axis conversion in the library viewer only. S3 kept; codeRef line corrected 162→174.",
+   "evidence": [
+    "shots/vq6/dark/010-detail-74hc00.png",
+    "shots/vq6/dark/015-op07cd-detail.png"
+   ]
+  }
+ },
+ {
+  "id": "Q6-029",
+  "knownRef": null,
+  "area": "library.detail",
+  "title": "Footprint previews are framed around invisible F.Fab text, so imported footprints sit off-centre and small",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "B",
+  "designId": null,
+  "repro": [
+   "Stack B, Library → open OP07CD (imported from fixtures/OP07CD.zip) → Footprint card; also LM324N",
+   "Compare footprint centre with canvas centre"
+  ],
+  "expected": "The visible geometry (pads + visible graphics) is centred and fills the canvas like core parts.",
+  "actual": "OP07CD's pads sit ~150 px left of centre with large empty space on the right; LM324N's DIP-14 is ~80 px left of centre (pads x 296–397 in a 105–750 canvas). The .kicad_mod places the value text at (7.87, 3.537) on F.Fab — the preview hides F.Fab but still includes its labels in the fit bounds. Same in the preview pane thumbnail.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/dark/067-op07cd-footprint-framing.png",
+    "shots/q6/light/023-stuck-converting-after-reload.png",
+    "shots/q6/light/015-upload-minimal-step-card.png"
+   ],
+   "console": []
+  },
+  "codeRefs": [
+   {
+    "path": "node_modules/@openpcb/r3f-eda-canvas/dist/preview/FootprintPreviewCanvas.js",
+    "line": 22,
+    "note": "fitToGeometryOnly → footprintGeometryBounds; default footprintVisualBounds includes labels"
+   },
+   {
+    "path": "src/modules/library/frontend/components/LibraryPreviewPane.tsx",
+    "line": 144,
+    "note": "FootprintPreviewCanvas without fitToGeometryOnly"
+   },
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 623,
+    "note": "same (also :636, :772)"
+   }
+  ],
+  "suggestedFix": "Pass fitToGeometryOnly to every library FootprintPreviewCanvas (LibraryPreviewPane.tsx:144, ComponentDetailPage.tsx:623/636/772, LibraryCard if applicable); optionally make the package exclude labels on PREVIEW_HIDDEN_LAYERS from visual bounds.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.preview:footprint:fit-includes-hidden-fab-text",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced: OP07CD footprint card (canvas x 105–750) draws pads at x≈158–390, i.e. ~150 px left of centre. FootprintPreviewCanvas fits to footprintVisualBounds (labels incl. hidden F.Fab text) unless fitToGeometryOnly is passed (dist/preview/FootprintPreviewCanvas.js:22-25); no library caller passes it. Fix is in-repo: pass fitToGeometryOnly at LibraryPreviewPane.tsx:144 and ComponentDetailPage.tsx:623/636/772 (the package already supports it). fixScope changed shared-package → frontend. S3 kept.",
+   "evidence": [
+    "shots/vq6/dark/015-op07cd-detail.png"
+   ]
+  }
+ },
+ {
+  "id": "Q6-030",
+  "knownRef": null,
+  "area": "library.browse",
+  "title": "At 1100×720 (Electron minimum) the Library table is squeezed to 420 px: names collapse to one character and column headers overlap",
+  "category": "visual",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1100x720"
+  ],
+  "stack": "B",
+  "designId": null,
+  "repro": [
+   "Stack B, resize window to 1100×720",
+   "Library, Table view (facet rail and preview pane visible — they can't be hidden)"
+  ],
+  "expected": "Part names stay readable (the name is the primary column); the preview pane or facet rail collapses, or the table scrolls horizontally.",
+  "actual": "Facet rail (220 px) + preview pane (380 px) are fixed width, leaving the table 420 px. Measured grid columns: '24px 13.4px 90px 10.6px 60px 44px 110px' — NAME is 13 px ('7…', 'A…', 'Q…'), PACKAGE 10 px ('s…'); the NAME and FAMILY header labels overprint ('NAMEILY'). Rows of QA-* parts are indistinguishable. The Family, Mount, Pins and Source columns keep their fixed widths.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/light/030-library-table-1100.png",
+    "shots/q6/dark/071-library-table-1100.png"
+   ],
+   "census": "census/library-table-light-1100.json",
+   "console": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/components/LibraryTable.tsx",
+    "line": 35,
+    "note": "COLS = '24px 1.4fr 90px 1.1fr 60px 44px 110px' — fr columns get the leftovers"
+   },
+   {
+    "path": "src/modules/library/frontend/components/LibraryPreviewPane.tsx",
+    "line": 82,
+    "note": "w-[380px] shrink-0"
+   },
+   {
+    "path": "src/modules/library/frontend/components/FacetSidebar.tsx",
+    "line": 63,
+    "note": "w-[220px] shrink-0"
+   }
+  ],
+  "suggestedFix": "Give NAME a minmax(180px,1.4fr) track and let Package/Source drop below ~1280 px, make the preview pane collapsible/resizable (or narrower, e.g. 300 px, under 1280 px) and allow the facet rail to collapse; fall back to overflow-x:auto on the table.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.browse:table:squeezed-at-1100",
+  "status": "duplicate",
+  "duplicateOf": "Q10-017",
+  "verification": {
+   "verdict": "duplicate",
+   "by": "vq6",
+   "reason": "Reproduced at 1100×720 (light): row grid-template-columns '24px 13.4375px 90px 10.5625px 60px 44px 110px', Name cell 13 px. Identical to Q10-017 (already verified S2 by vq10, same measurement and fix).",
+   "evidence": [
+    "shots/vq6/light/006-library-table-1100.png",
+    "gridTemplateColumns '24px 13.4375px 90px 10.5625px 60px 44px 110px'"
+   ]
+  }
+ },
+ {
+  "id": "Q6-031",
+  "knownRef": null,
+  "area": "library.detail",
+  "title": "Unsaved part edits are discarded silently on Back or rail navigation (no dirty guard)",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "B",
+  "designId": null,
+  "repro": [
+   "Stack B, open custom part QA-Q6-74HC00-edited → Edit",
+   "Change Name to 'QA-Q6-74HC00-unsaved-change' and type a tag",
+   "Click Back (or a rail item)",
+   "Reopen the part"
+  ],
+  "expected": "A 'Discard changes?' confirmation (kit dialog) as the part wizard already does on Esc when dirty; Esc cancels edit mode explicitly.",
+  "actual": "The page closes immediately, no prompt (dialog spy: 0 confirm calls, no [role=dialog]); the edits are lost — the part reopens with the old name, not in edit mode. Esc does nothing in edit mode.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/light/011-tag-typing.png"
+   ],
+   "console": [
+    "dialog spy: {prompt:0, confirm:0, alert:0} after Back with dirty form"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 576,
+    "note": "onBack={() => setDetailComponentId(null)} with no dirty check"
+   },
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 175,
+    "note": "edit drafts live only in component state"
+   }
+  ],
+  "suggestedFix": "Track dirty = draft ≠ saved; intercept Back/rail navigation with the kit ConfirmDialog; bind Esc to Cancel and Cmd/Ctrl+Enter to Save while editing.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.detail:edit:no-dirty-guard",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced: my clone → Edit → Name 'QA-vq6-unsaved-change'; Esc does nothing (still editing); Back → list immediately, no dialog (no [role=dialog], spy confirm=0), the part keeps its saved name. Space.tsx:576 onBack has no dirty check. S3 kept.",
+   "evidence": [
+    "Esc: editing=true; after Back: dlg=false, spy={confirm:0}, API name unchanged 'QA-vq6-LM358-edited'"
+   ]
+  }
+ },
+ {
+  "id": "Q6-032",
+  "knownRef": null,
+  "area": "library.browse",
+  "title": "Facet options reorder and vanish as you tick them (sorted by live counts), so the next click lands on a different option",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "B",
+  "designId": null,
+  "repro": [
+   "Stack B, Library, no filters: Source order is Local Library 47 / OpenPCB Core Library 17 / User 3; Family order passive, ic, connector, diode, transistor, bjt",
+   "Tick Family › ic",
+   "Tick Source › OpenPCB Core Library"
+  ],
+  "expected": "Stable option order while a facet session is active (checked options pinned, zero-count options kept but disabled), so users can tick several options in a row.",
+  "actual": "After ticking, 'OpenPCB Core Library' jumps to the top and 'User' disappears; Family re-sorts to connector 4, ic 4, diode 3, passive 3, transistor 3, bjt 2 — the row under the pointer changes after each click. The header also reads '4 parts · 2 sources' while only one source is selected (it counts facet options, not sources in the result).",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/light/002-library-table-start.png",
+    "shots/q6/light/004-facets-chips.png"
+   ],
+   "console": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/backend/queries.ts",
+    "line": 1829,
+    "note": "facet options sorted by count desc on every request"
+   },
+   {
+    "path": "src/modules/library/frontend/components/FacetSidebar.tsx",
+    "line": 172,
+    "note": "zero-count styling exists but zero options are dropped upstream"
+   },
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 565,
+    "note": "sourceCount = facets.source.length"
+   }
+  ],
+  "suggestedFix": "Keep a stable sort (alphabetical, or the unfiltered order captured on first render) and keep checked + zero-count options visible (disabled); compute the header 'sources' from the result rows.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.browse:facets:options-reorder-on-toggle",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Confirmed via the facets API the UI renders: unfiltered Source [Local Library 48, OpenPCB Core Library 17, User 3]; with tags=ic 'User' disappears ([Local 4, Core 4]); with ic + source:openpcb.core Family re-sorts to connector 4, ic 4, diode 3, passive 3… (queries.ts:1829 sorts by count desc on every request; zero-count options are dropped). Header shows '2 sources' with one source selected (Space.tsx:565 = facets.source.length). S3 kept.",
+   "evidence": [
+    "GET /facets?tags=ic → source [Local Library 4, OpenPCB Core Library 4]",
+    "GET /facets?tags=ic,source:openpcb.core → family [connector 4, ic 4, diode 3, passive 3, …]"
+   ]
+  }
+ },
+ {
+  "id": "Q6-033",
+  "knownRef": "K36",
+  "area": "library.browse",
+  "title": "Library table/preview use 9.5px source badges and near-invisible facet counts (text-disabled, ≈1.9:1 contrast)",
+  "category": "a11y",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "stack": "B",
+  "designId": null,
+  "repro": [
+   "Stack B, Library Table view",
+   "Run DOM census; pixel-probe the facet counts, SOURCE column and the tag-suggestion count in Edit mode"
+  ],
+  "expected": "Text ≥10px; informational numbers at ≥4.5:1 (or ≥3:1 for large/secondary) using text-tertiary/secondary tokens — disabled grey only for disabled items.",
+  "actual": "Census: 29 row SOURCE badges ('core', 'user', 'kicad') + the preview-pane header badge render at 9.5px (K36 confirmed for LibraryTable.tsx:227 and LibraryPreviewPane.tsx:95). Facet counts use --text-disabled: #b4b4b9 on #f7f7f8 = 1.93:1 (light), #505055 on #111113 = 2.35:1 (dark). SOURCE text #8e8e95 on #f2f2f3 = 2.9:1 (light). '60 of 67' #94949a on #f2f2f3 = 2.7:1. Tag suggestion count #b1b1b6 on #e2e2e5 = 1.65:1.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/light/002-library-table-start.png",
+    "shots/q6/dark/050-library-table-start.png",
+    "shots/q6/light/012-tag-suggestions.png"
+   ],
+   "census": "census/library-table-light-1100.json",
+   "pixelProbes": [
+    {
+     "file": "shots/q6/light/002-library-table-start.png",
+     "x": 285,
+     "y": 71,
+     "hex": "#b4b4b9",
+     "nearestToken": "--text-disabled",
+     "deltaE": 2.0
+    },
+    {
+     "file": "shots/q6/dark/050-library-table-start.png",
+     "x": 285,
+     "y": 71,
+     "hex": "#505055",
+     "nearestToken": "--text-disabled",
+     "deltaE": 1.0
+    },
+    {
+     "file": "shots/q6/light/012-tag-suggestions.png",
+     "x": 1388,
+     "y": 297,
+     "hex": "#b1b1b6",
+     "nearestToken": "--text-disabled",
+     "deltaE": 2.5
+    }
+   ],
+   "console": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/components/LibraryTable.tsx",
+    "line": 227,
+    "note": "text-[9.5px] source badge"
+   },
+   {
+    "path": "src/modules/library/frontend/components/LibraryPreviewPane.tsx",
+    "line": 95,
+    "note": "text-[9.5px] source badge"
+   },
+   {
+    "path": "src/modules/library/frontend/components/FacetSidebar.tsx",
+    "line": 174,
+    "note": "counts use text-text-disabled"
+   }
+  ],
+  "suggestedFix": "Use text-2xs (10px) for the badges and text-text-tertiary for facet/suggestion counts and the 'N of M' strip.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "library.browse:text:sub10px-and-low-contrast-counts",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Confirmed: LibraryTable.tsx:227 and LibraryPreviewPane.tsx:95 use text-[9.5px] (K36). Contrast from fresh screenshots: facet count #b2b2b7 on #f7f7f8 = 1.97:1 (light), ≈2.2:1 in dark (#4c4c51 AA on #111113; token #55555a); SOURCE 'CORE' #8e8e95 on #e2e2e5 = 2.5:1; '60 of 68' #8d8d94 on #f2f2f3 = 2.95:1. FacetSidebar.tsx:173-174 uses text-text-disabled for live counts. Overlaps the cross-cutting sub-10px item Q11-014 (raw) for the badge part only. S3 kept.",
+   "evidence": [
+    "shots/vq6/light/001-library-table.png",
+    "shots/vq6/dark/008-preview-detail-500.png",
+    "light: facet 1.97:1, SOURCE 2.52:1, strip 2.95:1"
+   ]
+  }
+ },
+ {
+  "id": "Q6-034",
+  "knownRef": null,
+  "area": "library.detail",
+  "title": "Light theme: messages inside the always-dark canvas wells use light-theme tokens (dark text, light borders) — low contrast, glaring boxes",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "B",
+  "designId": null,
+  "repro": [
+   "Stack B, light theme, open a part whose 3D model is pending ('Converting 3D model…') or missing, or a preview whose detail fails",
+   "Pixel-probe the message box inside the canvas well"
+  ],
+  "expected": "Well overlays use the dark palette (the well is #08090a in both themes) — e.g. a canvas-overlay token set.",
+  "actual": "'Converting 3D model…' / 'Loading 3D model metadata…' render text #55555c (light --text-secondary) on #08090a = 2.7:1 inside a bright #cfcfd4 (light --border-control) outline box; the empty-state 'Upload STEP' uses light --primary #1a1a1d on #08090a (invisible edge). The preview-pane canvases are a third black (#131313, hardcoded in the package) next to grid thumbnails on #08090a.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/light/023-stuck-converting-after-reload.png",
+    "shots/q6/light/020-dead-upload-step-view.png",
+    "shots/q6/light/002-library-table-start.png",
+    "shots/q6/light/003-grid.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/q6/light/023-stuck-converting-after-reload.png",
+     "x": 1023,
+     "y": 406,
+     "hex": "#cfcfd4",
+     "nearestToken": "--border-control",
+     "deltaE": 0.0
+    },
+    {
+     "file": "shots/q6/light/002-library-table-start.png",
+     "x": 1100,
+     "y": 200,
+     "hex": "#131313",
+     "nearestToken": "--text-strong",
+     "deltaE": 2.0
+    },
+    {
+     "file": "shots/q6/light/003-grid.png",
+     "x": 350,
+     "y": 150,
+     "hex": "#08090a",
+     "nearestToken": "--surface-canvas-well",
+     "deltaE": 0.0
+    }
+   ],
+   "console": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/three-d/ThreeDComponentPreview.tsx",
+    "line": 86,
+    "note": "LoadingMessage: border-border-control text-text-secondary on bg-surface-canvas-well"
+   },
+   {
+    "path": "src/modules/library/frontend/three-d/ThreeDComponentPreview.tsx",
+    "line": 142,
+    "note": "empty state text-text-secondary + bg-primary button in the well"
+   },
+   {
+    "path": "node_modules/@openpcb/r3f-eda-canvas/dist/preview/FootprintPreviewCanvas.js",
+    "line": 17,
+    "note": "backgroundColor = '#131313' default"
+   }
+  ],
+  "suggestedFix": "Add canvas-overlay tokens (e.g. --canvas-overlay-text/-border) that stay dark-palette in both themes and use them for every message inside wells; pass backgroundColor=var(--surface-canvas-well) to the preview canvases.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "library.detail:canvas-well:light-theme-overlay-tokens",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced (light): the 3D well is #08090a (intended — wells are theme-invariant dark per D1, cf. rejected Q1-017/Q3-031) but its content uses light tokens: 'Upload STEP' is --primary #1c1c1f on #08090a (probe ΔE 0 for both), and LoadingMessage ('Converting 3D model…'/'Loading 3D model metadata…') uses text-text-secondary + border-border-control (ThreeDComponentPreview.tsx:85-92). The defect is the overlay tokens, not the dark well. S3 kept.",
+   "evidence": [
+    "shots/vq6/light/002-dead-upload-step-in-well.png",
+    "probe 1060,558 #1c1c1f --primary; 1040,558 #08090a --surface-canvas-well"
+   ]
+  }
+ },
+ {
+  "id": "Q6-035",
+  "knownRef": null,
+  "area": "library.browse",
+  "title": "Library notice toast sits on top of the header actions (Import library…, New part) for 5 s and uses a drop shadow",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "B",
+  "designId": null,
+  "repro": [
+   "Stack B, Library → Import library… → choose fixtures/sample.txt (or any import)",
+   "Look at the top-right header while the notice is shown"
+  ],
+  "expected": "Notices don't cover primary controls (anchor below the 34px header or bottom-right) and follow the flat, shadow-less kit.",
+  "actual": "The notice is fixed at top:12px/right:12px, z-50, directly over 'Import library…' and 'New part' (only the right edge of the buttons remains visible), so the user can't retry the import until it auto-dismisses; it carries shadow-lg (gradient #d9d9da→#e8e8e8 below the box in light). The error notice duplicates the inline list error ('ZIP import failed / file must have a .zip extension' + red line in the table).",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/light/027-import-sample-txt.png",
+    "shots/q6/dark/051-import-sample-txt.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/q6/light/027-import-sample-txt.png",
+     "x": 1243,
+     "y": 38,
+     "hex": "#c2402f",
+     "nearestToken": "--status-danger",
+     "deltaE": 0.0
+    },
+    {
+     "file": "shots/q6/light/027-import-sample-txt.png",
+     "x": 1300,
+     "y": 62,
+     "hex": "#ddddde",
+     "nearestToken": "--divider",
+     "deltaE": 1.0
+    }
+   ],
+   "console": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/Space.tsx",
+    "line": 131,
+    "note": "fixed right-3 top-3 z-50 … shadow-lg"
+   }
+  ],
+  "suggestedFix": "Move the viewport to top-[46px] (below the header) or bottom-right, drop shadow-lg for a 1px border, and don't duplicate the error inline + toast (see Q6-003).",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "library.browse:notice:covers-header-actions",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced in both themes: the notice box sits at (1243,12) 185×49 over 'Import library…' (x 1219) and 'New part'; computed box-shadow includes rgba(0,0,0,.1) 0 10px 15px -3px (shadow-lg); the same error is duplicated as the inline list line (Q6-003). Correction: the notice has a × dismiss button, so the header buttons are reachable after dismissing — not blocked for the full 5 s. S3 kept.",
+   "evidence": [
+    "shots/vq6/dark/016-import-sample-txt.png",
+    "shots/vq6/light/007-import-notice-covers-header.png",
+    "boxShadow … rgba(0,0,0,0.1) 0px 10px 15px -3px, rgba(0,0,0,0.1) 0px 4px 6px -4px"
+   ]
+  }
+ },
+ {
+  "id": "Q6-036",
+  "knownRef": null,
+  "area": "library.detail",
+  "title": "Every STEP conversion floods the console with ~200 'GLTFExporter: Use MeshStandardMaterial…' warnings",
+  "category": "console",
+  "severity": "S4",
+  "themes": [
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "B",
+  "designId": null,
+  "repro": [
+   "Stack B, custom part LM324N → Edit → Upload STEP → extracted LM324N.step",
+   "console warning"
+  ],
+  "expected": "No warnings for a successful conversion.",
+  "actual": "198 identical warnings 'GLTFExporter: Use MeshStandardMaterial or MeshBasicMaterial for best results.' for one conversion (one per mesh), burying real warnings.",
+  "evidence": {
+   "screenshots": [],
+   "console": [
+    "198 × [WARNING] GLTFExporter: Use MeshStandardMaterial or MeshBasicMaterial for best results."
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "node_modules/@openpcb/step-to-glb/dist/category-materials.js",
+    "line": 52,
+    "note": "new MeshLambertMaterial(...) — GLTFExporter warns once per mesh"
+   },
+   {
+    "path": "src/modules/library/frontend/three-d/step-to-glb.ts",
+    "line": 1,
+    "note": "shim over @openpcb/step-to-glb"
+   }
+  ],
+  "suggestedFix": "In @openpcb/step-to-glb category-materials.js use MeshStandardMaterial (roughness/metalness equivalents) instead of MeshLambertMaterial, then re-pin the package.",
+  "fixScope": "shared-package",
+  "estimate": "XS",
+  "dedupeKey": "library.3d:step-to-glb:gltfexporter-warning-flood",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced: one LM324N.step conversion (restore upload) logged 192× 'GLTFExporter: Use MeshStandardMaterial or MeshBasicMaterial for best results.' Cause located: @openpcb/step-to-glb builds MeshLambertMaterial (dist/category-materials.js:52). S4 kept.",
+   "evidence": [
+    "console warning: 192 × GLTFExporter: Use MeshStandardMaterial …"
+   ]
+  }
+ },
+ {
+  "id": "Q6-037",
+  "knownRef": null,
+  "area": "library.detail",
+  "title": "Detail page copy nits: fullscreen title upper-cases identifiers; missing part shows a bare 'Component detail not found' box",
+  "category": "copy",
+  "severity": "S4",
+  "themes": [
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "stack": "B",
+  "designId": null,
+  "repro": [
+   "Stack B, core Resistor → Footprint card → 'Open footprint full screen'",
+   "Open a component id that no longer exists (e.g. a chat link to a deleted part: navigateToModule('library', undefined, {componentId:'<deleted>'}))"
+  ],
+  "expected": "Identifiers keep their case ('R_0603_1608Metric — Footprint'); a missing part says it was deleted/not found with a Back to Library action.",
+  "actual": "Fullscreen header reads 'R_0603_1608METRIC — FOOTPRINT' (uppercase transform changes the real footprint name). Missing part: header 'Component', red bordered box 'Component detail not found' and nothing else.",
+  "evidence": {
+   "screenshots": [
+    "shots/q6/light/009-fullscreen-footprint.png",
+    "shots/q6/light/019-detail-unknown-id.png"
+   ],
+   "console": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/library/frontend/components/PreviewModal.tsx",
+    "line": 39,
+    "note": "title rendered with uppercase caps style"
+   },
+   {
+    "path": "src/modules/library/frontend/ComponentDetailPage.tsx",
+    "line": 417,
+    "note": "error box for load errors"
+   }
+  ],
+  "suggestedFix": "Render the name part of the title without text-transform (caps only for the '— Footprint' suffix); give the not-found state an empty-state layout with copy + 'Back to Library'.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "library.detail:copy:fullscreen-title-case-and-not-found",
+  "status": "confirmed",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq6",
+   "reason": "Reproduced: fullscreen header renders '74HC00 QUAD NAND SOIC-14 — SYMBOL' (PreviewModal.tsx:39 'uppercase' on the whole title, so footprint names like R_0603_1608Metric are altered); navigating to a non-existent componentId shows only 'Back / Component / Component detail not found' in a red bordered box (ComponentDetailPage.tsx:416-419). S4 kept.",
+   "evidence": [
+    "shots/vq6/dark/011-fullscreen-symbol-74hc00.png",
+    "shots/vq6/light/003-detail-unknown-id.png"
+   ]
+  }
+ }
+]

@@ -1,0 +1,105 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "dark",
+ "vw": 1920,
+ "vh": 1080,
+ "title": "OpenPCB",
+ "smallText": [],
+ "smallTextCount": 0,
+ "controlHeights": {
+  "input:15": 3
+ },
+ "oddControls": [
+  {
+   "h": 15,
+   "path": "div>header>label>input"
+  },
+  {
+   "h": 15,
+   "path": "div>div>label>input[aria-label=\"Filter family options\"]"
+  },
+  {
+   "h": 15,
+   "path": "div>div>label>input[aria-label=\"Filter other options\"]"
+  }
+ ],
+ "nameless": [],
+ "namelessCount": 0,
+ "comingSoon": [],
+ "topColors": [
+  [
+   "fg rgb(217, 217, 217)",
+   364
+  ],
+  [
+   "fg rgb(127, 127, 132)",
+   91
+  ],
+  [
+   "fg rgb(245, 245, 245)",
+   61
+  ],
+  [
+   "bg rgb(12, 12, 13)",
+   39
+  ],
+  [
+   "bg rgb(17, 17, 19)",
+   38
+  ],
+  [
+   "bd rgb(106, 106, 112)",
+   34
+  ],
+  [
+   "bd rgb(30, 30, 33)",
+   32
+  ],
+  [
+   "bg rgb(8, 9, 10)",
+   27
+  ],
+  [
+   "fg rgb(85, 85, 90)",
+   24
+  ],
+  [
+   "bg rgb(44, 44, 49)",
+   18
+  ],
+  [
+   "bd rgb(42, 42, 46)",
+   5
+  ],
+  [
+   "fg rgb(168, 168, 173)",
+   5
+  ],
+  [
+   "bg rgb(21, 21, 23)",
+   5
+  ],
+  [
+   "bg rgb(15, 15, 16)",
+   2
+  ],
+  [
+   "fg rgb(17, 17, 20)",
+   2
+  ],
+  [
+   "bg rgb(28, 28, 31)",
+   1
+  ],
+  [
+   "bg rgb(232, 232, 232)",
+   1
+  ]
+ ],
+ "dialogCalls": {
+  "prompt": 0,
+  "confirm": 0,
+  "alert": 0,
+  "log": []
+ }
+}

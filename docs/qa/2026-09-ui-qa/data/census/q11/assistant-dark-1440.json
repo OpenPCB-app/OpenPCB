@@ -1,0 +1,180 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "dark",
+ "vw": 1440,
+ "vh": 900,
+ "title": "OpenPCB",
+ "smallText": [
+  {
+   "fs": 9,
+   "text": "S3 LLM Edge \u2014 additive v2",
+   "path": "div>div[aria-label=\"Open chat edge additive v2\"]>span>span"
+  },
+  {
+   "fs": 9,
+   "text": "S3 LLM Edge \u2014 bad recipe",
+   "path": "div>div[aria-label=\"Open chat edge bad recipe\"]>span>span"
+  },
+  {
+   "fs": 9,
+   "text": "S3 LLM Edge \u2014 12V params",
+   "path": "div>div[aria-label=\"Open chat edge 12V\"]>span>span"
+  },
+  {
+   "fs": 9,
+   "text": "probe",
+   "path": "div>div[aria-label=\"Open chat S3 LLM smoke\"]>span>span"
+  },
+  {
+   "fs": 9,
+   "text": "Strict",
+   "path": "div>div>button>span"
+  }
+ ],
+ "smallTextCount": 5,
+ "controlHeights": {
+  "input:15": 1,
+  "textarea:32": 1
+ },
+ "oddControls": [
+  {
+   "h": 15,
+   "path": "aside>div>div>input"
+  }
+ ],
+ "nameless": [],
+ "namelessCount": 0,
+ "comingSoon": [],
+ "topColors": [
+  [
+   "fg rgb(168, 168, 173)",
+   86
+  ],
+  [
+   "fg rgb(127, 127, 132)",
+   78
+  ],
+  [
+   "fg rgb(85, 85, 90)",
+   57
+  ],
+  [
+   "fg rgb(236, 236, 238)",
+   48
+  ],
+  [
+   "fg rgb(245, 245, 245)",
+   27
+  ],
+  [
+   "fg rgb(217, 217, 217)",
+   16
+  ],
+  [
+   "bg rgb(12, 12, 13)",
+   14
+  ],
+  [
+   "fg oklch(0.872 0.01 258.338)",
+   14
+  ],
+  [
+   "bg rgb(111, 191, 122)",
+   12
+  ],
+  [
+   "bg rgb(28, 28, 31)",
+   11
+  ],
+  [
+   "fg rgb(255, 255, 255)",
+   6
+  ],
+  [
+   "fg rgb(196, 196, 201)",
+   5
+  ],
+  [
+   "bd rgb(44, 44, 49)",
+   4
+  ],
+  [
+   "fg rgb(111, 191, 122)",
+   4
+  ],
+  [
+   "bg oklab(0.451282 0.00225024 -0.00772989 / 0.15)",
+   4
+  ],
+  [
+   "fg rgb(220, 220, 224)",
+   3
+  ],
+  [
+   "bg rgba(51, 209, 255, 0.08)",
+   3
+  ],
+  [
+   "bg rgb(17, 17, 19)",
+   3
+  ],
+  [
+   "bd rgb(28, 28, 31)",
+   2
+  ],
+  [
+   "bd oklab(0.295118 0.00246359 -0.00863151 / 0.4)",
+   2
+  ],
+  [
+   "bg oklab(0 0 0 / 0.1)",
+   2
+  ],
+  [
+   "bg rgb(15, 15, 16)",
+   1
+  ],
+  [
+   "bg oklab(0.178528 0.00112759 -0.00390549 / 0.8)",
+   1
+  ],
+  [
+   "bg rgb(58, 58, 64)",
+   1
+  ],
+  [
+   "bg oklab(0.451282 0.00225024 -0.00772989 / 0.1)",
+   1
+  ],
+  [
+   "bd rgb(138, 138, 144)",
+   1
+  ],
+  [
+   "bg oklab(0.154793 0.000591978 -0.00201665 / 0.95)",
+   1
+  ],
+  [
+   "bg oklch(0.696 0.17 162.48)",
+   1
+  ],
+  [
+   "fg rgb(208, 208, 213)",
+   1
+  ],
+  [
+   "bd oklab(0.451282 0.00225024 -0.00772989 / 0.2)",
+   1
+  ],
+  [
+   "bg rgb(44, 44, 49)",
+   1
+  ]
+ ],
+ "dialogCalls": {
+  "prompt": 0,
+  "confirm": 0,
+  "alert": 0,
+  "log": []
+ }
+}

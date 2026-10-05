@@ -1,0 +1,43 @@
+{
+ "trigger": "button \"Export\u2026\"",
+ "focusOnOpen": "button \"Export\u2026\"",
+ "panel": {
+  "panelRole": null,
+  "dialogRole": "dialog",
+  "ariaModal": "true",
+  "labelledby": "pcb-export-dialog-title",
+  "x": 480,
+  "y": 231,
+  "w": 480,
+  "h": 438,
+  "bg": "rgb(226, 226, 229)",
+  "rad": "3px",
+  "bs": "rgba(0, 0, 0, 0.25) 0px 25px 50px -12px"
+ },
+ "tabs": [
+  "OUT button \"DRC\"",
+  "OUT button \"View\"",
+  "OUT button \"Layers\"",
+  "OUT button \"Layer visibility preset\"",
+  "OUT button \"Metadata \u00b7 Alt+click to solo\"",
+  "OUT button \"Toggle opacity slider\"",
+  "OUT button \"Hide layer\"",
+  "OUT button \"Board Outline \u00b7 Alt+click to solo\"",
+  "OUT button \"Toggle opacity slider\"",
+  "OUT button \"Hide layer\"",
+  "OUT button \"Drill Holes \u00b7 Alt+click to solo\"",
+  "OUT button \"Toggle opacity slider\"",
+  "OUT button \"Hide layer\"",
+  "OUT button \"Collapse group\"",
+  "OUT button \"Show all\"",
+  "OUT button \"Top Overlay \u00b7 Alt+click to solo\""
+ ],
+ "shiftTabs": [
+  "OUT button \"Show all\"",
+  "OUT button \"Collapse group\"",
+  "OUT button \"Hide layer\""
+ ],
+ "openAfterEsc": false,
+ "openAfterClose": false,
+ "focusAfterClose": "button \"Hide layer\""
+}

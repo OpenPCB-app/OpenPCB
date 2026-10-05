@@ -1,0 +1,363 @@
+{
+ "agent": "f2a",
+ "designs": {
+  "QA-f2a-golden": "847e94e7-36e6-4284-b22c-17725e0f5b02 (stack A, final rev 138; routed, B.Cu GND thermal zone + disabled board:B.Cu zone row, 1 keepout, 1 cutout, 1 waived silk warning)",
+  "QA-f2a-scratch": "not created"
+ },
+ "artefacts": {
+  "exportZip": "f2a/openpcb-847e94e7-36e6-4284-b22c-17725e0f.zip",
+  "unzipped": "f2a/export/",
+  "gerberParser": "f2a/gerb.py"
+ },
+ "summary": {
+  "totalTimeMin": 94,
+  "timeBreakdownMin": {
+   "schematic (place 8 parts, 7 nets, ports, ERC, values)": 18,
+   "PCB board+placement (incl. teleport investigation ~10)": 22,
+   "routing 18 traces/5 vias incl. delete/reroute/split": 15,
+   "pour/keepout/cutout/fill toggle/cleanup": 12,
+   "DRC + waive + export + fab audit": 12,
+   "3D, reload/undo, net-id extension, light+1100 repeat": 15
+  },
+  "hardBlockers": 0,
+  "silentDataBlockers": [
+   "F2A-002 port dropped on a pin not connected (would ship without VCC/GND on that pin)",
+   "F2A-008/Q6-023 core NE555 footprint mirrored in Gerber/PnP → board dead on arrival"
+  ],
+  "frictionPoints": [
+   "F2A-001 cornered wires rejected ('doubles back') + 12 px canvas jump (~6 min)",
+   "F2A-002 ports must be placed off-pin and wired (~4 min)",
+   "F1B-002 all parts stacked at board centre, dragged one by one (~5 min)",
+   "F2A-003 tap-then-click teleports parts (~10 min investigating, Undo fixes)",
+   "F2A-020 route hint row shifts board between clicks → runaway route (~3 min)",
+   "F2A-018 top traces unselectable while B.Cu active (~2 min)",
+   "F2A-019 zone selectable only by outline → Shift+Z seemed dead (~3 min)",
+   "F2A-004 'Show copper fills' created a solid zone that killed thermals (~4 min)",
+   "F2A-006 VCC/GND routed at 0.25 mm then flagged by DRC (unfixable without re-routing; no trace width editor F2B-011)",
+   "F2A-017 no unrouted counter — needed DRC run to confirm completion",
+   "DRC 'Run DRC' click silently missed because selecting a trace switched the dock to Properties (~1 min)"
+  ],
+  "drcCleanExportableViaUIOnly": "YES — 0 errors, export gate 'DRC passed with 44 warning(s)', 14-file ZIP downloaded; but NOT a working board (F2A-008 mirrored NE555) and not warning-free: 38 stock-footprint silkscreen warnings (F1B-009) + 7 NETCLASS_TRACE_WIDTH (F2A-006) could not be cleared from the UI without re-routing/library edits; 1 silk warning waived.",
+  "howUserKnowsRoutingComplete": "Only by spotting that no dashed ratsnest lines remain or by running DRC (UNCONNECTED_NET 'Net_4 is not fully routed (1 airwire remaining)'); no Unrouted counter anywhere (F2A-017).",
+  "undoAfterReload": "Survives: PCB Cmd+Z rev125→126 (removed Net_4 trace), Schem toolbar Undo →127 (U1 value NE555→''), Schem Redo →128, PCB Cmd+Shift+Z →129. Separate histories per view (PCB session undoDepth 65, schematic 39). Tabs + dock tab restored; active view (→Schem) and cameras (PCB→Fit, Schem→80 % origin) NOT restored; app lands on Home (F2A-013).",
+  "gndZoneOrphanExtension": "Zone NOT orphaned (re-binds by netName) but GND vias (3) and GND traces (4) are when the GND root point moves → pour clears around its own vias, DRC 0→6 errors (F2A-014). Moving U1 orphans 5 Net_1/Net_2 traces only (F1B-013).",
+  "fabAudit": {
+   "B_Cu": "1 dark G36 zone region + 11 %LPC clear regions (cutout, keepout, VCC trace/J1.1/VCC-via clearance, Net_3 via+trace+C2.1 clearance, J1.2 thermal gaps, GND via drill knock-outs) then pads/traces LPD — clearances around non-GND copper OK, thermal on J1.2 OK; disabled board:B.Cu zone not exported",
+   "F_Cu": "25 flashes, 41 draw segments (38×0.25, 3×0.5) for 15 top traces; U1 pad 1 (GND) at bottom-left = mirrored SOIC (Q6-023)",
+   "PTH": "7 hits = 5 vias (0.4) + 2 THT J1 (1.0); NPTH empty",
+   "PnP": "7 rows = 7 SMD parts; C2 'Bottom' rot 180; U1 rot 270; J1 (THT) excluded",
+   "BOM": "8 lines match schematic (J1 empty Comment because value never set)",
+   "Edge_Cuts": "rect ±20×±15 mm = 40×30 outline",
+   "gbrjob": "LayerNumber 2, Size 40×30, BoardThickness 1.6, ProjectId Name = UUID (F1B-014)"
+  }
+ },
+ "checklist": [
+  {
+   "item": "Home: N creates design, double-click tab rename to QA-f2a-golden",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Cmd+K place 555, 2+ resistors, 2 caps, LED, 2-pin header (8 parts)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "G (GND) and P (VCC) ports; wiring pin→corner→pin, 7 nets",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "ERC run + deliberately open pin (CONT) reported?",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Board 40×30 via Board panel Width field + Apply",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Drag parts onto board, R rotate, F flip to bottom",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Route all ratsnest with R: 2 layers, 5 vias (V), W/Shift+W width, delete+reroute, Split and reroute",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "How user knows routing complete",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Z pour on B.Cu via area-tool-options (layer/net/pads thermal→solid→thermal), pour-aware ratsnest, thermal spokes, non-GND clearance",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Copper-fill toggle, Remove redundant pour traces, K keepout (fill recedes), Shift+Z cutout",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "DRC from dock to 0 errors, unrouted connection flagged, waive one warning, rerun after pour",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Export dialog DRC gate, BOM+PnP, Download, unzip, fab-file audit",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "3D finished board: pour, traces, bottom part, refdes",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Reload: tabs/view/camera restore; Cmd+Z PCB, toolbar Undo/Redo schematic across reload",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Schematic part move → GND zone net orphaned? (F1B-013 extension)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Route + pour repeat at 1100×720 and light; pixel probes of route rows, area-tool-options bar, pour/thermal colours",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  }
+ ],
+ "known": [
+  {
+   "ref": "Q3-014",
+   "status": "confirmed",
+   "evidence": "CONT (passive) pin and C2.1 left open → 'No ERC violations' (shots/f2a/dark/028-erc-open-pin.png)"
+  },
+  {
+   "ref": "Q6-023",
+   "status": "confirmed",
+   "evidence": "Golden path NE555: Gerber F_Cu pad1 GND at bottom-left, silk triangle bottom-left, 3D pin-1 dot opposite; filed extension F2A-008"
+  },
+  {
+   "ref": "F1B-013",
+   "status": "partial",
+   "evidence": "Moving U1 orphans 5 traces (confirmed); GND zone re-binds by name (not orphaned) but vias/traces orphan → F2A-014"
+  },
+  {
+   "ref": "F1B-002",
+   "status": "confirmed",
+   "evidence": "8 parts landed within ±4 mm of board centre, stacked (shots/f2a/dark/031-pcb-initial.png)"
+  },
+  {
+   "ref": "F1B-009",
+   "status": "confirmed",
+   "evidence": "38 FAB_SILK_* warnings from 8 stock footprints on JLCPCB preset"
+  },
+  {
+   "ref": "F1B-033",
+   "status": "confirmed",
+   "evidence": "Route row +14 px; plus second hint row +14 px after first click → F2A-020"
+  },
+  {
+   "ref": "Q4-004",
+   "status": "confirmed",
+   "evidence": "see F2A-020"
+  },
+  {
+   "ref": "Q4-001",
+   "status": "confirmed",
+   "evidence": "toolbar DRC '1' vs dock tab '46' vs status '46 DRC' (shots/f2a/dark/077-drc-unrouted.png)"
+  },
+  {
+   "ref": "Q4-023",
+   "status": "confirmed",
+   "evidence": "'The board changed since this DRC ran' shown right after a fresh run; stale 53/6-error report shown after reopening a restored board (shots/f2a/light/002-pcb-light.png)"
+  },
+  {
+   "ref": "Q3-006",
+   "status": "confirmed",
+   "evidence": "tab badge r0 while design at rev 8…125; r134 while at rev 138"
+  },
+  {
+   "ref": "F1B-014",
+   "status": "confirmed",
+   "evidence": "ZIP/files/gbrjob ProjectId named openpcb-847e94e7-…"
+  },
+  {
+   "ref": "F1B-017",
+   "status": "confirmed",
+   "evidence": "'Include inner copper layers (4-layer boards only)' checked on 2-layer export"
+  },
+  {
+   "ref": "Q4-006",
+   "status": "confirmed",
+   "evidence": "PCB status zoom frozen at 18 %/80 % while camera changes"
+  },
+  {
+   "ref": "Q4-003",
+   "status": "confirmed",
+   "evidence": "Zone/Keepout tools armed but status hint 'Click to select…'"
+  },
+  {
+   "ref": "Q3-004",
+   "status": "confirmed",
+   "evidence": "first open / after reload schematic at 80 % with NE555 filling canvas"
+  },
+  {
+   "ref": "Q4-041",
+   "status": "confirmed",
+   "evidence": "1100×720 PCB canvas ~458 px wide"
+  },
+  {
+   "ref": "Q4-042",
+   "status": "confirmed",
+   "evidence": "1100×720 routing: Layers 'Inactive layers' row overlapped by Components header"
+  },
+  {
+   "ref": "F2B-010",
+   "status": "partial",
+   "evidence": "also on 2-layer boards at 1100×720: 'Standard 2L' wraps, live route status clipped (shots/f2a/dark/112-route-active-1100.png)"
+  },
+  {
+   "ref": "Q4-043",
+   "status": "confirmed",
+   "evidence": "45 DRC markers bury the board at fit zoom"
+  },
+  {
+   "ref": "Q4-017",
+   "status": "confirmed",
+   "evidence": "DRC list 'net pt:288' / 'trace 977163 ↔ C2.2 ↔ GND ↔ net …'"
+  },
+  {
+   "ref": "K37",
+   "status": "confirmed",
+   "evidence": "AreaToolOptionsBar selects 18/20 px; extended in F2A-021"
+  },
+  {
+   "ref": "K38",
+   "status": "confirmed",
+   "evidence": "PCB canvas stays dark #0e1116 in light theme"
+  },
+  {
+   "ref": "Q5-028",
+   "status": "confirmed",
+   "evidence": "3D left rail/mechanical card unreadable in light (shots/f2a/light/009-3d-light.png)"
+  },
+  {
+   "ref": "Q3-028",
+   "status": "confirmed",
+   "evidence": "Radix DialogContent + THREE.Clock warnings on each palette open"
+  },
+  {
+   "ref": "F1A-010",
+   "status": "confirmed",
+   "evidence": "schematic error strip never clears until next success and shifts layout 12 px (F2A-001)"
+  },
+  {
+   "ref": "F2B-011",
+   "status": "confirmed",
+   "evidence": "no trace inspector to change width of existing VCC/GND traces (blocks clearing NETCLASS_TRACE_WIDTH)"
+  },
+  {
+   "ref": "K12",
+   "status": "untested",
+   "evidence": "not in this charter's flow"
+  },
+  {
+   "ref": "K44",
+   "status": "confirmed",
+   "evidence": "no grid snapping; root cause of F2A-001 µm jogs"
+  },
+  {
+   "ref": "N1",
+   "status": "untested",
+   "evidence": "wire-segment drag not exercised"
+  },
+  {
+   "ref": "F1B-019",
+   "status": "untested",
+   "evidence": "no refdes rename performed"
+  },
+  {
+   "ref": "Q3-015",
+   "status": "n/a",
+   "evidence": "NE555 is single-unit + power unit; no stacked-unit shorts observed"
+  },
+  {
+   "ref": "spike/Q4-001",
+   "status": "confirmed",
+   "evidence": "see Q4-001"
+  }
+ ],
+ "untested": [
+  {
+   "item": "O-key board sketch",
+   "reason": "used Board panel Width field (charter allows either)"
+  },
+  {
+   "item": "Export with DRC errors present (gate blocking)",
+   "reason": "covered by F2B-008; golden board was error-free at export time"
+  },
+  {
+   "item": "QA-f2a-scratch design",
+   "reason": "not needed; light/1100 repeats done on golden with Undo"
+  }
+ ]
+}

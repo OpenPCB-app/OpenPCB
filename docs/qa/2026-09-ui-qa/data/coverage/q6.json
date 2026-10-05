@@ -1,0 +1,42 @@
+{"agent":"q6",
+"checklist":[
+{"item":"Library Table/Grid toggle + persistence across reload (openpcb.library.view)","dark":"tested","light":"tested","viewports":["1440x900","1100x720"]},
+{"item":"Header counts vs actual rows (K07 60-row cap)","dark":"tested","light":"tested","viewports":["1440x900"]},
+{"item":"Facets: every bucket, filter box inside facet, checkbox labels, Show more, option ordering","dark":"tested","light":"tested","viewports":["1440x900"]},
+{"item":"Active filter chips + Clear all","dark":"tested","light":"tested","viewports":["1440x900"]},
+{"item":"Search incl '/' hint (K24), Esc, no-results state","dark":"tested","light":"tested","viewports":["1440x900"]},
+{"item":"Table keyboard nav (arrows/Enter/Home/End/PgUp/Delete), focus style, focus restore after Back","dark":"tested","light":"tested","viewports":["1440x900"]},
+{"item":"Row select → preview pane (symbol/footprint previews, Part/Footprints/Pins/Specs), Open, Component actions menu","dark":"tested","light":"tested","viewports":["1440x900","1100x720"]},
+{"item":"Preview 'Loading preview…' / 'No preview' / detail-500 states","dark":"tested","light":"tested","viewports":["1440x900"]},
+{"item":"Detail page built-in: read-only banner, Duplicate to edit, footprint options switching","dark":"tested","light":"tested","viewports":["1440x900","1100x720"]},
+{"item":"Detail page custom: Edit/Save/Cancel, name/description, TagTokenInput add/remove/suggestions, empty-name validation, dirty guard","dark":"tested","light":"tested","viewports":["1440x900"]},
+{"item":"Fullscreen symbol/footprint previews (Esc, focus)","dark":"tested","light":"tested","viewports":["1440x900"]},
+{"item":"3D card: STEP upload minimal.step, garbage.step, wrong extension, valid STEP; failed/pending/missing states; Retry conversion","dark":"tested","light":"tested","viewports":["1440x900"]},
+{"item":"3D model conversion errors incl. swallowed PATCH (K41) via routed 500","dark":"n/a","light":"tested","viewports":["1440x900"]},
+{"item":"'Place in design' (K43)","dark":"tested","light":"tested","viewports":["1440x900"]},
+{"item":"Import library…: LM324N.zip (new + re-import), OP07CD.zip, kicad-with-step.zip, non-KiCad zip, sample.txt; warnings display","dark":"tested","light":"tested","viewports":["1440x900"]},
+{"item":"Single delete + bulk delete (K06 native confirm)","dark":"tested","light":"tested","viewports":["1440x900"]},
+{"item":"Delete error → 500 (K08 list wipe) and ZIP import error","dark":"tested","light":"tested","viewports":["1440x900"]},
+{"item":"Grid card visuals, selection checkboxes, click-to-open","dark":"tested","light":"tested","viewports":["1440x900","1100x720"]},
+{"item":"Empty states (no results, missing component id)","dark":"tested","light":"tested","viewports":["1440x900"]},
+{"item":"1100x720 layout (table squeeze by facet rail + preview pane; detail grid)","dark":"tested","light":"tested","viewports":["1100x720"]},
+{"item":"Footprint handedness cross-check: library preview vs PCB vs 3D vs Gerber export (555 Timer on stack B)","dark":"tested","light":"tested","viewports":["1440x900"]},
+{"item":"DOM census (table, grid, detail) + pixel-probe contrast","dark":"tested","light":"tested","viewports":["1440x900","1100x720"]}
+],
+"known":[
+{"ref":"K06","status":"confirmed","evidence":"Q6-004: window.confirm 'Delete N component(s)? …' for single + bulk delete (dialog spy confirm=1, both themes)"},
+{"ref":"K07","status":"confirmed","evidence":"Q6-002: '60 of 69' / '60 of 67', no paging; backend clamps limit ≤100 with no offset"},
+{"ref":"K08","status":"confirmed","evidence":"Q6-003: failed delete (routed 500) and failed ZIP import replace the whole list with a bare error line (raw 'Delete failed (HTTP 500)'), no retry/dismiss"},
+{"ref":"K24","status":"confirmed","evidence":"Q6-007: '/' leaves focus on BODY in both themes; search input has no aria-label"},
+{"ref":"K36","status":"confirmed","evidence":"Q6-033: census 29 table SOURCE badges + preview-pane badge at 9.5px (LibraryTable.tsx:227, LibraryPreviewPane.tsx:95)"},
+{"ref":"K40","status":"partial","evidence":"Library surfaces show raw 'Delete failed (HTTP 500)' (Q6-003) and would show 'Model upload failed (HTTP n)'/'3D model metadata fetch failed (HTTP n)' (Q6-024 codeRefs); full 42-site audit not in charter"},
+{"ref":"K41","status":"confirmed","evidence":"Q6-024: model-conversion.ts:101 swallowed PATCH leaves footprint in pending_client_conversion → permanent 'Converting 3D model…' with no retry after a failed upload"},
+{"ref":"K43","status":"confirmed","evidence":"Q6-016: Library detail 'Place in design' permanently disabled even with a design tab open; tooltip/banner contradict"},
+{"ref":"K45","status":"partial","evidence":"Library 3D card failed state uses raw red palette (Q6-026); preview overlays use un-generated slate classes (Q6-012)"}
+],
+"untested":[
+{"item":"Drag-and-drop from Library table onto schematic/PCB (N2)","reason":"owned by designer agents; only noted that D&D is the sole place path (Q6-016)"},
+{"item":"Library with zero components (true empty state)","reason":"would require deleting all core + other agents' parts on shared stack B"},
+{"item":"KiCad-imported footprint handedness for SOT-23/polarised caps in Gerber","reason":"verified on SOIC-8 (555 Timer U1) only; same root cause expected"},
+{"item":"Import warnings list UI beyond first warning","reason":"no UI exists to open '+N more' (reported in Q6-021)"}
+]}

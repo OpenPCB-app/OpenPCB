@@ -1,0 +1,777 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "dark",
+ "vw": 1920,
+ "vh": 1080,
+ "docW": 1920,
+ "bands": [
+  {
+   "tag": "header",
+   "x": 80,
+   "y": 0,
+   "w": 1840,
+   "h": 34,
+   "text": "Schem PCB 3D BOM DRC Local Assistant",
+   "cls": "grid h-[34px] shrink-0 grid-cols-[1fr_auto_1fr] items-stretch border-b border-border bg-surface-rail",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(15, 15, 16)"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 34,
+   "w": 259,
+   "h": 24,
+   "text": "Outline 0",
+   "cls": "flex shrink-0 items-center gap-1.5 border-y border-border bg-surface-section px-2 h-[24px]",
+   "n": 1,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(21, 21, 23)"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 58,
+   "w": 259,
+   "h": 26,
+   "text": "Parts Nets Labels",
+   "cls": "flex h-[26px] shrink-0 items-center gap-1.5 border-b border-border px-2",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "button",
+   "x": 92,
+   "y": 177,
+   "w": 235,
+   "h": 22,
+   "text": "Add net label",
+   "cls": "inline-flex shrink-0 items-center whitespace-nowrap rounded-control transition-colors outline-none focus-visible:border-selection disabled:c",
+   "n": 2,
+   "bb": true,
+   "bt": true,
+   "bg": "rgba(0, 0, 0, 0)"
+  }
+ ],
+ "rows": [
+  {
+   "parent": "mt-3 flex w-full flex-col items-center gap-2",
+   "px": 4,
+   "py": 137,
+   "child": "BUTTON.flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center g",
+   "n": 3,
+   "heights": {
+    "51": 3
+   },
+   "w": 72,
+   "sample": "Library"
+  },
+  {
+   "parent": "tablist",
+   "px": 873,
+   "py": 0,
+   "child": "BUTTON.inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs tran",
+   "n": 5,
+   "heights": {
+    "34": 5
+   },
+   "w": 62,
+   "sample": "Schem"
+  },
+  {
+   "parent": "flex max-h-64 flex-col overflow-y-auto",
+   "px": 932,
+   "py": 489,
+   "child": "BUTTON.flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surf",
+   "n": 20,
+   "heights": {
+    "15": 20
+   },
+   "w": 398,
+   "sample": "Dual LED Blinker r510"
+  }
+ ],
+ "btnHeights": {
+  "text:15": 20,
+  "text:51": 5,
+  "text:34": 5,
+  "text:18": 3,
+  "text:22": 3,
+  "icon:32": 1,
+  "icon:22": 1,
+  "text:24": 1,
+  "icon:20": 1,
+  "text:28": 1
+ },
+ "btnVariants": {
+  "h51 fs12px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 132) fw400": {
+   "n": 4,
+   "ex": [
+    "Home",
+    "Library",
+    "Docs"
+   ]
+  },
+  "h51 fs12px r2px bg:rgb(28, 28, 31) bd:none fg:rgb(245, 245, 245) fw400": {
+   "n": 1,
+   "ex": [
+    "Designer"
+   ]
+  },
+  "h34 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(245, 245, 245) fw500": {
+   "n": 1,
+   "ex": [
+    "Schem"
+   ]
+  },
+  "h34 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 132) fw400": {
+   "n": 4,
+   "ex": [
+    "PCB",
+    "3D",
+    "BOM"
+   ]
+  },
+  "h24 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 132) fw400": {
+   "n": 1,
+   "ex": [
+    "Assistant"
+   ]
+  },
+  "h18 fs10px r0px bg:rgb(44, 44, 49) bd:none fg:rgb(245, 245, 245) fw500": {
+   "n": 1,
+   "ex": [
+    "Parts"
+   ]
+  },
+  "h18 fs10px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(168, 168, 173) fw400": {
+   "n": 2,
+   "ex": [
+    "Nets",
+    "Labels"
+   ]
+  },
+  "h22 fs11px r2px bg:rgb(232, 232, 232) bd:none fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "Place component\n\u2318K"
+   ]
+  },
+  "h22 fs11px r2px bg:rgba(0, 0, 0, 0) bd:rgb(42, 42, 46) fg:rgb(217, 217, 217) fw400": {
+   "n": 2,
+   "ex": [
+    "Add net label",
+    "Browse library"
+   ]
+  },
+  "h28 fs12px r2px bg:rgb(232, 232, 232) bd:none fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "New design"
+   ]
+  },
+  "h15 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(217, 217, 217) fw400": {
+   "n": 20,
+   "ex": [
+    "Dual LED Blinker\nr510",
+    "Untitled Design\nr25",
+    "DRC Demo\nr0"
+   ]
+  }
+ },
+ "btnOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 137,
+   "w": 64,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 195,
+   "w": 72,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 1038,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 873,
+   "y": 0,
+   "w": 62,
+   "h": 34,
+   "role": "tab",
+   "text": "Schem",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 935,
+   "y": 0,
+   "w": 49,
+   "h": 34,
+   "role": "tab",
+   "text": "PCB",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 984,
+   "y": 0,
+   "w": 42,
+   "h": 34,
+   "role": "tab",
+   "tid": "designer-view-3d",
+   "text": "3D",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 1026,
+   "y": 0,
+   "w": 52,
+   "h": 34,
+   "role": "tab",
+   "text": "BOM",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 1078,
+   "y": 0,
+   "w": 49,
+   "h": 34,
+   "role": "tab",
+   "text": "DRC",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 208,
+   "y": 62,
+   "w": 40,
+   "h": 18,
+   "label": "Parts",
+   "text": "Parts",
+   "cls": "inline-flex items-center gap-1 px-2 text-2xs whitespace-nowrap transition-colors outline-none disabled:cursor-not-allowed disabled:opacity-5",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 248,
+   "y": 62,
+   "w": 37,
+   "h": 18,
+   "label": "Nets",
+   "text": "Nets",
+   "cls": "inline-flex items-center gap-1 px-2 text-2xs whitespace-nowrap transition-colors outline-none disabled:cursor-not-allowed disabled:opacity-5",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 285,
+   "y": 62,
+   "w": 45,
+   "h": 18,
+   "label": "Labels",
+   "text": "Labels",
+   "cls": "inline-flex items-center gap-1 px-2 text-2xs whitespace-nowrap transition-colors outline-none disabled:cursor-not-allowed disabled:opacity-5",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 423,
+   "w": 398,
+   "h": 28,
+   "text": "New design",
+   "cls": "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-control transition-colors outline-none focus-visible:border-selec",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 489,
+   "w": 398,
+   "h": 15,
+   "text": "Dual LED Blinker r510",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 504,
+   "w": 398,
+   "h": 15,
+   "text": "Untitled Design r25",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 519,
+   "w": 398,
+   "h": 15,
+   "text": "DRC Demo r0",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 534,
+   "w": 398,
+   "h": 15,
+   "text": "DRC Demo r11",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 549,
+   "w": 398,
+   "h": 15,
+   "text": "555 Timer LED Blinker r33",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 564,
+   "w": 398,
+   "h": 15,
+   "text": "GUIDE-VALIDATE r15",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 579,
+   "w": 398,
+   "h": 15,
+   "text": "Untitled Design r0",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 594,
+   "w": 398,
+   "h": 15,
+   "text": "S3 Smoke \u2014 5 LED indicators (v2) r40",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 609,
+   "w": 398,
+   "h": 15,
+   "text": "S3 LLM Smoke \u2014 5 LED (DeepSeek V4 Flash)",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 624,
+   "w": 398,
+   "h": 15,
+   "text": "S3 LLM Smoke \u2014 5 LED (DeepSeek V4 Flash)",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 639,
+   "w": 398,
+   "h": 15,
+   "text": "S3 LLM Edge \u2014 12V params r48",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 654,
+   "w": 398,
+   "h": 15,
+   "text": "S3 LLM Edge \u2014 additive v2 r33",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 669,
+   "w": 398,
+   "h": 15,
+   "text": "S3 LLM Edge \u2014 bad recipe r0",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 684,
+   "w": 398,
+   "h": 15,
+   "text": "LED Indicators 5V r72",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 699,
+   "w": 398,
+   "h": 15,
+   "text": "QA-Q3-sandbox r50",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 714,
+   "w": 398,
+   "h": 15,
+   "text": "QA-q5-empty r1",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 729,
+   "w": 398,
+   "h": 15,
+   "text": "QA-q5-USBtoUART r0",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 744,
+   "w": 398,
+   "h": 15,
+   "text": "QA-Q3-empty r0",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 759,
+   "w": 398,
+   "h": 15,
+   "text": "QA-q1-vq1-a r0",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 932,
+   "y": 774,
+   "w": 398,
+   "h": 15,
+   "text": "QA-q1-vq1-b r0",
+   "cls": "flex h-[22px] items-center justify-between gap-2 px-2 text-left text-xs text-text transition-colors hover:bg-surface-hover hover:text-text-s",
+   "fs": "11px"
+  }
+ ],
+ "inputs": [
+  {
+   "tag": "input",
+   "x": 113,
+   "y": 63,
+   "w": 81,
+   "h": 15,
+   "label": "Filter outline",
+   "cls": "min-w-0 flex-1 bg-transparent text-xs text-text-strong outline-none placeholder:text-text-disabled [&::-webkit-search-cancel-button]:appeara",
+   "type": "search",
+   "ph": "Filter ref, value, net\u2026",
+   "fs": "11px",
+   "rad": "0px",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bd": "none",
+   "wrapH": 20,
+   "wrapRad": "2px",
+   "native": "auto"
+  }
+ ],
+ "tablists": [
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 0,
+   "w": 26,
+   "h": 34,
+   "role": "tablist",
+   "label": "Open designs",
+   "cls": "flex min-w-0 items-stretch overflow-x-auto",
+   "tabs": 0,
+   "tabH": {},
+   "tabFs": {},
+   "roving": 0
+  },
+  {
+   "tag": "div",
+   "x": 873,
+   "y": 0,
+   "w": 254,
+   "h": 34,
+   "role": "tablist",
+   "text": "Schem PCB 3D BOM DRC",
+   "cls": "inline-flex items-stretch justify-center rounded-none bg-transparent text-text-tertiary data-[orientation=vertical]:h-auto data-[orientation",
+   "tabs": 5,
+   "tabH": {
+    "34": 5
+   },
+   "tabFs": {
+    "11px": 5
+   },
+   "roving": 5
+  }
+ ],
+ "segs": [
+  {
+   "tag": "div",
+   "x": 207,
+   "y": 61,
+   "w": 124,
+   "h": 20,
+   "role": "group",
+   "label": "Outline view",
+   "text": "Parts Nets Labels",
+   "cls": "inline-flex shrink-0 items-stretch overflow-hidden rounded-control border border-border-control h-[20px]",
+   "rad": "2px",
+   "bd": "rgb(42, 42, 46)",
+   "optFs": {
+    "10px": 3
+   },
+   "optH": {
+    "18": 3
+   },
+   "pressed": 3,
+   "activeBg": {
+    "rgb(44, 44, 49)": 1
+   }
+  }
+ ],
+ "radii": {
+  "2px": 8
+ },
+ "radEx": {},
+ "shadows": [],
+ "shadowCount": 0,
+ "blurs": [],
+ "grads": [],
+ "fontSizes": {
+  "11px": 33,
+  "10px": 32,
+  "13px": 1,
+  "12px": 1
+ },
+ "fontFam": {
+  "IBM Plex Sans": 45,
+  "IBM Plex Mono": 22
+ },
+ "weights": {
+  "400": 58,
+  "500": 9
+ },
+ "small": [],
+ "big": [],
+ "iconSizes": {
+  "20x20": 5,
+  "12x12": 5,
+  "14x14": 4,
+  "18x18": 2,
+  "16x16": 1
+ },
+ "iconStroke": {
+  "2px/attr2": 9,
+  "1.5px/attr1.5": 8
+ },
+ "iconOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-layout-grid h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 137,
+   "w": 64,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-pen-tool h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 195,
+   "w": 72,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-box h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-book-open h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-bot h-5 w-5"
+  },
+  {
+   "tag": "a",
+   "x": 24,
+   "y": 998,
+   "w": 32,
+   "h": 32,
+   "label": "Report a bug or request a feature",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-circle-dot h-[18px] w-[18p"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 1038,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-settings h-[18px] w-[18px]"
+  }
+ ],
+ "otherSvgs": [],
+ "floats": [],
+ "alerts": [],
+ "headings": [
+  {
+   "tag": "h2",
+   "x": 932,
+   "y": 370,
+   "w": 398,
+   "h": 18,
+   "text": "No design open",
+   "cls": "text-base font-medium text-text-strong",
+   "fs": "13px",
+   "fw": "500"
+  }
+ ],
+ "canvases": [],
+ "overflowX": [],
+ "clipped": []
+}

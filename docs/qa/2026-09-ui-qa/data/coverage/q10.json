@@ -1,0 +1,246 @@
+{
+ "agent": "q10",
+ "notes": [
+  "Port 1720 is on Chromium's unsafe-port list (ERR_UNSAFE_PORT); stack C1 was only reachable by launching the q10 sessions with --explicitly-allowed-ports=1720 via $QA/env/q10/cli.config.json (playwright-cli open --config=…).",
+  "Cloud host URLs on C1 are http://127.0.0.1:9 (also an unsafe port) → browser-side cloud calls fail with ERR_UNSAFE_PORT (equivalent to a network failure for the app); backend-side calls get ECONNREFUSED ('Unable to connect…').",
+  "Signed-in/offline states were exercised with a simulated Supabase session written to localStorage 'openpcb.auth' (valid shape, far-future expires_at, tier pro) — equivalent to a user who signed in earlier and is now offline. Real sign-in is impossible on C1.",
+  "C1 DB mutations left in place for reproduction: designer_cloud_link row for 3f9e4e24 (555 Timer LED Blinker) → cloud_design_id 11111111-…; two rotates of R1 on that design (r35); a comment 'QA-q10 offline comment' on Dual LED Blinker schematic; Assistant chats 'New chat' (OpenPCB Cloud provider) and 'Dual LED Blinker chat' (dock).",
+  "Internet-offline (as opposed to cloud-offline) was simulated with context.route(/^https?:\\/\\/(?!127\\.0\\.0\\.1|localhost)/ → abort('internetdisconnected')); unrouted afterwards.",
+  "Console errors per page load — Stack A (both themes): Home 0, Settings 0, Designer Schem/PCB 0, Library 0, Assistant 0, Docs 0 (only THREE.Clock deprecation warnings + React DevTools info). C1 signed-out: Home/Settings/Designer/Library/Docs/Assistant 0 per load; Route Board/Auto Place clicks add 1× 401 each. C1 signed-in offline: Home 0, Library 0, Docs 0, Assistant 0, Designer 1 (POST cloud-link 500) per load; linked design adds a WebSocket error every ~10 s (Q10-008). No ERR_CONNECTION_REFUSED spam otherwise."
+ ],
+ "checklist": [
+  {
+   "item": "A: Settings has no Account tab (only General/Libraries/Assistant/Privacy/About)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "A: Home sync footer degrades to 'Local' (rail still says 'Local only — not signed in' → covered by Q1-019)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "A: Designer header has no Open from Cloud / sync badge / presence; shows 'Local'",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "A: PCB has no Auto Layout / Route Board / Auto Place buttons",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "A: Library has no cloud sync/pull buttons",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "A: Assistant has no OpenPCB Cloud provider / copilot entries; no cloud network calls",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "A: zero cloud console noise per page (Home, Settings, Designer, Library, Assistant, Docs)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "A+C1: third-party network calls at runtime (cdn.jsdelivr.net font resolver) and no-internet behaviour of canvases/previews (Q10-001)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "C1: Home 'Sign in to sync' footer → Settings → Account",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "C1: Settings → Account signed out; 'Sign in to OpenPCB Cloud' with dead auth/web URL (Q10-011)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "C1: Settings → Account signed in offline: identity, plan, sync switch (Q10-007), Sign out offline (Q10-002)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "C1: Designer Local chip (signed out) and sync badge states: 'cloud: …', 'cloud: rev N', 'cloud: error (N×)' (Q10-006, Q10-018)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "C1: auto-link failure toast (Q10-004)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "C1: Open from Cloud dialog offline (Q10-010)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "C1: PCB Auto Layout signed out (Q10-012) and signed in → Run (Q10-003)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "C1: Route Board / Auto Place signed out (Q10-005) and signed in offline (Q10-004), layout/overlap (Q10-014)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "C1: Library Sync to Cloud / Pull offline (Q10-004)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "C1: comments with cloud.comments on — local add works offline; cloud pull blocking (Q10-009)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "C1: linked design editing while offline — local commands unaffected (fire-and-forget mirror), badge stale (Q10-006), realtime reconnect spam (Q10-008)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "C1: Assistant OpenPCB Cloud provider seeded for Pro; send offline in Space (Q10-004/Q10-015) and in designer dock (Q10-016)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "C1: console error count per page load (see notes)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Native dialog spy: 0 prompt/confirm/alert across q10 flows",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "1100x720 layout: Home, Library header with Sync buttons (table collapse Q10-017), Designer header with Open from Cloud + badge (fits), PCB floating buttons + Auto-route panel (Q10-014), Auto Layout dialog (fits), Account (fits)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720"
+   ]
+  }
+ ],
+ "known": [
+  {
+   "ref": "K40",
+   "status": "partial",
+   "evidence": "Confirmed for cloud surfaces: CloudLibrarySyncButton renders `HTTP 500` as its label (Q10-004). Other 41 sites not in charter."
+  },
+  {
+   "ref": "K45",
+   "status": "partial",
+   "evidence": "Confirmed on cloud surfaces: CloudDesignBrowser hand-rolled overlay with raw red/slate classes (Q10-010); Account panel emerald/amber/red raw palette (Q10-013)."
+  },
+  {
+   "ref": "K43",
+   "status": "partial",
+   "evidence": "AiCloudTeaser 'Coming soon' confirmed on Settings → Account; additionally contradicts the shipped OpenPCB Cloud assistant provider (Q10-013)."
+  }
+ ],
+ "untested": [
+  {
+   "item": "Presence avatars with real peers",
+   "reason": "requires a reachable Supabase realtime + a second signed-in client; offline path covered by Q10-008"
+  },
+  {
+   "item": "Real browser-handoff sign-in / deep-link callback and invite acceptance",
+   "reason": "Electron-only deep links; cloud dead by design on C1"
+  },
+  {
+   "item": "Settings → Libraries 'Check for updates' with no internet",
+   "reason": "the check runs in the backend process, which has internet; cannot black-hole backend egress without restarting servers (forbidden)"
+  },
+  {
+   "item": "Auto Layout/Route Board with a black-holed (non-refusing) service host",
+   "reason": "AUTO_LAYOUT_URL is a backend env constant (localhost:3002, refused instantly); changing it needs a backend restart"
+  },
+  {
+   "item": "Free-tier (non-Pro) signed-in session variants",
+   "reason": "time; Pro variant covers a superset of surfaces (Auto Layout is not tier-gated)"
+  },
+  {
+   "item": "Stack C2 (prod preview)",
+   "reason": "not in q10 charter"
+  }
+ ]
+}

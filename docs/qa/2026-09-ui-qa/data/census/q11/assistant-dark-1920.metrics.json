@@ -1,0 +1,906 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "dark",
+ "vw": 1920,
+ "vh": 1080,
+ "docW": 1920,
+ "bands": [
+  {
+   "tag": "div",
+   "x": 400,
+   "y": 0,
+   "w": 1520,
+   "h": 56,
+   "text": "QA-q8-main 15 tools nvidia/nemotron-3.5-",
+   "cls": "flex h-14 items-center justify-between gap-3 border-b border-slate-200 bg-white px-6 dark:border-slate-800 dark:bg-slate-950/95",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "oklab(0.154793 0.000591978 -0.00201665 / 0.95)"
+  },
+  {
+   "tag": "button",
+   "x": 1628,
+   "y": 12,
+   "w": 230,
+   "h": 32,
+   "label": "Tools + streaming OK",
+   "text": "nvidia/nemotron-3.5-li\u2026 STRICT",
+   "cls": "flex h-8 max-w-[260px] items-center gap-1.5 rounded-control border border-slate-300 bg-white px-2.5 text-xs text-slate-600 hover:border-slat",
+   "n": 1,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(17, 17, 19)"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 52,
+   "w": 295,
+   "h": 29,
+   "cls": "mt-3 flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-500 dark:border-slate-700 dark:bg-sl",
+   "n": 1,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(12, 12, 13)"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 133,
+   "w": 295,
+   "h": 67,
+   "role": "button",
+   "label": "Open chat QA-q8-main",
+   "text": "QA-q8-main just now",
+   "cls": "group flex w-full cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors border-violet-600 bg-violet-50 tex",
+   "n": 1,
+   "bb": true,
+   "bt": true,
+   "bg": "oklab(0.451282 0.00225024 -0.00772989 / 0.1)"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 204,
+   "w": 295,
+   "h": 67,
+   "role": "button",
+   "label": "Open chat edge unbound v2",
+   "text": "edge unbound v2 7/12/2026",
+   "cls": "group flex w-full cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors border-transparent text-slate-600 ",
+   "n": 7,
+   "bb": true,
+   "bt": true,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "div",
+   "x": 649,
+   "y": 946,
+   "w": 1022,
+   "h": 24,
+   "text": "Type / for commands Type @ to reference ",
+   "cls": "flex items-center gap-3 border-b border-slate-100 bg-slate-50/60 px-3 py-1 text-[10px] text-slate-400 dark:border-slate-800 dark:bg-black/10",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "oklab(0 0 0 / 0.1)"
+  },
+  {
+   "tag": "div",
+   "x": 649,
+   "y": 1018,
+   "w": 1022,
+   "h": 24,
+   "text": "15 tools \u00b7 64k context \u23ce send \u21e7\u23ce newline",
+   "cls": "flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-3 py-1 text-[10px] text-slate-400 dark:border-slate-800 ",
+   "n": 1,
+   "bb": false,
+   "bt": true,
+   "bg": "oklab(0 0 0 / 0.1)"
+  }
+ ],
+ "rows": [
+  {
+   "parent": "mt-3 flex w-full flex-col items-center gap-2",
+   "px": 4,
+   "py": 137,
+   "child": "BUTTON.flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center g",
+   "n": 3,
+   "heights": {
+    "51": 3
+   },
+   "w": 72,
+   "sample": "Designer"
+  },
+  {
+   "parent": "mt-2 flex flex-wrap gap-1",
+   "px": 92,
+   "py": 89,
+   "child": "BUTTON.inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[10px] text-slate-500 hover:bg-slate-100 dark:text-s",
+   "n": 3,
+   "heights": {
+    "19": 3
+   },
+   "w": 73,
+   "sample": "Pinned 0"
+  },
+  {
+   "parent": "min-h-0 flex-1 space-y-1 overflow-auto p-3",
+   "px": 80,
+   "py": 121,
+   "child": "DIV.group flex w-full cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors border-tra",
+   "n": 11,
+   "heights": {
+    "67": 7,
+    "88": 4
+   },
+   "w": 295,
+   "sample": "edge unbound v2 7/12/2026"
+  },
+  {
+   "parent": "",
+   "px": 704,
+   "py": -8,
+   "child": "LI.",
+   "n": 8,
+   "heights": {
+    "24": 2,
+    "48": 6
+   },
+   "w": 930,
+   "sample": "Match the resistor to the supply\u2011LED vol"
+  }
+ ],
+ "btnHeights": {
+  "icon:24": 12,
+  "text:67": 8,
+  "text:51": 5,
+  "text:19": 4,
+  "text:88": 4,
+  "icon:28": 2,
+  "icon:32": 1,
+  "text:27": 1,
+  "text:16": 1,
+  "text:32": 1,
+  "icon:30": 1,
+  "text:20": 1
+ },
+ "btnVariants": {
+  "h51 fs12px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 132) fw400": {
+   "n": 4,
+   "ex": [
+    "Home",
+    "Designer",
+    "Library"
+   ]
+  },
+  "h51 fs12px r2px bg:rgb(28, 28, 31) bd:none fg:rgb(245, 245, 245) fw400": {
+   "n": 1,
+   "ex": [
+    "Assistant"
+   ]
+  },
+  "h27 fs11px r2px bg:rgb(58, 58, 64) bd:none fg:rgb(255, 255, 255) fw500": {
+   "n": 1,
+   "ex": [
+    "New"
+   ]
+  },
+  "h19 fs10px r999px bg:rgba(51, 209, 255, 0.08) bd:none fg:rgb(245, 245, 245) fw400": {
+   "n": 1,
+   "ex": [
+    "All\n12"
+   ]
+  },
+  "h19 fs10px r999px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(168, 168, 173) fw400": {
+   "n": 3,
+   "ex": [
+    "Pinned\n0",
+    "Linked\n4",
+    "Archived\n0"
+   ]
+  },
+  "h67 fs12px r2px bg:oklab(0.451282 0.00225024 -0.00772989 / 0.1) bd:rgb(138, 138, 144) fg:rgb(236, 236, 238) fw400": {
+   "n": 1,
+   "ex": [
+    "QA-q8-main\njust now"
+   ]
+  },
+  "h67 fs12px r2px bg:rgba(0, 0, 0, 0) bd:rgba(0, 0, 0, 0) fg:rgb(168, 168, 173) fw400": {
+   "n": 7,
+   "ex": [
+    "edge unbound v2\n7/12/202",
+    "edge unbound\n7/12/2026",
+    "E2E OR 555\n6/1/2026"
+   ]
+  },
+  "h88 fs12px r2px bg:rgba(0, 0, 0, 0) bd:rgba(0, 0, 0, 0) fg:rgb(168, 168, 173) fw400": {
+   "n": 4,
+   "ex": [
+    "edge additive v2\nS3 LLM ",
+    "edge bad recipe\nS3 LLM E",
+    "edge 12V\nS3 LLM Edge \u2014 1"
+   ]
+  },
+  "h16 fs12px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(236, 236, 238) fw400": {
+   "n": 1,
+   "ex": [
+    "QA-q8-main"
+   ]
+  },
+  "h32 fs11px r2px bg:rgb(17, 17, 19) bd:rgb(44, 44, 49) fg:rgb(196, 196, 201) fw400": {
+   "n": 1,
+   "ex": [
+    "nvidia/nemotron-3.5-li\u2026\n"
+   ]
+  },
+  "h20 fs12px r4px bg:oklab(0.451282 0.00225024 -0.00772989 / 0.15) bd:none fg:rgb(168, 168, 173) fw500": {
+   "n": 1,
+   "ex": [
+    "@\nQA-q9-mention-target"
+   ]
+  }
+ },
+ "btnOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 137,
+   "w": 72,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 195,
+   "w": 72,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 312,
+   "w": 64,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 1038,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 294,
+   "y": 12,
+   "w": 28,
+   "h": 28,
+   "label": "Collapse sidebar",
+   "cls": "rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 326,
+   "y": 13,
+   "w": 61,
+   "h": 27,
+   "text": "New",
+   "cls": "inline-flex items-center gap-1 rounded-lg bg-violet-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-violet-500",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 92,
+   "y": 89,
+   "w": 44,
+   "h": 19,
+   "text": "All 12",
+   "cls": "inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[10px] bg-accent-soft text-accent-text",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 140,
+   "y": 89,
+   "w": 73,
+   "h": 19,
+   "text": "Pinned 0",
+   "cls": "inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[10px] text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slat",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 217,
+   "y": 89,
+   "w": 72,
+   "h": 19,
+   "text": "Linked 4",
+   "cls": "inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[10px] text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slat",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 293,
+   "y": 89,
+   "w": 65,
+   "h": 19,
+   "text": "Archived 0",
+   "cls": "inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[10px] text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slat",
+   "fs": "10px"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 133,
+   "w": 295,
+   "h": 67,
+   "role": "button",
+   "label": "Open chat QA-q8-main",
+   "text": "QA-q8-main just now",
+   "cls": "group flex w-full cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors border-violet-600 bg-violet-50 tex",
+   "fs": "12px"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 204,
+   "w": 295,
+   "h": 67,
+   "role": "button",
+   "label": "Open chat edge unbound v2",
+   "text": "edge unbound v2 7/12/2026",
+   "cls": "group flex w-full cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors border-transparent text-slate-600 ",
+   "fs": "12px"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 274,
+   "w": 295,
+   "h": 67,
+   "role": "button",
+   "label": "Open chat edge unbound",
+   "text": "edge unbound 7/12/2026",
+   "cls": "group flex w-full cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors border-transparent text-slate-600 ",
+   "fs": "12px"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 345,
+   "w": 295,
+   "h": 88,
+   "role": "button",
+   "label": "Open chat edge additive v2",
+   "text": "edge additive v2 S3 LLM Edge \u2014 additive ",
+   "cls": "group flex w-full cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors border-transparent text-slate-600 ",
+   "fs": "12px"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 437,
+   "w": 295,
+   "h": 88,
+   "role": "button",
+   "label": "Open chat edge bad recipe",
+   "text": "edge bad recipe S3 LLM Edge \u2014 bad recipe",
+   "cls": "group flex w-full cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors border-transparent text-slate-600 ",
+   "fs": "12px"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 529,
+   "w": 295,
+   "h": 88,
+   "role": "button",
+   "label": "Open chat edge 12V",
+   "text": "edge 12V S3 LLM Edge \u2014 12V params 7/12/2",
+   "cls": "group flex w-full cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors border-transparent text-slate-600 ",
+   "fs": "12px"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 621,
+   "w": 295,
+   "h": 88,
+   "role": "button",
+   "label": "Open chat S3 LLM smoke",
+   "text": "S3 LLM smoke probe 7/12/2026",
+   "cls": "group flex w-full cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors border-transparent text-slate-600 ",
+   "fs": "12px"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 713,
+   "w": 295,
+   "h": 67,
+   "role": "button",
+   "label": "Open chat E2E OR 555",
+   "text": "E2E OR 555 6/1/2026",
+   "cls": "group flex w-full cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors border-transparent text-slate-600 ",
+   "fs": "12px"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 783,
+   "w": 295,
+   "h": 67,
+   "role": "button",
+   "label": "Open chat E2E 555 blinker",
+   "text": "E2E 555 blinker 6/1/2026",
+   "cls": "group flex w-full cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors border-transparent text-slate-600 ",
+   "fs": "12px"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 854,
+   "w": 295,
+   "h": 67,
+   "role": "button",
+   "label": "Open chat New chat",
+   "text": "New chat 5/31/2026",
+   "cls": "group flex w-full cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors border-transparent text-slate-600 ",
+   "fs": "12px"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 924,
+   "w": 295,
+   "h": 67,
+   "role": "button",
+   "label": "Open chat New chat",
+   "text": "New chat 5/29/2026",
+   "cls": "group flex w-full cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors border-transparent text-slate-600 ",
+   "fs": "12px"
+  },
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 995,
+   "w": 295,
+   "h": 67,
+   "role": "button",
+   "label": "Open chat New chat",
+   "text": "New chat 5/29/2026",
+   "cls": "group flex w-full cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors border-transparent text-slate-600 ",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 424,
+   "y": 20,
+   "w": 85,
+   "h": 16,
+   "label": "Rename chat",
+   "text": "QA-q8-main",
+   "cls": "group flex min-w-0 items-center gap-1.5 text-left",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1628,
+   "y": 12,
+   "w": 230,
+   "h": 32,
+   "label": "Tools + streaming OK",
+   "text": "nvidia/nemotron-3.5-li\u2026 STRICT",
+   "cls": "flex h-8 max-w-[260px] items-center gap-1.5 rounded-control border border-slate-300 bg-white px-2.5 text-xs text-slate-600 hover:border-slat",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 1866,
+   "y": 13,
+   "w": 30,
+   "h": 30,
+   "label": "Chat actions",
+   "cls": "rounded-control border border-slate-300 p-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-40",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1633,
+   "y": 980,
+   "w": 28,
+   "h": 28,
+   "label": "Send",
+   "cls": "mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-600 text-white hover:bg-violet-500 disabled:bg-slate-200 disab",
+   "fs": "12px"
+  }
+ ],
+ "inputs": [
+  {
+   "tag": "input",
+   "x": 127,
+   "y": 59,
+   "w": 247,
+   "h": 15,
+   "cls": "min-w-0 flex-1 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200",
+   "type": "text",
+   "ph": "Search chats",
+   "fs": "11px",
+   "rad": "0px",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bd": "none",
+   "wrapH": 29,
+   "wrapRad": "2px",
+   "native": "auto"
+  },
+  {
+   "tag": "textarea",
+   "x": 659,
+   "y": 978,
+   "w": 966,
+   "h": 32,
+   "cls": "max-h-48 min-h-0 w-full resize-none overflow-y-auto bg-transparent text-sm leading-relaxed text-slate-800 outline-none placeholder:text-slat",
+   "type": "textarea",
+   "ph": "Ask about your PCB, or describe what to build\u2026",
+   "fs": "12px",
+   "rad": "0px",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bd": "none",
+   "wrapH": 48,
+   "wrapRad": "0px",
+   "native": "auto"
+  }
+ ],
+ "tablists": [],
+ "segs": [],
+ "radii": {
+  "2px": 23,
+  "circle/pill": 17,
+  "4px": 11,
+  "10px": 2
+ },
+ "radEx": {
+  "pill>12": [
+   {
+    "tag": "button",
+    "x": 92,
+    "y": 89,
+    "w": 44,
+    "h": 19,
+    "text": "All 12",
+    "cls": "inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[10px] bg-accent-soft text-accent-text"
+   }
+  ],
+  "4px": [
+   {
+    "tag": "span",
+    "x": 105,
+    "y": 384,
+    "w": 133,
+    "h": 18,
+    "text": "S3 LLM Edge \u2014 additive v2",
+    "cls": "inline-flex w-fit max-w-full items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] text-accent-text dark:bg-slate-800"
+   },
+   {
+    "tag": "span",
+    "x": 105,
+    "y": 476,
+    "w": 131,
+    "h": 18,
+    "text": "S3 LLM Edge \u2014 bad recipe",
+    "cls": "inline-flex w-fit max-w-full items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] text-accent-text dark:bg-slate-800"
+   },
+   {
+    "tag": "span",
+    "x": 105,
+    "y": 568,
+    "w": 137,
+    "h": 18,
+    "text": "S3 LLM Edge \u2014 12V params",
+    "cls": "inline-flex w-fit max-w-full items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] text-accent-text dark:bg-slate-800"
+   },
+   {
+    "tag": "span",
+    "x": 105,
+    "y": 660,
+    "w": 50,
+    "h": 18,
+    "text": "probe",
+    "cls": "inline-flex w-fit max-w-full items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] text-accent-text dark:bg-slate-800"
+   },
+   {
+    "tag": "span",
+    "x": 1783,
+    "y": 18,
+    "w": 44,
+    "h": 19,
+    "text": "STRICT",
+    "cls": "shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+   },
+   {
+    "tag": "button",
+    "x": 1285,
+    "y": 679,
+    "w": 150,
+    "h": 20,
+    "label": "Open QA-q9-mention-target",
+    "text": "@ QA-q9-mention-target",
+    "cls": "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-sm font-medium transition-colors bg-violet-500/10 text-violet-700 hover:bg-violet-"
+   }
+  ],
+  "10px": [
+   {
+    "tag": "div",
+    "x": 1539,
+    "y": 432,
+    "w": 117,
+    "h": 42,
+    "text": "offline send test",
+    "cls": "max-w-[80%] whitespace-pre-wrap break-words rounded-[10px_10px_2px_10px] border border-violet-300/40 bg-accent-soft px-3.5 py-2.5 text-sm le"
+   },
+   {
+    "tag": "div",
+    "x": 1270,
+    "y": 668,
+    "w": 386,
+    "h": 42,
+    "text": "@ QA-q9-mention-target Summarize this pa",
+    "cls": "max-w-[80%] whitespace-pre-wrap break-words rounded-[10px_10px_2px_10px] border border-violet-300/40 bg-accent-soft px-3.5 py-2.5 text-sm le"
+   }
+  ]
+ },
+ "shadows": [
+  {
+   "tag": "span",
+   "x": 1639,
+   "y": 24,
+   "w": 8,
+   "h": 8,
+   "cls": "h-2 w-2 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_6px_currentColor]",
+   "bs": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0"
+  },
+  {
+   "tag": "div",
+   "x": 648,
+   "y": 945,
+   "w": 1024,
+   "h": 98,
+   "text": "Type / for commands Type @ to reference ",
+   "cls": "rounded-xl shadow-xl shadow-slate-900/5 dark:shadow-black/40",
+   "bs": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0"
+  }
+ ],
+ "shadowCount": 2,
+ "blurs": [],
+ "grads": [
+  {
+   "tag": "div",
+   "x": 400,
+   "y": 865,
+   "w": 1520,
+   "h": 80,
+   "cls": "h-20 bg-gradient-to-t from-slate-50 to-transparent dark:from-slate-950",
+   "bi": "linear-gradient(to top in oklab, rgb(12, 12, 13) 0%, rgba(0, 0, 0, 0) 100%)"
+  }
+ ],
+ "fontSizes": {
+  "10px": 26,
+  "11px": 24,
+  "12px": 19,
+  "14px": 18,
+  "9px": 5
+ },
+ "fontFam": {
+  "IBM Plex Sans": 87,
+  "IBM Plex Mono": 5
+ },
+ "weights": {
+  "400": 61,
+  "500": 19,
+  "600": 12
+ },
+ "small": [
+  {
+   "tag": "span",
+   "x": 125,
+   "y": 386,
+   "w": 107,
+   "h": 14,
+   "text": "S3 LLM Edge \u2014 additive v2",
+   "cls": "truncate",
+   "fs": "9px"
+  },
+  {
+   "tag": "span",
+   "x": 125,
+   "y": 478,
+   "w": 105,
+   "h": 14,
+   "text": "S3 LLM Edge \u2014 bad recipe",
+   "cls": "truncate",
+   "fs": "9px"
+  },
+  {
+   "tag": "span",
+   "x": 125,
+   "y": 570,
+   "w": 111,
+   "h": 14,
+   "text": "S3 LLM Edge \u2014 12V params",
+   "cls": "truncate",
+   "fs": "9px"
+  },
+  {
+   "tag": "span",
+   "x": 125,
+   "y": 662,
+   "w": 24,
+   "h": 14,
+   "text": "probe",
+   "cls": "truncate",
+   "fs": "9px"
+  },
+  {
+   "tag": "span",
+   "x": 1783,
+   "y": 18,
+   "w": 44,
+   "h": 19,
+   "text": "STRICT",
+   "cls": "shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400",
+   "fs": "9px"
+  }
+ ],
+ "big": [],
+ "iconSizes": {
+  "16x16": 18,
+  "12x12": 7,
+  "20x20": 5,
+  "10x10": 4,
+  "14x14": 3,
+  "18x18": 2
+ },
+ "iconStroke": {
+  "2px/attr2": 31,
+  "1.5px/attr1.5": 8
+ },
+ "iconOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-layout-grid h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 137,
+   "w": 72,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-pen-tool h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 195,
+   "w": 72,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-box h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-book-open h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 312,
+   "w": 64,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-bot h-5 w-5"
+  },
+  {
+   "tag": "a",
+   "x": 24,
+   "y": 998,
+   "w": 32,
+   "h": 32,
+   "label": "Report a bug or request a feature",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-circle-dot h-[18px] w-[18p"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 1038,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-settings h-[18px] w-[18px]"
+  }
+ ],
+ "otherSvgs": [],
+ "floats": [],
+ "alerts": [],
+ "headings": [],
+ "canvases": [],
+ "overflowX": [],
+ "clipped": []
+}

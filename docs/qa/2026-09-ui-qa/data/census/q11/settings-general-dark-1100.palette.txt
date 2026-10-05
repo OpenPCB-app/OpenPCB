@@ -1,0 +1,26 @@
+/private/tmp/claude-501/-Users-andrejvysny-workspace-openpcb-OpenPCB/f18aac79-e8af-4eed-b528-c505e87cbf8a/scratchpad/qa/shots/q11/dark/016-settings-general-1100.png theme=dark sampled=198000
+#0c0c0c  51.5%  --surface-app dE=0.5
+#101010  34.4%  --surface-rail dE=0.6
+#0c0c10   7.0%  --surface-app dE=1.5
+#30180c   4.0%  --status-warning-soft@app dE=10.0  OFF-TOKEN
+#242428   0.8%  --divider dE=0.9
+#1c1c20   0.7%  --surface-raised dE=0.7
+#e8e8e8   0.2%  --primary dE=0.0
+#28282c   0.1%  --border-control dE=0.9
+#d8d8d8   0.0%  --text dE=0.4
+#606064   0.0%  --text-caps dE=4.3
+#f4f4f4   0.0%  --text-strong dE=0.3
+#7c7c84   0.0%  --text-tertiary dE=2.1
+#101014   0.0%  --primary-foreground dE=0.7
+#4c4c50   0.0%  --text-disabled dE=3.9
+#181818   0.0%  --surface-panel-head dE=2.0
+#141414   0.0%  --surface-panel-head dE=1.5
+#444448   0.0%  --text-disabled dE=7.3
+#141418   0.0%  --border-subtle dE=1.0
+#68686c   0.0%  --text-caps dE=1.5
+#705834   0.0%  --text-disabled dE=27.8
+#1c1c1c   0.0%  --status-neutral-soft@app dE=1.5
+#58585c   0.0%  --text-disabled dE=1.4
+#78787c   0.0%  --text-tertiary dE=2.8
+#505054   0.0%  --text-disabled dE=2.2
+#7c7c80   0.0%  --text-tertiary dE=1.3

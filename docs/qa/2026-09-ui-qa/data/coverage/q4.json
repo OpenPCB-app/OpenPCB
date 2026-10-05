@@ -1,0 +1,420 @@
+{
+ "agent": "q4",
+ "checklist": [
+  {
+   "item": "Toolbar: every button, tooltip, disabled states (Undo/Redo/Fit/Flip/Route/Board/Add/Export/DRC/View)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "DRC count consistency toolbar vs dock tab vs status bar (spike)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Route: R, click pad, corners, Enter/End finish, Esc cancel, Backspace",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Route: width W/Shift+W, width dropdown Custom… (K03 prompt)",
+   "dark": "tested",
+   "light": "tested (chrome only)",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Route: via V / + / -, via preset/diameter/drill dropdowns + Custom (K03)",
+   "dark": "tested",
+   "light": "tested (chrome only)",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Route: corner mode 45/90, posture /, layer switch T/B/1/2 while routing and idle (K16)",
+   "dark": "tested",
+   "light": "tested (chrome only)",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Route hint text (K16)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Board O: draw custom outline, typed length, Enter close",
+   "dark": "tested",
+   "light": "tested (sketch HUD)",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Board outline edit: drag corner, Fillet/Chamfer/Set position/Delete vertex, Set length/Insert vertex, Enter/Esc in CornerOpModal/EdgeDimModal, undo/redo",
+   "dark": "tested",
+   "light": "tested (fillet modal, context menu)",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Import DXF… with board-rect.dxf",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Board panel: shape Rect/Rounded/Circle/Oval, size inputs + validation, presets, Apply, Done, Fit to parts, Reset to rectangle, Stackup, Edit rules…, Summary",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Add menu: Hole H, Pad P, Text T (K02), Zone Z, Keepout K, Comment C (K14)",
+   "dark": "tested",
+   "light": "tested (menu, keepout)",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Shift+Z zone cutout",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "M measure",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "U tune (target length, amplitude, apply)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "F flip selected / selection filter with nothing selected",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "R rotate selected part, Flip part button, Delete (incl. footprint re-spawn)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Cmd+Z / Cmd+Shift+Z / Ctrl+Y",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Cmd+A (K18)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Context menus: empty canvas (K15), trace, via, placement, outline corner/edge",
+   "dark": "tested",
+   "light": "tested (empty, corner)",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Overlap picker (Alt+click)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "View menu: ratsnest / guides / DRC markers",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Layers panel: eye toggles, Alt+click solo (+ cross-design leak), opacity slider, preset select, copper fill toggle + selects, display mode Normal/Dim/Hide + Ctrl+H, group collapse",
+   "dark": "tested",
+   "light": "tested (solo, eye, display mode)",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Layer tab strip clicks + flip view (Shift+F / Viewing Top)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Components panel row click selects/centres; shift-click",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Properties dock: nothing (Board panel)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Properties dock: single footprint, multi-selection",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Properties dock: free hole, free pad, text, zone, keepout, trace, via",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Design rules dialog: edit, Cancel, Save & re-run, Esc, <select> + R/T/Delete (K12)",
+   "dark": "tested",
+   "light": "tested (visual)",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Assistant dock composer typing 'rotate test' (K12)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Inspector <select> + R / Backspace (K12)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "DRC dock: Run DRC, progress, violations list, click violation centres canvas, Waive/Un-waive, severity toggles, Edit rules, stale banner",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Full DRC view tab (empty + results)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Export… dialog on 2-layer board (K30), DRC gate, Export anyway, Download, Esc, hotkeys behind modal",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Autolayout / Route board / Auto place buttons with cloud off",
+   "dark": "n/a",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Status bar: cursor, zoom, layer, hint, DRC chip, selection, view side, units",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Canvas clear colour probe vs --surface-canvas-well (K38)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Light theme parity of PCB chrome (menus, route row, dock, dialogs, modals, HUDs, toasts, filter)",
+   "dark": "n/a",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "1100x720 layout check (board panel, route row, DRC dock, export dialog, sidebar)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720"
+   ]
+  },
+  {
+   "item": "DOM census PCB board state",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "DRC Demo 3196d811: PCB, free holes/pads, Fit to parts, Run DRC, messages",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  }
+ ],
+ "known": [
+  {
+   "ref": "spike",
+   "status": "confirmed",
+   "evidence": "Q4-001: toolbar 13→32 (errors) vs dock/status 19→106 (errors+warnings); live route count '1 DRC' in status bar while routing"
+  },
+  {
+   "ref": "K02",
+   "status": "confirmed",
+   "evidence": "Q4-030: window.prompt('Overlay text:') on Text tool click; dialog spy prompt:1"
+  },
+  {
+   "ref": "K03",
+   "status": "confirmed",
+   "evidence": "Q4-008: Custom… width/diameter/drill use native prompts, no validation"
+  },
+  {
+   "ref": "K12",
+   "status": "confirmed",
+   "evidence": "Q4-019 (S1): composer typing toggles tools, Backspace deletes selected trace; also inspector <select> R→Route, Backspace→deletes pad; Q4-022 rules dialog selects; Q4-040 Export modal Delete removes hole"
+  },
+  {
+   "ref": "K13",
+   "status": "confirmed",
+   "evidence": "Q4-035: no code path sets toolMode 'bundle'; Tune/Measure hotkey-only"
+  },
+  {
+   "ref": "K14",
+   "status": "confirmed",
+   "evidence": "Q4-020: C does nothing on PCB; Esc does not exit Comment tool"
+  },
+  {
+   "ref": "K15",
+   "status": "confirmed",
+   "evidence": "Q4-015: empty-canvas menu shows 'Enter route mode X'"
+  },
+  {
+   "ref": "K16",
+   "status": "partial",
+   "evidence": "Q4-045: T/B hint is never rendered (primaryOnly hints) but in idle Route mode T quits Route and arms Text while B switches layer"
+  },
+  {
+   "ref": "K18",
+   "status": "confirmed",
+   "evidence": "Q4-018: Cmd+A selects nothing, highlights app chrome text"
+  },
+  {
+   "ref": "K30",
+   "status": "confirmed",
+   "evidence": "Q4-024: inner copper checkbox enabled+checked on 2-layer board (both themes)"
+  },
+  {
+   "ref": "K37",
+   "status": "confirmed",
+   "evidence": "Q4-050: 18px inspector/board inputs, 18/20px route row, 32px modal inputs, 13px checkboxes"
+  },
+  {
+   "ref": "K38",
+   "status": "confirmed",
+   "evidence": "Q4-038: PCB clear #0e1116 in dark and light (token #08090a, ΔE 3.9); PcbCanvas.tsx:5922 hard-coded"
+  }
+ ],
+ "untested": [
+  {
+   "item": "Autolayout / Route board / Auto place dialogs",
+   "reason": "Hidden on stack A: autoLayoutEnabled = cloudEnabled && flag; cloud auth forced off (Space.tsx:346). Belongs to C1 (Q10)."
+  },
+  {
+   "item": "Electron-specific behaviour of native prompts / title bar",
+   "reason": "Browser-only stack; window.prompt behaviour in Electron inferred, not observed"
+  },
+  {
+   "item": "Light-theme pass of Tune/Measure/overlap picker/copper-fill rows",
+   "reason": "Canvas-driven overlays share the same components as dark; chrome colours verified via probes on route row, menus, dock, dialogs only"
+  },
+  {
+   "item": "4-layer board flows (layer pair chip, In1/In2, inner copper export)",
+   "reason": "No UI to change copper layer count (Stackup is read-only); no 4-layer design owned"
+  }
+ ]
+}

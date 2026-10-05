@@ -1,0 +1,316 @@
+{
+ "agent": "f2b",
+ "stack": "B",
+ "designsCreated": {
+  "QA-f2b-2L": "4ed2e1e5-3333-49d1-b27e-c1b3d2ef2dd4",
+  "QA-f2b-4L": "2a4c5318-4bea-4e32-841b-2750b998e9d4",
+  "QA-f2b-6L": "315789a0-b31c-48d7-bd36-b48cc3d3c593",
+  "QA-f2b-blind": "60743616-5236-45e6-a8fd-1195e3107cbf"
+ },
+ "fixtures": "f2b/QA-f2b-{2L,4L,6L,blind}.zip built by f2b/build.py from fixtures/KiCad_Example_Project_USBtoUART.zip (.kicad_pro + .kicad_sch + crafted .kicad_pcb). 4L: In1/In2 + D1-K & D+ chains on In1, D2-K on In2, GND zone on In2. 6L: In1..In4, chains on In1/In2/In3/In4, GND zone In2. blind: 4L + via (156.75,132.5) blind F.Cu–In1.Cu.",
+ "checklist": [
+  {
+   "item": "Build 4L/6L/blind fixtures outside the repo",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": []
+  },
+  {
+   "item": "Import 2L/4L/6L/blind via Home → Import KiCad…; review step (layer count, warnings), result",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "Review shows 'Copper layers 2/4/6/4' and only [net_class_unknown_rules]; no warning for 6 layers or blind via; commit warnings (J1 dropped) never shown (Q5-019); opens on Schem tab; dialog always dark (Q5-029)."
+  },
+  {
+   "item": "Fidelity 2L/4L: footprints, segments, vias, zones, nets vs kicad_pcb, /projection/pcb, UI",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "footprints 19→18 (J1, Q5-019); segments 183→183 with identical widths and per-layer split (4L: F148/B24/In1 7/In2 4); vias 44→44 (0.6/0.3); zones F&B split to 2 + In2 = 3 with clearance 0.5/min 0.25; nets 36→51 (duplicates, renamed Net_N) and 142/183 traces + 15/44 vias netless (F2B-002); gr_text 7→0 (F2B-015); board Y-mirrored and 90/270° pads swapped (F2B-001); netclasses 1→3 (F2B-003)."
+  },
+  {
+   "item": "4L layer tab strip In1/In2",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ],
+   "notes": "present as Mid-Layer 1/2; strip overflows even at 1440 (F2B-009)"
+  },
+  {
+   "item": "Layers panel rows + inner-layer colour distinctness (probe)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "F2B-014; inner layers hidden on open (F2B-012)"
+  },
+  {
+   "item": "Layer keys 1/2/3/4, PgUp/PgDn",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "4L: 1/2/3/4 OK; PgUp/PgDn jump to F/B (KiCad-like, no inner cycling); 6L: 3/4 dead (F2B-007)"
+  },
+  {
+   "item": "Alt+click solo on inner layer",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "Q4-011 confirmed on In2: 'Revision conflict', active layer stays B.Cu, B.Cu pour visible through solo"
+  },
+  {
+   "item": "Dim/Hide display modes",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "Normal≈Dim (Q4-013). On 4L at 1440 the Normal/Dim/Hide segment is covered by the Components header (F1B-001 root) — click intercepted"
+  },
+  {
+   "item": "Board panel Stackup",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "Copper layers 4 / 6, thickness 1.60; no export warning for 6"
+  },
+  {
+   "item": "3D stackup and thickness",
+   "dark": "blocked",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "Board not visible in 3D (Q5-020, imported board off-origin); Mechanical card '4 layer · 1…' truncated (Q5-017)"
+  },
+  {
+   "item": "4L routing: R, key 3, layer-pair chip + options, V via continues on pair layer, commit",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ],
+   "notes": "Pair chip F↔B/F↔In1/In1↔In2/In2↔B; V from In1 with In1↔In2 → In2 OK; default 'Standard 4L' (imported class 0.6/0.3) rejected at commit INVALID_PCB_VIA → 'Command failed' (F2B-003, F2B-004); with Standard 2L commit OK (+2 traces In1/In2, +1 via)"
+  },
+  {
+   "item": "Zone on In2 (Zone layer list)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "Layer select lists F/In1/In2/B (6L: also In3/In4); zone created but invisible under F.Cu pour (F2B-005); net list has 4× VBUS etc."
+  },
+  {
+   "item": "DRC on 4L",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "231 errors / 321 warnings, same noise as 2L + ZONE_OVERLAP from test zone"
+  },
+  {
+   "item": "Undo/redo of route",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "Ctrl+Z removes 2 traces + via, Ctrl+Shift+Z restores; an extra undo step is an invisible layer change (Q4-025)"
+  },
+  {
+   "item": "4L export with inner layers",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "16 files; In1_Cu Copper,L2,Inr; In2_Cu Copper,L3,Inr; B_Cu L4,Bot; gbrjob LayerNumber 4; PTH/NPTH Plated,1,4 — correct"
+  },
+  {
+   "item": "4L export with inner box unchecked",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "F2B-006: inner files dropped, gbrjob still 4 layers, no warning"
+  },
+  {
+   "item": "6L: In3/In4 reach (tabs/keys/panel), route on In3",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ],
+   "notes": "Unreachable/invisible (F2B-007); route on In3 impossible"
+  },
+  {
+   "item": "6L export 422 'Unsupported layer count' UX",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "Pre-blocked via summary 422, detail text shown; F2B-008; light contrast F2B-013"
+  },
+  {
+   "item": "Blind via: render, inspector type, DRC",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "Renders like through via; no via inspector (F2B-011); DRC VIA_TYPE_UNSUPPORTED error (mentions JLCPCB 2-layer on a 4L board); DRC entry jumps to via"
+  },
+  {
+   "item": "Blind via export 422 'Unsupported via type' + locate via",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "detail shown, viaIds discarded, no way from dialog to the via (F2B-008)"
+  },
+  {
+   "item": "DRC on imported 2L: totals by type + ≥3 spot checks",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "230 errors/318 warnings. By type: FAB_SILK_CLEARANCE 61, NETCLASS_TRACE_WIDTH 59, ANNULAR_RING_MIN 44, DRILL_SIZE_MIN 44, VIA_DIAMETER_MIN 44, VIA_DRILL_MIN 44, SILK_TO_BOARD_EDGE 39, FAB_MASK_BRIDGE 36, NETCLASS_VIA_DIAMETER 32, NETCLASS_VIA_DRILL 32, NET_SHORT_CIRCUIT 17, HOLE_TO_HOLE 14, TRACE_TO_TRACE_CLEARANCE 14, FAB_MASK_TO_COPPER 11, SILK_TO_MASK_CLEARANCE 11, UNCONNECTED_NET 10, TRACE_TO_PAD_CLEARANCE 9, FAB_SILK_WIDTH 7, TRACK_DANGLING 7, … Spot checks: via min ×4 = false positive vs imported class (F2B-003); NETCLASS_* on GND = false positive (synthetic GND class, F2B-003); TRACE_TO_TRACE 14/14 same KiCad net = false positive (F2B-002); NET_SHORT_CIRCUIT caused by pad swap (F2B-001); HOLE_TO_HOLE 0.054 mm between GND vias under U1 = true positive (KiCad source vias really that close)."
+  },
+  {
+   "item": "1100×720: 6-layer strip overflow cue; route row with layer-pair chip",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1100x720"
+   ],
+   "notes": "F2B-009, F2B-010; Layers list paints over Components (F1B-001/Q4-042)"
+  },
+  {
+   "item": "Console / native dialogs",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ],
+   "notes": "0 prompt/confirm/alert; console errors only the 422 summary responses; THREE.Clock deprecation warnings"
+  }
+ ],
+ "known": [
+  {
+   "ref": "K30",
+   "status": "confirmed",
+   "evidence": "2L export dialog: 'Include inner copper layers (4-layer boards only)' enabled+checked (shots/f2b/dark/007-2L-export-dialog.png); new 4L variant filed as F2B-006"
+  },
+  {
+   "ref": "Q5-019",
+   "status": "confirmed",
+   "evidence": "J1 dropped on all four imports (commit warnings component_unresolved / pcb_placement_skipped_no_part), 18/19 placements"
+  },
+  {
+   "ref": "Q5-020",
+   "status": "confirmed",
+   "evidence": "4L 3D view empty (shots/f2b/dark/020-4L-3d.png)"
+  },
+  {
+   "ref": "Q5-021",
+   "status": "confirmed",
+   "evidence": "stale 'v1 imports the project name…' footnote and 'missing' tags on every import"
+  },
+  {
+   "ref": "Q5-029",
+   "status": "confirmed",
+   "evidence": "import dialog stays dark in light theme (shots/f2b/light/050-import-review-6L.png)"
+  },
+  {
+   "ref": "Q4-011",
+   "status": "confirmed",
+   "evidence": "Alt+click Mid-Layer 2 → 'Revision conflict. Please retry after refresh.' (shots/f2b/dark/014-4L-alt-solo-In2.png)"
+  },
+  {
+   "ref": "Q4-013",
+   "status": "confirmed",
+   "evidence": "Normal F.Cu #86000f vs Dim #6d000e with In1 active (f2b/modes-compare.png)"
+  },
+  {
+   "ref": "F1B-001",
+   "status": "confirmed",
+   "evidence": "On 4L at 1440 the Normal/Dim/Hide segment is under the Components header (click intercepted); at 1100 layer rows paint over C1–C3 (shots/f2b/light/066-4L-1100.png)"
+  },
+  {
+   "ref": "Q4-041",
+   "status": "partial",
+   "evidence": "extends to 1440 on 4+-layer boards, filed as F2B-009"
+  },
+  {
+   "ref": "Q4-042",
+   "status": "confirmed",
+   "evidence": "route row wraps 'Standard 4L', status clipped (F2B-010)"
+  },
+  {
+   "ref": "Q4-005",
+   "status": "confirmed",
+   "evidence": "'Via blocked: NET_SHORT_CIRCUIT, TRACE_TO_PAD_CLEARANCE, …' and tooltip 'Reported by DRC but never blocking (contract 07 §6)'"
+  },
+  {
+   "ref": "Q4-016",
+   "status": "confirmed",
+   "evidence": "click on blind via selects the trace; needed Selection filter"
+  },
+  {
+   "ref": "Q4-006",
+   "status": "confirmed",
+   "evidence": "PCB zoom readout stays 10% after heavy wheel zoom (shots/f2b/dark/072-blind-zoom.png)"
+  },
+  {
+   "ref": "Q4-025",
+   "status": "confirmed",
+   "evidence": "second Ctrl+Z after route undo bumps revision with no visible change"
+  },
+  {
+   "ref": "Q4-023",
+   "status": "confirmed",
+   "evidence": "tab label stays 'r13' at revision 23+; 'board changed since this DRC ran' banner right after export-dialog DRC"
+  },
+  {
+   "ref": "Q4-009",
+   "status": "confirmed",
+   "evidence": "preset menu 'drill / diameter' vs chips 'Ø 0.60 / ⌀ 0.30'"
+  }
+ ],
+ "untested": [
+  {
+   "item": "3D inner-layer stackup rendering",
+   "reason": "imported boards render off-screen in 3D (Q5-020)"
+  },
+  {
+   "item": "Routing on In3/In4 (6L)",
+   "reason": "no UI path to select or see In3/In4 (F2B-007)"
+  },
+  {
+   "item": "Light-theme routing/DRC interaction on 4L",
+   "reason": "time-boxed; theme-independent logic verified in dark, light used for rendering/dialog checks"
+  }
+ ]
+}

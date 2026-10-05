@@ -1,0 +1,2251 @@
+[
+ {
+  "id": "Q8-001",
+  "area": "assistant.space",
+  "title": "Model pill silently swaps the provider's default (free) model for the first model in the list (paid aion-labs/aion-2.0); new chats persist it",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "repro": [
+   "Stack A: OpenRouter provider enabled with defaultModel 'nvidia/nemotron-3.5-lightning:free' (GET /providers shows it); settings.defaultProviderId=openrouter",
+   "Open Assistant (auto-selects chat 'edge unbound v2', stored on disabled provider OpenCode Zen / deepseek-v4-flash-free)",
+   "Look at the model pill / sidebar footer",
+   "Click New → GET /api/modules/assistant/chats"
+  ],
+  "expected": "When a chat's provider is healed to the default provider, the model falls back to that provider's defaultModel (nemotron free). New chats use the default model.",
+  "actual": "Pill + sidebar footer show 'aion-labs/aion-2.0' (alphabetically first of 460 OpenRouter models, a paid model). The new chat is persisted with model 'aion-labs/aion-2.0' (API: {providerConfigId:'openrouter', model:'aion-labs/aion-2.0'}). A user who just hits Send would be billed on an arbitrary paid model instead of the configured free default.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/001-edge-unbound-v2-pill.png",
+    "shots/vq8/dark/002-new-chat-aion.png",
+    "shots/q8/dark/001-assistant-initial.png",
+    "shots/q8/dark/004-new-chat-empty.png",
+    "shots/q8/dark/003-model-pill-popover.png"
+   ],
+   "network": [
+    "GET /api/modules/assistant/chats → newest {title:'New chat', providerConfigId:'openrouter', model:'aion-labs/aion-2.0'}",
+    "GET /providers → openrouter.defaultModel='nvidia/nemotron-3.5-lightning:free' (present in the 460-entry models list)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 750,
+    "note": "effect: if model not in models → setModel(models[0].modelId); races with the provider-heal effect (:762) that sets fallback.defaultModel while `models` still holds the previous provider's list"
+   },
+   {
+    "path": "src/modules/assistant/frontend/components/ModelSelectorPill.tsx",
+    "line": 163,
+    "note": "select value also falls back to models[0]"
+   }
+  ],
+  "suggestedFix": "Space.tsx:743-755: clear `models` (setModels([])) when providerId changes before fetching, and in the fallback effect prefer selectedProvider.defaultModel when it is in the list (models[0] only as a last resort). Apply the same to DesignerChatDock.tsx's copy of the effect. Never persist a model the user did not pick (createChat at :828 should send the provider default if the current model is not in the loaded list).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "assistant.space:model-pill:wrong-default-model",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced on A: selected 'edge unbound v2' (stored on disabled provider OpenCode Zen / deepseek-v4-flash-free) -> pill shows 'aion-labs/aion-2.0 Strict'; New -> API newest chat 8108e99e {providerConfigId:'openrouter', model:'aion-labs/aion-2.0'} although openrouter.defaultModel='nvidia/nemotron-3.5-lightning:free' is in the 460-entry list. Root cause verified: the disabled provider's /models still returns 55 models (first 'big-pickle'), so after the heal effect (Space.tsx:762) sets nemotron, the fallback effect (Space.tsx:750) sees a stale list without nemotron -> setModel('big-pickle'); when the OpenRouter list arrives 'big-pickle' is missing -> setModel(models[0]='aion-labs/aion-2.0'). Chat deleted afterwards. S2 kept: silently selects an arbitrary (non-free) model that is then persisted and billed.",
+   "evidence": [
+    "shots/vq8/dark/001-edge-unbound-v2-pill.png",
+    "shots/vq8/dark/002-new-chat-aion.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-002",
+  "area": "assistant.space",
+  "title": "Every tool call renders twice — a 'requested' card stuck on 'running…' spinner forever plus the real result; tool count doubled",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "designId": "a557d3b5",
+  "repro": [
+   "Assistant → New chat → '@S3 LLM Smoke — 5 LED (DeepSeek V4 Flash) List the components in this design' → Enter",
+   "Wait for the run to finish",
+   "Expand '2 tools · 3 src · 16ms'",
+   "Reload the page, reopen the chat, expand again"
+  ],
+  "expected": "One 'Read design' card, succeeded; summary '1 tool'.",
+  "actual": "Two cards: 'Read design running…' with an indeterminate progress bar + spinner that never resolves, and 'Read design designId=… 3 src 16 ms ✓'. Summary says '2 tools'. Persists after reload. Backend stores two events for the same toolCallId (status 'requested' and 'succeeded') and the UI renders both.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/003-duplicate-running-toolcard.png",
+    "shots/q8/dark/011-prompt1-tools-expanded.png",
+    "shots/q8/dark/012-stale-running-toolcard-after-reload.png"
+   ],
+   "network": [
+    "GET /chats/b5bf7167…/tool-events → [{toolName:designer_get_design_summary,status:'requested',toolCallId:call-3a1c…},{…status:'succeeded',toolCallId:call-3a1c…}]"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/backend/run-service.ts",
+    "line": 1065,
+    "note": "run.tool.requested upsert omits id of the row already seeded by run.message.completed (:1049) -> duplicate row"
+   },
+   {
+    "path": "src/modules/assistant/backend/conversation-store.ts",
+    "line": 568,
+    "note": "upsertToolEvent only updates when input.id is given; no toolCallId uniqueness"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 299,
+    "note": "mergeToolEvents keys by event.id, not toolCallId"
+   },
+   {
+    "path": "src/modules/assistant/frontend/components/MessageCard.tsx",
+    "line": 336,
+    "note": "visibleToolEvents not deduped by toolCallId"
+   }
+  ],
+  "suggestedFix": "run-service.ts:1065: pass id: toolEventsByCall.get(event.data.toolCallId)?.id (or skip the insert when callSummaries already has the call) so one row per toolCallId is kept; optionally make upsertToolEvent look up by (chat_id, tool_call_id). Frontend belt-and-braces: collapse events by toolCallId (latest status wins) in mergeToolEvents/MessageCard before rendering and counting. Existing duplicated rows need a one-off cleanup or the frontend collapse.",
+  "fixScope": "backend-needed",
+  "estimate": "S",
+  "dedupeKey": "assistant:toolcard:duplicate-running",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced: QA-q8-main -> expand '2 tools · 3 src · 16ms' -> 'Read design running…' (spinner + progress bar) above 'Read design … 3 src 16 ms ✓'. API: every chat on OpenRouter/OpenCode Zen has exactly 2 rows per toolCallId (requested + succeeded) - 13 of 15 chats, e.g. f6a5ed1d 28 events / 14 calls. Root cause is backend, not only rendering: run-service.ts:1064-1073 ('run.tool.requested' branch) calls upsertToolEvent WITHOUT id: toolEventsByCall.get(toolCallId)?.id, so when 'run.message.completed' (F8 seeding, :1039-1059) already inserted the 'requested' row, a second row is inserted and later status updates hit only the new one; the first row stays 'requested' forever. S2 kept (every tool history shows a never-ending 'running' item and doubled counts).",
+   "evidence": [
+    "shots/vq8/dark/003-duplicate-running-toolcard.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-003",
+  "area": "assistant.space",
+  "title": "Settings 'Tool policy: Auto read · confirm writes' is ignored — assistant write proposals auto-apply without confirmation",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "designId": "a557d3b5",
+  "repro": [
+   "Stack A: Settings → Assistant → Tool policy = 'Auto read · confirm writes' (GET /settings → toolExecutionPolicy:'auto_readonly_confirm_writes')",
+   "Assistant → chat referencing @S3 LLM Smoke — 5 LED → 'Add a 10k resistor R99 to the schematic'",
+   "Watch the proposal card and the design revision"
+  ],
+  "expected": "With 'confirm writes' (or 'Confirm all writes') the proposal stays PENDING until the user clicks Apply.",
+  "actual": "Proposal 'Add 10kΩ resistor R99' is shown APPLIED immediately, its Apply/Reject buttons disabled; design a557d3b5 went rev 45 → 47 and gained a part with no user action. The backend never reads toolExecutionPolicy: auto-apply is hard-coded for every non-destructive proposal. The three policy options in Settings are therefore a misleading control.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/021-resolved-proposal-cards.png",
+    "shots/q8/dark/013-prompt2-proposal.png"
+   ],
+   "network": [
+    "GET /api/modules/assistant/settings → toolExecutionPolicy:'auto_readonly_confirm_writes'",
+    "GET /api/modules/designer/designs/a557d3b5… → revision 47, parts 11 (was 45 / 10)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/backend/assistant-service.ts",
+    "line": 118,
+    "note": "isSessionAutoApplyAllowed: riskLevel !== 'destructive' || … — policy not consulted"
+   },
+   {
+    "path": "src/modules/assistant/backend/settings-store.ts",
+    "line": 112,
+    "note": "toolExecutionPolicy only persisted; no reader in run-service/tools"
+   },
+   {
+    "path": "src/core/frontend/src/settings/panels/AssistantPanel.tsx",
+    "line": 405,
+    "note": "'Auto read · confirm writes' / 'Confirm all writes' / 'Auto all tools' options"
+   }
+  ],
+  "suggestedFix": "Either wire settings.toolExecutionPolicy into isSessionAutoApplyAllowed (assistant-service.ts:118: confirm_all_writes -> only writeSessionPolicy.isAllowed; auto_readonly_confirm_writes -> same; auto_all -> true) or remove the 'Tool policy' select (AssistantPanel.tsx:393-410) and replace it with static copy 'Non-destructive edits apply immediately (undoable); deletions ask first'.",
+  "fixScope": "design-decision",
+  "estimate": "S",
+  "dedupeKey": "assistant:tool-policy:ignored",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Code-verified and data-verified. GET /settings -> toolExecutionPolicy 'auto_readonly_confirm_writes'; QA-q8-main write-proposal 959b089f 'Add 10kΩ resistor R99' riskLevel medium went to status 'applied' 14 ms after creation (createdAt .635Z, updatedAt .649Z) with no user action. grep: toolExecutionPolicy is only read/written in settings-store.ts:32/112 and AssistantPanel.tsx:396-401 - never consulted by run-service or tools. assistant-service.ts:118 hard-codes isSessionAutoApplyAllowed = riskLevel !== 'destructive' || writeSessionPolicy. Auto-applying non-destructive edits is an intentional product rule (code comment, tool description 'Non-destructive, so it auto-applies', CLAUDE.md MCP policy), so the defect is the Settings control that promises a policy that does nothing. Not re-sent to the LLM (would mutate a557d3b5 again). S2 kept: misleading control whose default label contradicts actual behaviour.",
+   "evidence": [
+    "shots/vq8/dark/021-resolved-proposal-cards.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-004",
+  "area": "assistant.space",
+  "title": "Assistant reports 'R99 has been added' but the part got reference R6 — placement tool can't set a reference and its result omits the assigned one",
+  "category": "data",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "designId": "a557d3b5",
+  "repro": [
+   "Assistant chat linked by @mention to a557d3b5",
+   "Send 'Add a 10k resistor R99 to the schematic'",
+   "Read the reply and the proposal card, then inspect the design (GET /designs/a557d3b5… or open Designer)"
+  ],
+  "expected": "A part with reference R99 and value 10k, or an honest reply that the reference was auto-assigned (e.g. 'placed as R6').",
+  "actual": "Reply: 'The 10kΩ resistor (R99) has been added…'; card title 'Add 10kΩ resistor R99' APPLIED. Design actually contains reference R6, value 10k. designer_propose_schematic_edits parts[] has no `reference` field and its resultJson contains no assigned reference, so the model cannot know and states a wrong designator.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/021-resolved-proposal-cards.png",
+    "shots/q8/dark/013-prompt2-proposal.png"
+   ],
+   "network": [
+    "tool-events: designer_propose_schematic_edits args parts:[{componentId:'openpcb.core.passive.resistor',value:'10k'}] (no reference); result has no 'R6'/'reference'",
+    "design entity a228a719… reference:'R6' value:'10k'"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/backend/tools/designer-tools.ts",
+    "line": 1813,
+    "note": "parts item schema: componentId/value/positionNm/rotationDeg/mirrored/properties - no reference"
+   },
+   {
+    "path": "src/modules/assistant/backend/tools/designer-tools.ts",
+    "line": 1799,
+    "note": "designer_propose_schematic_edits result/operations omit the assigned reference"
+   }
+  ],
+  "suggestedFix": "Accept an optional `reference` per part in designer_propose_schematic_edits (apply via updatePartAfterCreate), and return the applied references (e.g. placed:[{ref:'R6',partId}]) in the tool result so the model reports real designators.",
+  "fixScope": "backend-needed",
+  "estimate": "S",
+  "dedupeKey": "assistant:placement:reference-not-honoured",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Data-verified in QA-q8-main: tool-event args parts:[{componentId:'openpcb.core.passive.resistor', value:'10k', properties:{color:…}}] (no reference); resultJson (1729 chars) has no 'R6'/'reference', its only operation is 'Place Resistor at 110000000, 0 nm.'; the visible reply says 'The 10kΩ resistor (R99) has been added'; the later deletion proposals the model built from real design data are titled 'Delete resistor R6'. designer-tools.ts:1813-1830 parts item schema has no reference property. Not re-run to avoid another design mutation. Not purely LLM quality: the tool cannot honour the requested designator and does not report the assigned one. S2 kept (APPLIED card + reply state a designator that does not exist).",
+   "evidence": [
+    "shots/vq8/dark/021-resolved-proposal-cards.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-005",
+  "knownRef": "K23",
+  "area": "assistant.space",
+  "title": "'Pinned' chat filter is permanently empty — no Pin action exists anywhere; empty state then says 'No chats yet.'",
+  "category": "stub",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "repro": [
+   "Assistant space with 11 chats",
+   "Look for a pin action: row '…' menu (Rename chat / Delete chat), right-click menu (same), header Chat actions (Rename / Export markdown / Archive / Delete)",
+   "Click the 'Pinned 0' filter chip"
+  ],
+  "expected": "A Pin/Unpin action in the row and header menus, or no Pinned filter at all; a filter-specific empty message.",
+  "actual": "No UI calls togglePin; the Pinned filter always shows 0 and the list body reads 'No chats yet.' although 11 chats exist.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/004-pinned-empty.png",
+    "shots/vq8/dark/006-row-actions-menu.png",
+    "shots/q8/dark/002-filter-pinned-empty.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/components/useChatUserState.ts",
+    "line": 49,
+    "note": "togglePin defined, never called"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1191,
+    "note": "Pinned filter chip"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1480,
+    "note": "header Chat actions — no Pin item"
+   }
+  ],
+  "suggestedFix": "Add 'Pin'/'Unpin' to the header DropdownMenu and the row context menu (userState.togglePin(chat.id)); or remove the Pinned chip until pinning ships.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "assistant.space:filter:pinned-unreachable",
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced: row '…' menu = Rename chat / Delete chat; header Chat actions = Rename / Export markdown / Archive / Delete - no Pin anywhere; grep: useChatUserState.togglePin (useChatUserState.ts:49) has no caller. Pinned 0 filter shows 'No chats yet.' with 15 chats. Matches K23. Empty-state copy overlaps Q8-006 but the root cause (no pin action) is distinct. S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/004-pinned-empty.png",
+    "shots/vq8/dark/006-row-actions-menu.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-006",
+  "area": "assistant.space",
+  "title": "Chat list says 'No chats yet.' for any empty filter or search miss",
+  "category": "copy",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "repro": [
+   "Assistant space (11 chats)",
+   "Type 'zzzz' in Search chats, or click the Archived / Pinned filter"
+  ],
+  "expected": "'No chats match \"zzzz\"' / 'No archived chats' with a Clear search affordance.",
+  "actual": "Always 'No chats yet.' — implies the user has no chats at all. Search also matches titles only (typing 'LED' finds nothing although 4 chats are linked to LED designs).",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/005-search-zzzz-empty.png",
+    "shots/vq8/dark/004-pinned-empty.png",
+    "shots/q8/dark/002-filter-pinned-empty.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1351,
+    "note": "single 'No chats yet.' empty state"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 251,
+    "note": "query matches chat.title only"
+   }
+  ],
+  "suggestedFix": "Branch the empty state on query/filter; include linked design name in the search haystack.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "assistant.space:chat-list:empty-copy",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced: Pinned filter and search 'zzzz' both render 'No chats yet.' (single empty state Space.tsx:1349-1352); search 'LED' returns 0 rows although QA-q8-dock is linked to 'S3 Smoke — 5 LED indicators (v2)' (query only matches chat.title, Space.tsx:251). S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/005-search-zzzz-empty.png",
+    "shots/vq8/dark/004-pinned-empty.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-007",
+  "area": "assistant.space",
+  "title": "Model picker popover: 460-entry native <select> with no search or free/paid hint, unlabeled comboboxes, Esc does not close it",
+  "category": "a11y",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "repro": [
+   "Assistant space → click the model pill (e.g. 'nvidia/nemotron-3.5-li… STRICT')",
+   "Inspect the popover; press Escape"
+  ],
+  "expected": "Searchable model list (OpenRouter returns 460 models) that marks :free / pricing; each select labelled (Provider / Model / Prompt preset); Esc and focus-return close the popover; role=dialog.",
+  "actual": "Plain native <select>s — model list is an unfiltered 460-option dropdown sorted alphabetically (first entry is a paid model), no pricing/free cue. <label>s are not associated (a11y tree shows three nameless 'combobox'). Escape leaves the popover open; only an outside mousedown closes it. Pill is 32px tall (h-8) with a glowing status dot (shadow-[0_0_6px_currentColor]) vs 22px flat controls.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/009-model-pill-popover.png",
+    "shots/q8/dark/003-model-pill-popover.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/components/ModelSelectorPill.tsx",
+    "line": 132,
+    "note": "label without htmlFor + native select"
+   },
+   {
+    "path": "src/modules/assistant/frontend/components/ModelSelectorPill.tsx",
+    "line": 91,
+    "note": "only mousedown-outside closes; no keydown Escape"
+   },
+   {
+    "path": "src/modules/assistant/frontend/components/ModelSelectorPill.tsx",
+    "line": 114,
+    "note": "h-8 + glow shadow"
+   }
+  ],
+  "suggestedFix": "Use the kit Popover (Radix) for Esc/focus handling; replace the model select with a filterable combobox (cmdk) showing ':free'/price; add id/htmlFor; h-[22px] pill, drop the glow.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "assistant:model-pill:popover-a11y",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced: popover has three native <select>s with labels.length 0 / no aria-label (a11y tree: 3 nameless combobox), model select 460 options, first 'aion-labs/aion-2.0', no free/price cue; Escape leaves it open (only mousedown-outside closes, ModelSelectorPill.tsx:91-99); pill height 32px (h-8) with glow dot; preset badge is text-[9px] (sub-10px). S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/009-model-pill-popover.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-008",
+  "area": "assistant.space",
+  "title": "'Configure providers' button in the model pill does nothing (onOpenSettings never wired) in Assistant space and dock",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "light"
+  ],
+  "repro": [
+   "Stack B (no LLM use; stack A excluded by charter): Assistant → model pill 'big-pickle STRICT' → 'Configure providers'"
+  ],
+  "expected": "Navigates to Settings → Assistant providers.",
+  "actual": "Popover closes and nothing else happens — the user stays on the Assistant chat (verified on stack B). Code: ModelSelectorPill calls onOpenSettings?.() but neither Space.tsx nor DesignerChatDock.tsx passes onOpenSettings, so the same dead button exists in the dock.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/light/006-stackB-configure-providers-noop.png",
+    "shots/q8/light/014-stackB-pill-before-configure.png",
+    "shots/q8/light/015-stackB-after-configure-providers.png",
+    "shots/q8/dark/003-model-pill-popover.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/components/ModelSelectorPill.tsx",
+    "line": 223,
+    "note": "onOpenSettings?.()"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1466,
+    "note": "no onOpenSettings prop"
+   },
+   {
+    "path": "src/modules/assistant/frontend/DesignerChatDock.tsx",
+    "line": 855,
+    "note": "no onOpenSettings prop"
+   }
+  ],
+  "suggestedFix": "Pass onOpenSettings={() => openSettings('assistant')} (the same navigation used by the rail gear / Ctrl+,) from both hosts; hide the button when absent.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "assistant:model-pill:configure-providers-dead",
+  "knownRef": null,
+  "stack": "B",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced on stack B (charter: not on A): Assistant -> pill 'big-pickle Strict' -> Configure providers -> popover closes, still on Assistant (composer present, no Settings heading). grep: onOpenSettings is declared in ModelSelectorPill.tsx:57/78/223 and passed by neither Space.tsx:1468 nor DesignerChatDock.tsx:855 -> dead in both hosts. S2 kept (dead button whose label promises navigation; workaround via rail Settings).",
+   "evidence": [
+    "shots/vq8/light/006-stackB-configure-providers-noop.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-009",
+  "area": "assistant.space",
+  "title": "Mermaid 'Fullscreen' shows the diagram smaller than inline; overlay ignores Esc, has no dialog role, drops focus to <body>",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "repro": [
+   "Assistant → open chat 'edge unbound' (contains a rendered flowchart)",
+   "Click the diagram toolbar 'Fullscreen' (⤢)",
+   "Press Escape; then click the X"
+  ],
+  "expected": "Diagram scaled up to fill most of the viewport (zoom/pan ideally); Esc closes; role=dialog + focus trapped on the close button and returned to the trigger on close.",
+  "actual": "Overlay shows a ~350×270px thumbnail (inline figure is 609×465) — 'fullscreen' is smaller than the inline render. Escape does nothing. After closing, document.activeElement is BODY. The inline 'View source' toggle has no aria-pressed/aria-expanded.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/010-mermaid-inline.png",
+    "shots/vq8/dark/011-mermaid-fullscreen.png",
+    "shots/q8/dark/019-mermaid-rendered.png",
+    "shots/q8/dark/022-mermaid-fullscreen.png",
+    "shots/q8/dark/020b-mermaid-source-open.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/shared/frontend/markdown/MermaidDiagram.tsx",
+    "line": 368,
+    "note": "fixed inset-0 overlay, no role/Esc/focus; svg width=100% inside shrink-to-fit box → tiny"
+   },
+   {
+    "path": "src/shared/frontend/markdown/MermaidDiagram.tsx",
+    "line": 330,
+    "note": "View source button lacks aria-pressed"
+   }
+  ],
+  "suggestedFix": "Render fullscreen via the kit Dialog (Esc, focus trap/return); give the SVG container w-[90vw] h-[85vh] and set the svg to width/height 100% with preserveAspectRatio; add aria-pressed to View source.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "markdown:mermaid:fullscreen-broken",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced on 'edge unbound': inline diagram svg 609x465, fullscreen svg 300x229 (smaller than inline); overlay role=null, Escape leaves it open, after 'Close fullscreen' activeElement=BODY; 'View source' has no aria-pressed. MermaidDiagram.tsx:368-389 (plain fixed div, [&_svg]:max-w-[80vw] on an svg with width=100% inside a shrink-to-fit box). S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/010-mermaid-inline.png",
+    "shots/vq8/dark/011-mermaid-fullscreen.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-010",
+  "area": "assistant.space",
+  "title": "Mermaid diagrams use a hard-coded violet/navy theme (#A78BFA borders, #0A0E14 bg) off the neutral tokens; chat prose hr/borders use Tailwind gray (blue cast)",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "repro": [
+   "Assistant → chat 'edge unbound' → scroll to 'Circuit topology' flowchart",
+   "Probe node borders / background; also the <hr> in the new chat's answer"
+  ],
+  "expected": "Diagram chrome and theme variables derived from tokens (neutral surfaces, --selection/status accents); prose rules neutral.",
+  "actual": "Node border #7a69b7 (ΔE 33.5 from any token), subgraph border #302b4a, diagram bg #0a0e14 (blue-black), FLOWCHART chip + subgraph titles violet. Markdown <hr> in answers probes #364153 (Tailwind gray-700, ΔE 12.8 — blue cast). Light theme variables also violet (#7C3AED / #f5f3ff). Dock/space markdown tables use the same gray scale: row separators #364153, header rule #4a5565.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/010-mermaid-inline.png",
+    "shots/q8/dark/019-mermaid-rendered.png",
+    "shots/q8/dark/018-mermaid-invalid.png",
+    "shots/q8/dark/061-dock-table-answer.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/vq8/dark/010-mermaid-inline.png",
+     "x": 802,
+     "y": 311,
+     "hex": "#7c71ad",
+     "nearestToken": "--status-info",
+     "deltaE": 25.7
+    },
+    {
+     "file": "shots/vq8/dark/010-mermaid-inline.png",
+     "x": 900,
+     "y": 253,
+     "hex": "#363053",
+     "nearestToken": "--surface-control",
+     "deltaE": 18.0
+    },
+    {
+     "file": "shots/vq8/dark/010-mermaid-inline.png",
+     "x": 660,
+     "y": 300,
+     "hex": "#0a0e14",
+     "nearestToken": "--primary-foreground",
+     "deltaE": 2.4
+    },
+    {
+     "file": "shots/q8/dark/019-mermaid-rendered.png",
+     "x": 1072,
+     "y": 584,
+     "hex": "#7a69b7",
+     "nearestToken": "--status-info",
+     "deltaE": 33.5
+    },
+    {
+     "file": "shots/q8/dark/019-mermaid-rendered.png",
+     "x": 560,
+     "y": 620,
+     "hex": "#0a0e14",
+     "nearestToken": "--primary-foreground",
+     "deltaE": 2.4
+    },
+    {
+     "file": "shots/q8/dark/018-mermaid-invalid.png",
+     "x": 900,
+     "y": 320,
+     "hex": "#364153",
+     "nearestToken": "--surface-control",
+     "deltaE": 12.8
+    },
+    {
+     "file": "shots/q8/dark/061-dock-table-answer.png",
+     "x": 1300,
+     "y": 514,
+     "hex": "#364153",
+     "nearestToken": "--surface-control",
+     "deltaE": 12.8
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/shared/frontend/markdown/MermaidDiagram.tsx",
+    "line": 154,
+    "note": "themeVariablesFor: violet palette"
+   },
+   {
+    "path": "src/shared/frontend/markdown/MermaidDiagram.tsx",
+    "line": 300,
+    "note": "violet type chip / bg-[#0A0E14]"
+   },
+   {
+    "path": "src/modules/assistant/frontend/components/MessageCard.tsx",
+    "line": 36,
+    "note": "prose (typography gray scale not remapped)"
+   }
+  ],
+  "suggestedFix": "Build themeVariables from getComputedStyle(--surface-*, --border, --text*, --selection); drop violet chip; add prose-neutral/prose-zinc-like remap or set --tw-prose-hr/borders to var(--divider).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "markdown:mermaid:violet-theme",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Re-probed dark: default node border #7c71ad (dE 25.7 from nearest token, themeVariables nodeBorder #A78BFA), subgraph border #363053 (#5B4B8A), node fill #13191f and diagram bg #0a0e14 (slight blue cast). Prose hr/tbody row borders computed oklch(0.373 0.034 259.7) = Tailwind gray-700 #364153 (blue hue 259), thead rule oklch(0.446 0.03 256.8). Correction: the 'FLOWCHART' chip is NOT violet - text-violet-*/bg-violet-* are neutralised by the PLAN D1 violet->neutral remap (computed #a8a8ad) - but it is 9px text. The raw hex in themeVariablesFor bypasses the remap. Assistant/markdown is in the documented re-skin-only bucket (PLAN §0/§9) yet the violet accent is exactly what the redesign removed. S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/010-mermaid-inline.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-011",
+  "area": "assistant.space",
+  "title": "Multi-step answers glue each iteration's text together with no separator ('…LED components.The design…', '…brightness)?Let me examine…')",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "repro": [
+   "Assistant → open chat 'edge unbound v2' (a multi-iteration tool run)",
+   "Read the first paragraphs of the assistant answer"
+  ],
+  "expected": "Each model turn's prose starts on a new paragraph (or intermediate 'thinking aloud' turns are folded into the tool timeline).",
+  "actual": "Stored message content concatenates iteration deltas verbatim: 'look up available LED components.The design \"LED Indicators 5V\" is already bound…recipe.The circuit compiled cleanly', '…higher/lower brightness)?Let me examine the design…'. Reads as broken sentences; markdown headings following a glued sentence can fail to parse.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/012-raw-sub-and-glued.png",
+    "shots/q8/dark/023-concatenated-iterations-and-raw-sub.png"
+   ],
+   "network": [
+    "GET /chats/f6a5ed1d…/messages → content 'LED components.The design \"LED Indicators 5V\" is already bound'"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/backend/run-service.ts",
+    "line": 1014,
+    "note": "run.message.delta appended verbatim across iterations"
+   },
+   {
+    "path": "node_modules/@openpcb/ai-core/dist/runs/run-loop.js",
+    "line": 54,
+    "note": "each iteration re-streams deltas into the same assistant message"
+   }
+  ],
+  "suggestedFix": "In run-service, when a new iteration starts (or after tool results) and the message already has content not ending in a newline, append '\\n\\n' before the next delta (track lastIteration per run).",
+  "fixScope": "backend-needed",
+  "estimate": "XS",
+  "dedupeKey": "assistant:message:iteration-text-glued",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Data-verified: f6a5ed1d ('edge unbound v2') visible assistant content contains 'look up available LED components.The design \"LED Indic…', '…led_indicator` recipe.The circuit compiled', '…higher/lower brightness)?Let me examine the de…'. Current code still appends every run.message.delta verbatim (run-service.ts:1013-1018) across ai-core iterations (run-loop.js:53-56) with no separator. Newer nemotron chats show no gluing only because that model emits no pre-tool prose - model-dependent, not fixed. S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/012-raw-sub-and-glued.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-012",
+  "area": "assistant.space",
+  "title": "Inline HTML from the model (e.g. V<sub>F</sub>) is shown as literal tags in chat tables/lists",
+  "category": "visual",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "repro": [
+   "Assistant → chat 'edge unbound v2' → 'Schematic: 2 LED Indicators on 5V' table and 'Assumptions made' list"
+  ],
+  "expected": "Subscript rendered (safe allow-list for sub/sup) or stripped to 'VF'.",
+  "actual": "Cells read 'V<sub>F</sub> = 2 V, I = 10 mA'; list item 'Forward voltage V<sub>F</sub> = 2 V'.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/012-raw-sub-and-glued.png",
+    "shots/q8/dark/023-concatenated-iterations-and-raw-sub.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/shared/frontend/markdown/MarkdownContent.tsx",
+    "line": 1,
+    "note": "react-markdown without rehype-sanitize allow-list for sub/sup"
+   }
+  ],
+  "suggestedFix": "Enable rehype-raw + rehype-sanitize with an allow-list of sub/sup/br/kbd, or strip tags; also tell the prompt to use Unicode subscripts.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "assistant:markdown:raw-html-sub",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced on 'edge unbound v2': table cells and list item read literally 'V<sub>F</sub> = 2 V, I = 10 mA' / 'Forward voltage V<sub>F</sub> = 2 V'. MarkdownContent.tsx:162 uses remark-gfm only (raw HTML escaped - safe, but ugly). The prompt forbids HTML, so partly model non-compliance; stripping/allow-listing sub/sup is the cheap fix. S4 kept.",
+   "evidence": [
+    "shots/vq8/dark/012-raw-sub-and-glued.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-013",
+  "knownRef": "K05",
+  "area": "assistant.space",
+  "title": "Assistant space row 'Rename chat' uses native window.prompt (header rename is inline) ",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "repro": [
+   "Assistant → hover chat row 'QA-q8-main' → '…' (Chat actions for QA-q8-main) → 'Rename chat'"
+  ],
+  "expected": "Inline rename in the row (as the header title already does) or a kit dialog.",
+  "actual": "Native prompt 'Rename chat' appears (dialog-spy: prompt=1, log 'prompt: Rename chat'). Native prompt is unsupported/blocked in Electron (window.prompt returns null) so row-rename silently does nothing in the desktop app. Inconsistent with the header title inline editor, which works.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/006-row-actions-menu.png",
+    "shots/q8/dark/025-row-actions-menu.png",
+    "shots/q8/dark/024-header-rename-inline.png"
+   ],
+   "console": [
+    "__qaDialogCalls.log: 'prompt: Rename chat'",
+    "__qaDialogCalls: {prompt:1, log:['prompt: Rename chat']}"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 893,
+    "note": "window.prompt('Rename chat', …)"
+   }
+  ],
+  "suggestedFix": "Reuse the header inline editor: setSelectedChatId(chatId); beginRename(); or render an inline <input> in the row.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "assistant.space:rename:native-prompt",
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced: row '…' -> 'Rename chat' on QA-q8-retry -> native prompt 'Rename chat' (spy prompt=1), dismissed. Space.tsx:893 window.prompt; header title rename is inline. Matches K05. S2 per rubric (native prompt, returns null in Electron).",
+   "evidence": [
+    "shots/vq8/dark/006-row-actions-menu.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-014",
+  "knownRef": "K06",
+  "area": "assistant.space",
+  "title": "Assistant space chat delete (row menu, header menu, bulk 'Delete selected') all use native window.confirm",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "repro": [
+   "Row '…' → 'Delete chat' on QA-q8-del1",
+   "Header '…' Chat actions → Delete on QA-q8-del3",
+   "Check two chats → 'Delete selected'"
+  ],
+  "expected": "Kit confirm dialog (danger variant) with chat title, focus on Cancel, Esc cancels.",
+  "actual": "Native confirm dialogs: 'Delete \"QA-q8-del1\"?', 'Delete \"QA-q8-del3\"?', 'Delete 2 selected chats?'. In Electron native confirm is synchronous/unstyled (and blocked in some configs), inconsistent with the redesigned Home delete modal.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/008-multiselect-hidden.png",
+    "shots/q8/dark/026-header-chat-actions.png",
+    "shots/q8/dark/029-multiselect-hidden-selection.png"
+   ],
+   "console": [
+    "__qaDialogCalls.log: 'confirm: Delete 2 selected chats?', 'confirm: Delete \"QA-q8-retry\"?'",
+    "__qaDialogCalls log: confirm: Delete \"QA-q8-del1\"? / confirm: Delete \"QA-q8-del3\"? / confirm: Delete 2 selected chats?"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 852,
+    "note": "deleteChat window.confirm"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 869,
+    "note": "deleteSelectedChats window.confirm"
+   }
+  ],
+  "suggestedFix": "Replace with the shared ConfirmDialog (same as Home delete) — async, returns boolean.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "assistant.space:delete:native-confirm",
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced: row 'Delete chat' on QA-q8-retry -> native confirm 'Delete \"QA-q8-retry\"?' (dismissed); bulk 'Delete selected' -> native confirm 'Delete 2 selected chats?'. Header Delete calls the same deleteChat (Space.tsx:852). Matches K06. S2 per rubric.",
+   "evidence": [
+    "shots/vq8/dark/008-multiselect-hidden.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-015",
+  "area": "assistant.space",
+  "title": "Header 'Chat actions' menu stays open after Archive / Export / Delete and blocks the whole page (body pointer-events:none)",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "repro": [
+   "Assistant → select chat QA-q8-del2 → header '…' (Chat actions) → Archive",
+   "Try clicking the 'Archived' filter chip"
+  ],
+  "expected": "Menu closes after the action; archived chat deselected or header shows 'Archived' state.",
+  "actual": "Menu stays open (item now reads 'Unarchive'); Radix keeps body pointer-events:none so every other click is swallowed until Esc/outside click (a playwright click on 'Archived 1' failed: element not in a11y tree). The archived chat stays open in the main pane but vanishes from the All list with no archived indicator in the header.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/007-archive-menu-stays-open.png",
+    "shots/q8/dark/028a-archive-menu-stays-open.png",
+    "shots/q8/dark/028-archived-filter.png"
+   ],
+   "console": [
+    "getComputedStyle(document.body).pointerEvents === 'none', [role=menu] count 1 after selecting Archive"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1500,
+    "note": "onSelect={(e) => { e.preventDefault(); … }} on Export/Archive/Delete keeps Radix menu open"
+   }
+  ],
+  "suggestedFix": "Drop e.preventDefault() from those onSelect handlers (only needed if a nested dialog opens); after archiving, clear selection or show an 'Archived' chip + Unarchive in the header.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "assistant.space:chat-actions:menu-stuck-open",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced on own disposable chat: header Chat actions -> Archive -> [role=menu] still open, item now 'Unarchive', body pointer-events 'none'; clicking 'Archived 1' did not go through; Esc closed the menu. Header still shows the archived chat with no archived indicator. Space.tsx:1500-1512 onSelect e.preventDefault(). Same pattern as Q1-001 (Home) but without wrong-target risk here. S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/007-archive-menu-stays-open.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-016",
+  "area": "assistant.space",
+  "title": "Multi-select keeps chats selected across filters; 'Delete selected' deletes hidden (e.g. archived) chats the user can't see",
+  "category": "data",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "repro": [
+   "Archived filter → tick 'QA-q8-del2'",
+   "Switch to All → tick 'QA-q8-ms1'",
+   "Bar shows '2 selected' while only one visible row is ticked → Delete selected → OK"
+  ],
+  "expected": "Selection cleared on filter/search change, or the bar lists/indicates hidden selected items.",
+  "actual": "'2 selected' with one visible tick; confirm 'Delete 2 selected chats?' removed the hidden archived chat too.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/008-multiselect-hidden.png",
+    "shots/q8/dark/029-multiselect-hidden-selection.png",
+    "shots/q8/dark/030-after-bulk-delete.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1216,
+    "note": "selectedChatIds independent of filteredChats"
+   }
+  ],
+  "suggestedFix": "Intersect selectedChatIds with filteredChats (or clear on filter/query change); add 'Select all visible'.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "assistant.space:multiselect:hidden-selection",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced with two own chats: Archived -> tick 'New chat' -> All -> tick 'QA-vq8-ms1' -> 1 visible tick, bar '2 selected' -> Delete selected -> confirm 'Delete 2 selected chats?' accepted -> both chats gone from GET /chats, including the hidden archived one. selectedChatIds (Space.tsx:190) is never intersected with filteredChats. S3 kept (the confirm does state the count).",
+   "evidence": [
+    "shots/vq8/dark/008-multiselect-hidden.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-017",
+  "area": "assistant.space",
+  "title": "Send failures are invisible: the error alert renders at the top of the thread (≈3800px above the viewport) and says only 'Internal error'",
+  "category": "error-handling",
+  "severity": "S2",
+  "themes": [
+   "dark"
+  ],
+  "repro": [
+   "Assistant → chat QA-q8-main (long thread, scrolled to bottom)",
+   "playwright route '**/api/modules/assistant/chats/*/messages*' → 500 problem+json",
+   "Type 'QA error injection test' → Enter",
+   "Unroute afterwards",
+   "Also: network-state-set offline → type 'offline send test' → Enter → same invisible alert, text 'Failed to fetch' (top=-4434px); network-state-set online → Enter resends fine (recovery OK, alert cleared)"
+  ],
+  "expected": "Inline error next to the composer / failed user bubble with 'Retry', human copy ('Couldn't send your message — the assistant service returned an error').",
+  "actual": "Nothing visible changes: Send spinner stops, text stays in the composer. The role=alert box 'Internal error' is inserted above the first message (getBoundingClientRect top = -3811px) — only found by scrolling to the very top. No retry affordance; message is not shown as failed. Offline send shows the raw browser string 'Failed to fetch', also off-screen.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/013-send-500-nothing-visible.png",
+    "shots/q8/dark/033-send-500.png",
+    "shots/q8/dark/034-send-500-alert-scrolled-top.png",
+    "shots/q8/dark/038-offline-send.png"
+   ],
+   "network": [
+    "POST /api/modules/assistant/chats/b5bf7167…/messages -> 500 (injected, then unrouted)",
+    "offline -> net::ERR_INTERNET_DISCONNECTED",
+    "POST /api/modules/assistant/chats/b5bf7167…/messages → 500 (injected)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1609,
+    "note": "error alert placed inside the scroll container before messages"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 140,
+    "note": "api() surfaces body.title ('Internal error') / 'HTTP 500' verbatim"
+   }
+  ],
+  "suggestedFix": "Render the error in the floating composer area (above ChatComposer) or as a sticky banner; map 5xx/network errors to friendly copy with a Retry button that resubmits the kept input.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "assistant.space:send-error:offscreen",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced on QA-q8-main: route POST **/chats/*/messages -> 500 problem+json, Enter -> nothing visible, text stays in composer; the only feedback is role=alert 'Internal error' at getBoundingClientRect().top = -6565px (inside the scroll container above the first message, Space.tsx:1607-1622). Offline -> same alert, text 'Failed to fetch', same off-screen position. Unrouted/online afterwards. S2 kept (send failures effectively invisible, raw error strings).",
+   "evidence": [
+    "shots/vq8/dark/013-send-500-nothing-visible.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-018",
+  "area": "assistant.space",
+  "title": "Chat row keeps the pulsing 'run active' dot after a run is cancelled (Stop)",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "repro": [
+   "QA-q8-main → send a long prompt → click Stop generating while streaming",
+   "Observe the chat row in the sidebar; switch chats and back"
+  ],
+  "expected": "Activity dot only while a run is actually running.",
+  "actual": "Row 'QA-q8-main' keeps the animate-pulse dot indefinitely after 'Assistant task cancelled.' (verified after switching chats). Cancelled/failed runs stay in activeRunsByChat for the Retry card and the sidebar treats any entry as active.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/019-after-stop-pulse.png",
+    "shots/q8/dark/032-after-stop.png",
+    "shots/q8/dark/033-send-500.png"
+   ],
+   "console": [
+    "row.querySelector('.animate-pulse') → true after cancel"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1305,
+    "note": "{activeRunsByChat[chat.id] ? <pulse/> : null} ignores run.status"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 660,
+    "note": "cancelled runs kept via updateRun(status:'cancelled')"
+   }
+  ],
+  "suggestedFix": "Show the dot only when status is running/streaming/queued (exclude cancelled/failed/paused/disconnected); use a static warning glyph for failed runs if desired.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "assistant.space:chat-row:stale-run-dot",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced in QA-q8-retry: sent a prompt, clicked 'Stop generating' -> 'Assistant task cancelled.' + Retry; row 'QA-q8-retry' keeps .animate-pulse, still true after switching to QA-q8-main and back. Space.tsx:1307 renders the dot for any activeRunsByChat entry regardless of status. S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/019-after-stop-pulse.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-019",
+  "knownRef": "K22",
+  "area": "assistant.space",
+  "title": "Clicking an @page mention in a chat message opens Docs with 'No page selected' instead of the page",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "repro": [
+   "Assistant → composer '@QA-q9-mention' → pick 'QA-q9-mention-target' (pageId 5bec1891…, from q9 handoff) → 'Summarize this page in one sentence.' → Enter",
+   "Click the '@ QA-q9-mention-target' chip in the sent user bubble"
+  ],
+  "expected": "Docs opens with QA-q9-mention-target selected in the tree and the editor showing it (design mentions do open the design).",
+  "actual": "Docs opens on the empty state 'No page selected — Select a page from the sidebar or create a new one.'; the page is listed but not selected. (Design mention chips correctly open the design in Designer.)",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/014-page-mention-no-page-selected.png",
+    "shots/q8/dark/040-page-mention-click.png",
+    "shots/q8/dark/041-design-mention-click.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/Space.tsx",
+    "line": 12,
+    "note": "KnowledgeSpaceInner ignores ModuleSpaceProps.params; selectedPageId initialised to null"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 84,
+    "note": "navigateToModule('knowledge', undefined, { pageId }) - already correct"
+   }
+  ],
+  "suggestedFix": "In knowledge/frontend/Space.tsx read params?.pageId and setSelectedPageId(pageId) in an effect keyed on it (also expand/scroll the tree to it).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "assistant:mention:page-click-no-select",
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced: clicking '@ QA-q9-mention-target' chip in QA-q8-main opens Docs with 'No page selected' although the page (5bec1891, GET 200) is listed. Correction of root cause: assistant navigateFromMention already passes params {pageId} (Space.tsx:84-86); the knowledge Space ignores params entirely (knowledge/frontend/Space.tsx:12-17 destructures only backendURL/moduleId/designId; selectedPageId starts null). Matches K22. S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/014-page-mention-no-page-selected.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-020",
+  "area": "assistant.space",
+  "title": "Composer shows raw mention markup '@[design:<uuid>|Name]' after picking a mention (and exports it verbatim)",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "repro": [
+   "Assistant composer → type '@S3' → pick 'S3 LLM Smoke — 5 LED (DeepSeek V4 Flash)'",
+   "Look at the textarea; later Chat actions → Export markdown"
+  ],
+  "expected": "Mention rendered as an atomic chip in the composer (as it is in the sent bubble); export writes '@S3 LLM Smoke…'.",
+  "actual": "Textarea contains '@[design:a557d3b5-92c4-4caa-b79c-594f1382ac82|S3 LLM Smoke — 5 LED (DeepSeek V4 Flash)] ' with the UUID spell-check underlined; backspace edits the markup piecemeal. Exported QA-q8-main.md contains the same raw markup and omits every tool call / proposal outcome (only prose).",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/016-composer-raw-mention.png",
+    "shots/q8/dark/008-composer-raw-mention-syntax.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/components/ChatComposer.tsx",
+    "line": 134,
+    "note": "inserts createMentionSyntax() text into a plain <textarea>"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1114,
+    "note": "exportMarkdown writes message.content verbatim"
+   }
+  ],
+  "suggestedFix": "Use a contenteditable/tiptap mini-editor with mention nodes (the Docs editor already has one), or overlay-highlight + atomic deletion; run stripMentions() in exportMarkdown and include tool/proposal summaries.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "assistant:composer:raw-mention-markup",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced: '@S3' -> pick 'S3 LLM Smoke — 5 LED (DeepSeek V4 Flash) Revision 48' -> textarea value '@[design:a557d3b5-92c4-4caa-b79c-594f1382ac82|S3 LLM Smoke — 5 LED (DeepSeek V4 Flash)] '. exportMarkdown (Space.tsx:1114-1128) writes message.content verbatim and skips tool/internal messages. S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/016-composer-raw-mention.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-021",
+  "area": "assistant.space",
+  "title": "Slash quick-actions menu is mouse-only; Enter on '/' sends a literal '/' message to the LLM",
+  "category": "keyboard",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "repro": [
+   "Assistant composer → type '/' → 'Quick actions' popover (Wire the schematic / Resolve BOM / Run ERC / Suggest improvements)",
+   "Press ArrowDown (focus stays in textarea, nothing highlighted); press Enter"
+  ],
+  "expected": "Arrow keys move a highlighted item, Enter/Tab picks it (like the @ mention list); '/' alone is never sent.",
+  "actual": "No keyboard selection; Enter runs onSubmit with content '/' (handleKey only special-cases the mention list). Popover has no listbox/option roles. (Enter-send not executed to save LLM budget; verified in code.)",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/017-slash-menu.png",
+    "shots/q8/dark/005-slash-menu.png"
+   ],
+   "network": [
+    "POST /api/modules/assistant/chats/b5bf7167…/messages body {\"content\":\"/\",…} (intercepted with 500)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/components/ChatComposer.tsx",
+    "line": 210,
+    "note": "Enter submits whenever value.trim() — slashOpen not considered"
+   },
+   {
+    "path": "src/modules/assistant/frontend/components/ChatComposer.tsx",
+    "line": 243,
+    "note": "quick-actions popover: plain buttons, no roles"
+   }
+  ],
+  "suggestedFix": "Track slashIndex like mentionIndex; ArrowUp/Down/Enter/Tab select when slashOpen; block submit of a bare '/'; add role=listbox/option + aria-activedescendant.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "assistant:composer:slash-menu-keyboard",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced without spending LLM budget (POST routed to 500 + fetch spy): type '/' -> Quick actions popover open, ArrowDown keeps focus in textarea with no highlighted item, no listbox/option roles; Enter -> POST /messages body {content:'/', …}. ChatComposer.tsx:209-217 submits whenever value.trim(); only the mention list is keyboard-handled. S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/017-slash-menu.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-022",
+  "area": "assistant.space",
+  "title": "@-mention autocomplete uses emoji icons (🛠️ 🔌 📄), no group headers or listbox semantics; duplicate-named designs indistinguishable",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "repro": [
+   "Assistant composer → type '@' then '@S3' then '@QA-q9'"
+  ],
+  "expected": "Lucide icons consistent with the rest of the app, grouped sections (Designs / Components / Pages), role=listbox/option with aria-activedescendant; disambiguating detail for same-named designs (id/modified date).",
+  "actual": "Rows prefixed with emoji glyphs; flat mixed list; a11y tree has no listbox/option (screen readers get nothing while arrowing). Two designs both named 'S3 LLM Smoke — 5 LED (DeepSeek V4 Flash)' differ only by 'Revision 45' vs 'Revision 0'.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/015-mention-autocomplete.png",
+    "shots/q8/dark/006-mention-at-empty.png",
+    "shots/q8/dark/007-mention-design-list.png",
+    "shots/q8/dark/039-mention-page.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/components/MentionAutocomplete.tsx",
+    "line": 133,
+    "note": "emoji icon span"
+   },
+   {
+    "path": "src/modules/assistant/frontend/components/MentionAutocomplete.tsx",
+    "line": 116,
+    "note": "no role attributes"
+   }
+  ],
+  "suggestedFix": "Map entity types to Lucide icons (CircuitBoard, Cpu, FileText); add section headers + role=listbox/option/aria-selected; show short id or updated date as secondary text.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "assistant:mention-autocomplete:emoji-a11y",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced: '@S3' list rows are buttons prefixed with '🛠️' emoji, no listbox/option roles; two rows 'S3 LLM Smoke — 5 LED (DeepSeek V4 Flash)' differ only by 'Revision 48' vs 'Revision 0'. S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/015-mention-autocomplete.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-023",
+  "knownRef": "K12",
+  "area": "assistant.dock",
+  "title": "Typing in the Assistant dock on the PCB view fires PCB hotkeys: letters are swallowed, tools switch, selected parts rotate/flip/delete, Cmd+Z undoes the design",
+  "category": "keyboard",
+  "severity": "S1",
+  "themes": [
+   "dark"
+  ],
+  "designId": "3d5d1f7c",
+  "repro": [
+   "Designer → open 'S3 Smoke — 5 LED indicators (v2)' → PCB tab → Cmd+I (Assistant dock) → click 'Ask about this design…'",
+   "Type 'Route the power traces on top layer'",
+   "Select D2 in the Components list, click the composer, type 'rf'",
+   "Select D1, click composer (contains 'typo'), press Backspace",
+   "Press Cmd+Z inside the composer"
+  ],
+  "expected": "All keystrokes go to the textarea; PCB keymap ignores events whose target is a textarea/select/contenteditable.",
+  "actual": "Composer value became 'e e we aces n  laye' (R,o,t,h,p,o,r,t,c,s,o,t,p,y… swallowed) and the PCB switched to Route (R) mode; z→Zone, k→Keepout tool. With D2 selected, typing 'r' rotated D2 0°→90° (design rev 42→43). With D1 selected, Backspace in the composer deleted D1's placement (POST /commands, rev 40→41, placement id ce73e36f→11fd8b2e re-synced) instead of deleting a character. Cmd+Z in the composer undid the design (rev 42) and left the text untouched. All changes silently mutate the user's board while they type a question. (Restored via Undo afterwards.)",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/022-k12-dock-typing-swallowed.png",
+    "shots/vq8/dark/023-k12-r-rotates-selected.png",
+    "shots/q8/dark/053-k12-route-mode-from-dock-typing.png",
+    "shots/q8/dark/055-k12-swallowed-chars.png",
+    "shots/q8/dark/056-k12-backspace-deletes-part.png",
+    "shots/q8/dark/057-k12-rf-rotates-flips-part.png"
+   ],
+   "network": [
+    "POST /api/modules/designer/designs/3d5d1f7c…/commands 200 (typing 'r' in dock textarea) -> projection D2 rotationDeg 0 -> 90",
+    "POST /api/modules/designer/designs/3d5d1f7c…/history/undo 200 (Cmd+Z in dock textarea)",
+    "POST /api/modules/designer/designs/3d5d1f7c…/commands 200 (Backspace in dock textarea)",
+    "projection/pcb: D2 rotationDeg 0 → 90 after typing 'r' in composer"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 4342,
+    "note": "if (event.target instanceof HTMLInputElement) return; — textarea/select/contenteditable not excluded"
+   },
+   {
+    "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+    "line": 5012,
+    "note": "Delete/Backspace deletes selection"
+   }
+  ],
+  "suggestedFix": "Use a shared isEditableTarget(e.target) guard (input, textarea, select, [contenteditable], role=textbox) at the top of every window keydown handler in PcbCanvas (and the schematic/3D keymaps); also skip when e.defaultPrevented or when focus is inside the dock (closest('[data-dock]')).",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.pcb:keymap:fires-in-textarea",
+  "stack": "A",
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced on own 3d5d1f7c, PCB tab, Cmd+I dock: typing 'Route the power traces on top layer' into the composer left 'e e we aces n  laye' and toggled Route (R) + 45° on; with D2 selected via Components list, typing 'r' in the composer rotated D2 0->90 (rev 44->45, composer stayed empty); typing 'ab' kept only 'a' ('b' = lock B.Cu) and a further design command was posted; Cmd+Z inside the composer posted /history/undo (rev 46->47) and left the text untouched. Restored with toolbar Undo (rev 48, all placements 0° F.Cu). Backspace-deletes-selection not re-run (destructive); same guard at PcbCanvas.tsx:5012 and identical root cause independently reproduced as Q5-024 (comment composer) - cross-agent duplicate for triage. Guard at PcbCanvas.tsx:4342 only checks HTMLInputElement. S1 kept (silent design mutation while typing).",
+   "evidence": [
+    "shots/vq8/dark/022-k12-dock-typing-swallowed.png",
+    "shots/vq8/dark/023-k12-r-rotates-selected.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-024",
+  "area": "assistant.dock",
+  "title": "After a page reload an in-flight run shows no 'Working…'/Stop, and a run that ends with an empty answer shows no 'No answer — Retry' (just tool chips + library cards)",
+  "category": "error-handling",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "3d5d1f7c",
+  "repro": [
+   "Designer 3d5d1f7c → dock → new design chat → 'How many LEDs are in this design? Answer in one line.' → Enter",
+   "While 'Working…' is shown, reload the page (here: Vite restart/host suspend triggered a reload) and reopen Designer → dock (and 'Open in Assistant view')",
+   "Task d728b47d… stays status 'streaming' for ~6 min (API), then 'completed' with empty assistant content"
+  ],
+  "expected": "Restored run shows Working…/Stop on the visible assistant bubble; an empty completion shows the 'No answer returned — Retry' card the live path shows.",
+  "actual": "During the streaming phase the bubble shows only '4 tools · 3 src' + 'Components from library' cards, Send is enabled, no Stop (sidebar row does pulse). After completion the answer text is simply absent — no notice, no Retry. restoreActiveTask binds the run to the LAST assistant message with a taskId, which is an internal (metadata.ai.internal) hidden message, so the visible bubble never gets runState; the emptyResponse→Retry logic only exists in the live onTerminal path. Same root: a cancelled run's assistant bubble renders as an empty 'Assistant' header with no content once the in-memory run state is gone (QA-q8-retry, first answer).",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/024-dock-open.png",
+    "shots/q8/dark/047-dock-after-reload.png",
+    "shots/q8/dark/048-open-in-assistant-view.png",
+    "shots/q8/dark/059-dock-empty-answer.png",
+    "shots/q8/light/020-component-mention-raw-in-bubble.png"
+   ],
+   "network": [
+    "GET /tasks/d728b47d… → status 'streaming' (11:38), later 'completed' updatedAt 11:40:49",
+    "GET /chats/b934ae46…/messages → visible assistant content '' + internal assistant/tool rows with same taskId"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/DesignerChatDock.tsx",
+    "line": 466,
+    "note": "latest = last assistant message with taskId (internal one)"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 686,
+    "note": "same in Space restoreActiveTask"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 640,
+    "note": "emptyResponse → Retry only in live onTerminal"
+   }
+  ],
+  "suggestedFix": "In restoreActiveTask pick the first non-internal assistant message for that taskId; when rendering a completed assistant message with empty content and no proposals, show the 'No answer returned — Retry' card.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "assistant:run-restore:hidden-message",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Empty-answer half reproduced: QA-q8-dock first turn (task d728b47d, completed) renders only '4 tools · 3 src' + 'Components from library' cards, no text, no 'No answer'/Retry (textContent check). API: visible assistant 0e… content '' plus internal assistant/tool rows with the same taskId. Restore half code-verified: DesignerChatDock.tsx:463-467 and Space.tsx:684-688 pick the last assistant message with a taskId without filtering metadata.ai.internal, so after the first tool iteration a restored run is bound to a hidden message; the emptyResponse->Retry card exists only in live onTerminal (Space.tsx:640-656). A fresh reload-mid-run attempt completed before the first internal message, so timing could not be re-hit. S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/024-dock-open.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-025",
+  "area": "assistant.dock",
+  "title": "Dock chrome polish: composer hint row wraps into a cramped 3-line block, thread-menu Rename/Delete are 10px/15px-tall text links, preset list shows raw ids, 'Close chat' hides the whole side panel",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark"
+  ],
+  "designId": "3d5d1f7c",
+  "repro": [
+   "Designer 3d5d1f7c → Cmd+I (dock ~288px wide)",
+   "Look at the composer header row",
+   "Open the thread menu (chat title ▾)",
+   "Open the model pill → Prompt preset",
+   "Click the X 'Close chat'"
+  ],
+  "expected": "Hints collapse to a single line or hide in narrow docks; menu actions are ≥20px rows with icons (kit DropdownMenu); preset labels match the Space ('Strict Grounded'); the X label matches its effect ('Close panel') or only closes the chat.",
+  "actual": "'Type / for commands  Type @ to reference docs, components, or designs' wraps to three lines (≈45px). Thread menu is a hand-rolled list: 'Rename' and 'Delete' are 10px text, 15px tall, side by side under each chat. Dock passes presets={[]} so the preset select lists 'strict-grounded / friendly-tutorial / minimal-concise'. 'Close chat' collapses the entire side panel incl. Properties/ERC tabs.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/024-dock-open.png",
+    "shots/vq8/dark/025-dock-thread-menu.png",
+    "shots/vq8/dark/026-dock-preset-raw-ids.png",
+    "shots/vq8/dark/027-dock-close-chat-hides-panel.png",
+    "shots/q8/dark/043-dock-open.png",
+    "shots/q8/dark/049-dock-thread-menu.png",
+    "shots/q8/dark/062-dock-model-pill.png",
+    "shots/q8/dark/051-dock-close-chat.png"
+   ],
+   "census": "census/assistant-dock-schem-dark-1440.json"
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/components/ChatComposer.tsx",
+    "line": 264,
+    "note": "hint row not collapsed when compact"
+   },
+   {
+    "path": "src/modules/assistant/frontend/DesignerChatDock.tsx",
+    "line": 867,
+    "note": "presets={[]}"
+   },
+   {
+    "path": "src/modules/assistant/frontend/DesignerChatDock.tsx",
+    "line": 848,
+    "note": "'Close chat' closes dock"
+   }
+  ],
+  "suggestedFix": "Hide the hint row when compact (or show only '/ · @'); switch the thread menu to the kit DropdownMenu with 22px items; fetch prompt presets in the dock (or share from a store); rename the X to 'Close panel'.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "assistant.dock:chrome-polish",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced in dock (~278px): composer hint row 54px tall, wraps ('Type / for commands Type @ to reference docs, components, or designs'); thread menu has no role=menu, 'Rename'/'Delete' are 10px text buttons 15px tall; preset select lists raw ids strict-grounded / friendly-tutorial / minimal-concise (DesignerChatDock.tsx:867 presets={[]}); 'Close chat' (aria-label, :848-849) collapses the whole side panel (0 Side panel tabs, Toggle side panel aria-pressed=false). S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/024-dock-open.png",
+    "shots/vq8/dark/025-dock-thread-menu.png",
+    "shots/vq8/dark/026-dock-preset-raw-ids.png",
+    "shots/vq8/dark/027-dock-close-chat-hides-panel.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-026",
+  "knownRef": "K45",
+  "area": "assistant.space",
+  "title": "Assistant space/dock is not on the redesign kit: raw sky/amber/red/emerald palette, shadow-xl + gradient composer, 56px header, 10px bubble radii, hand-rolled menus",
+  "category": "consistency",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "repro": [
+   "Open Assistant space; open a chat with proposals ('edge unbound v2', QA-q8-main); open the dock in Designer",
+   "Probe proposal card, Apply button, badges, cancel banner; measure header"
+  ],
+  "expected": "Same flat neutral tokens as redesigned screens: --surface-*/--border, --status-* for badges, 34px header, 22px rows/controls, 2px radii, no shadows/gradients, kit DropdownMenu/Dialog.",
+  "actual": "Proposal cards: sky border #034569 (ΔE 25 off-token) / Apply button sky-600 #0084d1 (ΔE 22.7); risk badges raw amber #736020 (ΔE 36) and red #91575c; 'Assistant task cancelled.' banner brown/amber #180f0a with #cdc39e text; pill status dot emerald-500 #00bc7d with glow. Composer floats with shadow-xl + bg-gradient-to-t fade; chat header h-14 (56px) vs 34px shell headers; chat rows are 70px cards (rounded-lg borders) not 22px rows; user bubble radius 10px; row context menu and dock thread menu hand-rolled divs (no role=menu, no keyboard); native checkbox 13px in chat rows; 66 raw palette/shadow/gradient class uses across AST components. Light theme: proposal border sky-300 #74d4ff (ΔE 25.6), bg #f1f8fe, disabled Apply #79bee8, MEDIUM badge #e0b691 (ΔE 25.3).",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/021-resolved-proposal-cards.png",
+    "shots/vq8/light/005-proposal-light.png",
+    "shots/vq8/dark/006-row-actions-menu.png",
+    "shots/q8/dark/001-assistant-initial.png",
+    "shots/q8/dark/013-prompt2-proposal.png",
+    "shots/q8/dark/032-after-stop.png",
+    "shots/q8/dark/025-row-actions-menu.png",
+    "shots/q8/dark/049-dock-thread-menu.png",
+    "shots/q8/light/005-proposal-light.png",
+    "shots/q8/light/006-model-pill-light.png",
+    "shots/q8/light/007-row-menu-light.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/vq8/dark/021-resolved-proposal-cards.png",
+     "x": 464,
+     "y": 400,
+     "hex": "#034569",
+     "nearestToken": "--surface-control",
+     "deltaE": 25.3
+    },
+    {
+     "file": "shots/vq8/dark/021-resolved-proposal-cards.png",
+     "x": 481,
+     "y": 470,
+     "hex": "#064d77",
+     "nearestToken": "--text-disabled",
+     "deltaE": 27.4
+    },
+    {
+     "file": "shots/vq8/light/005-proposal-light.png",
+     "x": 464,
+     "y": 400,
+     "hex": "#74d4ff",
+     "nearestToken": "--selection",
+     "deltaE": 25.6
+    },
+    {
+     "file": "shots/vq8/light/005-proposal-light.png",
+     "x": 481,
+     "y": 470,
+     "hex": "#79bee8",
+     "nearestToken": "--selection",
+     "deltaE": 20.8
+    },
+    {
+     "file": "shots/q8/dark/001-assistant-initial.png",
+     "x": 498,
+     "y": 658,
+     "hex": "#0084d1",
+     "nearestToken": "--status-info",
+     "deltaE": 22.7
+    },
+    {
+     "file": "shots/q8/dark/013-prompt2-proposal.png",
+     "x": 1415,
+     "y": 600,
+     "hex": "#034569",
+     "nearestToken": "--surface-control",
+     "deltaE": 25.3
+    },
+    {
+     "file": "shots/q8/dark/013-prompt2-proposal.png",
+     "x": 694,
+     "y": 502,
+     "hex": "#736020",
+     "nearestToken": "--status-warning",
+     "deltaE": 36.2
+    },
+    {
+     "file": "shots/q8/dark/001-assistant-initial.png",
+     "x": 590,
+     "y": 227,
+     "hex": "#91575c",
+     "nearestToken": "--text-caps",
+     "deltaE": 25.7
+    },
+    {
+     "file": "shots/q8/dark/032-after-stop.png",
+     "x": 566,
+     "y": 655,
+     "hex": "#cdc39e",
+     "nearestToken": "--text",
+     "deltaE": 21.6
+    },
+    {
+     "file": "shots/q8/light/005-proposal-light.png",
+     "x": 1415,
+     "y": 560,
+     "hex": "#74d4ff",
+     "nearestToken": "--selection",
+     "deltaE": 25.6
+    },
+    {
+     "file": "shots/q8/light/005-proposal-light.png",
+     "x": 694,
+     "y": 478,
+     "hex": "#e0b691",
+     "nearestToken": "--status-warning-soft@app",
+     "deltaE": 25.3
+    }
+   ],
+   "census": "census/assistant-space-dark-1440.json"
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/components/GenericProposalCard.tsx",
+    "line": 231,
+    "note": "sky/amber/red/emerald classes"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1373,
+    "note": "h-14 header"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1730,
+    "note": "gradient fade + shadow-xl composer"
+   },
+   {
+    "path": "src/modules/assistant/frontend/components/MessageCard.tsx",
+    "line": 383,
+    "note": "rounded-[10px_10px_2px_10px] bubble"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1782,
+    "note": "hand-rolled context menu"
+   }
+  ],
+  "suggestedFix": "Migrate AST components to kit tokens: status badges → kit Chip with --status-*-soft; primary action → kit Button; card borders → --border; header → 34px PanelHeader; DropdownMenu for row/thread menus; remove shadow/gradient; radius-control everywhere.",
+  "fixScope": "frontend",
+  "estimate": "L",
+  "dedupeKey": "assistant:visual:off-kit",
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Re-probed: dark proposal card border #034569 (dE 25.3), disabled Apply #064d77 (sky-600 @50%), card bg #0a151d; light card border #74d4ff (dE 25.6), bg #f1f8fe, disabled Apply #79bee8 (dE 20.8). Chat header computed height 56px (Space.tsx:1373 h-14); row actions menu is a hand-rolled div (no role=menu, Esc does not close it). Consistent with PLAN §0 (Assistant = token re-skin only) and §9 follow-up 'migrate remaining files … (Assistant…)' - a documented stopgap, but the sky/amber/red/emerald classes are NOT covered by the D1 remap so they render off-token. Matches K45. S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/021-resolved-proposal-cards.png",
+    "shots/vq8/light/005-proposal-light.png",
+    "shots/vq8/dark/006-row-actions-menu.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-027",
+  "area": "assistant.space",
+  "title": "Light theme: Mermaid nodes styled with the prompt-mandated dark palette render as black boxes on a white diagram",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "light"
+  ],
+  "repro": [
+   "Light theme → Assistant → chat 'edge unbound' → 'Circuit topology' flowchart"
+  ],
+  "expected": "Diagram readable and consistent in light theme (class colours adapt to theme).",
+  "actual": "+5V / CTRL0 / CTRL1 / GND nodes are near-black (#13191F fill, #F3F4F6 text) while R/D nodes are light violet — a patchy dark-on-light diagram. The system prompt hard-codes classDef fills '#13191F' for every class, so every assistant diagram carries dark-mode colours regardless of theme; Download SVG exports them too.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/light/003-mermaid-light.png",
+    "shots/q8/light/002-mermaid-light.png",
+    "shots/q8/dark/019-mermaid-rendered.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/vq8/light/003-mermaid-light.png",
+     "x": 1192,
+     "y": 450,
+     "hex": "#13191f",
+     "nearestToken": "--primary",
+     "deltaE": 4.0
+    },
+    {
+     "file": "shots/vq8/light/003-mermaid-light.png",
+     "x": 860,
+     "y": 305,
+     "hex": "#f5f3ff",
+     "nearestToken": "--surface-app",
+     "deltaE": 5.7
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/backend/prompt-service.ts",
+    "line": 18,
+    "note": "classDef power fill:#13191F … (dark-only palette)"
+   },
+   {
+    "path": "src/shared/frontend/markdown/MermaidDiagram.tsx",
+    "line": 198,
+    "note": "light themeVariables violet"
+   }
+  ],
+  "suggestedFix": "Have the model emit semantic class names only (classDef-free) and inject theme-aware classDefs in MermaidDiagram before render (from tokens), overriding any model-supplied fills.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "markdown:mermaid:light-theme-dark-nodes",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced light on 'edge unbound': diagram bg #ffffff; +5V/CTRL0/CTRL1/GND node fill computed rgb(19,25,31) (#13191f, probe on GND dE 4.0 from --primary = near-black) from the prompt-mandated classDefs (prompt-service.ts:18), while default R/D nodes are light violet (#f5f3ff fill, #b697f3 border from light themeVariables #7C3AED). Distinct root from Q8-010 (prompt classDefs vs component theme). S3 kept.",
+   "evidence": [
+    "shots/vq8/light/003-mermaid-light.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-028",
+  "area": "assistant.space",
+  "title": "Light theme: composer hint row, footer meta and kbd hints are ~1.5–2.7:1 contrast (10px text)",
+  "category": "a11y",
+  "severity": "S3",
+  "themes": [
+   "light"
+  ],
+  "repro": [
+   "Light theme → Assistant → look at the composer: 'Type / for commands · Type @ …', footer '15 tools · 64k context', '⏎ send ⇧⏎ newline'; placeholder"
+  ],
+  "expected": "≥4.5:1 for 10–11px text (use --text-secondary/--text-tertiary on --surface-panel).",
+  "actual": "Darkest hint-glyph pixel #9a9a9e on #fafafb = 2.69:1; kbd label #b1b1b6 on #d8d8db = 1.5:1; placeholder #a8a8ad on white = 2.37:1. Dark theme is fine.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/light/004-composer-contrast.png",
+    "shots/q8/light/001-assistant-space.png"
+   ],
+   "pixelProbes": [
+    {
+     "file": "shots/q8/light/001-assistant-space.png",
+     "x": 460,
+     "y": 780,
+     "hex": "#9a9a9e",
+     "nearestToken": "--text-disabled",
+     "deltaE": 5.4
+    },
+    {
+     "file": "shots/q8/light/001-assistant-space.png",
+     "x": 1329,
+     "y": 851,
+     "hex": "#b1b1b6",
+     "nearestToken": "--text-disabled",
+     "deltaE": 3.4
+    },
+    {
+     "file": "shots/q8/light/001-assistant-space.png",
+     "x": 454,
+     "y": 816,
+     "hex": "#a8a8ad",
+     "nearestToken": "--text-disabled",
+     "deltaE": 0.5
+    }
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/components/ChatComposer.tsx",
+    "line": 264,
+    "note": "text-[10px] text-slate-400 hint row; kbd bg-slate-200"
+   }
+  ],
+  "suggestedFix": "Use text-text-tertiary (≥4.5:1 on panel) for hint/footer text and a bordered kbd token instead of slate-200 fill.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "assistant:composer:light-contrast",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Re-measured light (computed colours): composer hint row 10px #a8a8ad on ~#fafafb = 2.27:1; kbd '⏎' #a8a8ad on #dcdce0 = 1.73:1; placeholder #a8a8ad on #ffffff = 2.37:1 (all < 4.5:1). Footer '15 tools · 64k context' meta at #7f7f84 = 3.98:1. ChatComposer.tsx:264-282 text-slate-400 + bg-slate-200 (remapped neutral-400/200). Dark theme fine. S3 kept.",
+   "evidence": [
+    "shots/vq8/light/004-composer-contrast.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-029",
+  "area": "designer.shell",
+  "title": "Designer with no design open still shows the Outline 'Empty design' panel whose Place component / Add net label buttons do nothing, plus active view tabs",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "light"
+  ],
+  "repro": [
+   "Fresh profile (no designer tabs) → rail Designer",
+   "Click 'Place component ⌘K' then 'Add net label' in the left Outline panel"
+  ],
+  "expected": "Left sidebar hidden (or disabled) until a design is open; only the centred 'No design open' card is actionable; Schem/PCB/3D/BOM/DRC tabs disabled.",
+  "actual": "Outline shows '0 · Empty design — Add your first component…' with primary 'Place component' button; clicking it or 'Add net label' does nothing (no dialog, no feedback). View tabs remain clickable.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/light/001-no-design-outline.png",
+    "shots/vq8/light/002-no-design-after-clicks.png",
+    "shots/q8/light/008-dock-light.png",
+    "shots/q8/light/009-no-design-place-component.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 1344,
+    "note": "DesignerSidebar rendered even when noTabsOpen"
+   },
+   {
+    "path": "src/modules/designer/frontend/Space.tsx",
+    "line": 599,
+    "note": "openComponentPalette silently returns when !canOpenPalette"
+   },
+   {
+    "path": "src/modules/designer/frontend/components/OutlinePanel/OutlineEmptyState.tsx",
+    "line": 19,
+    "note": "'Empty design' state shown with no design"
+   }
+  ],
+  "suggestedFix": "Designer Space.tsx:1344: render the left sidebar/resizer only when !noTabsOpen (and disable the view tabs), so the no-design state is just DesignerEmptyState.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "designer.shell:no-design:dead-outline-actions",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced in a fresh light profile: Designer with no tabs shows centred 'No design open' plus left Outline 'Empty design' with 'Place component ⌘K' / 'Add net label' - clicking both opens nothing (0 dialogs); Schem/PCB/3D/BOM/DRC tabs switch (PCB selected). Designer Space.tsx:1344-1377 renders DesignerSidebar whenever activeView isn't bom/drc, not gated on noTabsOpen; openComponentPalette (:599) no-ops without canOpenPalette. S3 kept.",
+   "evidence": [
+    "shots/vq8/light/001-no-design-outline.png",
+    "shots/vq8/light/002-no-design-after-clicks.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-030",
+  "area": "assistant.space",
+  "title": "Chat list rows trap keyboard: nested checkbox and '…' button can't be activated (row keydown swallows Enter/Space) and the '…' button stays invisible when focused",
+  "category": "keyboard",
+  "severity": "S3",
+  "themes": [
+   "light"
+  ],
+  "repro": [
+   "Assistant → click 'Search chats' → Tab to 'Select QA-q8-main' checkbox → press Space",
+   "Tab to 'Chat actions for QA-q8-main' → press Enter"
+  ],
+  "expected": "Space toggles the checkbox; Enter opens the row menu; focused '…' button visible (focus-visible:opacity-100).",
+  "actual": "Checkbox stays unchecked after Space; Enter on the actions button opens nothing (the parent role=button row handles Enter/Space with preventDefault and just selects the chat). The focused actions button has computed opacity 0 (group-hover only). Interactive controls are nested inside a role=button element (invalid ARIA nesting).",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/018-focused-row-actions-invisible.png",
+    "shots/q8/light/016-focused-row-actions-invisible.png"
+   ],
+   "console": [
+    "activeElement 'Chat actions for QA-q8-main' opacity=0",
+    "after Space: 'Select QA-q8-main' checked=false"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1267,
+    "note": "row onKeyDown Enter/Space → preventDefault + select, fires for nested controls"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1328,
+    "note": "opacity-0 group-hover:opacity-100 only"
+   }
+  ],
+  "suggestedFix": "In the row onKeyDown ignore events whose target !== currentTarget; add focus-visible:opacity-100 to the actions button; restructure row as a listitem containing a real <button> for 'open' plus sibling checkbox/menu button.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "assistant.space:chat-row:keyboard-nested-controls",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced: Tab from Search chats to 'Chat actions for QA-q8-retry' -> computed opacity 0 (visible outline style only, element invisible); Enter -> no menu, the row just gets selected (header 'QA-q8-retry'); Shift+Tab to 'Select QA-q8-retry' checkbox, Space -> checked stays false. Row role=button onKeyDown (Space.tsx:1267) preventDefaults Enter/Space for nested targets. Not a trap (Tab moves on) -> S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/018-focused-row-actions-invisible.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-031",
+  "area": "assistant.space",
+  "title": "'Retry' on a stopped/cancelled run does nothing (dead button)",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "light"
+  ],
+  "repro": [
+   "Assistant → new chat QA-q8-retry → send 'Reply with exactly: hello from the retry test'",
+   "Click Stop generating within ~1s → card 'Assistant task cancelled.' + Retry",
+   "Click Retry (twice)"
+  ],
+  "expected": "The last user prompt is re-submitted as a new run.",
+  "actual": "Nothing happens: no Working… state, no POST /chats/3489e162…/messages (backend log count stays 1), no error. After the run terminates, onTerminal → refreshChats → the selected-chat effect calls restoreActiveTask, which overwrites the run with userMessageContent: '' — and retryRunAsNew returns early on an empty prompt.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/019-after-stop-pulse.png",
+    "shots/vq8/dark/020-after-retry-noop.png",
+    "shots/q8/light/018-cancelled-with-retry.png",
+    "shots/q8/light/019-after-retry.png"
+   ],
+   "network": [
+    "backend-A.log: POST /api/modules/assistant/chats/3489e162…/messages count 3 before and after two Retry clicks",
+    "backend-A.log: POST /api/modules/assistant/chats/3489e162…/messages count before=1 after=1 around Retry clicks"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1014,
+    "note": "if (!run.userMessageContent.trim()) return;"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 708,
+    "note": "restoreActiveTask sets userMessageContent: ''"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 737,
+    "note": "selected-chat effect re-runs restoreActiveTask on every chats refresh"
+   }
+  ],
+  "suggestedFix": "Retry should fall back to the preceding user message content from `messages` (find the user message before run.assistantMessageId); and restoreActiveTask must not clobber an existing in-memory run for the same task.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "assistant:run:retry-noop",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced in QA-q8-retry: Stop generating -> 'Assistant task cancelled.' + Retry; clicked Retry twice (after switching chats and back) -> no Working…, backend log count of POST /chats/3489e162…/messages stayed 3 (before and after). Code: restoreActiveTask (Space.tsx:692-707) overwrites the run with userMessageContent '' on the post-terminal refresh, and retryRunAsNew (:1012-1014) returns on empty content. S2 kept (visible Retry button does nothing).",
+   "evidence": [
+    "shots/vq8/dark/019-after-stop-pulse.png",
+    "shots/vq8/dark/020-after-retry-noop.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-032",
+  "area": "assistant.space",
+  "title": "Proposal cards: applied/rejected cards keep disabled Apply/Reject/Allow buttons and no Undo; operations show raw nanometres and deletions don't name the part",
+  "category": "copy",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "designId": "a557d3b5",
+  "repro": [
+   "QA-q8-main: 'Add a 10k resistor R99…' (auto-applied) and 'Delete resistor R6…' (pending → Reject; second one → Apply)",
+   "Read the cards"
+  ],
+  "expected": "Resolved cards collapse to a status line ('Applied · Undo' / 'Rejected'); coordinates in mm; delete rows name the target (R6).",
+  "actual": "APPLIED / REJECTED cards still render three greyed buttons (Apply, Reject, 'Allow this tool this session') with no Undo affordance even though edits are 'undoable'. Operation text 'Place Resistor at 110000000, 0 nm.' shows raw nm. Destructive rows read only 'Delete part — User requested deletion' (no reference/value), so the user approves a deletion without seeing what is deleted except in the LLM-written title. Feedback after Apply is a tiny 'Applied 1 schematic operation(s).' line.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/021-resolved-proposal-cards.png",
+    "shots/vq8/light/005-proposal-light.png",
+    "shots/q8/dark/013-prompt2-proposal.png",
+    "shots/q8/dark/014-prompt3-delete-pending.png",
+    "shots/q8/dark/015-after-reject.png",
+    "shots/q8/dark/016-after-apply.png",
+    "shots/q8/light/005-proposal-light.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/components/GenericProposalCard.tsx",
+    "line": 328,
+    "note": "buttons always rendered, only disabled"
+   },
+   {
+    "path": "src/modules/assistant/backend/tools/designer-tools.ts",
+    "line": 3275,
+    "note": "deletion op summary lacks part reference"
+   }
+  ],
+  "suggestedFix": "Hide action row once status≠pending and show 'Applied · Undo' (dispatch designer undo) / 'Rejected'; format positions via nm→mm helper; include ref/value in delete op titles ('Delete R6 (10k)').",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "assistant:proposal-card:resolved-state-copy",
+  "knownRef": null,
+  "stack": "A",
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced in QA-q8-main: all 3 resolved cards (APPLIED/REJECTED/APPLIED) still render Apply/Reject/'Allow this tool this session' (all disabled), no Undo; operation text 'Place Resistor at 110000000, 0 nm.'; delete rows read only 'Delete part' / 'User requested deletion'. GenericProposalCard.tsx:320-346 always renders the action row; designer-tools.ts:3271-3274 delete op title/summary lack reference/value. S3 kept.",
+   "evidence": [
+    "shots/vq8/dark/021-resolved-proposal-cards.png",
+    "shots/vq8/light/005-proposal-light.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-033",
+  "area": "assistant.space",
+  "title": "Chats are never auto-titled and 'New' immediately persists an empty 'New chat' row (list fills with identical 'New chat' entries)",
+  "category": "copy",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "repro": [
+   "Assistant → New → send a message; observe the row title",
+   "Click New several times without sending"
+  ],
+  "expected": "Title derived from the first prompt (or a short LLM summary); an empty chat is not persisted until the first message (or is reused).",
+  "actual": "Title stays 'New chat' after messages (QA-q8-main needed a manual rename); each New click creates a server-side chat, so the list already contains three untouched 'New chat' rows from earlier sessions that are indistinguishable.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/002-new-chat-aion.png",
+    "shots/q8/dark/010-prompt1-done.png",
+    "shots/q8/dark/001-assistant-initial.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 828,
+    "note": "createChat POSTs immediately"
+   }
+  ],
+  "suggestedFix": "Set title from the first user message (trim to ~48 chars) server-side on first submit; lazily create the chat on first send or reuse an existing empty chat.",
+  "fixScope": "backend-needed",
+  "estimate": "S",
+  "dedupeKey": "assistant:chat:auto-title",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced: New immediately POSTs a chat (8108e99e 'New chat' persisted before any message; deleted afterwards); list still holds 3 untouched 'New chat' rows. No auto-title logic exists (assistant-service.ts:141 title ?? 'New chat'; no title derivation on submit). S4 kept.",
+   "evidence": [
+    "shots/vq8/dark/002-new-chat-aion.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-034",
+  "area": "assistant.space",
+  "title": "@-mentions of built-in library components render as raw '@[library-component:openpcb.core.passive.resistor|Resistor]' — mention regex rejects '.' in ids (frontend and backend)",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "light"
+  ],
+  "repro": [
+   "Assistant → composer '@Resis' → pick 'Resistor' (built-in, id openpcb.core.passive.resistor)",
+   "Add 'In one line: what package does this component default to?' → Enter"
+  ],
+  "expected": "User bubble shows an '@ Resistor' chip (clickable → Library detail) like design/page mentions; backend resolves the mention into context.",
+  "actual": "Bubble shows the raw markup '@[library-component:openpcb.core.passive.resistor|Resistor] In one line…'; no chip, not clickable. Both parsers use /@\\[([a-z-]+):([a-zA-Z0-9-]+)\\|…/ — ids with dots never match, so every built-in/KiCad-derived component mention (all ids are dotted) is also invisible to the backend mention resolver (the model only answered via its own tool calls).",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/028-component-mention-raw-bubble.png",
+    "shots/q8/light/020-component-mention-raw-in-bubble.png"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/lib/mention-utils.ts",
+    "line": 3,
+    "note": "entityId class [a-zA-Z0-9-]"
+   },
+   {
+    "path": "src/core/backend/mentions/mention-parser.ts",
+    "line": 7,
+    "note": "same regex server-side"
+   }
+  ],
+  "suggestedFix": "Allow '.', '_' and ':' in the id group ([A-Za-z0-9._:-]+) in both parsers (keep the '|' and ']' delimiters), add a unit test with 'openpcb.core.passive.resistor'.",
+  "fixScope": "backend-needed",
+  "estimate": "XS",
+  "dedupeKey": "assistant:mention:dotted-component-id",
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced in QA-q8-retry: user bubble shows literal '@[library-component:openpcb.core.passive.resistor|Resistor] In one line: …', 0 mention chips. Both parsers use /@\\[([a-z-]+):([a-zA-Z0-9-]+)\\|([^\\]]+)\\]/ (frontend lib/mention-utils.ts:3, backend core/backend/mentions/mention-parser.ts:7) - ids with '.' never match, so every built-in component mention is neither rendered nor resolved for context. S2 kept.",
+   "evidence": [
+    "shots/vq8/dark/028-component-mention-raw-bubble.png"
+   ]
+  }
+ },
+ {
+  "id": "Q8-035",
+  "knownRef": "K04",
+  "area": "assistant.dock",
+  "title": "Dock thread menu 'Rename' uses native window.prompt and 'Delete' native window.confirm",
+  "category": "bug",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "designId": "3d5d1f7c",
+  "repro": [
+   "Designer 3d5d1f7c → Cmd+I → thread title ▾ → 'Rename' under the chat",
+   "Thread menu → 'Delete' under another chat"
+  ],
+  "expected": "Inline rename field in the menu/header and a kit confirm dialog.",
+  "actual": "Native prompt 'Rename chat' (dialog-spy: prompt 1) and native confirm 'Delete \"S3 Smoke — 5 LED indicators (v2) chat\"?' (confirm 1, both themes). In Electron window.prompt is unsupported → dock rename silently fails.",
+  "evidence": {
+   "screenshots": [
+    "shots/vq8/dark/025-dock-thread-menu.png",
+    "shots/q8/dark/049-dock-thread-menu.png",
+    "shots/q8/light/021-dock-thread-menu-2chats.png",
+    "shots/q8/dark/050-dock-after-delete.png"
+   ],
+   "console": [
+    "__qaDialogCalls.log: 'prompt: Rename chat', 'confirm: Delete \"QA-q8-dock\"?'",
+    "__qaDialogCalls.log: 'prompt: Rename chat', 'confirm: Delete \"S3 Smoke — 5 LED indicators (v2) chat\"?'"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/DesignerChatDock.tsx",
+    "line": 725,
+    "note": "window.prompt"
+   },
+   {
+    "path": "src/modules/assistant/frontend/DesignerChatDock.tsx",
+    "line": 748,
+    "note": "window.confirm"
+   }
+  ],
+  "suggestedFix": "Share the Space's inline title editor (click title → input) and the kit ConfirmDialog.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "assistant.dock:thread:native-dialogs",
+  "stack": "A",
+  "status": "confirmed",
+  "viewports": [
+   "1440x900"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vq8",
+   "reason": "Reproduced in dock (3d5d1f7c PCB): thread title ▾ -> 'Rename' -> native prompt 'Rename chat' (dismissed); 'Delete' -> native confirm 'Delete \"QA-q8-dock\"?' (dismissed, chat still exists). DesignerChatDock.tsx:725 window.prompt, :748 window.confirm. Matches K04 (+K06). S2 per rubric.",
+   "evidence": [
+    "shots/vq8/dark/025-dock-thread-menu.png"
+   ]
+  }
+ }
+]

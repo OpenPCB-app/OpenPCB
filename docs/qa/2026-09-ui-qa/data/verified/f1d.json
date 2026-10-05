@@ -1,0 +1,690 @@
+[
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "id": "F1D-001",
+  "area": "assistant.space",
+  "title": "Assistant shows hard-coded 'gpt-4o-mini · Cloud' (green dot) until settings load, and a send in that window creates the chat on 'openai'",
+  "category": "bug",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Stack A (configured default provider = OpenRouter / nvidia/nemotron-3.5-lightning:free)",
+   "In-page latency shim: delay every /api fetch (window.fetch wrapper, 2.5–8 s) to simulate a slow backend",
+   "Navigate Home → Assistant (in-memory, no reload)",
+   "Observe the header model pill and the sidebar footer during load",
+   "Before the chat list/settings arrive, type in the composer and press Enter (the shim blocks every non-GET, so nothing reached the backend)"
+  ],
+  "expected": "Until settings/providers are loaded, the model pill shows a neutral loading state and the composer and 'New' are disabled (or submit waits). A new chat always uses the configured default provider and model.",
+  "actual": "The pill reads 'gpt-4o-mini STRICT' and the footer reads 'gpt-4o-mini · Cloud' with a green 'healthy' dot. These are the useState defaults, not the user's configuration. The composer and 'New' stay enabled. Pressing Enter issued POST /api/modules/assistant/chats with body {\"providerConfigId\":\"openai\",\"model\":\"gpt-4o-mini\",\"promptPresetId\":\"strict-grounded\"}, so the chat would be persisted on an unconfigured/disabled provider (or a paid OpenAI model if a key exists). Every Assistant mount also fires a needless GET /providers/openai/models before settings arrive.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1d/dark/004-lat-assistant-first.png",
+    "shots/f1d/dark/019-lat-assistant-send-during-load.png",
+    "shots/f1d/light/103-lat-assistant-first.png",
+    "shots/vf1d/dark/002-latency-assistant-placeholder.png",
+    "shots/vf1d/dark/003-latency-send-during-load.png",
+    "shots/vf1d/light/101-latency-assistant-placeholder.png",
+    "shots/vf1d/dark/001-settings500-assistant-placeholder.png"
+   ],
+   "console": [],
+   "network": [
+    "POST /api/modules/assistant/chats body {providerConfigId:'openai', model:'gpt-4o-mini'} (captured+blocked in-page)",
+    "GET /api/modules/assistant/providers/openai/models on every mount (before /settings resolves)"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 184,
+    "note": "useState('openai') / useState('gpt-4o-mini') placeholders render as the real config until refreshConfig resolves"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 834,
+    "note": "createChat posts providerId || settings?.defaultProviderId; providerId is the 'openai' placeholder, so the fallback never applies"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 954,
+    "note": "submit also sends providerConfigId: providerId / model placeholder"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 744,
+    "note": "models effect fires GET /providers/openai/models for the placeholder id (cache read only, harmless)"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1357,
+    "note": "footer dot is unconditionally bg-status-success; label falls back to 'Cloud' when no provider is loaded"
+   },
+   {
+    "path": "src/modules/assistant/backend/assistant-service.ts",
+    "line": 139,
+    "note": "createChat only requireProvider() (exists), so a chat on the seeded built-in 'openai' is persisted; submitMessage then requireUsableProvider() fails 'Provider disabled'/'API key required' (or runs on OpenAI if that provider is enabled)"
+   }
+  ],
+  "suggestedFix": "Space.tsx:184-185: initialise providerId/model to null (or '') and add configLoaded state set at the end of refreshConfig (:422-443). While !configLoaded: render the ModelSelectorPill and footer (:1355-1367) as a neutral skeleton, disable composer submit, the empty-state prompt chips and 'New' (or queue the submit until loaded). Guard the models effect (:744) on configLoaded. In createChat (:834) and submit (:954) use settings.defaultProviderId when providerId is unset. Drive the footer dot from provider health instead of hard-coded bg-status-success.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "assistant.space:config-loading:placeholder-provider-used",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1d",
+   "reason": "Reproduced with the f1d fetch shim (6 s latency, writes blocked): pill 'gpt-4o-mini STRICT', footer 'gpt-4o-mini · Cloud' with green dot, 'No chats yet.'; composer enabled; a synthetic Enter 1.5 s after mount produced POST /assistant/chats {providerConfigId:'openai',model:'gpt-4o-mini'} (blocked). Code confirms (Space.tsx:184,834,954). Severity lowered S2->S3: on the real loopback stack the placeholder is on screen for one painted frame (MutationObserver: 22 ms, rAF saw 1 frame; /settings answers in ~1 ms), so a human cannot send inside the window; with /settings forced to 500 the auto-selected existing chat's provider (OpenRouter) was used, so the placeholder only persists when settings fail AND no chat is selected. Real defect (latent race + unconditional green 'healthy' dot), low exposure.",
+   "evidence": [
+    "shots/vf1d/dark/002-latency-assistant-placeholder.png",
+    "shots/vf1d/dark/003-latency-send-during-load.png",
+    "shots/vf1d/light/101-latency-assistant-placeholder.png",
+    "shots/vf1d/dark/001-settings500-assistant-placeholder.png",
+    "blocked POST /api/modules/assistant/chats body {providerConfigId:'openai',model:'gpt-4o-mini',promptPresetId:'strict-grounded'}",
+    "no-latency watcher: 'gpt-4o-mini' present 1154->1176 ms (22 ms, 1 rAF frame)"
+   ]
+  },
+  "mergedIds": null
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "id": "F1D-002",
+  "area": "cross-cutting",
+  "title": "Home paints '0 local' / All 0 / 'designs 0' / 'Select a design' next to the loading spinner on every visit; Assistant paints 'No chats yet.' while chats load",
+  "category": "bug",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "In-page latency shim: delay every /api fetch 2.5 s (window.fetch wrapper)",
+   "Navigate in memory (useNavigationStore, no reload): Home → Docs → Assistant → Settings General/Libraries/About → Tasks. For Docs, make it the first visit after a page load",
+   "Screenshot the first render and record which strings appear (MutationObserver watcher)"
+  ],
+  "expected": "While a list is loading, each space shows a loading state (spinner/skeleton). Counts and empty-state copy stay hidden until data arrives, and actions that depend on the data wait.",
+  "actual": "Home: until /designs resolves the header says '0 local', the sidebar counts are all 0, the status bar says 'designs 0' and the detail panel says 'Select a design' beside the list spinner. On the real stack (23 designs) this is visible for ~127 ms (8 painted frames) on every Home visit, and for the full load under a slow backend (screenshot at 3 s latency). Assistant: 'No chats yet.' / All 0 / 'New chat' with no loading indicator while /chats loads (1 frame on loopback, full load under latency). Docs sub-claim not reproduced as visible: 'No pages yet' is in the DOM for ~2 ms and is never painted (0 rAF frames) because the tree effect flips isLoading before paint. Tasks 'No tasks yet.' is already Q9-023 (and Tasks is unreachable, K42). Settings › Libraries 'Check for updates' enabled while status is unknown is harmless (the check fetches status itself).",
+  "evidence": {
+   "screenshots": [
+    "shots/f1d/dark/002-lat-home-first.png",
+    "shots/f1d/dark/004-lat-assistant-first.png",
+    "shots/f1d/dark/005-lat-assistant-mid.png",
+    "shots/f1d/dark/014-lat-tasks-first.png",
+    "shots/f1d/dark/009-lat-settings-libraries-first.png",
+    "shots/f1d/light/101-lat-docs-first.png",
+    "shots/f1d/light/102-lat-home-first.png",
+    "shots/f1d/light/103-lat-assistant-first.png",
+    "shots/f1d/light/107-lat-tasks-first.png",
+    "shots/vf1d/dark/004-latency-home-zero-counts.png",
+    "shots/vf1d/dark/002-latency-assistant-placeholder.png"
+   ],
+   "console": [],
+   "network": [
+    "watcher events light: Docs 40ms 'No pages yet'; Home 6ms 'designs 0','0 local','Select a design' until 2648ms; Assistant 36ms 'No chats yet' until ~2585ms; Tasks 6ms 'No tasks yet'"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 406,
+    "note": "'{designs.length} local' rendered while loading"
+   },
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 305,
+    "note": "counts memo computed from the empty initial array during load"
+   },
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 523,
+    "note": "'designs {visible.length}' status segment rendered while loading"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1351,
+    "note": "'No chats yet.' whenever filteredChats is empty — no chats-loaded flag"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1626,
+    "note": "EmptyState shown before the chat list/selection resolves"
+   }
+  ],
+  "suggestedFix": "HomeScreen.tsx: while loading render '—' (or nothing) for the header count (:406), the HomeSidebar counts (:305 counts -> pass null) and the 'designs N' status segment (:523), and hide 'Select a design' in DesignDetailPanel. Assistant Space.tsx: add chatsLoaded state set in refreshChats (:327); until true render a kit skeleton instead of 'No chats yet.' (:1351) and the EmptyState (:1626). (Docs needs no change for visibility; optionally init tree-store isLoading=true at tree-store.ts:104 for correctness.)",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "cross-cutting:loading-state:misleading-empty-zero",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1d",
+   "reason": "Home zero counts reproduced without any shim: per-frame rAF sampler after in-memory navigateHome showed 'Designs|0 local' + 'designs 0' + spinner from t=15 ms to t=142 ms, then '23 local'/'designs 23'. Under 3 s latency the full screenshot shows 0 counts, 'designs 0', 'Select a design'. Assistant 'No chats yet.' confirmed (1 frame on loopback, whole load under latency). Refuted parts: Docs 'No pages yet' never painted (2 ms in DOM, 0 rAF frames); Tasks is a duplicate of Q9-023; the Libraries 'Check for updates' point is not a defect. Severity lowered S3->S4: flicker-grade on the real loopback backend (~130 ms), no wrong action results.",
+   "evidence": [
+    "shots/vf1d/dark/004-latency-home-zero-counts.png",
+    "rAF frames: t=15 'Designs|0 local','designs 0',spin=true -> t=142 'Designs|23 local','designs 23'",
+    "Docs watcher: 'No pages yet' on 1135 ms / off 1137 ms, noPagesFrames=[]"
+   ]
+  },
+  "relatedIds": [
+   "Q9-023",
+   "Q8-006",
+   "F1D-003"
+  ],
+  "mergedIds": null
+ },
+ {
+  "knownRef": "K40",
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "id": "F1D-003",
+  "area": "cross-cutting",
+  "title": "List load failures have no in-place retry (Home, Assistant chats, Settings › Libraries) and fall back to 'No designs yet' / 'No chats yet.' empty states — recovery needs navigation",
+  "category": "error-handling",
+  "severity": "S2",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "In-page fetch shim returns 500 application/problem+json for GET /api/modules/designer/designs, /knowledge/workspaces/default/tree, /assistant/chats, /library/sources, /library/core-library/status",
+   "Navigate (in memory) to Home, Docs, Assistant, Settings › Libraries and screenshot each",
+   "Remove the shim (backend healthy again) and look for any in-UI way to retry without leaving the screen (dismiss, filter click, wait)"
+  ],
+  "expected": "Each list shows an error with a Retry action next to the failed list, never the 'nothing here, create one' empty state. Errors use human copy, not raw codes.",
+  "actual": "Home: raw 'Failed to load designs: HTTP 500' strip above 'No designs yet / Create your first design' (no Retry). Clicking filters does not refetch; you have to leave Home and come back. Assistant: the sidebar says 'No chats yet.' (All 0) and a generic 'Internal error' banner sits in the thread area, unrelated to the list. Dismissing it leaves an empty list, nothing refetches, and the user is invited to start a new chat. It recovers only after leaving and re-entering Assistant. Settings › Libraries: 'Internal error' banner plus the core card and sources table stuck on 'Loading…'. It recovers only by switching tabs (General → Libraries). Docs is the only list with a working Retry, which fixed it in one click (after shim removal: 1 GET, 8 rows), but it shows the raw code 'HTTP_500' in raw red.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1d/dark/050-err500-home.png",
+    "shots/f1d/dark/051-err500-docs.png",
+    "shots/f1d/dark/052-err500-assistant.png",
+    "shots/f1d/dark/053-err500-settings-libraries.png",
+    "shots/f1d/dark/054-recover-settings-libraries-after-tabswitch.png",
+    "shots/f1d/dark/055-recover-assistant-no-retry.png",
+    "shots/f1d/dark/056-recover-docs-retry.png",
+    "shots/f1d/light/150-err500-assistant.png",
+    "shots/f1d/light/151-err500-docs.png",
+    "shots/f1d/light/152-err500-home.png",
+    "shots/f1d/light/153-err500-settings-libraries.png",
+    "shots/vf1d/dark/010-err500-assistant-chats.png",
+    "shots/vf1d/dark/011-err500-home.png",
+    "shots/vf1d/dark/012-err500-docs.png",
+    "shots/vf1d/dark/013-err500-settings-libraries.png"
+   ],
+   "console": [],
+   "network": [
+    "After shim removal: Home/Assistant made 0 requests until navigation; Settings refetched only on tab switch; Docs Retry → GET /knowledge/workspaces/default/tree 200"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 724,
+    "note": "Promise.all([refreshConfig(), refreshChats()]).catch -> generic setError('Internal error') in the thread; chats stays [] and nothing retries"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1351,
+    "note": "'No chats yet.' rendered for a failed load"
+   },
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 138,
+    "note": "raw 'Failed to load designs: HTTP ${status}'; :350 renders emptyState ('No designs yet' + New design) while error is set; strip at :489 has no Retry (= Q1-003)"
+   },
+   {
+    "path": "src/core/frontend/src/settings/panels/LibrariesPanel.tsx",
+    "line": 356,
+    "note": "sources===null stays 'Loading…' after a failed fetch (= Q2-014)"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/PageTree.tsx",
+    "line": 49,
+    "note": "only list with Retry; shows raw 'HTTP_500' in text-red-600 (= Q9-012)"
+   }
+  ],
+  "suggestedFix": "Add one kit ErrorState (human message + Retry button, token colours) in src/shared/frontend/ui and a per-list status ('loading'|'error'|'ready'). Assistant Space.tsx: split the mount effect (:724) so refreshChats failure sets chatsError, render ErrorState with Retry -> refreshChats() in the sidebar list instead of 'No chats yet.' (:1351), and keep the thread banner for config errors only. HomeScreen.tsx: when error is set render ErrorState (Retry -> fetchDesigns) instead of emptyState (:350) and map status to copy ('Couldn't load designs — the local service didn't respond') instead of 'HTTP 500' (:138). LibrariesPanel.tsx:356/467: render ErrorState with Retry -> loadSources/loadStatus. PageTree.tsx:49: reuse the kit ErrorState and human copy instead of raw 'HTTP_500'.",
+  "fixScope": "frontend",
+  "estimate": "M",
+  "dedupeKey": "cross-cutting:list-load-error:no-retry",
+  "relatedIds": [
+   "Q1-003",
+   "Q2-014",
+   "Q9-012"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1d",
+   "reason": "Reproduced with shim 500s: Assistant /chats -> sidebar 'No chats yet.' (All 0) + thread banner 'Internal error', no Retry; after removing the failure, filter clicks issued 0 requests and the list stayed empty. Home -> 'Failed to load designs: HTTP 500' above 'No designs yet' with no Retry. Docs -> 'HTTP_500' + Retry. Settings › Libraries -> 'Internal error' + two 'Loading…' still present 3 s after the failure was lifted, 0 Retry buttons. Home/Settings/Docs parts are already filed (Q1-003 S2, Q2-014 S3, Q9-012 S2); the new instance is the Assistant chat list, which claims 'No chats yet.' when chats exist (wrong data shown) — S2 kept, consistent with Q1-003. Triage should fold this umbrella together with Q1-003/Q2-014/Q9-012 under one shared ErrorState fix.",
+   "evidence": [
+    "shots/vf1d/dark/010-err500-assistant-chats.png",
+    "shots/vf1d/dark/011-err500-home.png",
+    "shots/vf1d/dark/012-err500-docs.png",
+    "shots/vf1d/dark/013-err500-settings-libraries.png"
+   ]
+  },
+  "mergedIds": null
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "id": "F1D-004",
+  "area": "assistant.space",
+  "title": "Wide markdown tables and unbroken URLs overflow the message column — the whole chat thread scrolls horizontally",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "repro": [
+   "In-page mock: a chat whose assistant message (10k chars) contains a 30-column markdown table, a wide ```ts code block and a 300-char URL",
+   "Open the chat in the Assistant space and scroll to the message",
+   "Scroll the thread horizontally (trackpad / shift+wheel)"
+  ],
+  "expected": "Tables sit in their own horizontal scroller (like the code block does) and long tokens/URLs wrap. The thread itself never scrolls sideways.",
+  "actual": "The table renders 2885 px wide and runs off the right edge. The URL runs to the viewport edge. The thread container becomes horizontally scrollable (scrollWidth 2949 vs clientWidth 1040), so panning sideways shifts every other message and leaves the prose cut off on the left. The code block is fine: it has its own overflow-x. Related (code only, not reproduced): the designer dock thread uses overflow-x-hidden (DesignerChatDock.tsx:891), so in the ~300 px dock the same tables are clipped and their right-hand columns are unreachable.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1d/dark/030-asst200-first.png",
+    "shots/f1d/dark/034-asst-10k-message.png",
+    "shots/f1d/dark/035-asst-thread-hscroll.png",
+    "shots/f1d/dark/038-asst200-1100.png",
+    "shots/f1d/light/131-asst-10k-message.png",
+    "shots/vf1d/dark/020-asst-wide-table.png",
+    "shots/vf1d/dark/021-asst-thread-hscrolled.png",
+    "shots/vf1d/light/102-asst-wide-table.png"
+   ],
+   "console": [],
+   "network": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/shared/frontend/markdown/MarkdownContent.tsx",
+    "line": 101,
+    "note": "markdownComponents overrides only pre (mermaid); no table wrapper component"
+   },
+   {
+    "path": "src/modules/assistant/frontend/components/MessageCard.tsx",
+    "line": 36,
+    "note": "PROSE_CLASSES (space) lacks break-words/[overflow-wrap:anywhere]; prose-table:w-full only"
+   },
+   {
+    "path": "src/modules/assistant/frontend/components/MessageCard.tsx",
+    "line": 89,
+    "note": "COMPACT_PROSE_CLASSES (dock) has break-words but no table overflow handling"
+   },
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1542,
+    "note": "thread scroller overflow-auto -> becomes horizontally scrollable"
+   },
+   {
+    "path": "src/modules/assistant/frontend/DesignerChatDock.tsx",
+    "line": 891,
+    "note": "dock scroller overflow-x-hidden -> wide tables clipped"
+   }
+  ],
+  "suggestedFix": "MarkdownContent.tsx markdownComponents(): add a `table` component returning <div className='my-2 max-w-full overflow-x-auto'><table {...props}/></div> (fixes Space and dock at once). MessageCard.tsx:36: add 'break-words' and '[overflow-wrap:anywhere]' to PROSE_CLASSES (prose-a too). Optionally set overflow-x-hidden on the Space thread scroller (Space.tsx:1542) once tables have their own scroller.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "assistant.space:markdown:horizontal-overflow",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1d",
+   "reason": "Reproduced with the f1d chat mock (30-column table + 300-char URL in one assistant message): table 2885 px wide, URL link 2444 px, thread scroller scrollWidth 2949 vs clientWidth 1040 (overflow-x auto) in dark and light; setting scrollLeft=600 slides every message and cuts prose on the left (screenshot). The ts code block keeps its own scroller. MarkdownContent has no table component and PROSE_CLASSES has no overflow-wrap. S3 kept: LLM answers with wide BOM/parameter tables are a normal case, and the dock variant clips content outright.",
+   "evidence": [
+    "shots/vf1d/dark/020-asst-wide-table.png",
+    "shots/vf1d/dark/021-asst-thread-hscrolled.png",
+    "shots/vf1d/light/102-asst-wide-table.png"
+   ]
+  },
+  "mergedIds": null
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "id": "F1D-005",
+  "area": "docs",
+  "title": "Docs page tree is unreadable past ~5 levels: titles collapse to 1–3 characters in the fixed 260px sidebar, with no tooltip or resize",
+  "category": "visual",
+  "severity": "S3",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "repro": [
+   "In-page mock: the page tree returns 300 pages, a chain nested 8 deep, titles up to 150 chars",
+   "Open Docs and expand the chain 000 › 020 › 021 › … › 026"
+  ],
+  "expected": "Deep pages stay identifiable: tighter indent or indentation capped, the sidebar is resizable, action buttons take no space until hover, and a full-title tooltip is available.",
+  "actual": "Measured title widths per depth: 139, 123, 107, 91, 75, 59, 43, 27, 11 px. Depth 7–8 rows show '02…', '0.', '03…', '08…'. Each row still reserves 48 px for the invisible (opacity-0) Add-subpage/Delete buttons. Indent is 16 px per level. The sidebar is fixed at 260 px and not resizable. Rows have no title attribute. Rows are 36 px tall (shell rows are 22 px).",
+  "evidence": {
+   "screenshots": [
+    "shots/f1d/dark/041-docs300-chain-expanded.png",
+    "shots/f1d/dark/042-docs300-expanded-all.png",
+    "shots/f1d/dark/046-docs300-1100.png",
+    "shots/f1d/light/140-docs300-chain-expanded.png",
+    "shots/vf1d/dark/030-docs300-deep-chain.png",
+    "shots/vf1d/light/103-docs300-deep-chain-1100.png"
+   ],
+   "console": [],
+   "census": "census/f1d-docs300-dark-1440.json",
+   "network": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/TreeItem.tsx",
+    "line": 156,
+    "note": "paddingLeft = level*16+4, uncapped"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/TreeItem.tsx",
+    "line": 209,
+    "note": "action group uses opacity-0 (keeps width) instead of hidden/absolute"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/TreeItem.tsx",
+    "line": 207,
+    "note": "truncate title with no title= tooltip"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/Space.tsx",
+    "line": 99,
+    "note": "fixed w-[260px] sidebar"
+   }
+  ],
+  "suggestedFix": "TreeItem.tsx:156: cap/compress indent (e.g. min(level,4)*12 + max(0,level-4)*6 px) or draw indent guides. TreeItem.tsx:209: make the action group absolutely positioned (absolute right-1, bg matches row) and visible on group-hover/focus-within so it takes no width at rest. TreeItem.tsx:207: add title={node.title}. knowledge Space.tsx:99: make the 260 px sidebar resizable (reuse the Designer left-panel resizer, 240–520, persisted). Adopt the kit 22–24 px tree row height (see Q9-017).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "docs:page-tree:deep-truncation",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1d",
+   "reason": "Reproduced with the f1d tree mock (300 pages, chain 8 deep): measured title widths 139/123/107/91/75/59/43/27/11 px for depth 0..8, paddingLeft level*16+4, action group 48 px wide at opacity 0 on every row, no title attribute, row height 36 px; same 11 px at depth 8 in light at 1100×720. Code matches (TreeItem.tsx:156,207,209; Space.tsx:99 fixed w-[260px]). S3 kept: even top-level rows lose 48 px to invisible buttons, and deep pages cannot be identified with no tooltip.",
+   "evidence": [
+    "shots/vf1d/dark/030-docs300-deep-chain.png",
+    "shots/vf1d/light/103-docs300-deep-chain-1100.png"
+   ]
+  },
+  "mergedIds": null
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "id": "F1D-006",
+  "area": "docs",
+  "title": "Deep-page breadcrumbs truncate away the parent and push the editor meta line into 3-line columns ('edited / 1h / ago', '3 / words'), even at 1440px",
+  "category": "visual",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720"
+  ],
+  "repro": [
+   "In-page mock: 300-page tree, 8-deep chain with long titles",
+   "Docs search '027' → click the result (a page 8 levels deep)"
+  ],
+  "expected": "The breadcrumb shows the nearest ancestors (collapse the middle as '… /'), each crumb is clickable, and the 'edited … · N words' meta keeps a single line.",
+  "actual": "The breadcrumb is one plain string truncated at the end, so it shows the root title and cuts off the immediate parent. The meta items get squeezed: 'edited 1h ago' wraps onto 3 lines and '3 words' onto 2, at 1440 as well as 1100. The crumbs are not links. Search results do the same: the breadcrumb line under each result truncates from the end, so for deep pages only the root title is visible and results can't be told apart.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1d/dark/045-docs300-deep-page-open.png",
+    "shots/f1d/dark/046-docs300-1100.png",
+    "shots/f1d/dark/043-docs300-search-deep.png",
+    "shots/f1d/light/141-docs300-search-deep.png",
+    "shots/f1d/light/142-docs300-deep-page-open.png",
+    "shots/vf1d/dark/031-docs300-search-deep.png",
+    "shots/vf1d/dark/032-docs300-deep-page-meta.png"
+   ],
+   "console": [],
+   "network": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx",
+    "line": 302,
+    "note": "breadcrumb.join(' / ') in a truncate span; siblings lack shrink-0/whitespace-nowrap"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/Sidebar.tsx",
+    "line": 231,
+    "note": "search result breadcrumb joined + end-truncated"
+   }
+  ],
+  "suggestedFix": "PageEditor.tsx:300-303: render crumbs as buttons calling onSelectPage, collapse to 'Root / … / Parent' beyond 3 levels with per-crumb max-width + title tooltip. PageEditor.tsx:305-320: give the 'edited …' and 'N words' spans shrink-0 whitespace-nowrap (this is also the Q9-020 fix). Sidebar.tsx:231: show 'Root / … / Parent' for search-result breadcrumbs (or truncate from the start) so deep results are distinguishable.",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "docs:breadcrumb:deep-truncation-meta-wrap",
+  "relatedIds": [
+   "Q9-020"
+  ],
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1d",
+   "reason": "Reproduced at 1440×900 with the tree mock: opening the depth-8 page '027 power' from search shows the breadcrumb as one end-truncated span starting at the root, so the immediate parent is cut off; the meta row is 62 px tall with 'edited 1h ago' 50 px (3 lines) and '3 words' 33 px (2 lines). Search result breadcrumb scrollWidth 3534 vs clientWidth 203, truncated from the end (root only visible). Crumbs are plain text. The meta-wrap half has the same root cause as Q9-020 (no shrink-0/whitespace-nowrap on the meta spans) and should be fixed there; this finding extends Q9-020 to 1440 with long breadcrumbs. The remaining unique part (breadcrumb truncation direction, non-clickable crumbs) is polish -> S3 lowered to S4. The 'Error' save pill in the screenshot is a shim artefact (Q9-026 PATCH blocked).",
+   "evidence": [
+    "shots/vf1d/dark/031-docs300-search-deep.png",
+    "shots/vf1d/dark/032-docs300-deep-page-meta.png"
+   ]
+  },
+  "mergedIds": null
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "id": "F1D-007",
+  "area": "docs",
+  "title": "Docs fetches the page tree twice on every visit (two usePageTree instances race)",
+  "category": "perf",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900"
+  ],
+  "repro": [
+   "Wrap window.fetch to log requests",
+   "Navigate Home → Docs (in memory)",
+   "Inspect the request log"
+  ],
+  "expected": "One GET /api/modules/knowledge/workspaces/default/tree per visit.",
+  "actual": "Two identical GETs fire in the same millisecond on every Docs mount (log: '30958 GET …/tree' ×2, '185698 GET …/tree' ×2). The Retry button fetches once.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1d/dark/016-lat-docs-revisit-first.png"
+   ],
+   "console": [],
+   "network": [
+    "GET /api/modules/knowledge/workspaces/default/tree ×2 at t=30958 and t=185698"
+   ]
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/knowledge/frontend/Space.tsx",
+    "line": 23,
+    "note": "usePageTree(designId) for the breadcrumb"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/components/Sidebar/PageTree.tsx",
+    "line": 21,
+    "note": "second usePageTree(designId)"
+   },
+   {
+    "path": "src/modules/knowledge/frontend/hooks/usePageTree.ts",
+    "line": 56,
+    "note": "per-instance hasFetchedRef + render-time isLoading guard lets both instances fetch in the same commit"
+   }
+  ],
+  "suggestedFix": "knowledge Space.tsx:23: read the tree from the store (const tree = useTreeStore(s => s.tree)) instead of a second usePageTree(designId); or move the fetch-on-scope logic into the tree store (ensureLoaded(scope) guarded by a store-level in-flight promise) so any number of hook instances fetch once. usePageTree.ts:57 guard is per-instance and reads the render-time isLoading, so both instances fetch in the same commit.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "docs:page-tree:double-fetch",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1d",
+   "reason": "Reproduced on the real stack (no mocks, logging only): two identical GET /api/modules/knowledge/workspaces/default/tree within 1 ms on each Docs visit (243318/243319 and 251135 x2). No StrictMode in main.tsx, so the double comes from the two usePageTree instances (Space.tsx:23, PageTree.tsx:21) with per-instance hasFetchedRef (usePageTree.ts:57). S4 kept: harmless duplicate read (~1 ms each).",
+   "evidence": [
+    "network: GET …/workspaces/default/tree x2 at t=251135"
+   ]
+  },
+  "mergedIds": null
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "id": "F1D-008",
+  "area": "home",
+  "title": "Home renders every design row/card with its SVG thumbnail at once: a 0.36–0.54 s main-thread block at 300 designs (no virtualization)",
+  "category": "perf",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1440x900",
+   "1100x720",
+   "1920x1080"
+  ],
+  "repro": [
+   "In-page mock: GET /api/modules/designer/designs returns 300 designs cloned from the real shape (real schematicPreview payloads, mixed names, every DRC state)",
+   "Navigate to Home (list), then toggle Grid",
+   "Record PerformanceObserver longtask entries; run a rAF scroll probe"
+  ],
+  "expected": "First paint of a 300-item list stays under ~100 ms (virtualized rows / lazy thumbnails). Scrolling stays at 60 fps.",
+  "actual": "Long tasks: 465 ms (list, dark), 535 ms (list, light), 363 ms (List → Grid toggle). All 280 row DOM nodes and 300 SVG previews mount at once. Scrolling itself is smooth: list p95 16.8 ms per frame, grid avg 18.1 ms / p95 17.5 ms, no long tasks while scrolling. The only stalls >50 ms coincided with CLI screenshot/eval calls. The cost grows linearly with design count.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1d/dark/020-home300-list.png",
+    "shots/f1d/dark/022-home300-grid.png",
+    "shots/f1d/light/120-home300-list.png",
+    "shots/vf1d/dark/040-home300-list.png"
+   ],
+   "console": [],
+   "network": [
+    "longtask 465ms after designs render (dark)",
+    "longtask 535ms (light)",
+    "longtask 363ms on Grid toggle"
+   ],
+   "census": "census/f1d-home300-list-dark-1440.json"
+  },
+  "codeRefs": [
+   {
+    "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+    "line": 383,
+    "note": "visible.map renders all rows"
+   },
+   {
+    "path": "src/core/frontend/src/screens/home/SchematicThumbnail.tsx",
+    "line": 49,
+    "note": "buildSchematicPreviewGeometry + full SVG per row, eagerly"
+   }
+  ],
+  "suggestedFix": "HomeScreen.tsx:356 (grid) and :383 (list): virtualize with @tanstack/react-virtual (fixed 64 px list rows) or at minimum add content-visibility:auto + contain-intrinsic-size to DesignListRow/DesignCard and lazy-build thumbnails with IntersectionObserver in SchematicThumbnail.tsx:52 (buildSchematicPreviewGeometry runs eagerly per row).",
+  "fixScope": "frontend",
+  "estimate": "S",
+  "dedupeKey": "home:list:no-virtualization-render-block",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1d",
+   "reason": "Reproduced with the f1d Home mock (300 designs cloned from real previews): long task 548 ms on first list render, 458 ms List->Grid, 383 ms Grid->List; 920 SVG elements mounted at once. Baseline on the real stack (23 designs): 117 ms long task on Home entry, so cost scales with design count. S4 kept (only large libraries hit it; scrolling itself is smooth per f1d).",
+   "evidence": [
+    "shots/vf1d/dark/040-home300-list.png",
+    "longtask 548 ms (list render), 458 ms (grid toggle), 383 ms (list toggle); real 23 designs: 117 ms"
+   ]
+  },
+  "mergedIds": null
+ },
+ {
+  "knownRef": null,
+  "stack": "A",
+  "designId": null,
+  "status": "confirmed",
+  "id": "F1D-009",
+  "area": "assistant.space",
+  "title": "Assistant header gives the chat title the least room: at 1100px only ~12 chars show while the linked-design chip, tools badge and model pill keep full width",
+  "category": "visual",
+  "severity": "S4",
+  "themes": [
+   "dark",
+   "light"
+  ],
+  "viewports": [
+   "1100x720"
+  ],
+  "repro": [
+   "In-page mock: chat with a 120-char title linked to a design with a long name",
+   "Resize to 1100x720 and open the chat"
+  ],
+  "expected": "The title keeps priority: chips shrink or collapse to icons first, and the full title is available as a tooltip.",
+  "actual": "The header reads 'F1D long thre…' (~85 px) while the linked-design chip keeps 140 px, the '15 tools' badge ~70 px and the model pill ~230 px. The title button's title attribute is 'Rename chat', not the chat name, so the full title can't be seen.",
+  "evidence": {
+   "screenshots": [
+    "shots/f1d/dark/038-asst200-1100.png",
+    "shots/f1d/light/133-asst200-1100.png",
+    "shots/vf1d/dark/022-asst-header-1100.png"
+   ],
+   "console": [],
+   "network": []
+  },
+  "codeRefs": [
+   {
+    "path": "src/modules/assistant/frontend/Space.tsx",
+    "line": 1425,
+    "note": "title button (title='Rename chat') + shrink-0 linked chip/tools badge/pill"
+   }
+  ],
+  "suggestedFix": "Assistant Space.tsx:1419-1447 (title button :1422, chip :1436-1446): set title={selectedChat?.title} on the title button (move 'Rename chat' to aria-label/hover pencil), give the title span flex-1 priority, drop shrink-0 on the linked-design chip (:1437, title 'Open linked design' at :1440) and allow it to collapse to its Link2 icon below ~1200 px (container query or max-w-[40px] with tooltip); collapse the tools badge to the icon+count only.",
+  "fixScope": "frontend",
+  "estimate": "XS",
+  "dedupeKey": "assistant.space:header:title-starved-1100",
+  "verification": {
+   "verdict": "confirmed",
+   "by": "vf1d",
+   "reason": "Reproduced at 1100×720 with the chat mock: title button 106 px ('F1D long thre…') while the linked-design chip is 174 px (span capped at 140), the tools badge 76 px and the model pill ~230 px; the title button's title attribute is 'Rename chat', so the full chat name is not available on hover. S4 kept.",
+   "evidence": [
+    "shots/vf1d/dark/022-asst-header-1100.png"
+   ]
+  },
+  "mergedIds": null
+ }
+]

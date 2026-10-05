@@ -1,0 +1,43 @@
+{
+ "trigger": "button \"Edit rules\u2026\"",
+ "focusOnOpen": "button \"Edit rules\u2026\"",
+ "panel": {
+  "panelRole": null,
+  "dialogRole": "dialog",
+  "ariaModal": "true",
+  "labelledby": null,
+  "x": 440,
+  "y": 68,
+  "w": 560,
+  "h": 765,
+  "bg": "rgb(28, 28, 31)",
+  "rad": "3px",
+  "bs": "rgba(0, 0, 0, 0.25) 0px 25px 50px -12px"
+ },
+ "tabs": [
+  "OUT button \"21 DRC\"",
+  "OUT button \"Home\"",
+  "OUT button \"Designer\"",
+  "OUT button \"Library\"",
+  "OUT button \"Docs\"",
+  "OUT button \"Assistant\"",
+  "OUT a \"Report a bug or request a feature\"",
+  "OUT button \"Settings\"",
+  "OUT button \"Close GUIDE-VALIDATE\"",
+  "OUT button \"New design\"",
+  "OUT button[tab] \"PCB\"",
+  "OUT button \"Open the assistant (\u2318/Ctrl+I)\"",
+  "OUT button \"Toggle side panel\"",
+  "OUT button \"Undo\"",
+  "OUT button \"Fit board\"",
+  "OUT button \"Route (R)\""
+ ],
+ "shiftTabs": [
+  "OUT button \"Fit board\"",
+  "OUT button \"Undo\"",
+  "OUT button \"Toggle side panel\""
+ ],
+ "openAfterEsc": true,
+ "openAfterClose": false,
+ "focusAfterClose": "BODY"
+}

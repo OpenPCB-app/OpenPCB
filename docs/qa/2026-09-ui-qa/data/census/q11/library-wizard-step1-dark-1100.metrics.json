@@ -1,0 +1,447 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "dark",
+ "vw": 1100,
+ "vh": 720,
+ "docW": 1100,
+ "bands": [
+  {
+   "tag": "div",
+   "x": 92,
+   "y": 69,
+   "w": 239,
+   "h": 33,
+   "text": "Import file Draw symbol",
+   "cls": "flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-800",
+   "n": 1,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(28, 28, 31)"
+  }
+ ],
+ "rows": [
+  {
+   "parent": "mt-3 flex w-full flex-col items-center gap-2",
+   "px": 4,
+   "py": 137,
+   "child": "BUTTON.flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center g",
+   "n": 3,
+   "heights": {
+    "51": 3
+   },
+   "w": 72,
+   "sample": "Designer"
+  },
+  {
+   "parent": "flex gap-1",
+   "px": 259,
+   "py": 20,
+   "child": "BUTTON.flex flex-1 flex-col items-center gap-0.5",
+   "n": 4,
+   "heights": {
+    "17": 4
+   },
+   "w": 155,
+   "sample": "1. Symbol"
+  }
+ ],
+ "btnHeights": {
+  "text:51": 5,
+  "text:17": 4,
+  "text:27": 2,
+  "icon:32": 1,
+  "icon:24": 1,
+  "text:32": 1,
+  "text:28": 1
+ },
+ "btnVariants": {
+  "h51 fs12px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 132) fw400": {
+   "n": 4,
+   "ex": [
+    "Home",
+    "Designer",
+    "Docs"
+   ]
+  },
+  "h51 fs12px r2px bg:rgb(28, 28, 31) bd:none fg:rgb(245, 245, 245) fw400": {
+   "n": 1,
+   "ex": [
+    "Library"
+   ]
+  },
+  "h17 fs12px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(217, 217, 217) fw400": {
+   "n": 4,
+   "ex": [
+    "1. Symbol",
+    "2. Footprints",
+    "3. 3D Model"
+   ]
+  },
+  "h32 fs11px r2px bg:rgb(58, 58, 64) bd:rgb(58, 58, 64) fg:rgb(255, 255, 255) fw600": {
+   "n": 1,
+   "ex": [
+    "Next"
+   ]
+  },
+  "h27 fs11px r2px bg:rgb(44, 44, 49) bd:none fg:rgb(236, 236, 238) fw500": {
+   "n": 1,
+   "ex": [
+    "Import file"
+   ]
+  },
+  "h27 fs11px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(168, 168, 173) fw500": {
+   "n": 1,
+   "ex": [
+    "Draw symbol"
+   ]
+  },
+  "h28 fs11px r2px bg:oklab(0.227712 0.00158683 -0.0055169 / 0.4) bd:rgb(85, 85, 90) fg:rgb(168, 168, 173) fw500": {
+   "n": 1,
+   "ex": [
+    "Grid"
+   ]
+  }
+ },
+ "btnOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 137,
+   "w": 72,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 195,
+   "w": 64,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 678,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 259,
+   "y": 20,
+   "w": 155,
+   "h": 17,
+   "text": "1. Symbol",
+   "cls": "flex flex-1 flex-col items-center gap-0.5",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 419,
+   "y": 20,
+   "w": 155,
+   "h": 17,
+   "text": "2. Footprints",
+   "cls": "flex flex-1 flex-col items-center gap-0.5",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 578,
+   "y": 20,
+   "w": 155,
+   "h": 17,
+   "text": "3. 3D Model",
+   "cls": "flex flex-1 flex-col items-center gap-0.5",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 737,
+   "y": 20,
+   "w": 155,
+   "h": 17,
+   "text": "4. Metadata",
+   "cls": "flex flex-1 flex-col items-center gap-0.5",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 1030,
+   "y": 12,
+   "w": 50,
+   "h": 32,
+   "text": "Next",
+   "cls": "h-8 rounded-md border border-violet-600 bg-violet-600 px-3 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:o",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 95,
+   "y": 72,
+   "w": 117,
+   "h": 27,
+   "text": "Import file",
+   "cls": "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 212,
+   "y": 72,
+   "w": 117,
+   "h": 27,
+   "text": "Draw symbol",
+   "cls": "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 369,
+   "y": 76,
+   "w": 39,
+   "h": 28,
+   "text": "Grid",
+   "cls": "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors border-violet-500 bg-violet-100 text-viole",
+   "fs": "11px"
+  }
+ ],
+ "inputs": [],
+ "tablists": [],
+ "segs": [],
+ "radii": {
+  "2px": 12,
+  "circle/pill": 4
+ },
+ "radEx": {},
+ "shadows": [
+  {
+   "tag": "button",
+   "x": 1030,
+   "y": 12,
+   "w": 50,
+   "h": 32,
+   "text": "Next",
+   "cls": "h-8 rounded-md border border-violet-600 bg-violet-600 px-3 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:o",
+   "bs": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0"
+  },
+  {
+   "tag": "button",
+   "x": 95,
+   "y": 72,
+   "w": 117,
+   "h": 27,
+   "text": "Import file",
+   "cls": "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100",
+   "bs": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0"
+  },
+  {
+   "tag": "div",
+   "x": 360,
+   "y": 69,
+   "w": 168,
+   "h": 42,
+   "text": "Grid Zoom: scroll wheel",
+   "cls": "mx-auto inline-flex items-center gap-2 rounded-lg border border-slate-200/90 bg-white/95 px-2 py-1.5 shadow-sm backdrop-blur dark:border-sla",
+   "bs": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0"
+  }
+ ],
+ "shadowCount": 3,
+ "blurs": [
+  {
+   "tag": "div",
+   "x": 360,
+   "y": 69,
+   "w": 168,
+   "h": 42,
+   "text": "Grid Zoom: scroll wheel",
+   "cls": "mx-auto inline-flex items-center gap-2 rounded-lg border border-slate-200/90 bg-white/95 px-2 py-1.5 shadow-sm backdrop-blur dark:border-sla",
+   "bf": "blur(8px)"
+  }
+ ],
+ "grads": [],
+ "fontSizes": {
+  "11px": 14,
+  "10px": 5,
+  "15px": 1
+ },
+ "fontFam": {
+  "IBM Plex Sans": 20
+ },
+ "weights": {
+  "400": 12,
+  "500": 4,
+  "600": 4
+ },
+ "small": [],
+ "big": [],
+ "iconSizes": {
+  "20x20": 5,
+  "16x16": 2,
+  "18x18": 2
+ },
+ "iconStroke": {
+  "1.5px/attr1.5": 8,
+  "2px/attr2": 1
+ },
+ "iconOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-layout-grid h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 137,
+   "w": 72,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-pen-tool h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 195,
+   "w": 64,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-box h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-book-open h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-bot h-5 w-5"
+  },
+  {
+   "tag": "a",
+   "x": 24,
+   "y": 638,
+   "w": 32,
+   "h": 32,
+   "label": "Report a bug or request a feature",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-circle-dot h-[18px] w-[18p"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 678,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-settings h-[18px] w-[18px]"
+  }
+ ],
+ "otherSvgs": [],
+ "floats": [],
+ "alerts": [],
+ "headings": [
+  {
+   "tag": "h1",
+   "x": 134,
+   "y": 18,
+   "w": 113,
+   "h": 20,
+   "text": "New component",
+   "cls": "text-lg font-semibold text-slate-900 dark:text-slate-100",
+   "fs": "15px",
+   "fw": "600"
+  }
+ ],
+ "canvases": [
+  [
+   349,
+   57,
+   799,
+   720
+  ]
+ ],
+ "overflowX": [],
+ "clipped": []
+}

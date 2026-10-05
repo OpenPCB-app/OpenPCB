@@ -1,0 +1,965 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "light",
+ "vw": 1920,
+ "vh": 1080,
+ "docW": 1920,
+ "bands": [
+  {
+   "tag": "header",
+   "x": 80,
+   "y": 0,
+   "w": 1840,
+   "h": 34,
+   "text": "GUIDE-VALIDATE r15 Schem PCB 3D BOM DRC ",
+   "cls": "grid h-[34px] shrink-0 grid-cols-[1fr_auto_1fr] items-stretch border-b border-border bg-surface-rail",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(236, 236, 238)"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 34,
+   "w": 1840,
+   "h": 30,
+   "label": "Schematic tools",
+   "text": "Components GND PWR Portal Comment ERC",
+   "cls": "flex h-[30px] shrink-0 items-center gap-0.5 border-b border-border bg-surface-panel px-1.5 text-text-secondary",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(247, 247, 248)"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 64,
+   "w": 259,
+   "h": 24,
+   "text": "Outline 4",
+   "cls": "flex shrink-0 items-center gap-1.5 border-y border-border bg-surface-section px-2 h-[24px]",
+   "n": 1,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(235, 235, 237)"
+  },
+  {
+   "tag": "div",
+   "x": 1621,
+   "y": 64,
+   "w": 299,
+   "h": 24,
+   "role": "tablist",
+   "label": "Side panel",
+   "text": "Properties ERC Assistant",
+   "cls": "flex h-[24px] shrink-0 items-stretch border-b border-border bg-surface-rail",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(236, 236, 238)"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 88,
+   "w": 259,
+   "h": 26,
+   "text": "Parts Nets Labels",
+   "cls": "flex h-[26px] shrink-0 items-center gap-1.5 border-b border-border px-2",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "div",
+   "x": 1621,
+   "y": 88,
+   "w": 299,
+   "h": 28,
+   "text": "Sheet Nothing selected",
+   "cls": "flex h-[28px] shrink-0 items-center gap-1.5 border-b border-border px-2",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 114,
+   "w": 259,
+   "h": 22,
+   "text": "REF VALUE FOOTPRINT",
+   "cls": "sticky top-0 z-10 grid h-[22px] items-center border-b border-border bg-surface-panel px-[10px] text-2xs uppercase tracking-[.04em] text-text",
+   "n": 1,
+   "bb": true,
+   "bt": false,
+   "bg": "rgb(247, 247, 248)"
+  },
+  {
+   "tag": "div",
+   "x": 1621,
+   "y": 116,
+   "w": 299,
+   "h": 22,
+   "text": "SUMMARY",
+   "cls": "flex shrink-0 items-center gap-1.5 border-y border-border bg-surface-section px-2 h-[22px]",
+   "n": 1,
+   "bb": true,
+   "bt": true,
+   "bg": "rgb(235, 235, 237)"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 136,
+   "w": 259,
+   "h": 22,
+   "role": "button",
+   "text": "C1 Capacitor C_0603_1608Metric",
+   "cls": "grid items-center border-b border-border-subtle px-[10px] text-xs text-text hover:bg-surface-hover group relative cursor-pointer gap-1.5 out",
+   "n": 4,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "div",
+   "x": 1717,
+   "y": 138,
+   "w": 203,
+   "h": 22,
+   "text": "4",
+   "cls": "flex h-[22px] min-w-0 items-center gap-1.5 border-b border-border-subtle px-2 text-xs text-text-strong font-mono",
+   "n": 3,
+   "bb": true,
+   "bt": false,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 1058,
+   "w": 1840,
+   "h": 22,
+   "text": "X \u2014 Y \u2014 zoom 36% Click to select \u00b7 Shift",
+   "cls": "flex h-[22px] shrink-0 items-center overflow-hidden border-t border-border bg-surface-rail font-mono text-2xs text-text-secondary",
+   "n": 1,
+   "bb": false,
+   "bt": true,
+   "bg": "rgb(236, 236, 238)"
+  }
+ ],
+ "rows": [
+  {
+   "parent": "mt-3 flex w-full flex-col items-center gap-2",
+   "px": 4,
+   "py": 137,
+   "child": "BUTTON.flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center g",
+   "n": 3,
+   "heights": {
+    "51": 3
+   },
+   "w": 72,
+   "sample": "Library"
+  },
+  {
+   "parent": "tablist",
+   "px": 873,
+   "py": 0,
+   "child": "BUTTON.inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs tran",
+   "n": 5,
+   "heights": {
+    "34": 5
+   },
+   "w": 62,
+   "sample": "Schem"
+  },
+  {
+   "parent": "Schematic tools",
+   "px": 80,
+   "py": 34,
+   "child": "BUTTON.inline-flex shrink-0 items-center justify-center rounded-control transition-colors outline-none focus-visible:out",
+   "n": 4,
+   "heights": {
+    "24": 4
+   },
+   "w": 24,
+   "sample": ""
+  },
+  {
+   "parent": "Schematic tools",
+   "px": 80,
+   "py": 34,
+   "child": "SPAN.mx-1 h-4 w-px shrink-0 bg-divider",
+   "n": 3,
+   "heights": {
+    "16": 3
+   },
+   "w": 1,
+   "sample": ""
+  },
+  {
+   "parent": "Schematic tools",
+   "px": 80,
+   "py": 34,
+   "child": "BUTTON.inline-flex shrink-0 items-center justify-center rounded-control transition-colors outline-none focus-visible:out",
+   "n": 6,
+   "heights": {
+    "24": 6
+   },
+   "w": 99,
+   "sample": "Components"
+  },
+  {
+   "parent": "min-h-0 flex-1 overflow-y-auto",
+   "px": 80,
+   "py": 114,
+   "child": "DIV.relative",
+   "n": 4,
+   "heights": {
+    "22": 4
+   },
+   "w": 259,
+   "sample": "C1 Capacitor C_0603_1608Metric"
+  },
+  {
+   "parent": "absolute right-2 top-2 z-10 flex flex-col gap-0.5 border bor",
+   "px": 1583,
+   "py": 72,
+   "child": "BUTTON.flex h-[22px] w-[22px] items-center justify-center hover:bg-surface-hover hover:text-text-strong cursor-pointer o",
+   "n": 3,
+   "heights": {
+    "22": 3
+   },
+   "w": 22,
+   "sample": ""
+  },
+  {
+   "parent": "grid grid-cols-[96px_1fr]",
+   "px": 1621,
+   "py": 138,
+   "child": "DIV.flex h-[22px] min-w-0 items-center border-b border-border px-2 text-xs text-text-tertiary",
+   "n": 3,
+   "heights": {
+    "22": 3
+   },
+   "w": 96,
+   "sample": "Symbols"
+  },
+  {
+   "parent": "grid grid-cols-[96px_1fr]",
+   "px": 1621,
+   "py": 138,
+   "child": "DIV.flex h-[22px] min-w-0 items-center gap-1.5 border-b border-border-subtle px-2 text-xs text-text-strong font-mono",
+   "n": 3,
+   "heights": {
+    "22": 3
+   },
+   "w": 203,
+   "sample": "4"
+  },
+  {
+   "parent": "flex h-[22px] shrink-0 items-center overflow-hidden border-t",
+   "px": 80,
+   "py": 1058,
+   "child": "DIV.flex h-full items-center gap-2 border-r border-border px-[10px] last:border-r-0",
+   "n": 3,
+   "heights": {
+    "21": 3
+   },
+   "w": 69,
+   "sample": "X \u2014 Y \u2014"
+  }
+ ],
+ "btnHeights": {
+  "text:24": 7,
+  "text:34": 6,
+  "text:51": 5,
+  "icon:16": 5,
+  "icon:22": 4,
+  "icon:24": 4,
+  "text:22": 4,
+  "text:18": 3,
+  "text:23": 3,
+  "text:14": 2,
+  "icon:32": 1,
+  "icon:20": 1
+ },
+ "btnVariants": {
+  "h51 fs12px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 134) fw400": {
+   "n": 4,
+   "ex": [
+    "Home",
+    "Library",
+    "Docs"
+   ]
+  },
+  "h51 fs12px r2px bg:rgb(230, 230, 233) bd:none fg:rgb(17, 17, 20) fw400": {
+   "n": 1,
+   "ex": [
+    "Designer"
+   ]
+  },
+  "h34 fs11px r0px bg:rgb(242, 242, 243) bd:none fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "GUIDE-VALIDATE\nr15"
+   ]
+  },
+  "h34 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "Schem"
+   ]
+  },
+  "h34 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 134) fw400": {
+   "n": 4,
+   "ex": [
+    "PCB",
+    "3D",
+    "BOM"
+   ]
+  },
+  "h24 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 134) fw400": {
+   "n": 1,
+   "ex": [
+    "Assistant"
+   ]
+  },
+  "h24 fs11px r2px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(85, 85, 92) fw400": {
+   "n": 6,
+   "ex": [
+    "Components",
+    "GND",
+    "PWR"
+   ]
+  },
+  "h18 fs10px r0px bg:rgb(214, 214, 218) bd:none fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "Parts"
+   ]
+  },
+  "h18 fs10px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(85, 85, 92) fw400": {
+   "n": 2,
+   "ex": [
+    "Nets",
+    "Labels"
+   ]
+  },
+  "h14 fs10px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(111, 111, 118) fw400": {
+   "n": 2,
+   "ex": [
+    "REF",
+    "VALUE"
+   ]
+  },
+  "h22 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(38, 38, 43) fw400": {
+   "n": 4,
+   "ex": [
+    "C1\nCapacitor\nC_0603_1608",
+    "R1\nResistor\nR_0603_1608M",
+    "R2\nResistor\nR_0603_1608M"
+   ]
+  },
+  "h23 fs11px r0px bg:rgb(247, 247, 248) bd:none fg:rgb(17, 17, 20) fw500": {
+   "n": 1,
+   "ex": [
+    "Properties"
+   ]
+  },
+  "h23 fs11px r0px bg:rgba(0, 0, 0, 0) bd:none fg:rgb(127, 127, 134) fw400": {
+   "n": 2,
+   "ex": [
+    "ERC",
+    "Assistant"
+   ]
+  }
+ },
+ "btnOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 137,
+   "w": 64,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 195,
+   "w": 72,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "fs": "12px"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 1038,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "fs": "12px"
+  },
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 0,
+   "w": 170,
+   "h": 34,
+   "role": "tab",
+   "tid": "design-tab-b5a31f3e-de4f-434a-9922-a6ba9fcf1c8c",
+   "text": "GUIDE-VALIDATE r15",
+   "cls": "group relative flex min-w-[120px] max-w-[200px] cursor-pointer select-none items-center gap-1.5 px-2 text-xs transition-colors self-stretch ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 225,
+   "y": 9,
+   "w": 16,
+   "h": 16,
+   "label": "Close GUIDE-VALIDATE",
+   "cls": "flex h-4 w-4 shrink-0 items-center justify-center rounded-control text-text-tertiary transition-opacity hover:bg-surface-hover hover:text-te",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 873,
+   "y": 0,
+   "w": 62,
+   "h": 34,
+   "role": "tab",
+   "text": "Schem",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 935,
+   "y": 0,
+   "w": 49,
+   "h": 34,
+   "role": "tab",
+   "text": "PCB",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 984,
+   "y": 0,
+   "w": 42,
+   "h": 34,
+   "role": "tab",
+   "tid": "designer-view-3d",
+   "text": "3D",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 1026,
+   "y": 0,
+   "w": 52,
+   "h": 34,
+   "role": "tab",
+   "text": "BOM",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 1078,
+   "y": 0,
+   "w": 49,
+   "h": 34,
+   "role": "tab",
+   "text": "DRC",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent text-xs transition-colors outline-none ",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 208,
+   "y": 92,
+   "w": 40,
+   "h": 18,
+   "label": "Parts",
+   "text": "Parts",
+   "cls": "inline-flex items-center gap-1 px-2 text-2xs whitespace-nowrap transition-colors outline-none disabled:cursor-not-allowed disabled:opacity-5",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 248,
+   "y": 92,
+   "w": 37,
+   "h": 18,
+   "label": "Nets",
+   "text": "Nets",
+   "cls": "inline-flex items-center gap-1 px-2 text-2xs whitespace-nowrap transition-colors outline-none disabled:cursor-not-allowed disabled:opacity-5",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 285,
+   "y": 92,
+   "w": 45,
+   "h": 18,
+   "label": "Labels",
+   "text": "Labels",
+   "cls": "inline-flex items-center gap-1 px-2 text-2xs whitespace-nowrap transition-colors outline-none disabled:cursor-not-allowed disabled:opacity-5",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 90,
+   "y": 118,
+   "w": 40,
+   "h": 14,
+   "text": "REF",
+   "cls": "flex cursor-pointer items-center gap-0.5 text-left uppercase hover:text-text-secondary",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 136,
+   "y": 118,
+   "w": 107,
+   "h": 14,
+   "text": "VALUE",
+   "cls": "flex cursor-pointer items-center gap-0.5 uppercase hover:text-text-secondary text-left",
+   "fs": "10px"
+  },
+  {
+   "tag": "button",
+   "x": 319,
+   "y": 139,
+   "w": 16,
+   "h": 16,
+   "label": "Actions",
+   "cls": "absolute right-1 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded-control text-text-tertiary opacity-0 transition-o",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 319,
+   "y": 161,
+   "w": 16,
+   "h": 16,
+   "label": "Actions",
+   "cls": "absolute right-1 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded-control text-text-tertiary opacity-0 transition-o",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 319,
+   "y": 183,
+   "w": 16,
+   "h": 16,
+   "label": "Actions",
+   "cls": "absolute right-1 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded-control text-text-tertiary opacity-0 transition-o",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 319,
+   "y": 205,
+   "w": 16,
+   "h": 16,
+   "label": "Actions",
+   "cls": "absolute right-1 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded-control text-text-tertiary opacity-0 transition-o",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 1621,
+   "y": 64,
+   "w": 77,
+   "h": 23,
+   "role": "tab",
+   "text": "Properties",
+   "cls": "inline-flex items-center gap-1.5 border-r border-border px-3 text-xs whitespace-nowrap transition-colors outline-none disabled:cursor-not-al",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 1698,
+   "y": 64,
+   "w": 45,
+   "h": 23,
+   "role": "tab",
+   "text": "ERC",
+   "cls": "inline-flex items-center gap-1.5 border-r border-border px-3 text-xs whitespace-nowrap transition-colors outline-none disabled:cursor-not-al",
+   "fs": "11px"
+  },
+  {
+   "tag": "button",
+   "x": 1744,
+   "y": 64,
+   "w": 71,
+   "h": 23,
+   "role": "tab",
+   "text": "Assistant",
+   "cls": "inline-flex items-center gap-1.5 border-r border-border px-3 text-xs whitespace-nowrap transition-colors outline-none disabled:cursor-not-al",
+   "fs": "11px"
+  }
+ ],
+ "inputs": [
+  {
+   "tag": "input",
+   "x": 113,
+   "y": 93,
+   "w": 81,
+   "h": 15,
+   "label": "Filter outline",
+   "cls": "min-w-0 flex-1 bg-transparent text-xs text-text-strong outline-none placeholder:text-text-disabled [&::-webkit-search-cancel-button]:appeara",
+   "type": "search",
+   "ph": "Filter ref, value, net\u2026",
+   "fs": "11px",
+   "rad": "0px",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bd": "none",
+   "wrapH": 20,
+   "wrapRad": "2px",
+   "native": "auto"
+  }
+ ],
+ "tablists": [
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 0,
+   "w": 196,
+   "h": 34,
+   "role": "tablist",
+   "label": "Open designs",
+   "text": "GUIDE-VALIDATE r15",
+   "cls": "flex min-w-0 items-stretch overflow-x-auto",
+   "tabs": 1,
+   "tabH": {
+    "34": 1
+   },
+   "tabFs": {
+    "11px": 1
+   },
+   "roving": 1
+  },
+  {
+   "tag": "div",
+   "x": 873,
+   "y": 0,
+   "w": 254,
+   "h": 34,
+   "role": "tablist",
+   "text": "Schem PCB 3D BOM DRC",
+   "cls": "inline-flex items-stretch justify-center rounded-none bg-transparent text-text-tertiary data-[orientation=vertical]:h-auto data-[orientation",
+   "tabs": 5,
+   "tabH": {
+    "34": 5
+   },
+   "tabFs": {
+    "11px": 5
+   },
+   "roving": 4
+  },
+  {
+   "tag": "div",
+   "x": 1621,
+   "y": 64,
+   "w": 299,
+   "h": 24,
+   "role": "tablist",
+   "label": "Side panel",
+   "text": "Properties ERC Assistant",
+   "cls": "flex h-[24px] shrink-0 items-stretch border-b border-border bg-surface-rail",
+   "tabs": 3,
+   "tabH": {
+    "23": 3
+   },
+   "tabFs": {
+    "11px": 3
+   },
+   "roving": 0
+  }
+ ],
+ "segs": [
+  {
+   "tag": "div",
+   "x": 80,
+   "y": 34,
+   "w": 1840,
+   "h": 30,
+   "label": "Schematic tools",
+   "text": "Components GND PWR Portal Comment ERC",
+   "cls": "flex h-[30px] shrink-0 items-center gap-0.5 border-b border-border bg-surface-panel px-1.5 text-text-secondary",
+   "rad": "0px",
+   "bd": "none",
+   "optFs": {
+    "11px": 6,
+    "12px": 4
+   },
+   "optH": {
+    "24": 10
+   },
+   "pressed": 2,
+   "activeBg": {}
+  },
+  {
+   "tag": "div",
+   "x": 207,
+   "y": 91,
+   "w": 124,
+   "h": 20,
+   "role": "group",
+   "label": "Outline view",
+   "text": "Parts Nets Labels",
+   "cls": "inline-flex shrink-0 items-stretch overflow-hidden rounded-control border border-border-control h-[20px]",
+   "rad": "2px",
+   "bd": "rgb(207, 207, 212)",
+   "optFs": {
+    "10px": 3
+   },
+   "optH": {
+    "18": 3
+   },
+   "pressed": 3,
+   "activeBg": {
+    "rgb(214, 214, 218)": 1
+   }
+  }
+ ],
+ "radii": {
+  "2px": 4
+ },
+ "radEx": {},
+ "shadows": [],
+ "shadowCount": 0,
+ "blurs": [],
+ "grads": [],
+ "fontSizes": {
+  "11px": 33,
+  "10px": 27,
+  "12px": 1
+ },
+ "fontFam": {
+  "IBM Plex Sans": 41,
+  "IBM Plex Mono": 20
+ },
+ "weights": {
+  "400": 53,
+  "500": 8
+ },
+ "small": [],
+ "big": [],
+ "iconSizes": {
+  "14x14": 13,
+  "12x12": 11,
+  "20x20": 5,
+  "18x18": 2,
+  "16x16": 1,
+  "10x10": 1,
+  "13x13": 1
+ },
+ "iconStroke": {
+  "2px/attr2": 13,
+  "1.5px/attr1.5": 11,
+  "1.5px/attr2": 10
+ },
+ "iconOdd": [
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 74,
+   "w": 72,
+   "h": 51,
+   "label": "Home",
+   "text": "Home",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-layout-grid h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 8,
+   "y": 137,
+   "w": 64,
+   "h": 51,
+   "label": "Designer",
+   "text": "Designer",
+   "cls": "flex w-16 bg-surface-hover text-text-strong cursor-pointer flex-col items-center gap-1 rounded-control py-2 pb-1.5 transition-colors",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-pen-tool h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 195,
+   "w": 72,
+   "h": 51,
+   "label": "Library",
+   "text": "Library",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-box h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 254,
+   "w": 72,
+   "h": 51,
+   "label": "Docs",
+   "text": "Docs",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-book-open h-5 w-5"
+  },
+  {
+   "tag": "button",
+   "x": 4,
+   "y": 312,
+   "w": 72,
+   "h": 51,
+   "label": "Assistant",
+   "text": "Assistant",
+   "cls": "flex w-[72px] text-text-tertiary hover:bg-surface-hover/60 hover:text-text cursor-pointer flex-col items-center gap-1 rounded-control py-2 p",
+   "svg": "20x20",
+   "sw": "1.5px",
+   "lc": "lucide lucide-bot h-5 w-5"
+  },
+  {
+   "tag": "a",
+   "x": 24,
+   "y": 998,
+   "w": 32,
+   "h": 32,
+   "label": "Report a bug or request a feature",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-circle-dot h-[18px] w-[18p"
+  },
+  {
+   "tag": "button",
+   "x": 24,
+   "y": 1038,
+   "w": 32,
+   "h": 32,
+   "label": "Settings",
+   "cls": "flex h-8 w-8 cursor-pointer items-center justify-center rounded-control transition-colors hover:bg-surface-hover text-text-tertiary hover:te",
+   "svg": "18x18",
+   "sw": "1.5px",
+   "lc": "lucide lucide-settings h-[18px] w-[18px]"
+  }
+ ],
+ "otherSvgs": [
+  {
+   "tag": "span",
+   "x": 90,
+   "y": 139,
+   "w": 40,
+   "h": 15,
+   "text": "C1",
+   "cls": "flex min-w-0 items-center gap-1",
+   "svg": "12x12",
+   "lc": "h-3 w-3 shrink-0 text-text-tertiary"
+  },
+  {
+   "tag": "span",
+   "x": 90,
+   "y": 161,
+   "w": 40,
+   "h": 15,
+   "text": "R1",
+   "cls": "flex min-w-0 items-center gap-1",
+   "svg": "12x12",
+   "lc": "h-3 w-3 shrink-0 text-text-tertiary"
+  },
+  {
+   "tag": "span",
+   "x": 90,
+   "y": 183,
+   "w": 40,
+   "h": 15,
+   "text": "R2",
+   "cls": "flex min-w-0 items-center gap-1",
+   "svg": "12x12",
+   "lc": "h-3 w-3 shrink-0 text-text-tertiary"
+  },
+  {
+   "tag": "span",
+   "x": 90,
+   "y": 205,
+   "w": 40,
+   "h": 15,
+   "text": "R3",
+   "cls": "flex min-w-0 items-center gap-1",
+   "svg": "12x12",
+   "lc": "h-3 w-3 shrink-0 text-text-tertiary"
+  }
+ ],
+ "floats": [],
+ "alerts": [],
+ "headings": [],
+ "canvases": [
+  [
+   341,
+   64,
+   1619,
+   1058
+  ]
+ ],
+ "overflowX": [],
+ "clipped": []
+}

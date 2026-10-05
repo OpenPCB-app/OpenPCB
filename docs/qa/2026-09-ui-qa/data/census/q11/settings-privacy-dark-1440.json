@@ -1,0 +1,85 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "dark",
+ "vw": 1440,
+ "vh": 900,
+ "title": "OpenPCB",
+ "smallText": [],
+ "smallTextCount": 0,
+ "controlHeights": {
+  "input:32": 1
+ },
+ "oddControls": [
+  {
+   "h": 32,
+   "path": "div>header>label>input"
+  }
+ ],
+ "nameless": [],
+ "namelessCount": 0,
+ "comingSoon": [],
+ "topColors": [
+  [
+   "fg rgb(127, 127, 132)",
+   56
+  ],
+  [
+   "fg rgb(217, 217, 217)",
+   43
+  ],
+  [
+   "fg rgb(245, 245, 245)",
+   12
+  ],
+  [
+   "fg rgb(168, 168, 173)",
+   10
+  ],
+  [
+   "bg rgb(12, 12, 13)",
+   3
+  ],
+  [
+   "fg rgb(106, 106, 112)",
+   3
+  ],
+  [
+   "bg rgb(17, 17, 19)",
+   2
+  ],
+  [
+   "bg rgb(15, 15, 16)",
+   1
+  ],
+  [
+   "bd rgb(42, 42, 46)",
+   1
+  ],
+  [
+   "bg rgb(38, 38, 43)",
+   1
+  ],
+  [
+   "bd rgb(30, 30, 33)",
+   1
+  ],
+  [
+   "fg rgb(51, 209, 255)",
+   1
+  ],
+  [
+   "bg oklab(0.414 0.0779366 0.0804356 / 0.3)",
+   1
+  ],
+  [
+   "fg oklch(0.924 0.12 95.746)",
+   1
+  ]
+ ],
+ "dialogCalls": {
+  "prompt": 0,
+  "confirm": 0,
+  "alert": 0,
+  "log": []
+ }
+}

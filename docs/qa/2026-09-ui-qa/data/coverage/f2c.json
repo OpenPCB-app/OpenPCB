@@ -1,0 +1,210 @@
+{
+ "agent": "f2c",
+ "checklist": [
+  {
+   "item": "Settings › Assistant read-only: default provider oMLX (unreachable) shows 'Active' + green dot",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Assistant space: New chat → 'hello' to unreachable oMLX (feedback in ~1.1 s: only 'Retrying … chat-only mode', no error/Retry/settings link; task 'completed')",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "First-run empty chat list (simulated GET /chats → []): welcome state + green default pill, no provider guidance",
+   "dark": "n/a",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Model pill → OpenAI (no key) → send: 400 'API key required for provider: OpenAI', no CTA, Retry = resend 400; banner off-screen in long chat",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Dock Cmd+I on Schem + PCB: send to unreachable provider; OpenAI no-key in dock",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Dock with hung local provider (black-hole listener on :8000): Working…/Stop, Stop, reload mid-run, second send, queue, no timeout (6m51s)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Assistant space chat selection after 'Open in Assistant view' (jumps back on refresh)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Runtime theme switch via Settings Dark→Light→Back on Schem/PCB/3D/Library list+detail/wizard draw/Assistant/Docs vs fresh-reload baseline (pixel diff: identical)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Runtime theme switch Light→Dark via Settings vs fresh dark (identical); Settings screen runtime vs fresh (identical)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "System preference + live OS scheme change (emulateMedia) with Schem/PCB/Library/menu mounted — schematic palette stuck",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Portalled menu (Library 'Component actions') during live theme switch → --menu-bg follows",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Library list GET 500: first open, search keystroke, facet toggle; unroute + recovery",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Library /facets 500: silent empty rail + wrong counts; recovery on search",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Comments: 2000-char body, unbroken 300-char URL (wraps OK), 25 replies (opens at top, reply not scrolled), 31 threads (crowding, edge clipping, offscreen chips), latency (<2 ms API)",
+   "dark": "tested",
+   "light": "tested",
+   "viewports": [
+    "1440x900",
+    "1100x720"
+   ]
+  },
+  {
+   "item": "Comments list GET 500 on design open: silent, no retry; post during failure; unroute recovery needs view switch",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Drag a comment pin (works, persisted; thread updatedAt not bumped)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Popup near right edge at 1100 flips left (OK); wheel over popup scrolls popup not canvas (OK)",
+   "dark": "tested",
+   "light": "n/a",
+   "viewports": [
+    "1100x720",
+    "1440x900"
+   ]
+  },
+  {
+   "item": "Light contrast probes: assistant warning text (#364153 OK), pill dot raw emerald, comment popup meta 10px #a8a8ad on white (same as F1B-023)",
+   "dark": "n/a",
+   "light": "tested",
+   "viewports": [
+    "1440x900"
+   ]
+  }
+ ],
+ "known": [
+  {
+   "ref": "K08",
+   "status": "confirmed",
+   "evidence": "List-load failure path also renders the same bare red error line ('HTTP 500') with no retry/dismiss; see F2C-006 (shots/f2c/dark/070-072)."
+  },
+  {
+   "ref": "Q10-016 (dock 'Working…' forever, cloud)",
+   "status": "partial",
+   "evidence": "For an unreachable local provider (ECONNREFUSED) the dock does NOT hang: the run completes in ~30 ms with a misleading 'Retrying … chat-only mode' line (F2C-001). For a hung local server the dock shows Working…/Stop (Stop works) but there is no timeout, and a post-reload second send orphans the run (F2C-002)."
+  },
+  {
+   "ref": "Q8-024",
+   "status": "partial",
+   "evidence": "After reload mid-run the dock bubble DID restore 'Working… Stop', but the composer showed Send (enabled) instead of 'Stop generating'. Cancelled runs render as empty 'Assistant' bubbles after reload."
+  },
+  {
+   "ref": "Q8-017",
+   "status": "confirmed",
+   "evidence": "The OpenAI no-key 400 banner rendered at top=-592px in a long chat (shots/f2c/light/115-1100-openai-nokey-light.png)."
+  },
+  {
+   "ref": "Q8-018",
+   "status": "confirmed",
+   "evidence": "Cancelled chats keep the grey run dot in the Assistant list (probe #606064, shots/f2c/dark/022, 024)."
+  },
+  {
+   "ref": "F1B-023",
+   "status": "confirmed",
+   "evidence": "The schematic comment popup shares the 10px #a8a8ad-on-white timestamp (light), so it is the same root."
+  },
+  {
+   "ref": "Q3-006",
+   "status": "confirmed",
+   "evidence": "Tab badge stayed r0/r4 while design was at r13."
+  }
+ ],
+ "untested": [
+  {
+   "item": "Toasts during a live theme switch",
+   "reason": "No toast trigger was available without extra library mutations. Toasts use dark: classes that follow the <html> class, so the risk is low."
+  },
+  {
+   "item": "Changing provider base URL/keys to simulate other failure modes",
+   "reason": "Charter says Settings › Assistant is read-only; a hung server was simulated with a local TCP black-hole on :8000 instead."
+  },
+  {
+   "item": "Retry button on a cancelled run",
+   "reason": "Already reported as Q8-031; not re-verified."
+  },
+  {
+   "item": "OpenCode Zen (no key, labelled Active) send",
+   "reason": "It would send to an external endpoint; OpenAI covered the no-key path."
+  }
+ ]
+}

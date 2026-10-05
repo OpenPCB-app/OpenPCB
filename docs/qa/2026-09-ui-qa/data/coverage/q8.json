@@ -1,0 +1,58 @@
+{
+  "agent": "q8",
+  "stack": "A (+ one read-only Configure-providers check on B)",
+  "llmBudget": {"before": {"usage": 0, "limit": 2}, "after": {"usage": 0, "limit": 2}, "turnsUsed": 15, "model": "nvidia/nemotron-3.5-lightning:free (verified on every chat before sending)"},
+  "checklist": [
+    {"item": "Assistant space: New chat", "dark": "tested", "light": "tested", "viewports": ["1440x900", "1100x720"]},
+    {"item": "Chat list filters All / Pinned (K23) / Linked / Archived", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "Search chats (match + no-match copy)", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "Row actions Rename (K05) / Delete (K06), right-click menu", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "Multi-select + Delete selected (incl. hidden selection across filters)", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "Header title inline rename (Enter commits, Esc cancels)", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "Linked design chip (header + row chip) -> opens design", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "Tools badge (read-only)", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "Model pill popover (read-only look; model select used only to force the free model)", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "Chat actions: Rename / Export markdown / Archive / Unarchive / Delete", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "Composer Enter / Shift+Enter / textarea growth", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "@ mentions: design, component, page (+ clicking mention chips, K22)", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "Slash quick actions + empty-state starter prompts", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "Prompt 1: list components (read tools, tool cards)", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "Prompt 2: add R99 -> proposal; destructive proposal Reject + Apply; design verified via API", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "Prompt 3: mermaid + markdown table; View source / Download SVG / Fullscreen", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "Stop generating mid-stream + Retry", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "Offline mid-run then online; offline send", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "500 injection on message submit (unrouted after)", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "Streaming, auto-scroll, '↓ New messages' pill", "dark": "tested", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "Message rendering quality (tables, headings, code, raw HTML, glued iterations)", "dark": "tested", "light": "tested", "viewports": ["1440x900", "1100x720"]},
+    {"item": "Dock (Cmd+I) on 3d5d1f7c: composer send, thread menu New/select/Rename (K04)/Delete (K06), model pill, Open in Assistant view, Close chat", "dark": "tested", "light": "tested", "viewports": ["1440x900", "1100x720"]},
+    {"item": "Dock on PCB view: typing fires PCB hotkeys (K12); also checked Schem and 3D (OK)", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "Run restore after reload (dock + Open in Assistant view)", "dark": "tested", "light": "n/a", "viewports": ["1440x900"]},
+    {"item": "Keyboard-only chat list (Tab, Space on checkbox, Enter on row menu)", "dark": "n/a", "light": "tested", "viewports": ["1440x900"]},
+    {"item": "Visual audit: raw colours / radii / shadows vs tokens (pixel probes), contrast", "dark": "tested", "light": "tested", "viewports": ["1440x900", "1100x720"]},
+    {"item": "Layout at 1100x720 (space + dock)", "dark": "tested", "light": "tested", "viewports": ["1100x720"]}
+  ],
+  "known": [
+    {"ref": "K04", "status": "confirmed", "evidence": "Dock thread menu Rename -> native prompt 'Rename chat' (dialog-spy prompt=1); Q8-035"},
+    {"ref": "K05", "status": "confirmed", "evidence": "Space row menu 'Rename chat' -> native prompt; header title rename is inline; Q8-013"},
+    {"ref": "K06", "status": "confirmed", "evidence": "Native confirm for Space row delete, header delete, bulk delete, dock thread delete; Q8-014, Q8-035"},
+    {"ref": "K12", "status": "confirmed", "evidence": "Dock composer on PCB: 'Route the power traces on top layer' became 'e e we aces n  laye', Route mode on; 'r' rotated selected D2 0->90; Backspace deleted D1 placement (rev 40->41); Cmd+Z undid design. Restored. Q8-023 (S1)"},
+    {"ref": "K22", "status": "confirmed", "evidence": "Clicking @QA-q9-mention-target chip opens Docs 'No page selected'; Q8-019"},
+    {"ref": "K23", "status": "confirmed", "evidence": "No Pin action in row/header menus; Pinned always 0 and shows 'No chats yet.'; Q8-005"},
+    {"ref": "K45", "status": "confirmed", "evidence": "Assistant: sky/amber/red/emerald raw colours (ΔE 22-36), shadow-xl, gradient, 56px header, 10px bubble radius, hand-rolled menus; Q8-026 (+ mermaid Q8-010/Q8-027)"}
+  ],
+  "untested": [
+    {"item": "'Allow this tool this session' on a destructive proposal", "reason": "would need another destructive proposal and permanent design mutation; skipped to keep owned designs intact"},
+    {"item": "Charter route pattern '**/api/modules/assistant/**/runs*' -> 500", "reason": "pattern only matches cloud-runs endpoints (routes.ts:249-286); local runs go through POST /chats/:id/messages + tasks SSE, so the equivalent injection was done on '**/api/modules/assistant/chats/*/messages*' (Q8-017) and unrouted"},
+    {"item": "Offline while a stream is already open", "reason": "CDP offline emulation did not drop the already-open EventSource on loopback; run completed normally after online. Offline-before-send tested instead (Q8-017)"},
+    {"item": "Whether @page mention content reaches the LLM", "reason": "model replied it had no access to page 5bec1891 although resolveMentionContext injects a system message; could be model quality — inconclusive, not filed"},
+    {"item": "'Loading older messages' pagination (>50 messages)", "reason": "no chat with >50 messages; not worth budget"},
+    {"item": "Copilot plan card / placement proposal card / BOM result card", "reason": "cloud copilot off on stack A; specific tools not triggered within budget"},
+    {"item": "Configure providers on stack A", "reason": "forbidden by charter; verified dead button on stack B instead (Q8-008)"}
+  ],
+  "notes": [
+    "Environment event ~11:34Z: Vite server connection lost + ERR_NETWORK_IO_SUSPENDED caused a full page reload of q8-dark (not an app bug).",
+    "Design state: a557d3b5 went rev45->48 (R6 added by assistant, then deleted via Apply) — content back to original 10 parts; 3d5d1f7c rev40->44 (K12 repro mutations undone, D1/D2 restored).",
+    "QA chats left for triage: QA-q8-main, QA-q8-dock (linked to 3d5d1f7c), QA-q8-retry. Disposable QA-q8-del*/ms1 chats deleted.",
+    "Console: only injected errors (500 / ERR_INTERNET_DISCONNECTED) plus THREE.Clock deprecation warning and one 'WebGLRenderer: Context Lost' when switching designer tabs."
+  ]
+}

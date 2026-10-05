@@ -1,0 +1,101 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "dark",
+ "vw": 1920,
+ "vh": 1080,
+ "title": "OpenPCB",
+ "smallText": [],
+ "smallTextCount": 0,
+ "controlHeights": {
+  "input:15": 1
+ },
+ "oddControls": [
+  {
+   "h": 15,
+   "path": "aside>div>label>input[aria-label=\"Filter outline\"]"
+  }
+ ],
+ "nameless": [],
+ "namelessCount": 0,
+ "comingSoon": [],
+ "topColors": [
+  [
+   "fg rgb(217, 217, 217)",
+   85
+  ],
+  [
+   "fg rgb(127, 127, 132)",
+   59
+  ],
+  [
+   "fg rgb(85, 85, 90)",
+   20
+  ],
+  [
+   "fg rgb(245, 245, 245)",
+   13
+  ],
+  [
+   "fg rgb(17, 17, 20)",
+   6
+  ],
+  [
+   "fg rgb(168, 168, 173)",
+   5
+  ],
+  [
+   "bg rgb(12, 12, 13)",
+   4
+  ],
+  [
+   "bd rgb(42, 42, 46)",
+   4
+  ],
+  [
+   "bg rgb(15, 15, 16)",
+   2
+  ],
+  [
+   "bg rgb(17, 17, 19)",
+   2
+  ],
+  [
+   "bd rgb(30, 30, 33)",
+   2
+  ],
+  [
+   "bg rgb(232, 232, 232)",
+   2
+  ],
+  [
+   "bg rgb(28, 28, 31)",
+   1
+  ],
+  [
+   "bg rgb(35, 35, 38)",
+   1
+  ],
+  [
+   "bg rgb(21, 21, 23)",
+   1
+  ],
+  [
+   "bg rgb(44, 44, 49)",
+   1
+  ],
+  [
+   "bg rgb(30, 30, 33)",
+   1
+  ],
+  [
+   "fg rgb(106, 106, 112)",
+   1
+  ]
+ ],
+ "dialogCalls": {
+  "prompt": 0,
+  "confirm": 0,
+  "alert": 0,
+  "log": []
+ }
+}

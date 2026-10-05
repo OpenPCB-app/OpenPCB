@@ -1,0 +1,102 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "dark",
+ "vw": 1440,
+ "vh": 900,
+ "title": "GUIDE-VALIDATE \u2014 OpenPCB",
+ "smallText": [],
+ "smallTextCount": 0,
+ "controlHeights": {},
+ "oddControls": [],
+ "nameless": [],
+ "namelessCount": 0,
+ "comingSoon": [],
+ "topColors": [
+  [
+   "fg rgb(127, 127, 132)",
+   131
+  ],
+  [
+   "fg rgb(217, 217, 217)",
+   95
+  ],
+  [
+   "fg rgb(245, 245, 245)",
+   31
+  ],
+  [
+   "fg rgb(85, 85, 90)",
+   21
+  ],
+  [
+   "bg rgb(217, 164, 65)",
+   20
+  ],
+  [
+   "fg rgb(168, 168, 173)",
+   15
+  ],
+  [
+   "bd rgb(30, 30, 33)",
+   4
+  ],
+  [
+   "bg rgb(12, 12, 13)",
+   3
+  ],
+  [
+   "bg rgb(15, 15, 16)",
+   3
+  ],
+  [
+   "fg rgb(17, 17, 20)",
+   3
+  ],
+  [
+   "bg rgb(224, 112, 95)",
+   3
+  ],
+  [
+   "bg rgb(21, 21, 23)",
+   3
+  ],
+  [
+   "fg rgb(106, 106, 112)",
+   2
+  ],
+  [
+   "bg rgb(28, 28, 31)",
+   1
+  ],
+  [
+   "bg rgb(35, 35, 38)",
+   1
+  ],
+  [
+   "bg rgb(17, 17, 19)",
+   1
+  ],
+  [
+   "bg rgb(232, 232, 232)",
+   1
+  ],
+  [
+   "bd rgb(42, 42, 46)",
+   1
+  ],
+  [
+   "bg rgb(122, 167, 217)",
+   1
+  ],
+  [
+   "fg rgb(224, 112, 95)",
+   1
+  ]
+ ],
+ "dialogCalls": {
+  "prompt": 0,
+  "confirm": 0,
+  "alert": 0,
+  "log": []
+ }
+}

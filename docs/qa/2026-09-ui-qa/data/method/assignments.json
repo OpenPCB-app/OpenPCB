@@ -1,0 +1,18 @@
+{
+  "stackA": {"frontend": "http://127.0.0.1:1520", "backend": "http://127.0.0.1:3100", "note": "main QA stack, cloud off, real OpenRouter key (free model nvidia/nemotron-3.5-lightning:free)"},
+  "stackB": {"frontend": "http://127.0.0.1:1620", "backend": "http://127.0.0.1:3200", "note": "global-mutation stack (library, part wizard, settings); NO provider keys"},
+  "stackC1": {"frontend": "http://127.0.0.1:1720", "backend": "http://127.0.0.1:3300", "note": "cloud flags ON but every cloud URL points to a dead port (offline)"},
+  "designs": {
+    "Q1": {"stack": "A", "own": [], "note": "read-only on existing designs; create/rename/delete only designs you create named QA-Q1-*; empty designs 6514633a (DRC Demo rev0) and 973fd6a1 (Untitled rev0) may be opened read-only"},
+    "Q3": {"stack": "A", "own": ["1198c943 'S3 LLM Edge — 12V params' (12 parts, 18 junctions)", "37099ba4 'S3 LLM Edge — additive v2' (8 parts)"], "plus": "QA-Q3-* new designs"},
+    "Q4": {"stack": "A", "own": ["c2c58a19 'Dual LED Blinker' (11 placements, 19 traces, 7 vias, hole)", "3196d811 'DRC Demo' rev11 (traces, vias, free holes/pads)"], "plus": "QA-Q4-* new designs"},
+    "Q5": {"stack": "A", "own": ["370447e2 'LED Indicators 5V' (16 parts)", "3f9e4e24 '555 Timer LED Blinker' (6 parts)"], "plus": "QA-Q5-* new designs + KiCad imports"},
+    "Q8": {"stack": "A", "own": ["a557d3b5 'S3 LLM Smoke — 5 LED (DeepSeek V4 Flash)' rev45", "3d5d1f7c 'S3 Smoke — 5 LED indicators (v2)'"], "plus": "QA-Q8-* chats/designs"},
+    "Q9": {"stack": "A", "own": [], "plus": "QA-Q9-* docs pages"},
+    "Q10": {"stack": "C1 (+A read-only)", "own": ["any design on C1 (own DB copy)"]},
+    "Q11": {"stack": "A", "own": ["b5a31f3e 'GUIDE-VALIDATE' (read-only)", "f22dfde2 'Untitled Design' rev25 with zone (read-only)"], "note": "read-only: never mutate anything"},
+    "Q2": {"stack": "B", "own": ["all settings/providers on B"]},
+    "Q6": {"stack": "B", "own": ["library on B"], "plus": "any design on B for drag/place tests"},
+    "Q7": {"stack": "B", "own": ["QA-Q7-* parts on B"]}
+  }
+}

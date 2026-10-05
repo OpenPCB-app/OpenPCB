@@ -1,0 +1,980 @@
+[
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Home",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 74,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 1
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Designer",
+  "tid": "",
+  "region": "nav",
+  "x": 8,
+  "y": 137,
+  "w": 64,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(181, 214, 252)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 2
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Library",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 195,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 3
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Docs",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 254,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 4
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Assistant",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 312,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 5
+ },
+ {
+  "tag": "a",
+  "role": "",
+  "name": "Report a bug or request a feature",
+  "tid": "",
+  "region": "aside",
+  "x": 24,
+  "y": 818,
+  "w": 32,
+  "h": 32,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(149, 188, 235)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 6
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Settings",
+  "tid": "",
+  "region": "aside",
+  "x": 24,
+  "y": 858,
+  "w": 32,
+  "h": 32,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(149, 188, 235)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 7
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Close GUIDE-VALIDATE",
+  "tid": "",
+  "region": "tab",
+  "x": 225,
+  "y": 9,
+  "w": 16,
+  "h": 16,
+  "inView": true,
+  "op": 0.8,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(153, 200, 255)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 8
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "New design",
+  "tid": "",
+  "region": "tablist",
+  "x": 254,
+  "y": 6,
+  "w": 22,
+  "h": 22,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 9
+ },
+ {
+  "tag": "button",
+  "role": "tab",
+  "name": "BOM",
+  "tid": "",
+  "region": "tablist",
+  "x": 786,
+  "y": 0,
+  "w": 52,
+  "h": 34,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": null,
+  "fvCls": "",
+  "tabindex": "0",
+  "i": 10
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "All 2",
+  "tid": "",
+  "region": "main",
+  "x": 91,
+  "y": 39,
+  "w": 37,
+  "h": 20,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 11
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Missing MPN 2",
+  "tid": "",
+  "region": "main",
+  "x": 128,
+  "y": 39,
+  "w": 82,
+  "h": 20,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 12
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "DNP 0",
+  "tid": "",
+  "region": "main",
+  "x": 209,
+  "y": 39,
+  "w": 44,
+  "h": 20,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 13
+ },
+ {
+  "tag": "input",
+  "role": "",
+  "name": "Filter BOM lines",
+  "tid": "",
+  "region": "main",
+  "x": 288,
+  "y": 41,
+  "w": 188,
+  "h": 15,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": "focus-within:border-selection",
+  "fvCls": "",
+  "tabindex": null,
+  "i": 14
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Export \u25be",
+  "tid": "",
+  "region": "main",
+  "x": 1049,
+  "y": 38,
+  "w": 61,
+  "h": 22,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": null,
+  "fvCls": "focus-visible:border-selection",
+  "tabindex": null,
+  "i": 15
+ },
+ {
+  "tag": "input",
+  "role": "",
+  "name": "Select all",
+  "tid": "",
+  "region": "main",
+  "x": 89,
+  "y": 74,
+  "w": 1,
+  "h": 1,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(153, 200, 255)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 16
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "DESIGNATORS \u25b4",
+  "tid": "",
+  "region": "main",
+  "x": 158,
+  "y": 68,
+  "w": 150,
+  "h": 14,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 17
+ },
+ {
+  "tag": "input",
+  "role": "",
+  "name": "Select C1",
+  "tid": "",
+  "region": "main",
+  "x": 89,
+  "y": 97,
+  "w": 1,
+  "h": 1,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(153, 200, 255)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 18
+ },
+ {
+  "tag": "input",
+  "role": "",
+  "name": "Select R1,R2,R3",
+  "tid": "",
+  "region": "main",
+  "x": 89,
+  "y": 121,
+  "w": 1,
+  "h": 1,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(153, 200, 255)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 19
+ },
+ {
+  "tag": "select",
+  "role": "",
+  "name": "Order quantity",
+  "tid": "",
+  "region": "main",
+  "x": 326,
+  "y": 882,
+  "w": 48,
+  "h": 16,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 20
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Show in schematic",
+  "tid": "",
+  "region": "aside",
+  "x": 1321,
+  "y": 41,
+  "w": 84,
+  "h": 14,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 21
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "PCB",
+  "tid": "",
+  "region": "aside",
+  "x": 1413,
+  "y": 41,
+  "w": 19,
+  "h": 14,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [],
+  "fdetail": null,
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 22
+ },
+ {
+  "tag": "input",
+  "role": "",
+  "name": "",
+  "tid": "",
+  "region": "aside",
+  "x": 1224,
+  "y": 181,
+  "w": 1,
+  "h": 1,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(153, 200, 255)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 23
+ },
+ {
+  "tag": "input",
+  "role": "",
+  "name": "MPN",
+  "tid": "",
+  "region": "aside",
+  "x": 1217,
+  "y": 216,
+  "w": 223,
+  "h": 22,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "bc"
+  ],
+  "fdetail": {
+   "bc": "1px rgb(42, 42, 46)|1px rgb(42, 42, 46)|1px rgb(42, 42, 46) -> 1px rgb(51, 209, 255)|1px rgb(51, 209, 255)|1px rgb(51, 209, 255)"
+  },
+  "fw": null,
+  "fvCls": "focus:border-selection",
+  "tabindex": null,
+  "i": 24
+ },
+ {
+  "tag": "input",
+  "role": "",
+  "name": "Manufacturer",
+  "tid": "",
+  "region": "aside",
+  "x": 1217,
+  "y": 238,
+  "w": 223,
+  "h": 22,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "bc"
+  ],
+  "fdetail": {
+   "bc": "1px rgb(42, 42, 46)|1px rgb(42, 42, 46)|1px rgb(42, 42, 46) -> 1px rgb(51, 209, 255)|1px rgb(51, 209, 255)|1px rgb(51, 209, 255)"
+  },
+  "fw": null,
+  "fvCls": "focus:border-selection",
+  "tabindex": null,
+  "i": 25
+ },
+ {
+  "tag": "input",
+  "role": "",
+  "name": "Supplier",
+  "tid": "",
+  "region": "aside",
+  "x": 1217,
+  "y": 260,
+  "w": 223,
+  "h": 22,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "bc"
+  ],
+  "fdetail": {
+   "bc": "1px rgb(42, 42, 46)|1px rgb(42, 42, 46)|1px rgb(42, 42, 46) -> 1px rgb(51, 209, 255)|1px rgb(51, 209, 255)|1px rgb(51, 209, 255)"
+  },
+  "fw": null,
+  "fvCls": "focus:border-selection",
+  "tabindex": null,
+  "i": 26
+ },
+ {
+  "tag": "input",
+  "role": "",
+  "name": "Supplier PN",
+  "tid": "",
+  "region": "aside",
+  "x": 1217,
+  "y": 282,
+  "w": 223,
+  "h": 22,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "bc"
+  ],
+  "fdetail": {
+   "bc": "1px rgb(42, 42, 46)|1px rgb(42, 42, 46)|1px rgb(42, 42, 46) -> 1px rgb(51, 209, 255)|1px rgb(51, 209, 255)|1px rgb(51, 209, 255)"
+  },
+  "fw": null,
+  "fvCls": "focus:border-selection",
+  "tabindex": null,
+  "i": 27
+ },
+ {
+  "tag": "input",
+  "role": "",
+  "name": "Unit price",
+  "tid": "",
+  "region": "aside",
+  "x": 1217,
+  "y": 304,
+  "w": 198,
+  "h": 22,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "bc"
+  ],
+  "fdetail": {
+   "bc": "1px rgb(42, 42, 46)|1px rgb(42, 42, 46)|1px rgb(42, 42, 46) -> 1px rgb(51, 209, 255)|1px rgb(51, 209, 255)|1px rgb(51, 209, 255)"
+  },
+  "fw": null,
+  "fvCls": "focus:border-selection",
+  "tabindex": null,
+  "i": 28
+ },
+ {
+  "tag": "input",
+  "role": "",
+  "name": "Currency",
+  "tid": "",
+  "region": "aside",
+  "x": 1217,
+  "y": 326,
+  "w": 223,
+  "h": 22,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "bc"
+  ],
+  "fdetail": {
+   "bc": "1px rgb(42, 42, 46)|1px rgb(42, 42, 46)|1px rgb(42, 42, 46) -> 1px rgb(51, 209, 255)|1px rgb(51, 209, 255)|1px rgb(51, 209, 255)"
+  },
+  "fw": null,
+  "fvCls": "focus:border-selection",
+  "tabindex": null,
+  "i": 29
+ },
+ {
+  "tag": "select",
+  "role": "",
+  "name": "Assembly side",
+  "tid": "",
+  "region": "aside",
+  "x": 1217,
+  "y": 370,
+  "w": 223,
+  "h": 22,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "bc"
+  ],
+  "fdetail": {
+   "bc": "1px rgb(42, 42, 46)|1px rgb(42, 42, 46)|1px rgb(42, 42, 46) -> 1px rgb(51, 209, 255)|1px rgb(51, 209, 255)|1px rgb(51, 209, 255)"
+  },
+  "fw": null,
+  "fvCls": "focus:border-selection",
+  "tabindex": null,
+  "i": 30
+ },
+ {
+  "tag": "textarea",
+  "role": "",
+  "name": "Notes",
+  "tid": "",
+  "region": "aside",
+  "x": 1129,
+  "y": 422,
+  "w": 303,
+  "h": 56,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "bc"
+  ],
+  "fdetail": {
+   "bc": "1px rgb(42, 42, 46)|1px rgb(42, 42, 46)|1px rgb(42, 42, 46) -> 1px rgb(51, 209, 255)|1px rgb(51, 209, 255)|1px rgb(51, 209, 255)"
+  },
+  "fw": null,
+  "fvCls": "focus:border-selection",
+  "tabindex": null,
+  "i": 31
+ },
+ {
+  "tag": "BODY",
+  "i": 32
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Home",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 74,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(149, 188, 235)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 33
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Designer",
+  "tid": "",
+  "region": "nav",
+  "x": 8,
+  "y": 137,
+  "w": 64,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(181, 214, 252)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 34
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Library",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 195,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 35
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Docs",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 254,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(149, 188, 235)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 36
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Assistant",
+  "tid": "",
+  "region": "nav",
+  "x": 4,
+  "y": 312,
+  "w": 72,
+  "h": 51,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 37
+ },
+ {
+  "tag": "a",
+  "role": "",
+  "name": "Report a bug or request a feature",
+  "tid": "",
+  "region": "aside",
+  "x": 24,
+  "y": 818,
+  "w": 32,
+  "h": 32,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(149, 188, 235)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 38
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Settings",
+  "tid": "",
+  "region": "aside",
+  "x": 24,
+  "y": 858,
+  "w": 32,
+  "h": 32,
+  "inView": true,
+  "op": 1,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(145, 178, 218)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 39
+ },
+ {
+  "tag": "button",
+  "role": "",
+  "name": "Close GUIDE-VALIDATE",
+  "tid": "",
+  "region": "tab",
+  "x": 225,
+  "y": 9,
+  "w": 16,
+  "h": 16,
+  "inView": true,
+  "op": 0.8,
+  "hidden": false,
+  "clippedBy": null,
+  "fv": true,
+  "diff": [
+   "ol"
+  ],
+  "fdetail": {
+   "ol": "none -> 1px auto rgb(153, 200, 255)"
+  },
+  "fw": null,
+  "fvCls": "",
+  "tabindex": null,
+  "i": 40
+ }
+]

@@ -1,0 +1,209 @@
+{
+ "url": "http://127.0.0.1:1520/",
+ "theme": "dark",
+ "vw": 1440,
+ "vh": 900,
+ "title": "GUIDE-VALIDATE \u2014 OpenPCB",
+ "smallText": [
+  {
+   "fs": 9,
+   "text": "Camera",
+   "path": "div>div>div>div"
+  },
+  {
+   "fs": 9,
+   "text": "Display",
+   "path": "div>div>div>div"
+  },
+  {
+   "fs": 9,
+   "text": "Board color",
+   "path": "div>div>div>div"
+  },
+  {
+   "fs": 9,
+   "text": "Scene",
+   "path": "div>div>div>div"
+  },
+  {
+   "fs": 9,
+   "text": "Transparency",
+   "path": "div>div>div>div"
+  },
+  {
+   "fs": 9,
+   "text": "Tallest parts",
+   "path": "div[data-testid=designer-3d-canvas]>div>div>div"
+  },
+  {
+   "fs": 9,
+   "text": "Strict",
+   "path": "div>div>button>span"
+  }
+ ],
+ "smallTextCount": 7,
+ "controlHeights": {
+  "select:26": 1,
+  "textarea:47": 1
+ },
+ "oddControls": [
+  {
+   "h": 26,
+   "path": "div>div>div>select"
+  }
+ ],
+ "nameless": [
+  "div>div>div>select",
+  "div>div>div>input"
+ ],
+ "namelessCount": 2,
+ "comingSoon": [
+  "div>div>div>label",
+  "div[data-testid=designer-3d-canvas]>div>div>button",
+  "div>div[data-testid=designer-3d-canvas]>div>button"
+ ],
+ "topColors": [
+  [
+   "fg rgb(127, 127, 132)",
+   103
+  ],
+  [
+   "fg rgb(217, 217, 217)",
+   40
+  ],
+  [
+   "fg rgb(168, 168, 173)",
+   38
+  ],
+  [
+   "fg rgb(220, 220, 224)",
+   27
+  ],
+  [
+   "fg rgb(245, 245, 245)",
+   22
+  ],
+  [
+   "fg rgb(196, 196, 201)",
+   17
+  ],
+  [
+   "fg rgb(236, 236, 238)",
+   16
+  ],
+  [
+   "bd rgb(28, 28, 31)",
+   11
+  ],
+  [
+   "bg rgb(12, 12, 13)",
+   6
+  ],
+  [
+   "bg rgb(28, 28, 31)",
+   5
+  ],
+  [
+   "fg rgb(85, 85, 90)",
+   5
+  ],
+  [
+   "bg rgb(17, 17, 19)",
+   5
+  ],
+  [
+   "bg oklab(0.227712 0.00158683 -0.0055169 / 0.6)",
+   5
+  ],
+  [
+   "bd rgb(44, 44, 49)",
+   4
+  ],
+  [
+   "fg rgb(255, 255, 255)",
+   4
+  ],
+  [
+   "fg rgb(111, 191, 122)",
+   4
+  ],
+  [
+   "bg rgb(15, 15, 16)",
+   3
+  ],
+  [
+   "bg rgb(44, 44, 49)",
+   2
+  ],
+  [
+   "bg rgba(51, 209, 255, 0.08)",
+   2
+  ],
+  [
+   "bg rgb(30, 30, 33)",
+   2
+  ],
+  [
+   "bg oklab(0.178528 0.00112759 -0.00390549 / 0.9)",
+   2
+  ],
+  [
+   "bg oklab(0 0 0 / 0.1)",
+   2
+  ],
+  [
+   "bg rgb(35, 35, 38)",
+   1
+  ],
+  [
+   "bg rgb(13, 77, 44)",
+   1
+  ],
+  [
+   "bg rgb(26, 26, 26)",
+   1
+  ],
+  [
+   "bg rgb(16, 54, 126)",
+   1
+  ],
+  [
+   "bg rgb(126, 20, 22)",
+   1
+  ],
+  [
+   "bg rgb(229, 229, 229)",
+   1
+  ],
+  [
+   "bg rgb(201, 162, 39)",
+   1
+  ],
+  [
+   "bg rgb(58, 58, 64)",
+   1
+  ],
+  [
+   "bg oklab(0.154793 0.000591978 -0.00201665 / 0.9)",
+   1
+  ],
+  [
+   "bg oklch(0.696 0.17 162.48)",
+   1
+  ],
+  [
+   "bd oklab(0.451282 0.00225024 -0.00772989 / 0.2)",
+   1
+  ],
+  [
+   "bg rgb(111, 191, 122)",
+   1
+  ]
+ ],
+ "dialogCalls": {
+  "prompt": 0,
+  "confirm": 0,
+  "alert": 0,
+  "log": []
+ }
+}

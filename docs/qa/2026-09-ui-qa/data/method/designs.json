@@ -1,0 +1,408 @@
+[
+ {
+  "id": "c2c58a19-bef5-488a-bfa4-c6b133ea9880",
+  "name": "Dual LED Blinker",
+  "revision": 449,
+  "drc": {
+   "ranAtRevision": 449,
+   "ranAt": "2026-06-02T12:48:20.433Z",
+   "errors": 13,
+   "warnings": 6,
+   "infos": 0,
+   "stale": false
+  },
+  "schematic": {
+   "parts": 11,
+   "wires": 17,
+   "labels": 0,
+   "primitives": 3,
+   "nets": 13,
+   "junctions": 6
+  },
+  "pcb": {
+   "placements": 11,
+   "traces": 19,
+   "vias": 7,
+   "freeHoles": 1,
+   "freePads": 0,
+   "overlayTexts": 0,
+   "overlayShapes": 0,
+   "zones": 0,
+   "keepouts": 0,
+   "ratsnest": 15,
+   "warnings": 0
+  },
+  "layerCount": 2
+ },
+ {
+  "id": "f22dfde2-d6a4-460f-87a7-066858426854",
+  "name": "Untitled Design",
+  "revision": 25,
+  "drc": null,
+  "schematic": {
+   "parts": 2,
+   "wires": 0,
+   "labels": 0,
+   "primitives": 0,
+   "nets": 8,
+   "junctions": 0
+  },
+  "pcb": {
+   "placements": 2,
+   "traces": 0,
+   "vias": 0,
+   "freeHoles": 0,
+   "freePads": 0,
+   "overlayTexts": 0,
+   "overlayShapes": 0,
+   "zones": 1,
+   "keepouts": 0,
+   "ratsnest": 0,
+   "warnings": 1
+  },
+  "layerCount": 2
+ },
+ {
+  "id": "6514633a-c5e9-49ed-8203-f9ddb96c7872",
+  "name": "DRC Demo",
+  "revision": 0,
+  "drc": null,
+  "schematic": {
+   "parts": 0,
+   "wires": 0,
+   "labels": 0,
+   "primitives": 0,
+   "nets": 0,
+   "junctions": 0
+  },
+  "pcb": {
+   "placements": 0,
+   "traces": 0,
+   "vias": 0,
+   "freeHoles": 0,
+   "freePads": 0,
+   "overlayTexts": 0,
+   "overlayShapes": 0,
+   "zones": 0,
+   "keepouts": 0,
+   "ratsnest": 0,
+   "warnings": 0
+  },
+  "layerCount": 2
+ },
+ {
+  "id": "3196d811-7bd5-40c4-ae07-8a6787530f4d",
+  "name": "DRC Demo",
+  "revision": 11,
+  "drc": {
+   "ranAtRevision": 11,
+   "ranAt": "2026-05-30T14:27:36.690Z",
+   "errors": 5,
+   "warnings": 2,
+   "infos": 0,
+   "stale": false
+  },
+  "schematic": {
+   "parts": 0,
+   "wires": 0,
+   "labels": 0,
+   "primitives": 0,
+   "nets": 0,
+   "junctions": 0
+  },
+  "pcb": {
+   "placements": 0,
+   "traces": 5,
+   "vias": 1,
+   "freeHoles": 3,
+   "freePads": 2,
+   "overlayTexts": 0,
+   "overlayShapes": 0,
+   "zones": 0,
+   "keepouts": 0,
+   "ratsnest": 0,
+   "warnings": 0
+  },
+  "layerCount": 2
+ },
+ {
+  "id": "3f9e4e24-dc31-4931-a8ed-f8cd6d1ec0f3",
+  "name": "555 Timer LED Blinker",
+  "revision": 33,
+  "drc": null,
+  "schematic": {
+   "parts": 6,
+   "wires": 13,
+   "labels": 0,
+   "primitives": 6,
+   "nets": 6,
+   "junctions": 4
+  },
+  "pcb": {
+   "placements": 6,
+   "traces": 0,
+   "vias": 0,
+   "freeHoles": 0,
+   "freePads": 0,
+   "overlayTexts": 0,
+   "overlayShapes": 0,
+   "zones": 0,
+   "keepouts": 0,
+   "ratsnest": 11,
+   "warnings": 0
+  },
+  "layerCount": 2
+ },
+ {
+  "id": "b5a31f3e-de4f-434a-9922-a6ba9fcf1c8c",
+  "name": "GUIDE-VALIDATE",
+  "revision": 15,
+  "drc": null,
+  "schematic": {
+   "parts": 4,
+   "wires": 0,
+   "labels": 0,
+   "primitives": 0,
+   "nets": 8,
+   "junctions": 0
+  },
+  "pcb": {
+   "placements": 4,
+   "traces": 1,
+   "vias": 0,
+   "freeHoles": 0,
+   "freePads": 0,
+   "overlayTexts": 0,
+   "overlayShapes": 0,
+   "zones": 0,
+   "keepouts": 0,
+   "ratsnest": 0,
+   "warnings": 0
+  },
+  "layerCount": 2
+ },
+ {
+  "id": "973fd6a1-fb93-44a8-9850-8ade11bda063",
+  "name": "Untitled Design",
+  "revision": 0,
+  "drc": null,
+  "schematic": {
+   "parts": 0,
+   "wires": 0,
+   "labels": 0,
+   "primitives": 0,
+   "nets": 0,
+   "junctions": 0
+  },
+  "pcb": {
+   "placements": 0,
+   "traces": 0,
+   "vias": 0,
+   "freeHoles": 0,
+   "freePads": 0,
+   "overlayTexts": 0,
+   "overlayShapes": 0,
+   "zones": 0,
+   "keepouts": 0,
+   "ratsnest": 0,
+   "warnings": 0
+  },
+  "layerCount": 2
+ },
+ {
+  "id": "3d5d1f7c-0ee1-42d8-9edc-65ca68bc50b8",
+  "name": "S3 Smoke \u2014 5 LED indicators (v2)",
+  "revision": 40,
+  "drc": null,
+  "schematic": {
+   "parts": 10,
+   "wires": 15,
+   "labels": 0,
+   "primitives": 10,
+   "nets": 7,
+   "junctions": 0
+  },
+  "pcb": {
+   "placements": 10,
+   "traces": 0,
+   "vias": 0,
+   "freeHoles": 0,
+   "freePads": 0,
+   "overlayTexts": 0,
+   "overlayShapes": 0,
+   "zones": 0,
+   "keepouts": 0,
+   "ratsnest": 12,
+   "warnings": 0
+  },
+  "layerCount": 2
+ },
+ {
+  "id": "d7ea9de9-5d53-4972-aeaf-c8fd1bc60839",
+  "name": "S3 LLM Smoke \u2014 5 LED (DeepSeek V4 Flash)",
+  "revision": 0,
+  "drc": null,
+  "schematic": {
+   "parts": 0,
+   "wires": 0,
+   "labels": 0,
+   "primitives": 0,
+   "nets": 0,
+   "junctions": 0
+  },
+  "pcb": {
+   "placements": 0,
+   "traces": 0,
+   "vias": 0,
+   "freeHoles": 0,
+   "freePads": 0,
+   "overlayTexts": 0,
+   "overlayShapes": 0,
+   "zones": 0,
+   "keepouts": 0,
+   "ratsnest": 0,
+   "warnings": 0
+  },
+  "layerCount": 2
+ },
+ {
+  "id": "a557d3b5-92c4-4caa-b79c-594f1382ac82",
+  "name": "S3 LLM Smoke \u2014 5 LED (DeepSeek V4 Flash)",
+  "revision": 45,
+  "drc": null,
+  "schematic": {
+   "parts": 10,
+   "wires": 15,
+   "labels": 5,
+   "primitives": 10,
+   "nets": 12,
+   "junctions": 0
+  },
+  "pcb": {
+   "placements": 10,
+   "traces": 0,
+   "vias": 0,
+   "freeHoles": 0,
+   "freePads": 0,
+   "overlayTexts": 0,
+   "overlayShapes": 0,
+   "zones": 0,
+   "keepouts": 0,
+   "ratsnest": 10,
+   "warnings": 0
+  },
+  "layerCount": 2
+ },
+ {
+  "id": "1198c943-87c5-4feb-933a-ff9a361c7d2c",
+  "name": "S3 LLM Edge \u2014 12V params",
+  "revision": 48,
+  "drc": null,
+  "schematic": {
+   "parts": 12,
+   "wires": 18,
+   "labels": 0,
+   "primitives": 12,
+   "nets": 5,
+   "junctions": 18
+  },
+  "pcb": {
+   "placements": 12,
+   "traces": 0,
+   "vias": 0,
+   "freeHoles": 0,
+   "freePads": 0,
+   "overlayTexts": 0,
+   "overlayShapes": 0,
+   "zones": 0,
+   "keepouts": 0,
+   "ratsnest": 15,
+   "warnings": 0
+  },
+  "layerCount": 2
+ },
+ {
+  "id": "37099ba4-f476-4dcf-9636-1ce37e2739ba",
+  "name": "S3 LLM Edge \u2014 additive v2",
+  "revision": 33,
+  "drc": null,
+  "schematic": {
+   "parts": 8,
+   "wires": 12,
+   "labels": 0,
+   "primitives": 8,
+   "nets": 7,
+   "junctions": 0
+  },
+  "pcb": {
+   "placements": 8,
+   "traces": 0,
+   "vias": 0,
+   "freeHoles": 0,
+   "freePads": 0,
+   "overlayTexts": 0,
+   "overlayShapes": 0,
+   "zones": 0,
+   "keepouts": 0,
+   "ratsnest": 9,
+   "warnings": 0
+  },
+  "layerCount": 2
+ },
+ {
+  "id": "9692f280-d1a4-4fcd-af0a-0e9d0890d2bf",
+  "name": "S3 LLM Edge \u2014 bad recipe",
+  "revision": 0,
+  "drc": null,
+  "schematic": {
+   "parts": 0,
+   "wires": 0,
+   "labels": 0,
+   "primitives": 0,
+   "nets": 0,
+   "junctions": 0
+  },
+  "pcb": {
+   "placements": 0,
+   "traces": 0,
+   "vias": 0,
+   "freeHoles": 0,
+   "freePads": 0,
+   "overlayTexts": 0,
+   "overlayShapes": 0,
+   "zones": 0,
+   "keepouts": 0,
+   "ratsnest": 0,
+   "warnings": 0
+  },
+  "layerCount": 2
+ },
+ {
+  "id": "370447e2-d91e-43f1-b0a5-e7dc9f6bcafe",
+  "name": "LED Indicators 5V",
+  "revision": 68,
+  "drc": null,
+  "schematic": {
+   "parts": 16,
+   "wires": 24,
+   "labels": 0,
+   "primitives": 18,
+   "nets": 8,
+   "junctions": 9
+  },
+  "pcb": {
+   "placements": 16,
+   "traces": 0,
+   "vias": 0,
+   "freeHoles": 0,
+   "freePads": 0,
+   "overlayTexts": 0,
+   "overlayShapes": 0,
+   "zones": 0,
+   "keepouts": 0,
+   "ratsnest": 20,
+   "warnings": 0
+  },
+  "layerCount": 2
+ }
+]
