@@ -290,6 +290,15 @@ export async function setNativeViewport(
 
 async function attachNativeIdentity(session: NativeSession): Promise<void> {
   const { app, page, profile, info, label } = session;
+  const rendererDist = path.resolve(
+    process.env.OPENPCB_NATIVE_RENDERER_DIST ?? "src/core/frontend/dist",
+  );
+  const indexPath = path.join(rendererDist, "index.html");
+  const servedIndex = await page.request.get(new URL("/", page.url()).href);
+  expect(
+    await servedIndex.text(),
+    "Served renderer must match the attested artifact",
+  ).toBe(await fs.readFile(indexPath, "utf8"));
   const identity = await app.evaluate(({ app }) => ({
     packaged: app.isPackaged,
     versions: process.versions,
@@ -300,23 +309,21 @@ async function attachNativeIdentity(session: NativeSession): Promise<void> {
   }));
   const gpu = await app.evaluate(({ app }) => app.getGPUInfo("basic"));
   const builds = await Promise.all(
-    ["electron/dist/main/index.js", "src/core/frontend/dist/index.html"].map(
-      async (file) => ({
-        file,
-        sha256: createHash("sha256")
-          .update(await fs.readFile(file))
-          .digest("hex"),
-        modifiedAt: (await fs.stat(file)).mtime.toISOString(),
-      }),
-    ),
+    ["electron/dist/main/index.js", indexPath].map(async (file) => ({
+      file,
+      sha256: createHash("sha256")
+        .update(await fs.readFile(file))
+        .digest("hex"),
+      modifiedAt: (await fs.stat(file)).mtime.toISOString(),
+    })),
   );
-  const assets = (await fs.readdir("src/core/frontend/dist/assets")).filter(
+  const assets = (await fs.readdir(path.join(rendererDist, "assets"))).filter(
     (file) => !file.endsWith(".map"),
   );
   const assetHashes = await Promise.all(
     [
       "electron/dist/preload/index.js",
-      ...assets.map((file) => `src/core/frontend/dist/assets/${file}`),
+      ...assets.map((file) => path.join(rendererDist, "assets", file)),
     ].map(async (file) => ({
       file,
       sha256: createHash("sha256")
@@ -357,6 +364,7 @@ async function attachNativeIdentity(session: NativeSession): Promise<void> {
     body: JSON.stringify(
       {
         identity,
+        rendererDist,
         gpu,
         builds,
         assetHashes,

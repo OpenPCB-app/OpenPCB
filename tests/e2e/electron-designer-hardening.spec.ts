@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import type {
   DesignerCommand,
   DesignerCommandEnvelope,
+  DesignerPcbProjection,
   DesignerSchematicProjection,
 } from "../../src/sdks";
 import {
@@ -88,6 +89,33 @@ test.describe("Native Designer command ordering", () => {
       if (!dispatch) throw new Error("Designer dispatcher unavailable");
       return dispatch(command);
     }, command);
+  }
+
+  async function readyCanvas(label: "Schematic canvas" | "PCB canvas") {
+    const canvas = session.page
+      .getByLabel(label, { exact: true })
+      .locator("canvas");
+    // A newly mounted HTML canvas is visible at 300x150 before R3F measures its container.
+    await expect
+      .poll(() =>
+        canvas.evaluate((node, label) => {
+          const area = node.closest(`[aria-label="${label}"]`)!;
+          const actual = node.getBoundingClientRect();
+          const expected = area.getBoundingClientRect();
+          return (
+            Math.abs(actual.width - expected.width) < 1 &&
+            Math.abs(actual.height - expected.height) < 1
+          );
+        }, label),
+      )
+      .toBe(true);
+    await session.page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    return canvas;
   }
 
   test("rapid schematic actions use successive revisions and native Undo restores geometry", async () => {
@@ -180,6 +208,140 @@ test.describe("Native Designer command ordering", () => {
       ]),
     );
     await nativeScreenshot(session, "pcb-ordered-holes");
+  });
+
+  test("schematic pointer placement uses the 1.27 mm grid independently of visibility", async () => {
+    await expect(
+      session.page.getByRole("button", { name: "Show grid", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    const canvas = await readyCanvas("Schematic canvas");
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error("Schematic canvas unavailable");
+    await session.page
+      .getByRole("button", { name: "Place GND port", exact: true })
+      .click();
+    await canvas.click({
+      position: { x: box.width / 2 + 83, y: box.height / 2 + 47 },
+    });
+    await expect
+      .poll(async () => (await projection()).primitives.length)
+      .toBe(1);
+    const placed = (await projection()).primitives[0]!;
+    expect(Math.abs(placed.positionNm.x % 1_270_000)).toBe(0);
+    expect(Math.abs(placed.positionNm.y % 1_270_000)).toBe(0);
+    await session.page
+      .getByRole("button", { name: "Show grid", exact: true })
+      .click();
+    await expect(
+      session.page.getByRole("button", { name: "Show grid", exact: true }),
+    ).toHaveAttribute("aria-pressed", "false");
+    await expect(
+      session.page.getByRole("button", { name: "Snap to grid", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await session.page
+      .getByRole("button", { name: "Place GND port", exact: true })
+      .click();
+    await canvas.click({
+      position: { x: box.width / 2 - 91, y: box.height / 2 - 53 },
+    });
+    await expect
+      .poll(async () => (await projection()).primitives.length)
+      .toBe(2);
+    for (const primitive of (await projection()).primitives) {
+      expect(Math.abs(primitive.positionNm.x % 1_270_000)).toBe(0);
+      expect(Math.abs(primitive.positionNm.y % 1_270_000)).toBe(0);
+    }
+    await nativeScreenshot(session, "schematic-grid-hidden-snap-on");
+    await session.page.keyboard.press("Shift+S");
+    await expect(
+      session.page.getByRole("button", { name: "Snap to grid", exact: true }),
+    ).toHaveAttribute("aria-pressed", "false");
+    await session.page
+      .getByRole("button", { name: "Place GND port", exact: true })
+      .click();
+    await canvas.click({
+      position: { x: box.width / 2 + 137, y: box.height / 2 - 61 },
+    });
+    await expect
+      .poll(async () => (await projection()).primitives.length)
+      .toBe(3);
+    expect(
+      (await projection()).primitives.some(
+        (primitive) =>
+          primitive.positionNm.x % 1_270_000 !== 0 ||
+          primitive.positionNm.y % 1_270_000 !== 0,
+      ),
+    ).toBe(true);
+  });
+
+  test("PCB pointer placement follows selectable grid and survives reopen", async () => {
+    await session.page.getByRole("tab", { name: "PCB", exact: true }).click();
+    const canvas = await readyCanvas("PCB canvas");
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error("PCB canvas unavailable");
+    await session.page
+      .getByRole("button", { name: "Fit board", exact: true })
+      .click();
+    await session.page
+      .getByRole("combobox", { name: "PCB grid spacing", exact: true })
+      .selectOption("0.5");
+    await session.page
+      .getByRole("button", { name: "Show grid", exact: true })
+      .click();
+    await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
+    await session.page.keyboard.press("h");
+    await canvas.click({
+      position: { x: box.width / 2 + 37, y: box.height / 2 + 23 },
+    });
+    const read = async (): Promise<DesignerPcbProjection> => {
+      const response = await fetch(
+        `${session.backend}/api/modules/designer/designs/${designId}/projection/pcb`,
+      );
+      return (
+        (await response.json()) as {
+          data: { projection: DesignerPcbProjection };
+        }
+      ).data.projection;
+    };
+    await expect.poll(async () => (await read()).freeHoles.length).toBe(1);
+    const hole = (await read()).freeHoles[0]!;
+    expect(Math.abs(hole.centerMm.x)).toBeLessThan(25);
+    expect(Math.abs(hole.centerMm.y)).toBeLessThan(15);
+    expect(Math.abs(Math.round(hole.centerMm.x * 1_000_000) % 500_000)).toBe(0);
+    expect(Math.abs(Math.round(hole.centerMm.y * 1_000_000) % 500_000)).toBe(0);
+    await session.page.keyboard.press("n");
+    await expect(
+      session.page.getByRole("combobox", {
+        name: "PCB grid spacing",
+        exact: true,
+      }),
+    ).toHaveValue("1");
+    await session.page.keyboard.press("Shift+N");
+    await expect(
+      session.page.getByRole("combobox", {
+        name: "PCB grid spacing",
+        exact: true,
+      }),
+    ).toHaveValue("0.5");
+    const before = await read();
+    await session.page.reload();
+    await session.page
+      .getByRole("button", { name: "Open", exact: true })
+      .click();
+    await session.page.getByRole("tab", { name: "PCB", exact: true }).click();
+    await expect(
+      session.page.getByRole("combobox", {
+        name: "PCB grid spacing",
+        exact: true,
+      }),
+    ).toHaveValue("0.5");
+    await expect(
+      session.page.getByRole("button", { name: "Show grid", exact: true }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect((await read()).freeHoles).toEqual(before.freeHoles);
+    expect((await read()).revision).toBe(before.revision);
+    await readyCanvas("PCB canvas");
+    await nativeScreenshot(session, "pcb-grid-reopen");
   });
 
   test("real revision conflict retains the edit until reviewed reapply", async () => {
