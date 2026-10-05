@@ -16,13 +16,13 @@ Two paths, both write to this directory:
 | Local    | `npm run corelib:fetch` (invoked automatically by `npm run build`) | `scripts/fetch-core-library.ts` → `gh release download` from `OpenPCB-app/CoreLibrary`            |
 | CI / tag | `.github/workflows/release.yml` "Fetch CoreLibrary release" step   | Same script, same source, but writes to `.build/core-library/` first; electron-builder reads that |
 
-Both paths run identical verification: SHA-256 vs `SHA256SUMS`, Ed25519 signature vs `OpenPCB/resources/keys/openpcb-core.pub`, manifest `library.id === "openpcb.core"`, components count ≥ 10.
+Both paths use the committed release policy in `resources/core-library-release.json` and require SHA-256, Ed25519 signature against committed `resources/keys/*.pub`, payload verification, manifest identity and component count ≥ 10. See [the trust and cache contract](../../docs/core-library-trust.md). The production pin currently remains unavailable until a new signed source release is reviewed.
 
 ## Why we don't commit the `.opclib`
 
 History showed it goes stale — a 2-component stub sat here for months before being noticed. Build-time fetch guarantees:
 
-- Every release ships against the current canonical library.
+- Every release ships against the explicitly reviewed library version and archive hash.
 - No silent fallback to a stale artifact when CI hiccups.
 - The release-workflow record (which CoreLibrary tag was bundled) is auditable in the workflow run logs and the release notes.
 
