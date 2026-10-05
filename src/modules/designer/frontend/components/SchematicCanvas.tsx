@@ -71,6 +71,13 @@ import type {
 import type { SymbolRenderModel } from "../../../../shared/rendering";
 import type { DesignerWorkspaceActions } from "../hooks/useDesignerWorkspace";
 import { SCHEMATIC_GRID_NM, SCHEMATIC_GRID_MM } from "../types";
+import {
+  snapPointNm,
+  snappedMoveDeltaNm,
+} from "../../../../shared/domain/editor-grid";
+import { useGridPreferences } from "../stores/grid-prefs";
+import { useGridHotkeys } from "../hooks/use-grid-hotkeys";
+import { snapWireWaypointNm } from "../lib/grid";
 import type { ViewportState } from "../types";
 import { COMPONENT_DND_MIME } from "./DesignerSidebar";
 import { useDesignerHighlight } from "../useDesignerHighlight";
@@ -168,11 +175,13 @@ interface DragCommonState {
   startScreenPx: { x: number; y: number };
   startPointerNm: PointNm;
   deltaNm: PointNm;
+  gridNm: number;
   /** Removes the gesture's window listeners + releases pointer capture. */
   cleanup: () => void;
 }
 interface DragMovePayload {
   kind: "move";
+  originNm: PointNm;
   initialPartPositionsNm: Map<string, PointNm>;
   initialPrimitivePositionsNm: Map<string, PointNm>;
 }
@@ -235,7 +244,6 @@ interface SchematicCanvasProps {
   } | null;
   wireSourcePinId: string | null;
   labelDraftText: string;
-  gridVisible: boolean;
   draggingComponentId: string | null;
   dragPlacementLoading: boolean;
   dragPlacementDetail: LibraryComponentPlacementDetail | null;
@@ -299,14 +307,6 @@ function toNm(pointMm: PointMm): PointNm {
   return {
     x: Math.round(Units.mmToNm(pointMm.x)),
     y: Math.round(Units.mmToNm(pointMm.y)),
-  };
-}
-
-function snapNm(pointNm: PointNm, gridEnabled: boolean): PointNm {
-  if (!gridEnabled) return pointNm;
-  return {
-    x: Math.round(pointNm.x / SCHEMATIC_GRID_NM) * SCHEMATIC_GRID_NM,
-    y: Math.round(pointNm.y / SCHEMATIC_GRID_NM) * SCHEMATIC_GRID_NM,
   };
 }
 
@@ -908,7 +908,6 @@ export const SchematicCanvas = forwardRef<
   const {
     projection,
     labelDraftText,
-    gridVisible,
     draggingComponentId,
     dragPlacementLoading,
     dragPlacementDetail,
@@ -940,7 +939,13 @@ export const SchematicCanvas = forwardRef<
   const menuOwnerId = `${canvasInstanceId}:${projection?.designId ?? ""}`;
   const canvasBackground = mode === "light" ? "#f0f4fb" : undefined;
 
-  const snap = (pointNm: PointNm) => snapNm(pointNm, gridVisible);
+  const grid = useGridPreferences((state) => state.schematic);
+  const gridVisible = grid.visible;
+  const gridNm = grid.snap ? SCHEMATIC_GRID_NM : 0;
+  const snap = useCallback(
+    (pointNm: PointNm) => snapPointNm(pointNm, gridNm),
+    [gridNm],
+  );
 
   const [cursorNm, setCursorNm] = useState<PointNm | null>(null);
   const [selection, setSelection] = useState<SelectionState>(emptySelection);
@@ -987,6 +992,7 @@ export const SchematicCanvas = forwardRef<
 
   // Floating canvas comment overlay: projection + new-comment draft.
   const wrapperRef = useRef<HTMLElement | null>(null);
+  useGridHotkeys(wrapperRef, "schematic");
   const projection2d = useCanvasProjection(wrapperRef, initialViewport);
   const [commentDraft, setCommentDraft] = useState<CommentDraft | null>(null);
   // Schedule a re-render in demand mode. CameraRefBridge publishes R3F's
@@ -1979,6 +1985,7 @@ export const SchematicCanvas = forwardRef<
             state.basePointsNm,
             state.segmentIndex,
             state.deltaNm,
+            state.gridNm,
           ),
         ],
       ]);
@@ -2013,6 +2020,7 @@ export const SchematicCanvas = forwardRef<
           state.basePointsNm,
           state.segmentIndex,
           state.deltaNm,
+          state.gridNm,
         );
         // dragWireSegment returns the base array unchanged on a no-op.
         if (finalPoints === state.basePointsNm) return;
@@ -2132,6 +2140,7 @@ export const SchematicCanvas = forwardRef<
         startScreenPx: { x: event.screenPoint.x, y: event.screenPoint.y },
         startPointerNm: worldNm,
         deltaNm: { x: 0, y: 0 },
+        gridNm,
         cleanup: () => {
           window.removeEventListener("pointerup", handleUp);
           window.removeEventListener("pointercancel", handleCancel);
@@ -2140,7 +2149,7 @@ export const SchematicCanvas = forwardRef<
         },
       };
     },
-    [],
+    [gridNm],
   );
 
   // Component unmount mid-gesture must not leak the window listeners.
@@ -2185,7 +2194,14 @@ export const SchematicCanvas = forwardRef<
               x: worldNm.x - dragState.startPointerNm.x,
               y: worldNm.y - dragState.startPointerNm.y,
             };
-            const snappedDelta = snap(rawDelta);
+            const snappedDelta =
+              dragState.kind === "wireSegment"
+                ? rawDelta
+                : snappedMoveDeltaNm(
+                    dragState.originNm,
+                    rawDelta,
+                    dragState.gridNm,
+                  );
             if (
               snappedDelta.x !== dragState.deltaNm.x ||
               snappedDelta.y !== dragState.deltaNm.y
@@ -2302,21 +2318,23 @@ export const SchematicCanvas = forwardRef<
         }
 
         if (armedPrimitive) {
+          // A selected electrical anchor is exact, even when intentionally off-grid.
+          const positionNm = pin?.worldPositionNm ?? snappedWorldNm;
           const command =
             armedPrimitive.kind === "gnd"
               ? {
                   type: "place_gnd_port" as const,
-                  positionNm: snappedWorldNm,
+                  positionNm,
                 }
               : armedPrimitive.kind === "pwr"
                 ? {
                     type: "place_pwr_port" as const,
-                    positionNm: snappedWorldNm,
+                    positionNm,
                     railText: armedPrimitive.railText,
                   }
                 : {
                     type: "place_net_portal" as const,
-                    positionNm: snappedWorldNm,
+                    positionNm,
                     portalText: armedPrimitive.portalText,
                   };
           void actions
@@ -2380,7 +2398,15 @@ export const SchematicCanvas = forwardRef<
 
           setWireSession({
             ...activeSession,
-            waypointsNm: [...activeSession.waypointsNm, snappedWorldNm],
+            waypointsNm: [
+              ...activeSession.waypointsNm,
+              snapWireWaypointNm(
+                worldNm,
+                activeSession.waypointsNm.at(-1) ?? sourcePin.worldPositionNm,
+                gridNm,
+                cameraRef.current?.zoom ?? 1,
+              ),
+            ],
           });
           return;
         }
@@ -2460,6 +2486,7 @@ export const SchematicCanvas = forwardRef<
 
           armDrag(event, worldNm, {
             kind: "move",
+            originNm: initialPartPositionsNm.get(partId) ?? worldNm,
             initialPartPositionsNm,
             initialPrimitivePositionsNm,
           });
@@ -2581,6 +2608,7 @@ export const SchematicCanvas = forwardRef<
 
           armDrag(event, worldNm, {
             kind: "move",
+            originNm: initialPrimitivePositionsNm.get(primitiveId) ?? worldNm,
             initialPartPositionsNm,
             initialPrimitivePositionsNm,
           });
@@ -2974,20 +3002,14 @@ export const SchematicCanvas = forwardRef<
         if (componentId && componentId !== draggingComponentId) {
           void actions.beginDragComponent(componentId).catch(() => {});
         }
-        actions.setDragGhostNm({
-          x: Math.round(event.snappedPoint.x),
-          y: Math.round(event.snappedPoint.y),
-        });
+        actions.setDragGhostNm(snap(event.worldPoint));
       },
       onDragOver(event) {
         const componentId = event.getData(COMPONENT_DND_MIME);
         if (componentId && !dragPlacementDetail && !dragPlacementLoading) {
           void actions.beginDragComponent(componentId).catch(() => {});
         }
-        actions.setDragGhostNm({
-          x: Math.round(event.snappedPoint.x),
-          y: Math.round(event.snappedPoint.y),
-        });
+        actions.setDragGhostNm(snap(event.worldPoint));
       },
       onDragLeave() {
         actions.setDragGhostNm(null);
@@ -3011,8 +3033,8 @@ export const SchematicCanvas = forwardRef<
         }
 
         const snapped = snap({
-          x: Math.round(event.snappedPoint.x),
-          y: Math.round(event.snappedPoint.y),
+          x: Math.round(event.worldPoint.x),
+          y: Math.round(event.worldPoint.y),
         });
 
         void actions
@@ -3059,6 +3081,8 @@ export const SchematicCanvas = forwardRef<
       projection,
       renderedPartPositionNm,
       selection,
+      snap,
+      gridNm,
       wireSession,
     ],
   );
@@ -3097,7 +3121,15 @@ export const SchematicCanvas = forwardRef<
     if (!sourcePin) {
       return null;
     }
-    const target = snap(cursorNm);
+    const target =
+      hitPin(cursorNm)?.worldPositionNm ??
+      hitWire(cursorNm)?.projectedNm ??
+      snapWireWaypointNm(
+        cursorNm,
+        wireSession.waypointsNm.at(-1) ?? sourcePin.worldPositionNm,
+        gridNm,
+        cameraRef.current?.zoom ?? 1,
+      );
     // Preview parity with the commit path: a session without user waypoints
     // commits through the backend's obstacle-aware router, so preview with
     // the same shared router. Waypointed sessions preview the exact polyline
@@ -3125,7 +3157,15 @@ export const SchematicCanvas = forwardRef<
       targetPinId: "cursor",
       pointsNm,
     } satisfies DesignerWire;
-  }, [cursorNm, gridVisible, pinById, effectiveProjection, wireSession]);
+  }, [
+    cursorNm,
+    gridNm,
+    hitPin,
+    hitWire,
+    pinById,
+    effectiveProjection,
+    wireSession,
+  ]);
 
   // Live connect-by-touch indicator while dragging (Altium-style): a dragged
   // pin (or primitive connection point) landing on a non-dragged wire's path
@@ -3218,7 +3258,7 @@ export const SchematicCanvas = forwardRef<
 
   const primitiveGhost: DesignerPrimitive | null = useMemo(() => {
     if (!armedPrimitive || !cursorNm) return null;
-    const snapped = snap(cursorNm);
+    const snapped = hitPin(cursorNm)?.worldPositionNm ?? snap(cursorNm);
     const id = "primitive-ghost";
     if (armedPrimitive.kind === "gnd") {
       return { id, kind: "gnd", positionNm: snapped, rotationDeg: 0 };
@@ -3239,7 +3279,7 @@ export const SchematicCanvas = forwardRef<
       rotationDeg: 0,
       portalText: armedPrimitive.portalText,
     };
-  }, [armedPrimitive, cursorNm]);
+  }, [armedPrimitive, cursorNm, snap, hitPin]);
 
   return (
     <section
@@ -3255,7 +3295,7 @@ export const SchematicCanvas = forwardRef<
         className="h-full w-full"
         initialZoom={DEFAULT_SCHEMATIC_ZOOM}
         enableDragDrop
-        gridSize={SCHEMATIC_GRID_NM}
+        gridSize={gridNm}
         backgroundColor={canvasBackground}
       >
         <CameraRefBridge

@@ -1152,9 +1152,6 @@ function DesignerSpaceInner({
         selectionRequest={schematicSelectionRequest}
         wireSourcePinId={state.wireSourcePinId}
         labelDraftText={state.labelDraftText}
-        // The schematic grid overlay + grid snap have never been switchable
-        // from the shell; keep the constant the dead state used to supply.
-        gridVisible={false}
         draggingComponentId={state.draggingComponentId}
         dragPlacementLoading={state.dragPlacementLoading}
         dragPlacementDetail={state.dragPlacementDetail}
@@ -1404,7 +1401,6 @@ function DesignerSpaceInner({
                   backendURL={backendURL}
                   moduleId={moduleId}
                   designId={state.selectedDesignId}
-                  gridVisible={false}
                   cloudHeaders={autoLayoutCloudHeaders}
                   autoLayoutEnabled={autoLayoutEnabled}
                   autoLayoutSignedIn={autoLayoutSignedIn}
@@ -1586,6 +1582,7 @@ function DesignerSpaceInner({
         <DesignerStatusBar
           showCursor
           zoom={zoomPercent}
+          gridEditor="pcb"
           activeLayer={pcbActiveLayer}
           hint={pcbHint}
           selection={pcbSelectionSummary}
@@ -1612,6 +1609,7 @@ function DesignerSpaceInner({
       {!noTabsOpen && state.activeView === "schem" ? (
         <DesignerStatusBar
           showCursor
+          gridEditor="schematic"
           cursorSource="schematic"
           zoom={zoomPercent}
           hint={schemHint}

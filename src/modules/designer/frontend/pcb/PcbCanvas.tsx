@@ -234,10 +234,7 @@ import {
   resolveAnchorLabel,
 } from "./drc/drc-labels";
 import { usePcbViewStore } from "./pcb-view-store";
-import {
-  DEFAULT_PCB_ZOOM,
-  PCB_GRID_MM,
-} from "../../../../shared/frontend/canvas/defaults";
+import { DEFAULT_PCB_ZOOM } from "../../../../shared/frontend/canvas/defaults";
 import {
   PCB_LAYER_COLORS,
   PCB_LAYER_PRESETS,
@@ -299,16 +296,11 @@ import {
   shouldRenderCopperLayer,
 } from "./pcb-visual-state";
 
+import { snapCoordinateMm } from "../../../../shared/domain/editor-grid";
+import { useGridPreferences } from "../stores/grid-prefs";
+import { useGridHotkeys } from "../hooks/use-grid-hotkeys";
+
 const NM_PER_MM = 1_000_000;
-
-function snapMm(value: number, gridEnabled: boolean): number {
-  if (!gridEnabled) return value;
-  return Math.round(value / PCB_GRID_MM) * PCB_GRID_MM;
-}
-
-function snapPointMm(p: PcbPointMm, gridEnabled: boolean): PcbPointMm {
-  return { x: snapMm(p.x, gridEnabled), y: snapMm(p.y, gridEnabled) };
-}
 
 function pointMmToNm(p: PcbPointMm): PointNm {
   return { x: Math.round(p.x * NM_PER_MM), y: Math.round(p.y * NM_PER_MM) };
@@ -428,7 +420,6 @@ interface PcbCanvasProps {
   moduleId: string;
   designId: string | null;
   commandRevision?: number | null;
-  gridVisible?: boolean;
   /** Login-only cloud auth headers (bearer) for the auto-layout service. */
   cloudHeaders?: CloudHeadersProvider;
   /** Logged in + cloud configured → show the unified Auto-Layout button. */
@@ -565,13 +556,17 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   const themeMode = useCanvasThemeMode();
   const canvasInstanceId = useId();
   const menuOwnerId = `${canvasInstanceId}:${props.designId ?? ""}`;
-  const gridEnabled = props.gridVisible ?? false;
+  const grid = useGridPreferences((state) => state.pcb);
+  const gridEnabled = grid.snap;
   // Stable identities — several per-pointer-move memos (bundlePreview, …)
   // list these as deps; plain arrows would invalidate them on EVERY render.
-  const snap = useCallback((v: number) => snapMm(v, gridEnabled), [gridEnabled]);
+  const snap = useCallback(
+    (v: number) => snapCoordinateMm(v, gridEnabled ? grid.mm : 0),
+    [gridEnabled, grid.mm],
+  );
   const snapPoint = useCallback(
-    (p: PcbPointMm) => snapPointMm(p, gridEnabled),
-    [gridEnabled],
+    (p: PcbPointMm) => ({ x: snap(p.x), y: snap(p.y) }),
+    [snap],
   );
 
   const workspace = usePcbWorkspace({
@@ -1337,6 +1332,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
 
   // Floating canvas comment overlay: projection + new-comment draft + recenter.
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  useGridHotkeys(wrapperRef, "pcb");
   const commentProjection = useCanvasProjection(
     wrapperRef,
     props.initialViewport,
@@ -5917,6 +5913,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           interactionCoordinateTransform={interactionCoordinateTransform}
         >
           <PcbScene
+            gridVisible={grid.visible}
+            gridMm={grid.mm}
             projection={workspace.projection}
             effectiveKeepouts={effectiveKeepouts}
             selection={sceneSelection}

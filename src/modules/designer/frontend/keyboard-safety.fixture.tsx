@@ -112,7 +112,6 @@ export function KeyboardSafetyFixture() {
               selectedLabelId={null}
               wireSourcePinId={null}
               labelDraftText="NET"
-              gridVisible={false}
               draggingComponentId={null}
               dragPlacementLoading={false}
               dragPlacementDetail={null}
