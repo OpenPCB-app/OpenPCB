@@ -73,7 +73,8 @@ function installSecurityPolicy(): void {
       // Dev: embedded backend (127.0.0.1), local devstack cloud (localhost:8000
       // Supabase / :3000 cloud-api / :5173 dashboard), and prod cloud domains so
       // a dev build can also point at prod.
-      "connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https://*.cloud.openpcb.app wss://*.cloud.openpcb.app https://cdn.jsdelivr.net",
+      // Verified resident font bytes are read by Troika workers through local blob XHR.
+      "connect-src 'self' blob: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https://*.cloud.openpcb.app wss://*.cloud.openpcb.app https://cdn.jsdelivr.net",
       "worker-src 'self' blob: http://127.0.0.1:*",
       "media-src 'self' blob:",
       "object-src 'none'",
@@ -88,7 +89,7 @@ function installSecurityPolicy(): void {
       "font-src 'self' data: https://cdn.jsdelivr.net",
       // Prod: embedded backend (127.0.0.1) + OpenPCB Cloud (Supabase, cloud-api,
       // realtime) under the *.cloud.openpcb.app wildcard.
-      "connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://*.cloud.openpcb.app wss://*.cloud.openpcb.app https://cdn.jsdelivr.net",
+      "connect-src 'self' blob: http://127.0.0.1:* ws://127.0.0.1:* https://*.cloud.openpcb.app wss://*.cloud.openpcb.app https://cdn.jsdelivr.net",
       "worker-src 'self' blob:",
       "media-src 'self' blob:",
       "object-src 'none'",
