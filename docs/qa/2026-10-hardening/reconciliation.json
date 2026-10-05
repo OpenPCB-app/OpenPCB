@@ -19497,13 +19497,22 @@
       "scopeExpansion": false,
       "resolution": "pending",
       "reproductionState": "unverified",
-      "implementationCommit": null,
-      "regressionTest": null,
+      "implementationCommit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+      "regressionTest": {
+        "kind": "behavioral",
+        "path": "src/modules/knowledge/frontend/tests/editor-lifecycle.test.tsx",
+        "name": "delayed title acknowledgement never wipes continuously typed body",
+        "command": "npx --no-install vitest run --config src/core/frontend/vitest.config.ts src/modules/knowledge/frontend",
+        "result": "passed",
+        "commit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+        "evidencePath": "docs/qa/2026-10-hardening/evidence/docs-save-regressions.json",
+        "evidenceSha256": "4001a1f26f9b80352595a93cf8db41ae2262373245658354bd752b01b344074a"
+      },
       "localEvidence": null,
       "historicalEvidence": [
         "network: #321 PATCH /pages/d76ea8b4…/meta 200"
       ],
-      "remainingBlocker": "Fresh isolated reproduction, implementation verification, behavioral regression and commit evidence outstanding."
+      "remainingBlocker": "Focused regression passes; archived native reproduction and complete H25/H26 acceptance remain outstanding. No qualified closure or process-crash draft recovery claimed."
     },
     {
       "tid": "T-361",
@@ -19548,14 +19557,23 @@
       "scopeExpansion": false,
       "resolution": "pending",
       "reproductionState": "unverified",
-      "implementationCommit": null,
-      "regressionTest": null,
+      "implementationCommit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+      "regressionTest": {
+        "kind": "behavioral",
+        "path": "src/modules/knowledge/frontend/tests/editor-lifecycle.test.tsx",
+        "name": "text/PDF/text and deleted-page navigation never use destroyed editors",
+        "command": "npx --no-install vitest run --config src/core/frontend/vitest.config.ts src/modules/knowledge/frontend",
+        "result": "passed",
+        "commit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+        "evidencePath": "docs/qa/2026-10-hardening/evidence/docs-save-regressions.json",
+        "evidenceSha256": "4001a1f26f9b80352595a93cf8db41ae2262373245658354bd752b01b344074a"
+      },
       "localEvidence": null,
       "historicalEvidence": [
         "shots/q9/dark/022-crash-pdf-to-text.png",
         "shots/vq9/dark/003-crash-pdf-to-text.png"
       ],
-      "remainingBlocker": "Fresh isolated reproduction, implementation verification, behavioral regression and commit evidence outstanding."
+      "remainingBlocker": "Focused regression passes; archived native reproduction and complete H25/H26 acceptance remain outstanding. No qualified closure or process-crash draft recovery claimed."
     },
     {
       "tid": "T-362",
@@ -19598,14 +19616,23 @@
       "scopeExpansion": false,
       "resolution": "pending",
       "reproductionState": "unverified",
-      "implementationCommit": null,
-      "regressionTest": null,
+      "implementationCommit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+      "regressionTest": {
+        "kind": "behavioral",
+        "path": "src/modules/knowledge/frontend/tests/editor-lifecycle.test.tsx",
+        "name": "switching documents creates independent undo history",
+        "command": "npx --no-install vitest run --config src/core/frontend/vitest.config.ts src/modules/knowledge/frontend",
+        "result": "passed",
+        "commit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+        "evidencePath": "docs/qa/2026-10-hardening/evidence/docs-save-regressions.json",
+        "evidenceSha256": "4001a1f26f9b80352595a93cf8db41ae2262373245658354bd752b01b344074a"
+      },
       "localEvidence": null,
       "historicalEvidence": [
         "shots/q9/light/015-undo-cross-page.png",
         "shots/vq9/dark/004-undo-cross-page.png"
       ],
-      "remainingBlocker": "Fresh isolated reproduction, implementation verification, behavioral regression and commit evidence outstanding."
+      "remainingBlocker": "Focused regression passes; archived native reproduction and complete H25/H26 acceptance remain outstanding. No qualified closure or process-crash draft recovery claimed."
     },
     {
       "tid": "T-363",
@@ -19648,13 +19675,22 @@
       "scopeExpansion": false,
       "resolution": "pending",
       "reproductionState": "unverified",
-      "implementationCommit": null,
-      "regressionTest": null,
+      "implementationCommit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+      "regressionTest": {
+        "kind": "behavioral",
+        "path": "src/modules/knowledge/frontend/tests/page-save-coordinator.test.ts",
+        "name": "page switches and late completions never retarget writes",
+        "command": "npx --no-install vitest run --config src/core/frontend/vitest.config.ts src/modules/knowledge/frontend",
+        "result": "passed",
+        "commit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+        "evidencePath": "docs/qa/2026-10-hardening/evidence/docs-save-regressions.json",
+        "evidenceSha256": "4001a1f26f9b80352595a93cf8db41ae2262373245658354bd752b01b344074a"
+      },
       "localEvidence": null,
       "historicalEvidence": [
         "network: no PATCH /pages/d76ea8b4…/meta after the title fill"
       ],
-      "remainingBlocker": "Fresh isolated reproduction, implementation verification, behavioral regression and commit evidence outstanding."
+      "remainingBlocker": "Focused regression passes; archived native reproduction and complete H25/H26 acceptance remain outstanding. No qualified closure or process-crash draft recovery claimed."
     },
     {
       "tid": "T-364",
@@ -19859,14 +19895,23 @@
       "scopeExpansion": false,
       "resolution": "pending",
       "reproductionState": "unverified",
-      "implementationCommit": null,
-      "regressionTest": null,
+      "implementationCommit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+      "regressionTest": {
+        "kind": "behavioral",
+        "path": "src/modules/knowledge/frontend/tests/editor-lifecycle.test.tsx",
+        "name": "failed body survives module unmount/reopen and explicit UI retry",
+        "command": "npx --no-install vitest run --config src/core/frontend/vitest.config.ts src/modules/knowledge/frontend",
+        "result": "passed",
+        "commit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+        "evidencePath": "docs/qa/2026-10-hardening/evidence/docs-save-regressions.json",
+        "evidenceSha256": "4001a1f26f9b80352595a93cf8db41ae2262373245658354bd752b01b344074a"
+      },
       "localEvidence": null,
       "historicalEvidence": [
         "shots/q9/dark/025-save-error.png",
         "shots/vq9/dark/010-save-error.png"
       ],
-      "remainingBlocker": "Fresh isolated reproduction, implementation verification, behavioral regression and commit evidence outstanding."
+      "remainingBlocker": "Focused regression passes; archived native reproduction and complete H25/H26 acceptance remain outstanding. No qualified closure or process-crash draft recovery claimed."
     },
     {
       "tid": "T-368",
@@ -20126,14 +20171,23 @@
       "scopeExpansion": false,
       "resolution": "pending",
       "reproductionState": "unverified",
-      "implementationCommit": null,
-      "regressionTest": null,
+      "implementationCommit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+      "regressionTest": {
+        "kind": "behavioral",
+        "path": "src/modules/knowledge/frontend/tests/editor-lifecycle.test.tsx",
+        "name": "toolbar follows selection and history transactions immediately",
+        "command": "npx --no-install vitest run --config src/core/frontend/vitest.config.ts src/modules/knowledge/frontend",
+        "result": "passed",
+        "commit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+        "evidencePath": "docs/qa/2026-10-hardening/evidence/docs-save-regressions.json",
+        "evidenceSha256": "4001a1f26f9b80352595a93cf8db41ae2262373245658354bd752b01b344074a"
+      },
       "localEvidence": null,
       "historicalEvidence": [
         "shots/q9/dark/009-toolbar-stale-bold.png",
         "shots/vq9/dark/007-toolbar-bold-stale.png"
       ],
-      "remainingBlocker": "Fresh isolated reproduction, implementation verification, behavioral regression and commit evidence outstanding."
+      "remainingBlocker": "Focused regression passes; archived native reproduction and complete H25/H26 acceptance remain outstanding. No qualified closure or process-crash draft recovery claimed."
     },
     {
       "tid": "T-373",
@@ -20392,14 +20446,23 @@
       "scopeExpansion": false,
       "resolution": "pending",
       "reproductionState": "unverified",
-      "implementationCommit": null,
-      "regressionTest": null,
+      "implementationCommit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+      "regressionTest": {
+        "kind": "behavioral",
+        "path": "src/modules/knowledge/frontend/tests/editor-lifecycle.test.tsx",
+        "name": "metadata word count resets on document switch",
+        "command": "npx --no-install vitest run --config src/core/frontend/vitest.config.ts src/modules/knowledge/frontend",
+        "result": "passed",
+        "commit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+        "evidencePath": "docs/qa/2026-10-hardening/evidence/docs-save-regressions.json",
+        "evidenceSha256": "4001a1f26f9b80352595a93cf8db41ae2262373245658354bd752b01b344074a"
+      },
       "localEvidence": null,
       "historicalEvidence": [
         "shots/q9/dark/003-add-subpage-tree-stale.png",
         "shots/vq9/dark/005-add-subpage-tree-stale.png"
       ],
-      "remainingBlocker": "Fresh isolated reproduction, implementation verification, behavioral regression and commit evidence outstanding."
+      "remainingBlocker": "Focused regression passes; archived native reproduction and complete H25/H26 acceptance remain outstanding. No qualified closure or process-crash draft recovery claimed."
     },
     {
       "tid": "T-378",
@@ -20593,14 +20656,23 @@
       "scopeExpansion": false,
       "resolution": "pending",
       "reproductionState": "unverified",
-      "implementationCommit": null,
-      "regressionTest": null,
+      "implementationCommit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+      "regressionTest": {
+        "kind": "behavioral",
+        "path": "src/modules/knowledge/frontend/tests/page-save-coordinator.test.ts",
+        "name": "viewing and reopening sends zero writes; whitespace title explicitly becomes Untitled",
+        "command": "npx --no-install vitest run --config src/core/frontend/vitest.config.ts src/modules/knowledge/frontend",
+        "result": "passed",
+        "commit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+        "evidencePath": "docs/qa/2026-10-hardening/evidence/docs-save-regressions.json",
+        "evidenceSha256": "4001a1f26f9b80352595a93cf8db41ae2262373245658354bd752b01b344074a"
+      },
       "localEvidence": null,
       "historicalEvidence": [
         "shots/q9/dark/039-empty-title.png",
         "shots/vq9/dark/021-empty-title.png"
       ],
-      "remainingBlocker": "Fresh isolated reproduction, implementation verification, behavioral regression and commit evidence outstanding."
+      "remainingBlocker": "Focused regression passes; archived native reproduction and complete H25/H26 acceptance remain outstanding. No qualified closure or process-crash draft recovery claimed."
     },
     {
       "tid": "T-382",
@@ -20643,13 +20715,22 @@
       "scopeExpansion": false,
       "resolution": "pending",
       "reproductionState": "unverified",
-      "implementationCommit": null,
-      "regressionTest": null,
+      "implementationCommit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+      "regressionTest": {
+        "kind": "behavioral",
+        "path": "src/modules/knowledge/frontend/tests/editor-lifecycle.test.tsx",
+        "name": "mount and editable changes never emit document writes",
+        "command": "npx --no-install vitest run --config src/core/frontend/vitest.config.ts src/modules/knowledge/frontend",
+        "result": "passed",
+        "commit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+        "evidencePath": "docs/qa/2026-10-hardening/evidence/docs-save-regressions.json",
+        "evidenceSha256": "4001a1f26f9b80352595a93cf8db41ae2262373245658354bd752b01b344074a"
+      },
       "localEvidence": null,
       "historicalEvidence": [
         "shots/q9/light/002-editor-formatting.png"
       ],
-      "remainingBlocker": "Fresh isolated reproduction, implementation verification, behavioral regression and commit evidence outstanding."
+      "remainingBlocker": "Focused regression passes; archived native reproduction and complete H25/H26 acceptance remain outstanding. No qualified closure or process-crash draft recovery claimed."
     },
     {
       "tid": "T-383",
