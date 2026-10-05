@@ -1,13 +1,16 @@
 import { app, BrowserWindow } from "electron";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { log as electronLog } from "./logger.js";
 import { Sentry } from "./sentry.js";
 import { getTelemetryOptIn } from "./preferences.js";
 import { startBackendRuntime } from "../../../src/core/backend/runtime";
 import type { StartedBackendRuntime } from "../../../src/core/backend/runtime";
-import type { ModuleRegistryResponse } from "../../../src/core/contracts/modules/registry";
-import { resetSharedSqlite } from "../../../src/core/backend/db/sqlite-client";
+import {
+  failDesktopStartup,
+  startRequiredDesktopRuntime,
+  summarizeModuleSnapshot,
+} from "./backend-startup.js";
 import {
   disposeDrcWorker,
   setDrcWorkerEntry,
@@ -31,7 +34,6 @@ interface BackendReadyPayload {
 
 let runtime: StartedBackendRuntime | null = null;
 let backendPayload: BackendReadyPayload | null = null;
-const REQUIRED_DESKTOP_MODULES = ["library", "designer", "assistant"] as const;
 
 function getAppDataDir(): string {
   const base = app.getPath("userData");
@@ -93,32 +95,6 @@ export function getBackendPayload(): BackendReadyPayload | null {
   return backendPayload;
 }
 
-function summarizeModuleSnapshot(snapshot: ModuleRegistryResponse): string {
-  if (snapshot.modules.length === 0) {
-    return "No module manifests were discovered.";
-  }
-
-  return snapshot.modules
-    .map((module) => {
-      const reason = module.reason ? ` — ${module.reason}` : "";
-      return `${module.id}: ${module.status}${reason}`;
-    })
-    .join("\n");
-}
-
-function assertRequiredModulesLoaded(snapshot: ModuleRegistryResponse): void {
-  const missing = REQUIRED_DESKTOP_MODULES.filter(
-    (id) => !snapshot.loadedModules.includes(id),
-  );
-  if (missing.length === 0) return;
-
-  throw new Error(
-    `Desktop backend started, but required module(s) failed to load: ${missing.join(
-      ", ",
-    )}\n\nModule registry:\n${summarizeModuleSnapshot(snapshot)}`,
-  );
-}
-
 /**
  * The DRC worker entry is a separate tsup bundle, spawned as a file — packaged
  * it lives outside app.asar (execution contract 09 §2.1). `app.getAppPath()`
@@ -151,40 +127,20 @@ async function closeCurrentRuntime(): Promise<void> {
   });
 }
 
-function resetDesktopDatabase(): void {
-  const dbPath = process.env.OPENPCB_DB_PATH;
-  if (!dbPath) return;
-
-  resetSharedSqlite();
-  for (const candidate of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
-    rmSync(candidate, { force: true });
-  }
-  log.warn(`Reset local desktop database after module startup failure: ${dbPath}`);
-}
-
 async function startRuntimeWithRequiredModules(): Promise<StartedBackendRuntime> {
-  runtime = await startBackendRuntime({ host: "127.0.0.1", port: 0 });
-  log.info(`Module registry:\n${summarizeModuleSnapshot(runtime.snapshot)}`);
-
-  try {
-    assertRequiredModulesLoaded(runtime.snapshot);
-    return runtime;
-  } catch {
-    // Pre-1.0 desktop builds are allowed to discard local data. This recovers
-    // stale development databases after schema resets instead of surfacing
-    // misleading module 404s to the renderer.
-    await closeCurrentRuntime();
-    resetDesktopDatabase();
-
-    runtime = await startBackendRuntime({ host: "127.0.0.1", port: 0 });
-    log.info(
-      `Module registry after database reset:\n${summarizeModuleSnapshot(
-        runtime.snapshot,
-      )}`,
-    );
-    assertRequiredModulesLoaded(runtime.snapshot);
-    return runtime;
-  }
+  return startRequiredDesktopRuntime({
+    start: async () => {
+      runtime = await startBackendRuntime({ host: "127.0.0.1", port: 0 });
+      return runtime;
+    },
+    close: closeCurrentRuntime,
+    logSnapshot: (snapshot) => {
+      log.info(`Module registry:\n${summarizeModuleSnapshot(snapshot)}`);
+    },
+    reportCleanupFailure: (error) => {
+      log.warn("Failed to clean up backend after startup failure:", error);
+    },
+  });
 }
 
 export async function startBackendServer(): Promise<BackendReadyPayload> {
@@ -214,13 +170,29 @@ export async function startBackendServer(): Promise<BackendReadyPayload> {
       port: startedRuntime.port,
     });
 
-    log.info(`Backend ready at ${runtime.url}`);
+    log.info(`Backend ready at ${startedRuntime.url}`);
     return backendPayload;
   } catch (error) {
-    Sentry.captureException(error, {
-      tags: { component: "backend", phase: "start" },
+    backendPayload = null;
+    return failDesktopStartup(error, {
+      close: closeCurrentRuntime,
+      reportCleanupFailure: (cleanupError) => {
+        log.warn(
+          "Failed to clean up backend after publication failure:",
+          cleanupError,
+        );
+      },
+      reportFailure: (startupError) => {
+        removeMcpPortfile(getAppDataDir());
+        log.error(
+          "Backend startup failed; database was not reset:",
+          startupError,
+        );
+        Sentry.captureException(startupError, {
+          tags: { component: "backend", phase: "start" },
+        });
+      },
     });
-    throw error;
   }
 }
 
