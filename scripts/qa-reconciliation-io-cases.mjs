@@ -32,7 +32,6 @@ import {
 
 function copyPortableFiles(destination) {
   for (const path of [
-    MANIFEST,
     OWNERS,
     PROJECTION,
     "scripts/qa-reconciliation.mjs",
@@ -42,6 +41,11 @@ function copyPortableFiles(destination) {
     mkdirSync(dirname(join(destination, path)), { recursive: true });
     copyFileSync(join(repo, path), join(destination, path));
   }
+  // Source portability is independent of qualifications requiring Git and evidence.
+  writeFileSync(
+    join(destination, MANIFEST),
+    JSON.stringify(fresh(), null, 2) + "\n",
+  );
 }
 
 function syntheticArchive(destination) {

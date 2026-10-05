@@ -1,0 +1,391 @@
+{
+  "schemaVersion": 1,
+  "scope": "Independent lead post-fix Electron development regression run; pending qualification, not original archived native reproduction or release acceptance.",
+  "implementationCommit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+  "regressionCommit": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+  "postFixEvidenceHead": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+  "resolution": "pending",
+  "planeStatus": "Not Done; no Plane updates made by this evidence task",
+  "priorUnitRegressionEvidence": {
+    "path": "docs/qa/2026-10-hardening/evidence/docs-save-regressions.json",
+    "sha256": "4001a1f26f9b80352595a93cf8db41ae2262373245658354bd752b01b344074a",
+    "preservation": "Existing nine per-TID behavioral unit regression objects and historical source/evidence fields remain unchanged."
+  },
+  "command": "OPENPCB_NATIVE_BUILD_SOURCE='5e3572a + frozen H15 worktree equivalent d11ce92; before H06 edits (build-owner attestation)' OPENPCB_E2E_NO_WEBSERVER=1 PLAYWRIGHT_JSON_OUTPUT_FILE=<fresh-temp>/report.json DEBUG=pw:browser npx --no-install playwright test tests/e2e/electron-docs-hardening.spec.ts --project=electron-desktop --workers=1 --retries=0 --reporter=list,json --output=<fresh-temp>/tests > <fresh-temp>/run.log 2>&1",
+  "execution": {
+    "startTime": "2026-10-05T17:13:38.234Z",
+    "duration": 51955.006,
+    "expected": 15,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0,
+    "exitCode": 0,
+    "launches": 16,
+    "profileIsolation": "Fresh mkdtemp userData; realpath diagnostics/database verified before fixture writes; only owned loopback backend APIs seeded; profiles removed after capture.",
+    "capturedPageErrors": 0,
+    "unexpectedConsoleErrors": 0,
+    "expectedConnectionRefusedConsoleErrors": 1,
+    "expectedRealBackend409ConsoleErrors": 1,
+    "externalRendererSessionAttempts": 0
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "packaged": false,
+    "versions": {
+      "electron": "41.6.1",
+      "node": "24.15.0",
+      "chromium": "146.0.7680.216"
+    },
+    "installedPackages": {
+      "electron": "41.6.1",
+      "@openpcb/opclib-pack": "0.2.0",
+      "@openpcb/ai-core": "0.3.0",
+      "@openpcb/contracts": "0.2.6",
+      "@tiptap/react": "3.27.1",
+      "pdfjs-dist": "6.1.200"
+    },
+    "contentBoundsAndRendererViewport": {
+      "width": 1100,
+      "height": 720,
+      "devToolsClosed": true
+    }
+  },
+  "frozenBuild": {
+    "ownerAttestation": "5e3572a + frozen H15 worktree equivalent d11ce92; before H06 edits (build-owner attestation)",
+    "baseSourceCommit": "5e3572a235e5e55d5ee1001b5b13f51a409445b6",
+    "includedUncommittedH15EquivalentCommit": "d11ce92fddf5cc4dc2b07a3d2fb9c61b1e9bc5a3",
+    "excludedLaterWork": "H06 and subsequent source/dependency work; no rebuild during this run",
+    "recordedAssetCount": 122,
+    "keyArtifactSha256": {
+      "electron/dist/main/index.js": "4b72a6217720fa7497782800bf9e577f6a86cc7c9839b2fe5b72f4a37637a080",
+      "src/core/frontend/dist/index.html": "44351f67dee1ac954c4ea1504c6823b09c3225713d4460f6d2dd254287fbd660",
+      "electron/dist/preload/index.js": "a0664d5f5b95803aa1877d9ec5e52f6501a0ae5a69139b2625e52e0a7c8b337f",
+      "src/core/frontend/dist/assets/app-BgZZL6Rq.css": "014cc4dbbd78a986d010d8ea2aaec4fdd580e6a297b6ee72548fe4e37c0107d5",
+      "src/core/frontend/dist/assets/app-CkH58-NQ.js": "74a117f1f804fab4ee8aec8bd5590dcff82273f1a4e6cf54595dfa6d2b8ec301",
+      "src/core/frontend/dist/assets/module.frontend-CqtlUpL9.js": "678c5e7bedebad6275ca3f8028229e252c5583b0bcdbeeb19d01cc1b71260ccf"
+    },
+    "fullAssetHashManifest": "Each hashed identity attachment contains all built frontend asset hashes; source HEAD is build-owner attestation, not inferred from the later test HEAD."
+  },
+  "gpu": {
+    "launch": "Default real GPU; no disable-gpu flag",
+    "features": {
+      "2d_canvas": "enabled",
+      "direct_rendering_display_compositor": "disabled_off_ok",
+      "gpu_compositing": "enabled",
+      "multiple_raster_threads": "enabled_on",
+      "opengl": "enabled_on",
+      "rasterization": "enabled",
+      "raw_draw": "disabled_off_ok",
+      "skia_graphite": "enabled_on",
+      "trees_in_viz": "disabled_off",
+      "video_decode": "enabled",
+      "video_encode": "enabled",
+      "webgl": "enabled",
+      "webgpu": "enabled",
+      "webnn": "disabled_off"
+    },
+    "basicDevices": [
+      {
+        "active": true,
+        "deviceId": 0,
+        "gpuPreference": 0,
+        "vendorId": 4203
+      }
+    ]
+  },
+  "limitations": [
+    "Electron default session renderer/worker HTTP traffic; main-process network is not instrumented",
+    "Listeners begin after application window preload-ready; current-process stdout/stderr also captured, early renderer errors may precede listeners",
+    "Post-fix fresh fixtures establish only the mapped current scenarios; no pre-fix native failure was freshly reproduced and no original QA database was opened.",
+    "No packaged distribution acceptance, crash/process-kill recovery of unsaved drafts, all main-process network verification, or offline Canvas qualification.",
+    "Native edit-menu roles and native first-responder effects passed; physical OS-menu clicks were not qualified.",
+    "Installed shared dependencies remain old: opclib-pack0.2.0 emitted its known bundled-library file-count error; ai-core0.3.0/contracts0.2.6 do not qualify their unpublished required APIs.",
+    "All nine resolutions remain pending; H25/H26 Plane tasks remain Not Done."
+  ],
+  "leadLocalReferences": {
+    "/private/tmp/openpcb-native-lead-results.fhNrLT/report.json": "27413cd24bdb121223f1e96499e8f46e03d102033457c7ef54a41066a3c40c9b",
+    "/private/tmp/openpcb-native-lead-results.fhNrLT/index.json": "c9304dc0217a21786dae9129ccdecfbf4b1b045703d87b2c08a5fbb8d6d0e124",
+    "/private/tmp/openpcb-native-lead-results.fhNrLT/run.log": "fdb904e2e6894808ba12a31fe1804d8898eafc87ccf7c53bce2e85c7c474a97a"
+  },
+  "derivedLocalReferenceRoot": "/private/tmp/openpcb-native-lead-attachments.wau7tJ",
+  "derivedLocalReferencesOrigin": "Exact selected report attachment bytes, exported without rewriting; no SQLite database, historical application log, trace/source bundle or original QA artifact is copied into this record.",
+  "derivedLocalReferences": {
+    "N01/initial-window-bounds.json": "fc61ceb0f98a1c8a97fb5cf8eeef2ea48932ec8f2788b27d1b6c6178b882e4bb",
+    "N01/initial-identity.json": "63d759a9d97e84fad77abd1741e23dc887004c4a3dc0d75f4c979cfa9bbdad83",
+    "N01/initial-title-body-race-saved.png": "d65ff94b8e37b1768a61b8c88c0591cc7d648a7fa7842735b5528b681001454d",
+    "N01/initial-final.png": "d65ff94b8e37b1768a61b8c88c0591cc7d648a7fa7842735b5528b681001454d",
+    "N01/initial-run.json": "63f44243f6f92941af0ad854321092ed3bc02f579805e8e877f855274535a6c9",
+    "N02/initial-window-bounds.json": "fc61ceb0f98a1c8a97fb5cf8eeef2ea48932ec8f2788b27d1b6c6178b882e4bb",
+    "N02/initial-identity.json": "c040e398b67b9cf16eb846cf9982ddcfb67a253b5e201c2f4c17f97c57f5ff1e",
+    "N02/initial-retained-after-navigation.png": "05868165149967bb82a83232ff5edc477d8aeadef459db0e78ed2ee79f2fb10e",
+    "N02/initial-final.png": "1585786f13dc3fe44dad4f0ef4e6688e17f6be9382148135b9fefe0341a9ac39",
+    "N02/initial-run.json": "187d4561dbb6f5fb7dac0c6c5ee1fb631e76448d59f98203fdc4dfb97b6ef9d2",
+    "N03/initial-window-bounds.json": "fc61ceb0f98a1c8a97fb5cf8eeef2ea48932ec8f2788b27d1b6c6178b882e4bb",
+    "N03/initial-identity.json": "afa928cdefb18f474e41473fe0746adc2af1c4902bbad3535db2dd37b2726ea7",
+    "N03/initial-cross-page-undo.png": "e5bf16c4f7b7daa8f65194464120989d4a6ad19cd1e40c1b3323105ee3c5a488",
+    "N03/initial-final.png": "e5bf16c4f7b7daa8f65194464120989d4a6ad19cd1e40c1b3323105ee3c5a488",
+    "N03/initial-run.json": "fd63fe0b4754d48aa150379de6cce4af20bc687a895a445acaec614d5341348a",
+    "N04/initial-window-bounds.json": "fc61ceb0f98a1c8a97fb5cf8eeef2ea48932ec8f2788b27d1b6c6178b882e4bb",
+    "N04/initial-identity.json": "bc2872647563010523433de89a4ca599a62abb5a2dcc398d23b67a076166f356",
+    "N04/initial-sse-conflict-retained.png": "a4ee30cd989123430eba209a117ab5fb104ee2785e33356a22ac7d3c8e215790",
+    "N04/initial-final.png": "39c84f1942e89b892208c3b4994c13f610cf7230c3149e10b0c39a666c41f826",
+    "N04/initial-run.json": "93bef9c94b7f3feada9efa67a28301d62bc8c9ec96e253f34d3adb596d59cbc0",
+    "N05/initial-window-bounds.json": "fc61ceb0f98a1c8a97fb5cf8eeef2ea48932ec8f2788b27d1b6c6178b882e4bb",
+    "N05/initial-identity.json": "3c320c0a678098dc697cad14e33b361228067e1373d3acae93a1e649479eeea7",
+    "N05/initial-remote-discard-undo.png": "a2c7e1fb4e07853d34aeec9976e9bfe19ad1a069ff066276e649a17f54da708f",
+    "N05/initial-final.png": "a2c7e1fb4e07853d34aeec9976e9bfe19ad1a069ff066276e649a17f54da708f",
+    "N05/initial-run.json": "593a08111ba83576412816d98c6d2a57ce6cd0e0a749cd04b4a17b3dc3c1ad05",
+    "N06/initial-window-bounds.json": "fc61ceb0f98a1c8a97fb5cf8eeef2ea48932ec8f2788b27d1b6c6178b882e4bb",
+    "N06/initial-identity.json": "db3611244005eeaa48d0369f8943722af685e794a9ed99d08b5e3022453f3519",
+    "N06/initial-before-restart.png": "492c6f410c4645b2e75181aad235029024efe079fd4b071650b88b6e4b9bbf39",
+    "N06/initial-final.png": "492c6f410c4645b2e75181aad235029024efe079fd4b071650b88b6e4b9bbf39",
+    "N06/initial-run.json": "584726b09a5063cc38a47bb603c12ddd43884c113c442ac0321ac6dfc7b69ff8",
+    "N06/restarted-window-bounds.json": "fc61ceb0f98a1c8a97fb5cf8eeef2ea48932ec8f2788b27d1b6c6178b882e4bb",
+    "N06/restarted-identity.json": "db3611244005eeaa48d0369f8943722af685e794a9ed99d08b5e3022453f3519",
+    "N06/restarted-after-restart.png": "86422e6a764a748da6274dc3a61b9e40893fc3281a66cba62f2fd4e044b0823d",
+    "N06/restarted-final.png": "5990db2a29158bdfd2be465d8c2cf644269376cb616afbc33f23e100f73085bb",
+    "N06/restarted-run.json": "b29f029118e741c36409290d3b5441463f504a9e64be978e8be49d80a13ca164",
+    "N07/initial-window-bounds.json": "fc61ceb0f98a1c8a97fb5cf8eeef2ea48932ec8f2788b27d1b6c6178b882e4bb",
+    "N07/initial-identity.json": "0425114e50ee77cd54631a9f918379f9be4adb98ad416cb92919d9c88a60f11d",
+    "N07/native-fixture.pdf": "8db397d8a4f3b6877522bd4fd5cc2089165afb46ae1754a9894a49a6b1d73c62",
+    "N07/initial-real-pdf-rendered.png": "a27a7a5701d2a73dde3067997945393a22101ab4adc4271c008bdd576cd0ae8c",
+    "N07/initial-after-current-delete.png": "9f4e7cce18e9fdd184a975e378a81b105c44aa39ba2cf9c34264a8a42236c022",
+    "N07/initial-final.png": "9f4e7cce18e9fdd184a975e378a81b105c44aa39ba2cf9c34264a8a42236c022",
+    "N07/initial-run.json": "b19dc50e05aff3de4917930d8b99d909e44bd5b4bfef3d406fe39cbd6577e096",
+    "N08/initial-window-bounds.json": "fc61ceb0f98a1c8a97fb5cf8eeef2ea48932ec8f2788b27d1b6c6178b882e4bb",
+    "N08/initial-identity.json": "bf15ab9e01b9bbf2ef992f5a90f05874c086740569e0e7a1c476e8c168763fe1",
+    "N08/initial-title-navigation-saved.png": "426782781d7c2c949614cb4261f43807da0a6b07006a066cb2db418db26a3079",
+    "N08/initial-final.png": "6c8bd76fa4ba020e5e3036819a44877d36c946fe05033c891b24fc416602e5a6",
+    "N08/initial-run.json": "b9817e621a14496a793b13465be5764ef3fcb43011492ef772f901008e0a4141",
+    "N09/initial-window-bounds.json": "fc61ceb0f98a1c8a97fb5cf8eeef2ea48932ec8f2788b27d1b6c6178b882e4bb",
+    "N09/initial-identity.json": "86e50b9fce94082f381e6e1d8af6663eba4b8bb3663e5d7c0ef8814898207d9d",
+    "N09/initial-real-backend409-retained.png": "2a4292a980ff863cef3fd15c48d863b51de18cc247154e7751c3c831cbbf626a",
+    "N09/initial-final.png": "cb3760bedc9839e7713fb98f656ebb81c3073e7b6c4eb216b99f4eee0abc4641",
+    "N09/initial-run.json": "452ad64494e5727b908bde2a25a23ce57549db51d0fe8764ed46154129418030",
+    "N10/initial-window-bounds.json": "fc61ceb0f98a1c8a97fb5cf8eeef2ea48932ec8f2788b27d1b6c6178b882e4bb",
+    "N10/initial-identity.json": "55f2c206f4478c8fdda717b1e8f9d39142fac65d32bd956849f4d8a82522fd8b",
+    "N10/initial-light-toolbar-metadata.png": "10790e87af05ac787b6e36789a41effa4d3c9e5b4cb6f54c50e04f6ac5fa2c45",
+    "N10/initial-final.png": "10790e87af05ac787b6e36789a41effa4d3c9e5b4cb6f54c50e04f6ac5fa2c45",
+    "N10/initial-run.json": "f685a900b13403abe6311c626e5ab9bb76f70bbfc78e2601c59d8f0080312be6",
+    "N11/initial-window-bounds.json": "fc61ceb0f98a1c8a97fb5cf8eeef2ea48932ec8f2788b27d1b6c6178b882e4bb",
+    "N11/initial-identity.json": "a22bf0975903d4749c43ea4ab592b08bec804fa538572d1ad65bed34040695f2",
+    "N11/initial-dark-toolbar-metadata.png": "874feba7f713323ceabff736d7bc3db426bf6eb6b79b3047abb5aa3735cfba77",
+    "N11/initial-final.png": "874feba7f713323ceabff736d7bc3db426bf6eb6b79b3047abb5aa3735cfba77",
+    "N11/initial-run.json": "ab6b3dfe0b0d8580982265f7b93481e6a0cec18ad8adbe08da46f7ec01f6066d",
+    "N12/initial-window-bounds.json": "fc61ceb0f98a1c8a97fb5cf8eeef2ea48932ec8f2788b27d1b6c6178b882e4bb",
+    "N12/initial-identity.json": "abe7ddb0d0af06eec330d6d9209cb522fc7fdf391ffa18a34a40f82bf5fa09f0",
+    "N12/initial-connection-draft-retained.png": "1fea0edb022ca6adf3480405075483185f2d31fa00b5c32105463fbaa2b59097",
+    "N12/initial-final.png": "9c22efaf03a100f9211e3806ea302394f2f3827619def9807458b1148e52575c",
+    "N12/initial-run.json": "a104840deff380feb7f92e2a3fb18c82644ab4a3023cb5a5d56b0e621cfb513f",
+    "N13/initial-window-bounds.json": "fc61ceb0f98a1c8a97fb5cf8eeef2ea48932ec8f2788b27d1b6c6178b882e4bb",
+    "N13/initial-identity.json": "01650af81e5ccde969ba3f4b260eca7251bcbc11ec16ba55c1421b7220040e72",
+    "N13/initial-search-navigation-undo.png": "9fb525868dded39a0a35da08c8b9932855189e5ec4ae36b3fc8682ce97e9a9e2",
+    "N13/initial-final.png": "9fb525868dded39a0a35da08c8b9932855189e5ec4ae36b3fc8682ce97e9a9e2",
+    "N13/initial-run.json": "c8d233ef8c39f927b36bc43c7fff0ff371a75ee26e474fc63cfc27877fa2d7c5",
+    "N14/initial-window-bounds.json": "fc61ceb0f98a1c8a97fb5cf8eeef2ea48932ec8f2788b27d1b6c6178b882e4bb",
+    "N14/initial-identity.json": "eeccc51ce92b27da2c9526bd0ae3de15c9843d2fb817af8a8bbf849076053c5a",
+    "N14/initial-empty-title-normalized.png": "891c100fb50bc6e5080f9087681a37e3f1383367c199f66a0242ea2aaf536105",
+    "N14/initial-final.png": "c00c457415a01bf4b2d261edf27a264261dcbaa92ae7750c103255dba082b44d",
+    "N14/initial-run.json": "7d15ffdcc02f9745e59e61eabece01e0f8da1c44faa10a09d17abc176bd35d2d",
+    "N15/initial-window-bounds.json": "fc61ceb0f98a1c8a97fb5cf8eeef2ea48932ec8f2788b27d1b6c6178b882e4bb",
+    "N15/initial-identity.json": "0e676ec7f11916a6553ee19410c482af7718daa36cb4c33d21d20974aaebd42e",
+    "N15/native-edit-menu-roles.json": "27427472d8aa2939a82a84733e9f192879c4b55b1071bc13264be34f4bc55c91",
+    "N15/initial-native-clipboard-effects.png": "2c0efe29a6a4e4bf757e09bdc4799313701e04e124f36b7e1a423a8dfab4eb62",
+    "N15/initial-final.png": "2c0efe29a6a4e4bf757e09bdc4799313701e04e124f36b7e1a423a8dfab4eb62",
+    "N15/initial-run.json": "4c557b0d9dfe3eaa1b3005bb9be019c7d3a90d98ab6ce3adae4a99b8c9e249f5"
+  },
+  "checks": [
+    {
+      "id": "N01",
+      "name": "native title acknowledgement preserves continuous body typing",
+      "testPath": "tests/e2e/electron-docs-hardening.spec.ts",
+      "regressionCommit": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+      "testSourceSha256": "fd43b7f4e1adde535a2742eae86c41cdd2854e85929994b95c55c78899aa34b3",
+      "result": "passed",
+      "localReferenceDirectory": "N01"
+    },
+    {
+      "id": "N02",
+      "name": "native 500 draft survives page/module switches until explicit Retry save",
+      "testPath": "tests/e2e/electron-docs-hardening.spec.ts",
+      "regressionCommit": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+      "testSourceSha256": "fd43b7f4e1adde535a2742eae86c41cdd2854e85929994b95c55c78899aa34b3",
+      "result": "passed",
+      "localReferenceDirectory": "N02"
+    },
+    {
+      "id": "N03",
+      "name": "native CmdZ cannot copy another page's history and opening never writes",
+      "testPath": "tests/e2e/electron-docs-hardening.spec.ts",
+      "regressionCommit": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+      "testSourceSha256": "fd43b7f4e1adde535a2742eae86c41cdd2854e85929994b95c55c78899aa34b3",
+      "result": "passed",
+      "localReferenceDirectory": "N03"
+    },
+    {
+      "id": "N04",
+      "name": "real SSE title/body conflict keeps draft until explicit keep resolution",
+      "testPath": "tests/e2e/electron-docs-hardening.spec.ts",
+      "regressionCommit": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+      "testSourceSha256": "fd43b7f4e1adde535a2742eae86c41cdd2854e85929994b95c55c78899aa34b3",
+      "result": "passed",
+      "localReferenceDirectory": "N04"
+    },
+    {
+      "id": "N05",
+      "name": "explicit remote discard resets undo without overwriting the remote page",
+      "testPath": "tests/e2e/electron-docs-hardening.spec.ts",
+      "regressionCommit": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+      "testSourceSha256": "fd43b7f4e1adde535a2742eae86c41cdd2854e85929994b95c55c78899aa34b3",
+      "result": "passed",
+      "localReferenceDirectory": "N05"
+    },
+    {
+      "id": "N06",
+      "name": "clean native title/body state survives process restart",
+      "testPath": "tests/e2e/electron-docs-hardening.spec.ts",
+      "regressionCommit": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+      "testSourceSha256": "fd43b7f4e1adde535a2742eae86c41cdd2854e85929994b95c55c78899aa34b3",
+      "result": "passed",
+      "localReferenceDirectory": "N06"
+    },
+    {
+      "id": "N07",
+      "name": "real PDF alternation and current-page deletion leave editors isolated",
+      "testPath": "tests/e2e/electron-docs-lifecycle-cases.ts",
+      "regressionCommit": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+      "testSourceSha256": "e1bdc487eaad837a0520f18eaac767a11600c0ead54e51b3508d95c08d9a3098",
+      "result": "passed",
+      "localReferenceDirectory": "N07"
+    },
+    {
+      "id": "N08",
+      "name": "title navigation before debounce saves only the originating page",
+      "testPath": "tests/e2e/electron-docs-lifecycle-cases.ts",
+      "regressionCommit": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+      "testSourceSha256": "e1bdc487eaad837a0520f18eaac767a11600c0ead54e51b3508d95c08d9a3098",
+      "result": "passed",
+      "localReferenceDirectory": "N08"
+    },
+    {
+      "id": "N09",
+      "name": "real backend409 retains native body and requires explicit conflict resolution",
+      "testPath": "tests/e2e/electron-docs-lifecycle-cases.ts",
+      "regressionCommit": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+      "testSourceSha256": "e1bdc487eaad837a0520f18eaac767a11600c0ead54e51b3508d95c08d9a3098",
+      "result": "passed",
+      "localReferenceDirectory": "N09"
+    },
+    {
+      "id": "N10",
+      "name": "native toolbar and metadata remain correct in Light theme",
+      "testPath": "tests/e2e/electron-docs-lifecycle-cases.ts",
+      "regressionCommit": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+      "testSourceSha256": "e1bdc487eaad837a0520f18eaac767a11600c0ead54e51b3508d95c08d9a3098",
+      "result": "passed",
+      "localReferenceDirectory": "N10"
+    },
+    {
+      "id": "N11",
+      "name": "native toolbar and metadata remain correct in Dark theme",
+      "testPath": "tests/e2e/electron-docs-lifecycle-cases.ts",
+      "regressionCommit": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+      "testSourceSha256": "e1bdc487eaad837a0520f18eaac767a11600c0ead54e51b3508d95c08d9a3098",
+      "result": "passed",
+      "localReferenceDirectory": "N11"
+    },
+    {
+      "id": "N12",
+      "name": "connection-refused draft survives navigation until explicit retry",
+      "testPath": "tests/e2e/electron-docs-lifecycle-cases.ts",
+      "regressionCommit": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+      "testSourceSha256": "e1bdc487eaad837a0520f18eaac767a11600c0ead54e51b3508d95c08d9a3098",
+      "result": "passed",
+      "localReferenceDirectory": "N12"
+    },
+    {
+      "id": "N13",
+      "name": "real Docs search navigation resets history without opening writes",
+      "testPath": "tests/e2e/electron-docs-lifecycle-cases.ts",
+      "regressionCommit": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+      "testSourceSha256": "e1bdc487eaad837a0520f18eaac767a11600c0ead54e51b3508d95c08d9a3098",
+      "result": "passed",
+      "localReferenceDirectory": "N13"
+    },
+    {
+      "id": "N14",
+      "name": "empty native title normalizes to Untitled and persists",
+      "testPath": "tests/e2e/electron-docs-lifecycle-cases.ts",
+      "regressionCommit": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+      "testSourceSha256": "e1bdc487eaad837a0520f18eaac767a11600c0ead54e51b3508d95c08d9a3098",
+      "result": "passed",
+      "localReferenceDirectory": "N14"
+    },
+    {
+      "id": "N15",
+      "name": "native context-menu edit roles dispatch clipboard effects",
+      "testPath": "tests/e2e/electron-native-menu-cases.ts",
+      "regressionCommit": "f9b46c4751ca5efaacf5e98ce8f7dab729080215",
+      "testSourceSha256": "8073d275d7e566e20f33f92425ac7e5bfdafbfe66768f9dbb8cb193c80124bed",
+      "result": "passed",
+      "localReferenceDirectory": "N15"
+    }
+  ],
+  "findings": [
+    {
+      "tid": "T-360",
+      "nativeCaseIds": ["N01"],
+      "reproductionState": "not-reproduced",
+      "notes": "Fresh isolated post-fix title acknowledgement during continuous native typing retained the complete body in the editor and API. Original QA page, paragraph payload, viewport and theme matrix were not replayed."
+    },
+    {
+      "tid": "T-361",
+      "nativeCaseIds": ["N07", "N13"],
+      "reproductionState": "not-reproduced",
+      "notes": "Fresh text/PDF/text, rapid page alternation, current-page deletion followed by another text page, and search navigation remained usable with no captured renderer errors. Original QA pages and exact new-page/delete/search sequence were not replayed."
+    },
+    {
+      "tid": "T-362",
+      "nativeCaseIds": ["N03", "N13"],
+      "reproductionState": "not-reproduced",
+      "notes": "Fresh native Cmd+Z after direct and search-driven page switches retained the current page body and revision without sending a hydration write. Original markdown/text QA fixtures were not replayed."
+    },
+    {
+      "tid": "T-363",
+      "nativeCaseIds": ["N08", "N01", "N06"],
+      "reproductionState": "unverified",
+      "notes": "Native predebounce page-switch title persistence and saved-state regressions passed. Leaving the Docs module before the title debounce and a title-only status transition were not directly asserted."
+    },
+    {
+      "tid": "T-367",
+      "nativeCaseIds": ["N02", "N04", "N05", "N09", "N12"],
+      "reproductionState": "unverified",
+      "notes": "Native injected500, connection-refused failure, real backend409 and real SSE conflict retained drafts and required explicit retry/keep/discard. Historical automatic backoff/online recovery and leave-page warning criteria were not qualified; the current design deliberately requires explicit retry."
+    },
+    {
+      "tid": "T-372",
+      "nativeCaseIds": ["N10", "N11"],
+      "reproductionState": "unverified",
+      "notes": "Native Light/Dark checks asserted Bold false→true and Undo disabled→enabled. Moving the caret from bold to plain text and immediate Redo state after repeated undo were not exercised."
+    },
+    {
+      "tid": "T-377",
+      "nativeCaseIds": ["N10", "N11"],
+      "reproductionState": "unverified",
+      "notes": "Native Light/Dark checks asserted three-word metadata and saved-state visibility. Empty subpage after a different word-count page and edited-time refresh/periodic aging were not directly asserted."
+    },
+    {
+      "tid": "T-381",
+      "nativeCaseIds": ["N14"],
+      "reproductionState": "unverified",
+      "notes": "Native Backspace-cleared title normalized to persisted Untitled and remained labeled after module navigation. Enter-to-body focus and searchability of the normalized empty-title page were not asserted."
+    },
+    {
+      "tid": "T-382",
+      "nativeCaseIds": ["N01", "N03", "N06", "N07", "N13"],
+      "reproductionState": "not-reproduced",
+      "notes": "Fresh page opening, page/search switches and clean process restart sent no hydration PATCH and preserved revision. Original QA database and new-page UI creation sequence were not replayed."
+    }
+  ]
+}
