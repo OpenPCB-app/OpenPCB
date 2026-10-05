@@ -160,3 +160,50 @@ test("failed Undo persistence leaves geometry and history intact", async () => {
   expect(await sdk.getSchematicProjection(design.id)).toEqual(before);
   expect(await sdk.getHistory(design.id, TEST_SESSION)).toEqual(history);
 });
+
+test("stale HTTP Undo/Redo refuses before consuming history or changing geometry", async () => {
+  const { sdk, server } = await bootDesignerRuntime("h07-history-revision");
+  const design = await sdk.createDesign({
+    name: "H07 expected history revision",
+  });
+  await dispatchOk(sdk, design.id, {
+    type: "place_gnd_port",
+    positionNm: { x: 0, y: 0 },
+  });
+  const before = await sdk.getSchematicProjection(design.id);
+  const history = await sdk.getHistory(design.id, TEST_SESSION);
+  for (const direction of ["undo", "redo"] as const) {
+    const response = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/designer/designs/${design.id}/history/${direction}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            sessionId: TEST_SESSION,
+            expectedRevision: 0,
+          }),
+        },
+      ),
+    );
+    expect(await response.json()).toMatchObject({
+      data: {
+        result: {
+          ok: false,
+          code: "REVISION_CONFLICT",
+          conflict: { expected: 0, actual: 1 },
+        },
+      },
+    });
+    expect(await sdk.getSchematicProjection(design.id)).toEqual(before);
+    expect(await sdk.getHistory(design.id, TEST_SESSION)).toEqual(history);
+  }
+  expect((await sdk.undo(design.id, TEST_SESSION, 1)).ok).toBe(true);
+  const undone = await sdk.getSchematicProjection(design.id);
+  expect(await sdk.redo(design.id, TEST_SESSION, 1)).toMatchObject({
+    ok: false,
+    code: "REVISION_CONFLICT",
+  });
+  expect(await sdk.getSchematicProjection(design.id)).toEqual(undone);
+  expect((await sdk.redo(design.id, TEST_SESSION, 2)).ok).toBe(true);
+});

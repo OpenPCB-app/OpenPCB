@@ -291,10 +291,12 @@ export interface DesignerSDK {
   undo(
     designId: string,
     sessionId: string,
+    expectedRevision?: number,
   ): Promise<DesignerHistoryActionResult>;
   redo(
     designId: string,
     sessionId: string,
+    expectedRevision?: number,
   ): Promise<DesignerHistoryActionResult>;
   /** Run the ERC engine over the current schematic projection. Returns `null` when the design has no schematic projection (e.g. brand new design). */
   runErc(designId: string): Promise<ErcReport | null>;

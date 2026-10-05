@@ -518,7 +518,10 @@ function parseUpdateDesignBody(body: unknown): { name: string } {
   return { name };
 }
 
-function parseHistoryBody(body: unknown): { sessionId: string } {
+function parseHistoryBody(body: unknown): {
+  sessionId: string;
+  expectedRevision?: number;
+} {
   const record = asRecord(body);
   if (!record) {
     throw new ValidationError("Request body must be an object");
@@ -527,7 +530,15 @@ function parseHistoryBody(body: unknown): { sessionId: string } {
   if (!sessionId) {
     throw new ValidationError("sessionId must be a string");
   }
-  return { sessionId };
+  const expectedRevision = record.expectedRevision;
+  if (
+    expectedRevision !== undefined &&
+    (typeof expectedRevision !== "number" ||
+      !Number.isSafeInteger(expectedRevision) ||
+      expectedRevision < 0)
+  )
+    throw new ValidationError("expectedRevision must be a non-negative integer");
+  return { sessionId, expectedRevision };
 }
 
 // Cherry-picked auto-router ops to apply. Each op.payload is re-validated by
@@ -3986,8 +3997,10 @@ export function registerRoutes(
     if (!projection) {
       throw new NotFoundError(`Design '${designId}' not found`);
     }
-    const { sessionId } = parseHistoryBody(await parseJsonBody<unknown>(req));
-    const result = await store.undo(designId, sessionId);
+    const { sessionId, expectedRevision } = parseHistoryBody(
+      await parseJsonBody<unknown>(req),
+    );
+    const result = await store.undo(designId, sessionId, expectedRevision);
     return success({ result });
   });
 
@@ -3997,8 +4010,10 @@ export function registerRoutes(
     if (!projection) {
       throw new NotFoundError(`Design '${designId}' not found`);
     }
-    const { sessionId } = parseHistoryBody(await parseJsonBody<unknown>(req));
-    const result = await store.redo(designId, sessionId);
+    const { sessionId, expectedRevision } = parseHistoryBody(
+      await parseJsonBody<unknown>(req),
+    );
+    const result = await store.redo(designId, sessionId, expectedRevision);
     return success({ result });
   });
 

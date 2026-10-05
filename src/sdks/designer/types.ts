@@ -2276,6 +2276,13 @@ export type DesignerHistoryActionResult =
   | DesignerHistoryActionOkResult
   | {
       ok: false;
+      code: "REVISION_CONFLICT";
+      direction: "undo" | "redo";
+      history: DesignerHistorySnapshot;
+      conflict: { expected: number; actual: number };
+    }
+  | {
+      ok: false;
       code: "HISTORY_EMPTY";
       direction: "undo" | "redo";
       history: DesignerHistorySnapshot;

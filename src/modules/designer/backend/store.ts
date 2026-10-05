@@ -202,10 +202,12 @@ export interface DesignerStore {
   undo(
     designId: string,
     sessionId: string,
+    expectedRevision?: number,
   ): Promise<DesignerHistoryActionResult>;
   redo(
     designId: string,
     sessionId: string,
+    expectedRevision?: number,
   ): Promise<DesignerHistoryActionResult>;
 }
 
@@ -354,9 +356,32 @@ export function createDesignerStore(
     designId: string,
     sessionId: string,
     direction: "undo" | "redo",
+    expectedRevision?: number,
   ): DesignerHistoryActionResult {
     const replay = ctx.db.transaction(() => {
       const history = resolveSessionHistory(designId, sessionId);
+      const actual =
+        db
+          .select({ revision: designHeads.revision })
+          .from(designHeads)
+          .where(eq(designHeads.id, designId))
+          .get()?.revision ?? -1;
+      if (
+        expectedRevision !== undefined &&
+        (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)
+      )
+        throw new Error("expectedRevision must be a non-negative integer");
+      if (expectedRevision !== undefined && actual !== expectedRevision)
+        return {
+          result: {
+            ok: false as const,
+            code: "REVISION_CONFLICT" as const,
+            direction,
+            history: summarizeHistory(history),
+            conflict: { expected: expectedRevision, actual },
+          },
+          entry: null,
+        };
       const entry =
         direction === "undo" ? history.consumeUndo() : history.consumeRedo();
       if (!entry)
@@ -1000,12 +1025,12 @@ export function createDesignerStore(
       return summarizeHistory(history);
     },
 
-    async undo(designId, sessionId) {
-      return replayHistory(designId, sessionId, "undo");
+    async undo(designId, sessionId, expectedRevision) {
+      return replayHistory(designId, sessionId, "undo", expectedRevision);
     },
 
-    async redo(designId, sessionId) {
-      return replayHistory(designId, sessionId, "redo");
+    async redo(designId, sessionId, expectedRevision) {
+      return replayHistory(designId, sessionId, "redo", expectedRevision);
     },
 
     async linkDesignToCloud(designId, cloud) {

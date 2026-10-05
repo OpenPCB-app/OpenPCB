@@ -57,8 +57,10 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
     dispatchCommand: (designId, envelope, capture) =>
       store.dispatchCommand(designId, envelope, undefined, capture),
     getHistory: (designId, sessionId) => store.getHistory(designId, sessionId),
-    undo: (designId, sessionId) => store.undo(designId, sessionId),
-    redo: (designId, sessionId) => store.redo(designId, sessionId),
+    undo: (designId, sessionId, expectedRevision) =>
+      store.undo(designId, sessionId, expectedRevision),
+    redo: (designId, sessionId, expectedRevision) =>
+      store.redo(designId, sessionId, expectedRevision),
     runErc: async (designId) => {
       const projection = await store.getSchematicProjection(designId);
       if (!projection) return null;
