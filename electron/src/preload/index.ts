@@ -3,6 +3,7 @@
 // to the main process logger (and disk).
 import "electron-log/preload";
 import { contextBridge, ipcRenderer } from "electron";
+import type { DraftJournal } from "../../../src/core/contracts/app/draft-journal";
 
 interface BackendReadyPayload {
   url: string;
@@ -41,6 +42,12 @@ interface McpConfig {
 }
 
 contextBridge.exposeInMainWorld("electronAPI", {
+  draftJournal: {
+    read: (key: string) => ipcRenderer.invoke("draft-journal:read", key),
+    write: (input) => ipcRenderer.invoke("draft-journal:write", input),
+    remove: (input) => ipcRenderer.invoke("draft-journal:remove", input),
+    list: () => ipcRenderer.invoke("draft-journal:list"),
+  } satisfies DraftJournal,
   // Dev-only marketing-capture flag (M0.2). Renderer-side capture hooks mount
   // only when this is true (OPENPCB_CAPTURE=1); false/absent in normal runs.
   captureMode: process.env.OPENPCB_CAPTURE === "1",

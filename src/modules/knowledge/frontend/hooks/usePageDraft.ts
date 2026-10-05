@@ -8,7 +8,8 @@ export function usePageDraft(page: Page | null) {
   const coordinator = useMemo(() => getPageSaveCoordinator(api), [api]);
   const id = page?.id ?? null;
   useEffect(() => {
-    if (page && !coordinator.snapshot(page.id)) coordinator.acceptRemote(page);
+    if (page && !coordinator.snapshot(page.id))
+      void coordinator.prepareRemote(page);
   }, [coordinator, page]);
   const subscribe = useCallback(
     (listener: () => void) => coordinator.subscribePage(id, listener),

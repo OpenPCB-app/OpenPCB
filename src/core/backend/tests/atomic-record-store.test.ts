@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -163,6 +164,18 @@ test("invalid and excessive inputs fail without creating any record", async () =
   expect(await store.list()).toEqual({ records: [], unreadableCount: 0 });
   expect(() => new AtomicRecordStore("relative")).toThrow("absolute");
 });
+
+test.skipIf(process.platform === "win32")(
+  "a FIFO is refused before an open can wait for a writer",
+  async () => {
+    const { directory, store } = await fixture();
+    await store.read("page");
+    const file = filename(directory, "page");
+    execFileSync("mkfifo", [file]);
+    await expect(store.read("page")).rejects.toThrow("Invalid record file");
+    expect((await fs.lstat(file)).isFIFO()).toBe(true);
+  },
+);
 
 for (const step of ["file-sync", "rename", "directory-sync"] as const) {
   test(`failed ${step} never falsely acknowledges and exact retry is safe`, async () => {

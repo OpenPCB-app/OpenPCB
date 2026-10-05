@@ -147,6 +147,9 @@ export class AtomicRecordStore {
   private async load(filename: string): Promise<Envelope | null> {
     let handle: Awaited<ReturnType<FileSystem["open"]>>;
     try {
+      const stat = await this.io.lstat(join(this.directory, filename));
+      if (!stat.isFile() || stat.size > MAX_RECORD_BYTES)
+        throw new Error("Invalid record file; retained unchanged");
       handle = await this.io.open(
         join(this.directory, filename),
         constants.O_RDONLY | constants.O_NOFOLLOW,

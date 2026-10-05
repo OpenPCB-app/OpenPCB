@@ -1,28 +1,19 @@
 import type { EditorContent, Page } from "../../shared/types";
 import { KnowledgeApiError, type KnowledgeApi } from "../hooks/useKnowledgeApi";
-
-export type PageSaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
-export interface PageDraft {
-  page: Page;
-  title: string;
-  content: EditorContent;
-  status: PageSaveStatus;
-  error: string | null;
-  conflict: boolean;
-  version: number;
-  documentGeneration: number;
-}
-interface Pending<T> {
-  value: T;
-  version: number;
-}
-interface Entry {
-  snapshot: PageDraft;
-  title?: Pending<string>;
-  content?: Pending<EditorContent>;
-  saving: boolean;
-  timer?: ReturnType<typeof setTimeout>;
-}
+import type { DraftJournal } from "../../../../core/contracts/app/draft-journal";
+import { PageDraftJournal } from "./page-draft-journal";
+import { nativeDraftJournal } from "./native-draft-journal";
+import {
+  recoveredState,
+  type PageDraft,
+  type Entry,
+  type Pending,
+} from "./page-draft-state";
+export type { PageSaveStatus, PageDraft } from "./page-draft-state";
+import {
+  parseRetainedPageDraft,
+  type RetainedPageDraft,
+} from "./draft-recovery-content";
 
 export const normalizedTitle = (title: string): string =>
   title.trim() || "Untitled";
@@ -30,7 +21,7 @@ const token = (page: Page): string => new Date(page.updated_at).toISOString();
 const sameContent = (a: EditorContent, b: EditorContent): boolean =>
   JSON.stringify(a) === JSON.stringify(b);
 
-/** In-memory recovery spans page/module navigation, not renderer restart or process failure. */
+/** Pending fields survive navigation; the optional native journal also survives renderer restart. */
 export class PageSaveCoordinator {
   private entries = new Map<string, Entry>();
   private listeners = new Set<() => void>();
@@ -38,8 +29,93 @@ export class PageSaveCoordinator {
   private requestIds = new Set<string>();
   private pageSubscribers = new Map<string, number>();
   private inactivePages = new Set<string>();
+  private preparing = new Map<string, Promise<boolean>>();
 
-  constructor(private api: KnowledgeApi) {}
+  constructor(
+    private api: KnowledgeApi,
+    private journal?: DraftJournal,
+  ) {}
+
+  prepareRemote(
+    page: Page,
+    observedVersion = this.version(page.id),
+  ): Promise<boolean> {
+    if (!this.journal || this.entries.has(page.id))
+      return Promise.resolve(this.acceptRemote(page, observedVersion));
+    const existing = this.preparing.get(page.id);
+    if (existing) return existing.then(() => this.acceptRemote(page));
+    const preparation = this.restore(page, observedVersion).finally(() =>
+      this.preparing.delete(page.id),
+    );
+    this.preparing.set(page.id, preparation);
+    return preparation;
+  }
+
+  private async restore(page: Page, observedVersion: number): Promise<boolean> {
+    const journal = new PageDraftJournal(this.journal, page.id, () => {
+      const entry = this.entries.get(page.id);
+      if (entry) {
+        this.update(entry, {
+          durability: journal.status,
+          durabilityError: journal.error,
+        });
+        this.releaseCleanPage(page.id);
+      }
+    });
+    let retained: RetainedPageDraft | null = null;
+    try {
+      const record = await journal.load();
+      if (record) retained = parseRetainedPageDraft(record.value, page);
+    } catch (error) {
+      journal.block(error);
+    }
+    if (!this.acceptRemote(page, observedVersion)) return false;
+    const entry = this.requireEntry(page.id);
+    entry.journal = journal;
+    this.update(entry, {
+      durability: journal.status,
+      durabilityError: journal.error,
+      ...recoveredState(entry, retained),
+    });
+    return true;
+  }
+
+  safeToClose(): boolean {
+    return [...this.entries].every(
+      ([id, entry]) =>
+        entry.snapshot.durability === "durable" ||
+        (!this.isDirty(id) && entry.snapshot.durability !== "writing"),
+    );
+  }
+
+  private retain(entry: Entry): void {
+    const { page } = entry.snapshot;
+    const record: RetainedPageDraft = {
+      schemaVersion: 1,
+      pageId: page.id,
+      workspaceId: page.workspace_id,
+      base: {
+        revision: page.revision,
+        updatedAt: token(page),
+        contentEngine: page.content_engine,
+        contentVersion: page.content_version,
+      },
+      pending: {
+        ...(entry.title
+          ? {
+              title: {
+                raw: entry.snapshot.title,
+                normalized: entry.title.value,
+              },
+            }
+          : {}),
+        ...(entry.content ? { content: entry.content.value } : {}),
+      },
+    };
+    entry.journal?.set(
+      entry.title || entry.content ? JSON.stringify(record) : null,
+    );
+  }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -97,6 +173,10 @@ export class PageSaveCoordinator {
           conflict: false,
           version: 0,
           documentGeneration: 0,
+          durability: this.journal ? "loading" : "volatile",
+          durabilityError: null,
+          ready: !this.journal,
+          recovered: false,
         },
       });
       this.emit();
@@ -146,6 +226,7 @@ export class PageSaveCoordinator {
     if (!entry.saving && entry.title.value === entry.snapshot.page.title)
       entry.title = undefined;
     this.update(entry, { title, version });
+    this.retain(entry);
     this.schedule(entry, 1000);
   }
 
@@ -164,6 +245,7 @@ export class PageSaveCoordinator {
     if (!entry.saving && sameContent(content, entry.snapshot.page.content_json))
       entry.content = undefined;
     this.update(entry, { content, version });
+    this.retain(entry);
     this.schedule(entry, 500);
   }
 
@@ -176,20 +258,22 @@ export class PageSaveCoordinator {
 
   retry(id: string): void {
     const entry = this.requireEntry(id);
-    if (entry.snapshot.conflict || entry.saving) return;
-    this.update(entry, { error: null, status: "pending" });
+    if (entry.suspended || entry.snapshot.conflict || entry.saving) return;
+    entry.journal?.retry();
+    this.update(entry, { error: null, status: "pending", recovered: false });
     this.flush(id);
   }
 
   async reload(id: string, keepDraft: boolean): Promise<boolean> {
     const entry = this.requireEntry(id);
-    if (entry.saving) return false;
+    if (entry.suspended || entry.saving) return false;
     const version = entry.snapshot.version;
     try {
       const page = await this.api.getPage(id);
       if (!page)
         throw new Error("This page is unavailable. Your draft is retained.");
-      if (entry.saving || entry.snapshot.version !== version) return false;
+      if (entry.suspended || entry.saving || entry.snapshot.version !== version)
+        return false;
       if (!keepDraft) {
         entry.title = undefined;
         entry.content = undefined;
@@ -202,11 +286,14 @@ export class PageSaveCoordinator {
         content,
         conflict: false,
         error: null,
+        recovered: false,
         version: version + 1,
         status: keepDraft && this.isDirty(id) ? "pending" : "idle",
         documentGeneration:
           entry.snapshot.documentGeneration + Number(!keepDraft || changed),
       });
+      this.retain(entry);
+      entry.journal?.retry();
       if (keepDraft) this.flush(id);
       return true;
     } catch (error) {
@@ -224,6 +311,8 @@ export class PageSaveCoordinator {
     if (
       this.inactivePages.has(id) &&
       !this.isDirty(id) &&
+      this.snapshot(id)?.durability !== "writing" &&
+      this.snapshot(id)?.durability !== "error" &&
       !this.snapshot(id)?.conflict
     ) {
       this.entries.delete(id);
@@ -267,7 +356,13 @@ export class PageSaveCoordinator {
   }
 
   private async save(entry: Entry): Promise<void> {
-    if (entry.saving || entry.snapshot.error || entry.snapshot.conflict) return;
+    if (
+      entry.suspended ||
+      entry.saving ||
+      entry.snapshot.error ||
+      entry.snapshot.conflict
+    )
+      return;
     const title = entry.title;
     const content = title ? undefined : entry.content;
     if (!title && !content) return;
@@ -280,6 +375,9 @@ export class PageSaveCoordinator {
       this.requestIds.delete(this.requestIds.values().next().value!);
     this.update(entry, { status: "saving" });
     try {
+      if (entry.journal) await entry.journal.flush();
+      if (entry.suspended || entry.snapshot.error || entry.snapshot.conflict)
+        return;
       const options = {
         requestId,
         ifUnmodifiedSince: token(entry.snapshot.page),
@@ -317,6 +415,7 @@ export class PageSaveCoordinator {
     title?: Pending<string>,
     content?: Pending<EditorContent>,
   ): void {
+    if (entry.suspended) return;
     const current = entry.snapshot.page;
     // Metadata acknowledgements carry a potentially stale server body.
     const acknowledged = {
@@ -344,6 +443,28 @@ export class PageSaveCoordinator {
       title: entry.title ? entry.snapshot.title : acknowledged.title,
       content: entry.content?.value ?? acknowledged.content_json,
     });
+    this.retain(entry);
+  }
+
+  suspendDeletion(ids: readonly string[]): () => void {
+    for (const id of ids) {
+      const entry = this.entries.get(id);
+      if (!entry) continue;
+      entry.suspended = true;
+      this.cancelTimer(entry);
+      this.update(entry, {
+        status: "error",
+        error:
+          "This page is being deleted. Any pending draft remains retained.",
+      });
+    }
+    // A failed delete restores explicit retry, never automatic replay of pending writes.
+    return () => {
+      for (const id of ids) {
+        const entry = this.entries.get(id);
+        if (entry) entry.suspended = false;
+      }
+    };
   }
 }
 
@@ -353,7 +474,14 @@ export function getPageSaveCoordinator(api: KnowledgeApi): PageSaveCoordinator {
   const key = api.draftNamespace;
   const existing = key ? coordinators.get(key) : anonymousCoordinators.get(api);
   if (existing) return existing;
-  const coordinator = new PageSaveCoordinator(api);
+  const coordinator = new PageSaveCoordinator(api, nativeDraftJournal());
+  if (typeof window !== "undefined")
+    window.addEventListener("beforeunload", (event) => {
+      if (!coordinator.safeToClose()) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    });
   if (key) coordinators.set(key, coordinator);
   else anonymousCoordinators.set(api, coordinator);
   return coordinator;

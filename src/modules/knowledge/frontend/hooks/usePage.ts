@@ -73,14 +73,20 @@ export function usePage(pageId: string | null): UsePageResult {
         signal: controller.signal,
       });
       if (
+        controller.signal.aborted ||
+        currentPageIdRef.current !== pageId ||
+        requestSeqRef.current !== currentRequestSeq
+      )
+        return;
+      const accepted = loadedPage
+        ? await coordinator.prepareRemote(loadedPage, observedVersion)
+        : true;
+      if (
         !controller.signal.aborted &&
         currentPageIdRef.current === pageId &&
         requestSeqRef.current === currentRequestSeq
       ) {
-        if (
-          !loadedPage ||
-          coordinator.acceptRemote(loadedPage, observedVersion)
-        ) {
+        if (accepted) {
           setPageState(loadedPage);
         }
       }

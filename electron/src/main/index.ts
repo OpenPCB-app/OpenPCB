@@ -1,7 +1,7 @@
 // Boot order is intentional: crashReporter and Sentry MUST be initialized
 // before any window opens or any child process spawns. electron-log is
 // initialized first so the rest of bootstrap is captured to disk.
-import { app, BrowserWindow, ipcMain, session, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
 import { join } from "node:path";
 import { initLogger, log } from "./logger.js";
 import { initCrashReporter } from "./crash.js";
@@ -21,6 +21,7 @@ import {
   removeSecureItem,
 } from "./secure-storage.js";
 import { registerEditContextMenu } from "./edit-context-menu.js";
+import { registerDraftJournalIpc } from "./draft-journal-ipc.js";
 import { getTelemetryOptIn, setTelemetryOptIn } from "./preferences.js";
 
 initLogger();
@@ -52,6 +53,7 @@ initUpdater();
 initDeepLink(() => mainWindow);
 
 let mainWindow: BrowserWindow | null = null;
+registerDraftJournalIpc(() => mainWindow, isAllowedAppUrl);
 
 function installSecurityPolicy(): void {
   session.defaultSession.setPermissionRequestHandler(
@@ -166,6 +168,19 @@ function createWindow(): void {
   });
 
   registerEditContextMenu(mainWindow);
+  mainWindow.webContents.on("will-prevent-unload", (event) => {
+    if (!mainWindow) return;
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: "warning",
+      buttons: ["Stay", "Leave without saving"],
+      defaultId: 0,
+      cancelId: 0,
+      title: "Draft not durably retained",
+      message: "Some edits are not saved or durably retained on this Mac.",
+      detail: "Stay to retry saving. Leaving can lose those edits.",
+    });
+    if (choice === 1) event.preventDefault();
+  });
 
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
@@ -378,6 +393,10 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("before-quit", () => {
-  void stopBackendServer();
+app.on("will-quit", () => {
+  // A cancelled close must keep the backend alive. SSE connections may outlive windows,
+  // so best-effort shutdown must not prevent Electron from completing an approved quit.
+  void stopBackendServer().catch((error: unknown) =>
+    log.error("Backend shutdown failed:", error),
+  );
 });

@@ -11,6 +11,7 @@ import { FixedToolbar } from "./FixedToolbar";
 import { LinkDialog } from "./LinkDialog";
 import { findParentNode } from "../Sidebar/PageTree";
 import { formatRelativeTime } from "../../lib/format";
+import { deletePageWithDrafts } from "../../lib/delete-page-with-drafts";
 import type { Page, PageTreeNode } from "../../../shared/types";
 
 interface PageEditorProps {
@@ -143,13 +144,13 @@ export function PageEditor({
     if (!pageId || !page || page.is_project_root) return;
     if (!window.confirm("Delete this page?")) return;
     try {
-      await api.deletePage(pageId);
+      await deletePageWithDrafts(api, tree, pageId);
       onPageDeleted?.(pageId);
       onRefreshTree?.();
     } catch (err) {
       console.error("Failed to delete page:", err);
     }
-  }, [pageId, page, api, onPageDeleted, onRefreshTree]);
+  }, [pageId, page, api, tree, onPageDeleted, onRefreshTree]);
 
   if (!pageId) {
     return (
@@ -194,7 +195,7 @@ export function PageEditor({
           <input
             type="text"
             value={title}
-            disabled={!draft}
+            disabled={!draft?.ready}
             onChange={handleTitleChange}
             aria-label="Page title"
             placeholder="Page title"
@@ -211,6 +212,7 @@ export function PageEditor({
             {saveStatus !== "idle" && (
               <span
                 role="status"
+                aria-label="Page save status"
                 className={`rounded-pill bg-slate-100 px-2 py-0.5 text-[11px] dark:bg-slate-800 ${
                   saveStatus === "saved"
                     ? "text-status-success"
@@ -285,7 +287,12 @@ export function PageEditor({
           role="alert"
           className="flex flex-wrap items-center gap-2 border-b border-border bg-status-danger-soft px-4 py-2 text-xs text-status-danger"
         >
-          <span>{draft.error} Draft retained while this app stays open.</span>
+          <span>
+            {draft.error}{" "}
+            {draft.durability === "durable"
+              ? "Draft retained on this Mac."
+              : "Draft retained while this app stays open."}
+          </span>
           {draft.conflict ? (
             <>
               <Button
@@ -306,14 +313,36 @@ export function PageEditor({
               </Button>
             </>
           ) : (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => coordinator.retry(pageId)}
-            >
-              Retry save
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => coordinator.retry(pageId)}
+              >
+                Retry save
+              </Button>
+              {draft.recovered && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => void coordinator.reload(pageId, false)}
+                >
+                  Discard draft and reload
+                </Button>
+              )}
+            </>
           )}
+        </div>
+      )}
+
+      {draft?.durability === "error" && (
+        <div role="alert" className="px-4 py-2 text-xs text-status-danger">
+          Draft not durably retained on this Mac. {draft.durabilityError}
+        </div>
+      )}
+      {draft?.durability === "writing" && (
+        <div role="status" className="px-4 py-1 text-xs text-text-secondary">
+          Retaining recovery draft…
         </div>
       )}
 
@@ -333,7 +362,7 @@ export function PageEditor({
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {isLoading && !page ? (
+          {(isLoading && !page) || (effectivePage && !draft?.ready) ? (
             <div className="p-4 text-sm text-text-tertiary">
               Loading page...
             </div>

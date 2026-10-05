@@ -16,6 +16,7 @@ export type NativeDocument = {
   id: string;
   title: string;
   revision: number;
+  updated_at: string;
   content_json: DocumentContent;
 };
 const modifier = process.platform === "darwin" ? "Meta" : "Control";

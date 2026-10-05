@@ -1,5 +1,7 @@
 import { registerNativeDocsLifecycleTests } from "./electron-docs-lifecycle-cases";
 import { registerNativeMenuTest } from "./electron-native-menu-cases";
+import { registerNativeDocsAcceptanceTests } from "./electron-docs-acceptance-cases";
+import { registerNativeDocsRecoveryTests } from "./electron-docs-recovery-cases";
 import { expect, test } from "@playwright/test";
 import {
   closeNativeSession,
@@ -244,4 +246,12 @@ test.describe("Electron Docs development regressions", () => {
 
   registerNativeDocsLifecycleTests(() => session!);
   registerNativeMenuTest(() => session!);
+  registerNativeDocsAcceptanceTests(() => session!);
+  registerNativeDocsRecoveryTests(
+    () => session!,
+    () => profile,
+    (value) => {
+      session = value;
+    },
+  );
 });
