@@ -427,6 +427,7 @@ interface PcbCanvasProps {
   backendURL?: string | null;
   moduleId: string;
   designId: string | null;
+  commandRevision?: number | null;
   gridVisible?: boolean;
   /** Login-only cloud auth headers (bearer) for the auto-layout service. */
   cloudHeaders?: CloudHeadersProvider;
@@ -442,7 +443,12 @@ interface PcbCanvasProps {
   dispatchCommand: (
     command: DesignerCommand,
   ) => Promise<DesignerDispatchResult>;
-  notifyExternalRevisionBump?: (revision: number) => void;
+  notifyExternalRevisionBump?: (designId: string, revision: number) => void;
+  runHistory?: (
+    designId: string,
+    sessionId: string,
+    kind: "undo" | "redo",
+  ) => Promise<void>;
   /**
    * Live in-progress-trace DRC conflict count while a route session is active;
    * `null` when idle (so the status bar can fall back to the batch count).
@@ -572,8 +578,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     backendURL: props.backendURL,
     moduleId: props.moduleId,
     designId: props.designId,
+    commandRevision: props.commandRevision,
     dispatchCommand: props.dispatchCommand,
     notifyExternalRevisionBump: props.notifyExternalRevisionBump,
+    runHistory: props.runHistory,
   });
   // THE effective keepouts for this projection (zone/keepout contract §4),
   // derived once in the workspace hook. Feeds the scene, the route obstacles
@@ -637,6 +645,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   const [dragSession, setDragSession] = useState<DragSession | null>(null);
   const [committedDragOverride, setCommittedDragOverride] =
     useState<ReadonlyMap<string, PcbPointMm> | null>(null);
+  useEffect(() => {
+    setCommittedDragOverride(null);
+    setDragSession(null);
+  }, [props.designId]);
   const [freePrimitiveDragSession, setFreePrimitiveDragSession] =
     useState<FreePrimitiveDragSession | null>(null);
   const freePrimitiveDragSessionRef = useRef<FreePrimitiveDragSession | null>(
@@ -3289,7 +3301,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         // keepout wins over the copper underneath it, or it would be
         // unreachable over a pour (contract §12.3 vertex editing).
         if (areaInteractions.tryGrabVertex(cursor)) {
-          setCommittedDragOverride(null);
           setDragSession(null);
           setFreePrimitiveDragSession(null);
           return;
@@ -3304,7 +3315,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             ? hitTrace(tracesRef.current, cursor, activeCopperLayer)
             : null;
         if (traceHit) {
-          setCommittedDragOverride(null);
           setDragSession(null);
           setSelection(
             shift
@@ -3320,7 +3330,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         const viaHit =
           sf.vias && viasVisible ? hitVia(viasRef.current, cursor) : null;
         if (viaHit) {
-          setCommittedDragOverride(null);
           setDragSession(null);
           setSelection(
             shift
@@ -3335,7 +3344,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         const freeHoleHit = hitFreeHole(freeHolesRef.current, cursor);
         if (freeHoleHit) {
-          setCommittedDragOverride(null);
           setDragSession(null);
           setSelection(
             shift
@@ -3368,7 +3376,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         const freePadHit = hitFreePad(freePadsRef.current, cursor);
         if (freePadHit) {
-          setCommittedDragOverride(null);
           setDragSession(null);
           setSelection(
             shift
@@ -3401,7 +3408,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         const overlayTextHit = hitOverlayText(overlayTextsRef.current, cursor);
         if (overlayTextHit) {
-          setCommittedDragOverride(null);
           setDragSession(null);
           setSelection(
             shift
@@ -3436,7 +3442,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           ? hitPlacement(visiblePlacements, cursor)
           : null;
         if (hit) {
-          setCommittedDragOverride(null);
           if (shift) {
             // Shift-click toggles placement membership; no drag.
             setDragSession(null);
@@ -3502,14 +3507,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         // still start anywhere inside a pour (contract §12.3).
         const areaSelection = areaInteractions.trySelect(cursor, shift, current);
         if (areaSelection) {
-          setCommittedDragOverride(null);
           setDragSession(null);
           setFreePrimitiveDragSession(null);
           setSelection(areaSelection);
           return;
         }
         // Empty space → start marquee (no drag).
-        setCommittedDragOverride(null);
         setDragSession(null);
         marquee.beginMarquee(cursor, shift);
       },
@@ -3758,8 +3761,18 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             // Non-destructive: fold the move into the preview map, not the DB.
             setPlacePreviewPositions(updates, originalByIdRef.current);
           } else {
-            setCommittedDragOverride(optimistic);
-            const clearOptimistic = () => setCommittedDragOverride(null);
+            setCommittedDragOverride((current) =>
+              new Map([...(current ?? []), ...optimistic]),
+            );
+            const clearOptimistic = () => setCommittedDragOverride((current) => {
+              if (!current) return null;
+              const next = new Map(current);
+              for (const [id, position] of optimistic) {
+                // An older acknowledgement cannot clear a newer drag of the same placement.
+                if (next.get(id) === position) next.delete(id);
+              }
+              return next.size ? next : null;
+            });
             if (updates.length === 1) {
               void workspace
                 .movePlacement(updates[0]!.placementId, updates[0]!.positionMm)
@@ -4959,7 +4972,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         setSelection(emptyPcbSelection());
         setDragSession(null);
         setFreePrimitiveDragSession(null);
-        setCommittedDragOverride(null);
         workspace.clearHighlight();
         if (toolMode === "route") {
           setToolMode("select");

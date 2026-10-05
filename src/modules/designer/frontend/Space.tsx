@@ -1,3 +1,4 @@
+import { CommandQueueNotice } from "./components/CommandQueueNotice";
 import {
   useCallback,
   useEffect,
@@ -1106,8 +1107,8 @@ function DesignerSpaceInner({
       designId?: string;
       revision?: number;
     }) => {
-      if (change?.revision !== undefined) {
-        actions.notifyExternalRevisionBump(change.revision);
+      if (change?.revision !== undefined && change.designId) {
+        actions.notifyExternalRevisionBump(change.designId, change.revision);
       }
 
       void (async () => {
@@ -1290,6 +1291,13 @@ function DesignerSpaceInner({
         />
       )}
 
+      <CommandQueueNotice
+        key={state.selectedDesignId}
+        snapshot={state.commandQueue}
+        refresh={actions.refreshProjection}
+        discard={actions.discardRetainedCommands}
+        reapply={actions.reapplyRetainedCommand}
+      />
       {state.error ? (
         <div className="shrink-0 border-b border-border bg-status-danger-soft px-3 py-1 text-xs text-status-danger">
           {state.error}
@@ -1311,8 +1319,12 @@ function DesignerSpaceInner({
         <SchematicToolbar
           canUndo={state.canUndo}
           canRedo={state.canRedo}
-          onUndo={() => void actions.undo()}
-          onRedo={() => void actions.redo()}
+          onUndo={() => void actions.undo().catch((error: unknown) =>
+            actions.setError(error instanceof Error ? error.message : "Undo failed"),
+          )}
+          onRedo={() => void actions.redo().catch((error: unknown) =>
+            actions.setError(error instanceof Error ? error.message : "Redo failed"),
+          )}
           onFit={() => canvasRef.current?.fit()}
           onZoomToSelection={() => canvasRef.current?.frameSelection()}
           canZoomToSelection={hasSchematicSelection}
@@ -1396,7 +1408,9 @@ function DesignerSpaceInner({
                   cloudHeaders={autoLayoutCloudHeaders}
                   autoLayoutEnabled={autoLayoutEnabled}
                   autoLayoutSignedIn={autoLayoutSignedIn}
+                  commandRevision={state.commandQueue?.revision}
                   dispatchCommand={actions.dispatchCommand}
+                  runHistory={actions.runHistory}
                   notifyExternalRevisionBump={
                     actions.notifyExternalRevisionBump
                   }

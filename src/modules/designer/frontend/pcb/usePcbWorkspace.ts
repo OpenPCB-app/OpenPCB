@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   PcbCommitLegality,
   DesignerCommand,
@@ -33,7 +33,9 @@ function rejectedCommit(
   op: string,
   result: DesignerDispatchResult & { ok: false },
 ): DispatchRejectedError {
-  const err = new Error(dispatchFailureMessage(op, result)) as DispatchRejectedError;
+  const err = new Error(
+    dispatchFailureMessage(op, result),
+  ) as DispatchRejectedError;
   err.dispatchResult = result;
   return err;
 }
@@ -50,10 +52,16 @@ export function usePcbWorkspace(params: {
   backendURL?: string | null;
   moduleId: string;
   designId: string | null;
+  commandRevision?: number | null;
   dispatchCommand: (
     command: DesignerCommand,
   ) => Promise<DesignerDispatchResult>;
-  notifyExternalRevisionBump?: (revision: number) => void;
+  notifyExternalRevisionBump?: (designId: string, revision: number) => void;
+  runHistory?: (
+    designId: string,
+    sessionId: string,
+    kind: "undo" | "redo",
+  ) => Promise<void>;
 }) {
   const {
     backendURL,
@@ -61,14 +69,21 @@ export function usePcbWorkspace(params: {
     designId,
     dispatchCommand,
     notifyExternalRevisionBump,
+    runHistory,
   } = params;
   const api = useMemo(
     () => createDesignerApi({ backendURL, moduleId }),
     [backendURL, moduleId],
   );
-  const [projection, setProjection] = useState<DesignerPcbProjection | null>(
-    null,
-  );
+  const [storedProjection, setProjection] =
+    useState<DesignerPcbProjection | null>(null);
+  const currentDesign = useRef(designId);
+  currentDesign.current = designId;
+  const projection =
+    storedProjection?.designId === designId ? storedProjection : null;
+  const refreshSequence = useRef(0);
+  const historySequence = useRef(0);
+  const [historyBusy, setHistoryBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,17 +126,22 @@ export function usePcbWorkspace(params: {
   }, [dispatchCommand, setStoreDispatcher]);
 
   const refresh = useCallback(async () => {
+    if (currentDesign.current !== designId) return;
     if (!designId) {
       setProjection(null);
       return;
     }
-    setLoading(true);
-    setError(null);
+    const sequence = ++refreshSequence.current;
+    const current = () =>
+      currentDesign.current === designId &&
+      refreshSequence.current === sequence;
+    if (current()) setLoading(true);
     try {
       const next = await api.getPcbProjection(designId);
+      if (!current()) return;
       setProjection(next);
       if (next) {
-        notifyExternalRevisionBump?.(next.revision);
+        notifyExternalRevisionBump?.(designId, next.revision);
         // Hydrate the view store from the fresh projection. The store
         // diffs against current state to avoid clobbering unflushed local
         // edits when a remote change arrives mid-debounce.
@@ -134,25 +154,33 @@ export function usePcbWorkspace(params: {
         syncLayerPresetFromVisible();
       }
     } catch (err) {
+      if (!current()) return;
       setError(
         err instanceof Error ? err.message : "Failed to load PCB projection",
       );
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
   }, [api, designId, hydrateView, notifyExternalRevisionBump]);
 
   const refreshHistory = useCallback(async () => {
+    if (currentDesign.current !== designId) return;
     if (!designId) {
       setCanUndo(false);
       setCanRedo(false);
       return;
     }
+    const sequence = ++historySequence.current;
+    const current = () =>
+      currentDesign.current === designId &&
+      historySequence.current === sequence;
     try {
       const history = await api.getHistory(designId, PCB_SESSION_ID);
+      if (!current()) return;
       setCanUndo(history.canUndo);
       setCanRedo(history.canRedo);
     } catch {
+      if (!current()) return;
       setCanUndo(false);
       setCanRedo(false);
     }
@@ -161,7 +189,7 @@ export function usePcbWorkspace(params: {
   useEffect(() => {
     void refresh();
     void refreshHistory();
-  }, [refresh, refreshHistory]);
+  }, [refresh, refreshHistory, params.commandRevision]);
 
   // Flush any in-flight view-state changes when the design switches or the
   // tab unmounts. Prevents losing the last slider tweak.
@@ -240,29 +268,32 @@ export function usePcbWorkspace(params: {
     await updateBoardSize(widthMm, heightMm, centerMm);
   }, [projection, updateBoardSize]);
 
-  const undo = useCallback(async () => {
-    if (!designId) return;
-    setError(null);
-    try {
-      await api.undo(designId, PCB_SESSION_ID);
-      await refresh();
-      await refreshHistory();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Undo failed");
-    }
-  }, [api, designId, refresh, refreshHistory]);
-
-  const redo = useCallback(async () => {
-    if (!designId) return;
-    setError(null);
-    try {
-      await api.redo(designId, PCB_SESSION_ID);
-      await refresh();
-      await refreshHistory();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Redo failed");
-    }
-  }, [api, designId, refresh, refreshHistory]);
+  const historyInFlight = useRef<Promise<void> | null>(null);
+  const changeHistory = useCallback(
+    (kind: "undo" | "redo") => {
+      if (!designId || !runHistory) return Promise.resolve();
+      if (historyInFlight.current) return historyInFlight.current;
+      setHistoryBusy(true);
+      const pending = runHistory(designId, PCB_SESSION_ID, kind)
+        .then(async () => {
+          await refresh();
+          await refreshHistory();
+        })
+        .catch((error: unknown) => {
+          if (currentDesign.current === designId)
+            setError(error instanceof Error ? error.message : "History failed");
+        })
+        .finally(() => {
+          historyInFlight.current = null;
+          setHistoryBusy(false);
+        });
+      historyInFlight.current = pending;
+      return pending;
+    },
+    [designId, runHistory, refresh, refreshHistory],
+  );
+  const undo = useCallback(() => changeHistory("undo"), [changeHistory]);
+  const redo = useCallback(() => changeHistory("redo"), [changeHistory]);
 
   const movePlacement = useCallback(
     async (placementId: string, positionMm: PcbPointMm) => {
@@ -882,7 +913,10 @@ export function usePcbWorkspace(params: {
     async (input: Omit<DesignerPcbAddZoneCommand, "type">) => {
       setError(null);
       try {
-        const result = await dispatchCommand({ type: "pcb_add_zone", ...input });
+        const result = await dispatchCommand({
+          type: "pcb_add_zone",
+          ...input,
+        });
         await refresh();
         await refreshHistory();
         return result.ok ? result.createdEntityId : null;
@@ -1066,8 +1100,8 @@ export function usePcbWorkspace(params: {
     error,
     runDrc,
     getDrcResult,
-    canUndo,
-    canRedo,
+    canUndo: canUndo && !historyBusy && !!runHistory,
+    canRedo: canRedo && !historyBusy && !!runHistory,
     highlightedNetId,
     pinnedHighlight,
     hoverNet,

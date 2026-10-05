@@ -1,8 +1,5 @@
 import { create } from "zustand";
-import {
-  DEFAULT_LAYER_PAIR,
-  type RouteLayerPair,
-} from "./tools/route-layer";
+import { DEFAULT_LAYER_PAIR, type RouteLayerPair } from "./tools/route-layer";
 import type {
   AutoLayoutConfig,
   DesignerCommand,
@@ -158,30 +155,38 @@ let pendingPromise: Promise<void> | null = null;
 // field is pending, `hydrateFromProjection` keeps the local value so we
 // don't clobber the user's optimistic edit with a stale projection read
 // that arrived before the debounced `pcb_set_view_state` flushed.
-const pendingFields = new Set<keyof PcbViewState>();
+const pendingFields = new Map<keyof PcbViewState, symbol>();
+let pendingDispatcher: CommandDispatcher | null = null;
 
 function scheduleFlush(): Promise<void> {
   if (pendingPromise) return pendingPromise;
+  pendingDispatcher = dispatcherRef;
   pendingPromise = new Promise((resolve) => {
     pendingTimer = setTimeout(() => {
       pendingTimer = null;
       const patch = pendingPatch;
       pendingPatch = {};
-      const fieldsBeingFlushed = new Set(pendingFields);
+      const fieldsBeingFlushed = new Map(pendingFields);
       pendingPromise = null;
-      const dispatch = dispatcherRef;
+      const dispatch = pendingDispatcher;
       if (!dispatch || Object.keys(patch).length === 0) {
-        for (const f of fieldsBeingFlushed) pendingFields.delete(f);
+        for (const [field, token] of fieldsBeingFlushed) {
+          if (pendingFields.get(field) === token) pendingFields.delete(field);
+        }
         resolve();
         return;
       }
       void dispatch({ type: "pcb_set_view_state", patch }).then(
         () => {
-          for (const f of fieldsBeingFlushed) pendingFields.delete(f);
+          for (const [field, token] of fieldsBeingFlushed) {
+            if (pendingFields.get(field) === token) pendingFields.delete(field);
+          }
           resolve();
         },
         () => {
-          for (const f of fieldsBeingFlushed) pendingFields.delete(f);
+          for (const [field, token] of fieldsBeingFlushed) {
+            if (pendingFields.get(field) === token) pendingFields.delete(field);
+          }
           resolve();
         },
       );
@@ -193,7 +198,7 @@ function scheduleFlush(): Promise<void> {
 function persistPatch(patch: Partial<PcbViewState>): void {
   pendingPatch = { ...pendingPatch, ...patch };
   for (const field of Object.keys(patch) as Array<keyof PcbViewState>) {
-    pendingFields.add(field);
+    pendingFields.set(field, Symbol(field));
   }
   void scheduleFlush();
 }
@@ -223,7 +228,9 @@ export const usePcbViewStore = create<Store>((set, get) => ({
     // happened to land between local mutation and debounced persistence.
     const current = get().viewState;
     const merged: PcbViewState = { ...incoming };
-    for (const field of pendingFields) {
+    for (const field of get().designId === designId
+      ? pendingFields.keys()
+      : []) {
       (merged as unknown as Record<string, unknown>)[field] = (
         current as unknown as Record<string, unknown>
       )[field];
@@ -237,6 +244,11 @@ export const usePcbViewStore = create<Store>((set, get) => ({
   },
 
   setDispatcher(dispatch) {
+    // Flush synchronously captures the outgoing document dispatcher before replacement.
+    if (dispatcherRef !== dispatch)
+      void get()
+        .flush()
+        .catch(() => undefined);
     dispatcherRef = dispatch;
   },
 
@@ -248,9 +260,11 @@ export const usePcbViewStore = create<Store>((set, get) => ({
     const patch = pendingPatch;
     pendingPatch = {};
     pendingPromise = null;
-    const fieldsBeingFlushed = new Set(pendingFields);
-    for (const f of fieldsBeingFlushed) pendingFields.delete(f);
-    const dispatch = dispatcherRef;
+    const fieldsBeingFlushed = new Map(pendingFields);
+    for (const [field, token] of fieldsBeingFlushed) {
+      if (pendingFields.get(field) === token) pendingFields.delete(field);
+    }
+    const dispatch = pendingDispatcher;
     if (!dispatch || Object.keys(patch).length === 0) return;
     await dispatch({ type: "pcb_set_view_state", patch });
   },
