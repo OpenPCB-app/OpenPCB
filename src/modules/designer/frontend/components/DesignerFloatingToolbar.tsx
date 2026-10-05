@@ -69,12 +69,14 @@ export function SchematicToolbar({
     <Toolbar aria-label="Schematic tools">
       <ToolbarButton
         label="Undo"
+        title={`Undo (${formatShortcut("Mod+Z")})`}
         icon={<Undo2 />}
         onClick={onUndo}
         disabled={!canUndo}
       />
       <ToolbarButton
         label="Redo"
+        title={`Redo (${formatShortcut("Mod+Shift+Z")})`}
         icon={<Redo2 />}
         onClick={onRedo}
         disabled={!canRedo}

@@ -244,6 +244,8 @@ interface SchematicCanvasProps {
   } | null;
   wireSourcePinId: string | null;
   labelDraftText: string;
+  canUndo?: boolean;
+  canRedo?: boolean;
   draggingComponentId: string | null;
   dragPlacementLoading: boolean;
   dragPlacementDetail: LibraryComponentPlacementDetail | null;
@@ -908,6 +910,8 @@ export const SchematicCanvas = forwardRef<
   const {
     projection,
     labelDraftText,
+    canUndo = false,
+    canRedo = false,
     draggingComponentId,
     dragPlacementLoading,
     dragPlacementDetail,
@@ -1760,6 +1764,33 @@ export const SchematicCanvas = forwardRef<
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isShortcutBlocked(event, { scopeRoot: wrapperRef.current })) return;
 
+      const undo = matchesShortcut(event, "Mod+Z");
+      const redo =
+        matchesShortcut(event, "Mod+Shift+Z") ||
+        matchesShortcut(event, "Ctrl+Y");
+      if (undo || redo) {
+        event.preventDefault();
+        // History must not invalidate geometry beneath an unfinished gesture.
+        if (
+          wireSession ||
+          marquee.marqueeSession ||
+          dragRef.current ||
+          armedLabelText ||
+          armedPrimitive ||
+          armedComponentDetail ||
+          draggingComponentId ||
+          commentMode
+        )
+          return;
+        if ((undo && !canUndo) || (redo && !canRedo)) return;
+        void (undo ? actions.undo() : actions.redo()).catch((error: unknown) =>
+          actions.setError(
+            error instanceof Error ? error.message : "History action failed",
+          ),
+        );
+        return;
+      }
+
       if (matchesShortcut(event, "Escape")) {
         if (
           wireSession ||
@@ -1955,6 +1986,10 @@ export const SchematicCanvas = forwardRef<
   }, [
     actions,
     onToggleCommentMode,
+    canUndo,
+    canRedo,
+    commentMode,
+    draggingComponentId,
     armedLabelText,
     armedPrimitive,
     armedComponentDetail,

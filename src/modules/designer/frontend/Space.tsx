@@ -1152,6 +1152,8 @@ function DesignerSpaceInner({
         selectionRequest={schematicSelectionRequest}
         wireSourcePinId={state.wireSourcePinId}
         labelDraftText={state.labelDraftText}
+        canUndo={state.canUndo}
+        canRedo={state.canRedo}
         draggingComponentId={state.draggingComponentId}
         dragPlacementLoading={state.dragPlacementLoading}
         dragPlacementDetail={state.dragPlacementDetail}
