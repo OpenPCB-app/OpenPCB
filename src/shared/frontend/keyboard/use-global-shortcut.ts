@@ -7,6 +7,7 @@ export interface GlobalShortcutOptions {
   enabled?: boolean;
   /** Fire while typing in a field (modals/menus still block). Default false. */
   allowInEditable?: boolean;
+  allowRepeat?: boolean;
 }
 
 /**
@@ -20,7 +21,11 @@ export function useGlobalShortcut(
   handler: (event: KeyboardEvent) => void | boolean,
   options: GlobalShortcutOptions = {},
 ): void {
-  const { enabled = true, allowInEditable = false } = options;
+  const {
+    enabled = true,
+    allowInEditable = false,
+    allowRepeat = false,
+  } = options;
   const handlerRef = useRef(handler);
   useEffect(() => {
     handlerRef.current = handler;
@@ -33,13 +38,12 @@ export function useGlobalShortcut(
     const bound = specKey.split("\u0000").filter((s) => s.length > 0);
     if (bound.length === 0) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
       if (!bound.some((s) => matchesShortcut(event, s))) return;
-      if (isShortcutBlocked(event, { allowInEditable })) return;
+      if (isShortcutBlocked(event, { allowInEditable, allowRepeat })) return;
       if (handlerRef.current(event) === false) return;
       event.preventDefault();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [enabled, allowInEditable, specKey]);
+  }, [enabled, allowInEditable, allowRepeat, specKey]);
 }

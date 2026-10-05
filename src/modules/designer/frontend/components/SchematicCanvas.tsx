@@ -2,6 +2,7 @@ import {
   forwardRef,
   useCallback,
   useEffect,
+  useId,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -50,12 +51,9 @@ import {
   DEFAULT_SCHEMATIC_ZOOM,
   NET_LABEL_FONT_MM,
 } from "../../../../shared/frontend/canvas/defaults";
-import {
-  isDeleteShortcut,
-  isEditableShortcutTarget,
-  isSelectAllShortcut,
-  matchesKey,
-} from "../../../../shared/frontend/canvas/utils/keyboard-shortcuts";
+import { isShortcutBlocked } from "@shared/frontend/keyboard/shortcut-guard";
+import { useEditorShortcutScope } from "@shared/frontend/keyboard/use-editor-shortcut-scope";
+import { matchesShortcut, formatShortcut } from "@shared/frontend/ui/shortcut";
 import type {
   DesignerCommand,
   DesignerCommentAnchor,
@@ -938,6 +936,8 @@ export const SchematicCanvas = forwardRef<
   // Light-mode canvas background tracks the app surface (#f0f4fb) so the
   // schematic reads as part of the shell; dark mode keeps the canvas default.
   const mode = useCanvasThemeMode();
+  const canvasInstanceId = useId();
+  const menuOwnerId = `${canvasInstanceId}:${projection?.designId ?? ""}`;
   const canvasBackground = mode === "light" ? "#f0f4fb" : undefined;
 
   const snap = (pointNm: PointNm) => snapNm(pointNm, gridVisible);
@@ -1736,13 +1736,25 @@ export const SchematicCanvas = forwardRef<
     [actions],
   );
 
+  useEditorShortcutScope(wrapperRef, {
+    ownerId: menuOwnerId,
+    identity: projection?.designId,
+    onDeactivate: () => {
+      setWireSession(null);
+      marquee.cancelMarquee();
+      finalizeDragRef.current(false);
+      setArmedLabelText(null);
+      setArmedPrimitive(null);
+      setArmedComponentDetail(null);
+      actions.setWireSourcePinId(null);
+    },
+  });
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isEditableShortcutTarget(event.target)) {
-        return;
-      }
+      if (isShortcutBlocked(event, { scopeRoot: wrapperRef.current })) return;
 
-      if (matchesKey(event, "Escape")) {
+      if (matchesShortcut(event, "Escape")) {
         if (
           wireSession ||
           marquee.marqueeSession ||
@@ -1769,7 +1781,7 @@ export const SchematicCanvas = forwardRef<
         return;
       }
 
-      if (isSelectAllShortcut(event)) {
+      if (matchesShortcut(event, "Mod+A")) {
         if (!projection) {
           return;
         }
@@ -1789,7 +1801,10 @@ export const SchematicCanvas = forwardRef<
         return;
       }
 
-      if (isDeleteShortcut(event)) {
+      if (
+        matchesShortcut(event, "Delete") ||
+        matchesShortcut(event, "Backspace")
+      ) {
         if (!projection || selectionIsEmpty(selection)) {
           return;
         }
@@ -1859,10 +1874,7 @@ export const SchematicCanvas = forwardRef<
       }
 
       if (
-        matchesKey(event, "r") &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
+        (matchesShortcut(event, "R") || matchesShortcut(event, "Shift+R")) &&
         selection.partIds.size > 0 &&
         projection
       ) {
@@ -1889,78 +1901,51 @@ export const SchematicCanvas = forwardRef<
         if (commands.length === 0) {
           return;
         }
-        void actions.dispatchCommandsBatch(commands).catch((error) =>
-          actions.setError(
-            error instanceof Error ? error.message : "Rotate failed",
-          ),
-        );
+        void actions
+          .dispatchCommandsBatch(commands)
+          .catch((error) =>
+            actions.setError(
+              error instanceof Error ? error.message : "Rotate failed",
+            ),
+          );
         return;
       }
 
-      if (
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        matchesKey(event, "l")
-      ) {
+      if (matchesShortcut(event, "L")) {
         event.preventDefault();
         setArmedLabelText(labelDraftText.trim() || "NET");
         return;
       }
 
-      if (
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        matchesKey(event, "g")
-      ) {
+      if (matchesShortcut(event, "G")) {
         event.preventDefault();
         setArmedPrimitive({ kind: "gnd" });
         return;
       }
 
-      if (
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        matchesKey(event, "p")
-      ) {
+      if (matchesShortcut(event, "P")) {
         event.preventDefault();
         setPwrPickerOpen(true);
         return;
       }
 
-      if (
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        matchesKey(event, "h")
-      ) {
+      if (matchesShortcut(event, "H")) {
         event.preventDefault();
         setNetPortalPickerOpen(true);
         return;
       }
 
       // Comment mode — same toggle the toolbar's "Comment (C)" button drives.
-      if (
-        onToggleCommentMode &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        matchesKey(event, "c")
-      ) {
+      if (onToggleCommentMode && matchesShortcut(event, "C")) {
         event.preventDefault();
         onToggleCommentMode();
         return;
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    const root = wrapperRef.current;
+    root?.addEventListener("keydown", handleKeyDown);
+    return () => root?.removeEventListener("keydown", handleKeyDown);
   }, [
     actions,
     onToggleCommentMode,
@@ -2813,7 +2798,6 @@ export const SchematicCanvas = forwardRef<
                 kind: "action",
                 id: "rotate-cw",
                 label: "Rotate 90° clockwise",
-                shortcut: "R",
                 onSelect: () => {
                   if (!primitive) return;
                   const next = ((((primitive.rotationDeg + 90) % 360) + 360) %
@@ -2835,7 +2819,6 @@ export const SchematicCanvas = forwardRef<
                 kind: "action",
                 id: "rotate-ccw",
                 label: "Rotate 90° counter-clockwise",
-                shortcut: "Shift+R",
                 onSelect: () => {
                   if (!primitive) return;
                   const next = ((((primitive.rotationDeg - 90) % 360) + 360) %
@@ -2889,7 +2872,7 @@ export const SchematicCanvas = forwardRef<
                   kind: "action",
                   id: "select-all",
                   label: "Select all",
-                  shortcut: "Ctrl+A",
+                  shortcut: formatShortcut("Mod+A"),
                   onSelect: () => {
                     setSelection({
                       partIds: new Set(projection.parts.map((p) => p.id)),
@@ -2981,6 +2964,7 @@ export const SchematicCanvas = forwardRef<
 
         openContextMenu({
           scope: "schematic",
+          ownerId: menuOwnerId,
           position: { x: event.screenPoint.x, y: event.screenPoint.y },
           groups,
         });
@@ -3067,6 +3051,7 @@ export const SchematicCanvas = forwardRef<
       hitPrimitiveId,
       hitWire,
       labelDraftText,
+      menuOwnerId,
       marquee,
       onCreateComment,
       onSelectCommentThread,
@@ -3259,6 +3244,8 @@ export const SchematicCanvas = forwardRef<
   return (
     <section
       ref={wrapperRef}
+      tabIndex={0}
+      aria-label="Schematic canvas"
       className="relative h-full w-full min-h-0 rounded-none"
     >
       <EdaCanvas

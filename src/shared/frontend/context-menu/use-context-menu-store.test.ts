@@ -10,6 +10,7 @@ describe("useContextMenuStore", () => {
     useContextMenuStore.setState({
       open: false,
       scope: null,
+      ownerId: null,
       position: { x: 0, y: 0 },
       groups: [],
       title: null,
@@ -193,4 +194,35 @@ describe("useContextMenuStore", () => {
     closeContextMenu();
     expect(useContextMenuStore.getState().open).toBe(false);
   });
+});
+
+it("preserves explicit owner identity and clears callbacks on dismissal", () => {
+  let calls = 0;
+  openContextMenu({
+    scope: "pcb",
+    ownerId: "canvas-a:design-a",
+    position: { x: 0, y: 0 },
+    groups: [
+      {
+        id: "route",
+        items: [
+          {
+            kind: "action",
+            id: "finish",
+            label: "Finish",
+            onSelect: () => {
+              calls++;
+            },
+          },
+        ],
+      },
+    ],
+  });
+  expect(useContextMenuStore.getState().ownerId).toBe("canvas-a:design-a");
+  closeContextMenu();
+  expect(useContextMenuStore.getState().ownerId).toBeNull();
+  useContextMenuStore.getState().selectFocused();
+  expect(calls).toBe(0);
+  openContextMenu({ scope: "app", position: { x: 0, y: 0 }, groups: [] });
+  expect(useContextMenuStore.getState().ownerId).toBeNull();
 });

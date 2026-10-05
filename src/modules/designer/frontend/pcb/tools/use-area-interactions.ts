@@ -26,11 +26,7 @@ import {
   moveRingVertex,
 } from "../pcb-ring-edit";
 import { ringContainedInRect, ringIntersectsRect } from "../pcb-rect-hit";
-import {
-  toggleKeepout,
-  toggleZone,
-  type PcbSelection,
-} from "../pcb-selection";
+import { toggleKeepout, toggleZone, type PcbSelection } from "../pcb-selection";
 
 /** Grab radius for an area vertex/edge grip, in mm. Matches the board handles. */
 const AREA_VERTEX_TOLERANCE_MM = 1.0;
@@ -77,6 +73,8 @@ interface AreaInteractionsWorkspace {
 }
 
 export interface AreaInteractionsApi {
+  /** Abandon preview geometry without writing it. */
+  cancelDrag(): void;
   /** Live vertex-drag geometry the scene renders instead of the persisted ring. */
   areaDragOverride: AreaVertexDragSession | null;
   /** Every grip to draw for the selection, with the live drag already applied. */
@@ -119,7 +117,11 @@ function regionWithRing(
   zone: PcbZone,
   ringIndex: number,
   ring: PcbPointMm[] | null,
-): { kind: "polygon"; pointsMm: PcbPointMm[]; holesMm?: PcbPointMm[][] } | null {
+): {
+  kind: "polygon";
+  pointsMm: PcbPointMm[];
+  holesMm?: PcbPointMm[][];
+} | null {
   if (zone.region.kind !== "polygon") return null;
   const holes = (zone.region.holesMm ?? []).map((h) => [...h]);
   let pointsMm = [...zone.region.pointsMm];
@@ -228,26 +230,23 @@ export function useAreaInteractions({
   const selectedAreaRef = useRef(selectedArea);
   selectedAreaRef.current = selectedArea;
 
-  const tryGrabVertex = useCallback(
-    (cursorMm: PcbPointMm): boolean => {
-      const area = selectedAreaRef.current;
-      if (!area || area.locked) return false;
-      const grab = hitAreaVertex(area, cursorMm);
-      if (!grab) return false;
-      const ring = area.rings[grab.ringIndex]!.map((p) => ({ x: p.x, y: p.y }));
-      setDrag({
-        kind: area.kind,
-        id: area.id,
-        ringIndex: grab.ringIndex,
-        vIndex: grab.vIndex,
-        initialPoints: ring,
-        current: ring.map((p) => ({ x: p.x, y: p.y })),
-        moved: false,
-      });
-      return true;
-    },
-    [],
-  );
+  const tryGrabVertex = useCallback((cursorMm: PcbPointMm): boolean => {
+    const area = selectedAreaRef.current;
+    if (!area || area.locked) return false;
+    const grab = hitAreaVertex(area, cursorMm);
+    if (!grab) return false;
+    const ring = area.rings[grab.ringIndex]!.map((p) => ({ x: p.x, y: p.y }));
+    setDrag({
+      kind: area.kind,
+      id: area.id,
+      ringIndex: grab.ringIndex,
+      vIndex: grab.vIndex,
+      initialPoints: ring,
+      current: ring.map((p) => ({ x: p.x, y: p.y })),
+      moved: false,
+    });
+    return true;
+  }, []);
 
   const trySelect = useCallback(
     (
@@ -453,9 +452,12 @@ export function useAreaInteractions({
     );
   }, [drag, selectedArea]);
 
+  const cancelDrag = useCallback(() => setDrag(null), []);
+
   return useMemo(
     () => ({
       areaDragOverride: drag,
+      cancelDrag,
       vertexHandlePoints,
       selectedArea,
       tryGrabVertex,
@@ -468,6 +470,7 @@ export function useAreaInteractions({
     }),
     [
       contextMenuGroup,
+      cancelDrag,
       deleteSelected,
       drag,
       handlePointerMove,

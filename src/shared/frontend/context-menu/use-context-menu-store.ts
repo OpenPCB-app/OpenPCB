@@ -38,6 +38,7 @@ interface ContextMenuStore extends ContextMenuState {
 export const useContextMenuStore = create<ContextMenuStore>((set, get) => ({
   open: false,
   scope: null,
+  ownerId: null,
   position: { x: 0, y: 0 },
   groups: [],
   title: null,
@@ -47,6 +48,7 @@ export const useContextMenuStore = create<ContextMenuStore>((set, get) => ({
     set({
       open: true,
       scope: input.scope,
+      ownerId: input.ownerId ?? null,
       position: input.position,
       groups: input.groups,
       title: input.title ?? null,
@@ -57,6 +59,7 @@ export const useContextMenuStore = create<ContextMenuStore>((set, get) => ({
     set({
       open: false,
       scope: null,
+      ownerId: null,
       groups: [],
       title: null,
       focusedIndex: 0,

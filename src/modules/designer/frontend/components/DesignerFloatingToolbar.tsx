@@ -1,3 +1,4 @@
+import { formatShortcut } from "@shared/frontend/ui/shortcut";
 import {
   ArrowRightFromLine,
   ChevronsDown,
@@ -103,7 +104,7 @@ export function SchematicToolbar({
       {onPlaceComponent ? (
         <ToolbarButton
           label="Place component"
-          title="Place component (⌘/Ctrl K)"
+          title={`Place component (${formatShortcut("Mod+K")})`}
           icon={<Search />}
           onClick={onPlaceComponent}
         >

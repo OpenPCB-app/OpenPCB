@@ -75,12 +75,13 @@ export function useMenuDismiss(
         return;
       close();
     };
-    document.addEventListener("pointerdown", outside);
+    // Canvas menus can open during pointerdown; capture has already passed then.
+    document.addEventListener("pointerdown", outside, true);
     window.addEventListener("scroll", scroll, true);
     window.addEventListener("resize", close);
     window.addEventListener("blur", close);
     return () => {
-      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("pointerdown", outside, true);
       window.removeEventListener("scroll", scroll, true);
       window.removeEventListener("resize", close);
       window.removeEventListener("blur", close);

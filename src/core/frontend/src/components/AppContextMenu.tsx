@@ -34,8 +34,16 @@ function handleMenuKey(event: KeyboardEvent<HTMLDivElement>): void {
 }
 
 export function AppContextMenu() {
-  const { open, scope, position, groups, title, focusedIndex, closeMenu } =
-    useContextMenuStore();
+  const {
+    open,
+    scope,
+    ownerId,
+    position,
+    groups,
+    title,
+    focusedIndex,
+    closeMenu,
+  } = useContextMenuStore();
   const menuRef = useRef<HTMLDivElement>(null);
   const clamped = useMenuPosition(menuRef, open, position, groups);
   useMenuFocus(menuRef, open, focusedIndex);
@@ -47,6 +55,7 @@ export function AppContextMenu() {
       ref={menuRef}
       data-testid="app-context-menu"
       data-scope={scope ?? ""}
+      data-shortcut-owner={ownerId ?? undefined}
       tabIndex={-1}
       role="menu"
       aria-label={title ?? "Actions"}

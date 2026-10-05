@@ -1,3 +1,4 @@
+import { useGlobalShortcut } from "@shared/frontend/keyboard/use-global-shortcut";
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { Package } from "lucide-react";
 import type {
@@ -264,21 +265,10 @@ export function DesignerBomView({
     await navigator.clipboard.writeText(text);
   }
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent): void {
-      if (!(event.metaKey || event.ctrlKey)) return;
-      if (event.key.toLowerCase() !== "e") return;
-      const target = event.target as HTMLElement | null;
-      const tag = target?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) {
-        return;
-      }
-      event.preventDefault();
-      void exportArtifact("csv");
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [designId]);
+  useGlobalShortcut("Mod+E", () => {
+    if (!designId) return false;
+    void exportArtifact("csv");
+  });
 
   if (!designId) {
     return (
@@ -674,9 +664,7 @@ function BomInspector({
           </PropertyRow>
           <PropertyRow label="Description" title={row.description ?? ""}>
             {row.description ?? (
-              <span className="italic text-text-tertiary">
-                No description
-              </span>
+              <span className="italic text-text-tertiary">No description</span>
             )}
           </PropertyRow>
           <PropertyRow label="Quantity" mono>
