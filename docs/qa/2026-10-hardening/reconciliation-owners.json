@@ -1,0 +1,3819 @@
+{
+  "sourceCommit": "798f9fdc7d0018f081f2a27f3fa2bc9d96f8e2c4",
+  "sourceCsvSha256": "c46dc99dc06f68bb3f208fd5cf7911ddbd8e41404680866c5449b58779421747",
+  "sourceCsvName": "OpenPCB_QA_Traceability.csv",
+  "planeTasks": [
+    {
+      "task": "H01",
+      "identifier": "OPENPCB-49",
+      "workItemId": "8f124ec0-f385-42cf-a9c5-5acbdcbedb88"
+    },
+    {
+      "task": "H02",
+      "identifier": "OPENPCB-50",
+      "workItemId": "571f00af-c1b6-4b18-aca3-2ff08861063b"
+    },
+    {
+      "task": "H03",
+      "identifier": "OPENPCB-51",
+      "workItemId": "739df8d2-b87d-4af6-8645-292e86c51de7"
+    },
+    {
+      "task": "H04",
+      "identifier": "OPENPCB-52",
+      "workItemId": "9a9d8c40-0982-4b8a-9d2a-bcd929fa153a"
+    },
+    {
+      "task": "H05",
+      "identifier": "OPENPCB-53",
+      "workItemId": "7b4405eb-1a80-4335-ad5d-f6cc83c23b1d"
+    },
+    {
+      "task": "H06",
+      "identifier": "OPENPCB-54",
+      "workItemId": "abe23723-ae2f-4f50-8a1a-b8b248b80448"
+    },
+    {
+      "task": "H07",
+      "identifier": "OPENPCB-55",
+      "workItemId": "28283575-d9c6-499c-a696-7d2acabe09b1"
+    },
+    {
+      "task": "H08",
+      "identifier": "OPENPCB-56",
+      "workItemId": "47349714-b3fe-4886-955e-1f1813bd8e00"
+    },
+    {
+      "task": "H09",
+      "identifier": "OPENPCB-57",
+      "workItemId": "3f9b3f2d-3877-4ffb-b1c8-279535f1b94e"
+    },
+    {
+      "task": "H10",
+      "identifier": "OPENPCB-58",
+      "workItemId": "940be295-3ce0-4b48-aa3c-809bb6eb4155"
+    },
+    {
+      "task": "H11",
+      "identifier": "OPENPCB-59",
+      "workItemId": "805c57e8-3636-40ca-bfc9-4cf5dc9d06d3"
+    },
+    {
+      "task": "H12",
+      "identifier": "OPENPCB-60",
+      "workItemId": "bafeb06c-7e3e-42e6-96eb-9e5e12b770dc"
+    },
+    {
+      "task": "H13",
+      "identifier": "OPENPCB-61",
+      "workItemId": "0ea36631-a23f-4d4c-b0a1-f5af0735eb09"
+    },
+    {
+      "task": "H14",
+      "identifier": "OPENPCB-62",
+      "workItemId": "34cd7b55-609d-4722-8767-b8e72dffdb75"
+    },
+    {
+      "task": "H15",
+      "identifier": "OPENPCB-63",
+      "workItemId": "29bbc010-7433-4219-a3f2-9d4590c35ae8"
+    },
+    {
+      "task": "H16",
+      "identifier": "OPENPCB-64",
+      "workItemId": "e0e3bd08-f44e-4434-9e38-a23af0152a7f"
+    },
+    {
+      "task": "H17",
+      "identifier": "OPENPCB-65",
+      "workItemId": "5d3f33fa-b234-4bb2-8d25-d7e3b8725f62"
+    },
+    {
+      "task": "H18",
+      "identifier": "OPENPCB-66",
+      "workItemId": "dd6310e3-d94f-496d-a102-eebf058f3f7d"
+    },
+    {
+      "task": "H19",
+      "identifier": "OPENPCB-67",
+      "workItemId": "be0df0bb-179a-4804-acc9-f717c2374b83"
+    },
+    {
+      "task": "H20",
+      "identifier": "OPENPCB-68",
+      "workItemId": "3dc97e6f-19f3-4222-bb25-ff3708635e47"
+    },
+    {
+      "task": "H21",
+      "identifier": "OPENPCB-69",
+      "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+    },
+    {
+      "task": "H22",
+      "identifier": "OPENPCB-70",
+      "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+    },
+    {
+      "task": "H23",
+      "identifier": "OPENPCB-71",
+      "workItemId": "4201989f-95d4-4247-9216-602e6a09e67a"
+    },
+    {
+      "task": "H24",
+      "identifier": "OPENPCB-72",
+      "workItemId": "2faf11d7-a644-477d-992d-b5e123070d66"
+    },
+    {
+      "task": "H25",
+      "identifier": "OPENPCB-73",
+      "workItemId": "887f320b-c830-4677-b53f-ef31d6c6da75"
+    },
+    {
+      "task": "H26",
+      "identifier": "OPENPCB-74",
+      "workItemId": "aa2b687f-8396-4c29-b7a2-9355e44830e9"
+    },
+    {
+      "task": "H27",
+      "identifier": "OPENPCB-75",
+      "workItemId": "f4bbad08-838d-4084-980a-09b0ef96caba"
+    },
+    {
+      "task": "H28",
+      "identifier": "OPENPCB-76",
+      "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+    },
+    {
+      "task": "H29",
+      "identifier": "OPENPCB-77",
+      "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+    },
+    {
+      "task": "H30",
+      "identifier": "OPENPCB-78",
+      "workItemId": "92826d9f-4223-443f-8a7e-98c36df5f2d4"
+    },
+    {
+      "task": "H31",
+      "identifier": "OPENPCB-79",
+      "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+    },
+    {
+      "task": "H32",
+      "identifier": "OPENPCB-80",
+      "workItemId": "33e6615e-aaba-42f3-8655-4b2920317ce6"
+    },
+    {
+      "task": "H33",
+      "identifier": "OPENPCB-81",
+      "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+    },
+    {
+      "task": "H34",
+      "identifier": "OPENPCB-82",
+      "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+    },
+    {
+      "task": "H35",
+      "identifier": "OPENPCB-83",
+      "workItemId": "262996c1-819f-4460-87b9-1b80f4528088"
+    },
+    {
+      "task": "H36",
+      "identifier": "OPENPCB-84",
+      "workItemId": "20266bbc-6e00-4301-b05a-4c17bdb7cefa"
+    },
+    {
+      "task": "H37",
+      "identifier": "OPENPCB-85",
+      "workItemId": "3d39d43a-0d27-45ff-8f8d-5cefe03b6cb2"
+    },
+    {
+      "task": "H38",
+      "identifier": "OPENPCB-86",
+      "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+    },
+    {
+      "task": "H39",
+      "identifier": "OPENPCB-87",
+      "workItemId": "030664c9-5178-4637-89c9-90657e983520"
+    },
+    {
+      "task": "H40",
+      "identifier": "OPENPCB-88",
+      "workItemId": "015292e9-6dc4-40c5-b563-35f7b89f20a8"
+    },
+    {
+      "task": "H41",
+      "identifier": "OPENPCB-89",
+      "workItemId": "78a1f88a-2d89-4c38-9352-388d0805aa89"
+    },
+    {
+      "task": "H42",
+      "identifier": "OPENPCB-90",
+      "workItemId": "e611b406-c969-4794-b804-2f3ce2798542"
+    },
+    {
+      "task": "H43",
+      "identifier": "OPENPCB-91",
+      "workItemId": "b9f70bcd-3b88-4c8f-8eb9-97f20e8e42bc"
+    },
+    {
+      "task": "H44",
+      "identifier": "OPENPCB-92",
+      "workItemId": "c06dd7c2-ba95-47ea-908b-9699322f3223"
+    },
+    {
+      "task": "H45",
+      "identifier": "OPENPCB-93",
+      "workItemId": "3cb2d77b-213f-45de-a83f-26c1c5b62e37"
+    },
+    {
+      "task": "H46",
+      "identifier": "OPENPCB-94",
+      "workItemId": "189531d6-cfac-4b3e-8e8c-d7bdcad2a85f"
+    },
+    {
+      "task": "H47",
+      "identifier": "OPENPCB-95",
+      "workItemId": "3323efb5-31f7-43ea-ba46-11669d1f7c2c"
+    },
+    {
+      "task": "H48",
+      "identifier": "OPENPCB-96",
+      "workItemId": "802c8bd3-157a-43f1-8afb-67ff11a33e0d"
+    },
+    {
+      "task": "H49",
+      "identifier": "OPENPCB-97",
+      "workItemId": "d87f04a7-4aab-4e7b-b704-5a1cd061ca96"
+    },
+    {
+      "task": "H50",
+      "identifier": "OPENPCB-98",
+      "workItemId": "44c587ef-e9d2-4dec-b2a1-234cc3a81606"
+    },
+    {
+      "task": "H51",
+      "identifier": "OPENPCB-99",
+      "workItemId": "3dd382da-efd3-4296-86e8-69fa204d6754"
+    }
+  ],
+  "owners": [
+    {
+      "tid": "T-001",
+      "primaryOwner": {
+        "task": "H05",
+        "identifier": "OPENPCB-53",
+        "workItemId": "7b4405eb-1a80-4335-ad5d-f6cc83c23b1d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-002",
+      "primaryOwner": {
+        "task": "H06",
+        "identifier": "OPENPCB-54",
+        "workItemId": "abe23723-ae2f-4f50-8a1a-b8b248b80448"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-003",
+      "primaryOwner": {
+        "task": "H04",
+        "identifier": "OPENPCB-52",
+        "workItemId": "9a9d8c40-0982-4b8a-9d2a-bcd929fa153a"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-004",
+      "primaryOwner": {
+        "task": "H48",
+        "identifier": "OPENPCB-96",
+        "workItemId": "802c8bd3-157a-43f1-8afb-67ff11a33e0d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-005",
+      "primaryOwner": {
+        "task": "H04",
+        "identifier": "OPENPCB-52",
+        "workItemId": "9a9d8c40-0982-4b8a-9d2a-bcd929fa153a"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-006",
+      "primaryOwner": {
+        "task": "H48",
+        "identifier": "OPENPCB-96",
+        "workItemId": "802c8bd3-157a-43f1-8afb-67ff11a33e0d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-007",
+      "primaryOwner": {
+        "task": "H48",
+        "identifier": "OPENPCB-96",
+        "workItemId": "802c8bd3-157a-43f1-8afb-67ff11a33e0d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-008",
+      "primaryOwner": {
+        "task": "H48",
+        "identifier": "OPENPCB-96",
+        "workItemId": "802c8bd3-157a-43f1-8afb-67ff11a33e0d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-009",
+      "primaryOwner": {
+        "task": "H49",
+        "identifier": "OPENPCB-97",
+        "workItemId": "d87f04a7-4aab-4e7b-b704-5a1cd061ca96"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-010",
+      "primaryOwner": {
+        "task": "H49",
+        "identifier": "OPENPCB-97",
+        "workItemId": "d87f04a7-4aab-4e7b-b704-5a1cd061ca96"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-011",
+      "primaryOwner": {
+        "task": "H49",
+        "identifier": "OPENPCB-97",
+        "workItemId": "d87f04a7-4aab-4e7b-b704-5a1cd061ca96"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-012",
+      "primaryOwner": {
+        "task": "H49",
+        "identifier": "OPENPCB-97",
+        "workItemId": "d87f04a7-4aab-4e7b-b704-5a1cd061ca96"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-013",
+      "primaryOwner": {
+        "task": "H49",
+        "identifier": "OPENPCB-97",
+        "workItemId": "d87f04a7-4aab-4e7b-b704-5a1cd061ca96"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-014",
+      "primaryOwner": {
+        "task": "H48",
+        "identifier": "OPENPCB-96",
+        "workItemId": "802c8bd3-157a-43f1-8afb-67ff11a33e0d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-015",
+      "primaryOwner": {
+        "task": "H49",
+        "identifier": "OPENPCB-97",
+        "workItemId": "d87f04a7-4aab-4e7b-b704-5a1cd061ca96"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-016",
+      "primaryOwner": {
+        "task": "H48",
+        "identifier": "OPENPCB-96",
+        "workItemId": "802c8bd3-157a-43f1-8afb-67ff11a33e0d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-017",
+      "primaryOwner": {
+        "task": "H48",
+        "identifier": "OPENPCB-96",
+        "workItemId": "802c8bd3-157a-43f1-8afb-67ff11a33e0d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-018",
+      "primaryOwner": {
+        "task": "H48",
+        "identifier": "OPENPCB-96",
+        "workItemId": "802c8bd3-157a-43f1-8afb-67ff11a33e0d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-019",
+      "primaryOwner": {
+        "task": "H49",
+        "identifier": "OPENPCB-97",
+        "workItemId": "d87f04a7-4aab-4e7b-b704-5a1cd061ca96"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-020",
+      "primaryOwner": {
+        "task": "H49",
+        "identifier": "OPENPCB-97",
+        "workItemId": "d87f04a7-4aab-4e7b-b704-5a1cd061ca96"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-021",
+      "primaryOwner": {
+        "task": "H49",
+        "identifier": "OPENPCB-97",
+        "workItemId": "d87f04a7-4aab-4e7b-b704-5a1cd061ca96"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-022",
+      "primaryOwner": {
+        "task": "H48",
+        "identifier": "OPENPCB-96",
+        "workItemId": "802c8bd3-157a-43f1-8afb-67ff11a33e0d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-023",
+      "primaryOwner": {
+        "task": "H43",
+        "identifier": "OPENPCB-91",
+        "workItemId": "b9f70bcd-3b88-4c8f-8eb9-97f20e8e42bc"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-024",
+      "primaryOwner": {
+        "task": "H04",
+        "identifier": "OPENPCB-52",
+        "workItemId": "9a9d8c40-0982-4b8a-9d2a-bcd929fa153a"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-025",
+      "primaryOwner": {
+        "task": "H04",
+        "identifier": "OPENPCB-52",
+        "workItemId": "9a9d8c40-0982-4b8a-9d2a-bcd929fa153a"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-026",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-027",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-028",
+      "primaryOwner": {
+        "task": "H04",
+        "identifier": "OPENPCB-52",
+        "workItemId": "9a9d8c40-0982-4b8a-9d2a-bcd929fa153a"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-029",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-030",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-031",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-032",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-033",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-034",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-035",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-036",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-037",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-038",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-039",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-040",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-041",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-042",
+      "primaryOwner": {
+        "task": "H44",
+        "identifier": "OPENPCB-92",
+        "workItemId": "c06dd7c2-ba95-47ea-908b-9699322f3223"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-043",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-044",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-045",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-046",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-047",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-048",
+      "primaryOwner": {
+        "task": "H28",
+        "identifier": "OPENPCB-76",
+        "workItemId": "7b5975a0-73e1-4a53-ad28-a2d3d4b5b567"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-049",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-050",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-051",
+      "primaryOwner": {
+        "task": "H45",
+        "identifier": "OPENPCB-93",
+        "workItemId": "3cb2d77b-213f-45de-a83f-26c1c5b62e37"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-052",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-053",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-054",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-055",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-056",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-057",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-058",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-059",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-060",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-061",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-062",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-063",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-064",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-065",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-066",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-067",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-068",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-069",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-070",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-071",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-072",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-073",
+      "primaryOwner": {
+        "task": "H45",
+        "identifier": "OPENPCB-93",
+        "workItemId": "3cb2d77b-213f-45de-a83f-26c1c5b62e37"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-074",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-075",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-076",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-077",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-078",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-079",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-080",
+      "primaryOwner": {
+        "task": "H29",
+        "identifier": "OPENPCB-77",
+        "workItemId": "6e4c6d08-9a9f-4588-a66a-5cde9a90bbff"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-081",
+      "primaryOwner": {
+        "task": "H30",
+        "identifier": "OPENPCB-78",
+        "workItemId": "92826d9f-4223-443f-8a7e-98c36df5f2d4"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-082",
+      "primaryOwner": {
+        "task": "H04",
+        "identifier": "OPENPCB-52",
+        "workItemId": "9a9d8c40-0982-4b8a-9d2a-bcd929fa153a"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-083",
+      "primaryOwner": {
+        "task": "H30",
+        "identifier": "OPENPCB-78",
+        "workItemId": "92826d9f-4223-443f-8a7e-98c36df5f2d4"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-084",
+      "primaryOwner": {
+        "task": "H30",
+        "identifier": "OPENPCB-78",
+        "workItemId": "92826d9f-4223-443f-8a7e-98c36df5f2d4"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-085",
+      "primaryOwner": {
+        "task": "H30",
+        "identifier": "OPENPCB-78",
+        "workItemId": "92826d9f-4223-443f-8a7e-98c36df5f2d4"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-086",
+      "primaryOwner": {
+        "task": "H30",
+        "identifier": "OPENPCB-78",
+        "workItemId": "92826d9f-4223-443f-8a7e-98c36df5f2d4"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-087",
+      "primaryOwner": {
+        "task": "H30",
+        "identifier": "OPENPCB-78",
+        "workItemId": "92826d9f-4223-443f-8a7e-98c36df5f2d4"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-088",
+      "primaryOwner": {
+        "task": "H30",
+        "identifier": "OPENPCB-78",
+        "workItemId": "92826d9f-4223-443f-8a7e-98c36df5f2d4"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-089",
+      "primaryOwner": {
+        "task": "H30",
+        "identifier": "OPENPCB-78",
+        "workItemId": "92826d9f-4223-443f-8a7e-98c36df5f2d4"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-090",
+      "primaryOwner": {
+        "task": "H30",
+        "identifier": "OPENPCB-78",
+        "workItemId": "92826d9f-4223-443f-8a7e-98c36df5f2d4"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-091",
+      "primaryOwner": {
+        "task": "H10",
+        "identifier": "OPENPCB-58",
+        "workItemId": "940be295-3ce0-4b48-aa3c-809bb6eb4155"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-092",
+      "primaryOwner": {
+        "task": "H11",
+        "identifier": "OPENPCB-59",
+        "workItemId": "805c57e8-3636-40ca-bfc9-4cf5dc9d06d3"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-093",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-094",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-095",
+      "primaryOwner": {
+        "task": "H09",
+        "identifier": "OPENPCB-57",
+        "workItemId": "3f9b3f2d-3877-4ffb-b1c8-279535f1b94e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-096",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-097",
+      "primaryOwner": {
+        "task": "H10",
+        "identifier": "OPENPCB-58",
+        "workItemId": "940be295-3ce0-4b48-aa3c-809bb6eb4155"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-098",
+      "primaryOwner": {
+        "task": "H12",
+        "identifier": "OPENPCB-60",
+        "workItemId": "bafeb06c-7e3e-42e6-96eb-9e5e12b770dc"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-099",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-100",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-101",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-102",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-103",
+      "primaryOwner": {
+        "task": "H12",
+        "identifier": "OPENPCB-60",
+        "workItemId": "bafeb06c-7e3e-42e6-96eb-9e5e12b770dc"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-104",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-105",
+      "primaryOwner": {
+        "task": "H43",
+        "identifier": "OPENPCB-91",
+        "workItemId": "b9f70bcd-3b88-4c8f-8eb9-97f20e8e42bc"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-106",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-107",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-108",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-109",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-110",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-111",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-112",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-113",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-114",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-115",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-116",
+      "primaryOwner": {
+        "task": "H43",
+        "identifier": "OPENPCB-91",
+        "workItemId": "b9f70bcd-3b88-4c8f-8eb9-97f20e8e42bc"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-117",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-118",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-119",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-120",
+      "primaryOwner": {
+        "task": "H43",
+        "identifier": "OPENPCB-91",
+        "workItemId": "b9f70bcd-3b88-4c8f-8eb9-97f20e8e42bc"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-121",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-122",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-123",
+      "primaryOwner": {
+        "task": "H31",
+        "identifier": "OPENPCB-79",
+        "workItemId": "70581039-871a-47c9-9916-97c0a899adf2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-124",
+      "primaryOwner": {
+        "task": "H32",
+        "identifier": "OPENPCB-80",
+        "workItemId": "33e6615e-aaba-42f3-8655-4b2920317ce6"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-125",
+      "primaryOwner": {
+        "task": "H32",
+        "identifier": "OPENPCB-80",
+        "workItemId": "33e6615e-aaba-42f3-8655-4b2920317ce6"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-126",
+      "primaryOwner": {
+        "task": "H32",
+        "identifier": "OPENPCB-80",
+        "workItemId": "33e6615e-aaba-42f3-8655-4b2920317ce6"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-127",
+      "primaryOwner": {
+        "task": "H32",
+        "identifier": "OPENPCB-80",
+        "workItemId": "33e6615e-aaba-42f3-8655-4b2920317ce6"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-128",
+      "primaryOwner": {
+        "task": "H32",
+        "identifier": "OPENPCB-80",
+        "workItemId": "33e6615e-aaba-42f3-8655-4b2920317ce6"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-129",
+      "primaryOwner": {
+        "task": "H32",
+        "identifier": "OPENPCB-80",
+        "workItemId": "33e6615e-aaba-42f3-8655-4b2920317ce6"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-130",
+      "primaryOwner": {
+        "task": "H32",
+        "identifier": "OPENPCB-80",
+        "workItemId": "33e6615e-aaba-42f3-8655-4b2920317ce6"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-131",
+      "primaryOwner": {
+        "task": "H32",
+        "identifier": "OPENPCB-80",
+        "workItemId": "33e6615e-aaba-42f3-8655-4b2920317ce6"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-132",
+      "primaryOwner": {
+        "task": "H08",
+        "identifier": "OPENPCB-56",
+        "workItemId": "47349714-b3fe-4886-955e-1f1813bd8e00"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-133",
+      "primaryOwner": {
+        "task": "H06",
+        "identifier": "OPENPCB-54",
+        "workItemId": "abe23723-ae2f-4f50-8a1a-b8b248b80448"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-134",
+      "primaryOwner": {
+        "task": "H07",
+        "identifier": "OPENPCB-55",
+        "workItemId": "28283575-d9c6-499c-a696-7d2acabe09b1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-135",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-136",
+      "primaryOwner": {
+        "task": "H21",
+        "identifier": "OPENPCB-69",
+        "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-137",
+      "primaryOwner": {
+        "task": "H18",
+        "identifier": "OPENPCB-66",
+        "workItemId": "dd6310e3-d94f-496d-a102-eebf058f3f7d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-138",
+      "primaryOwner": {
+        "task": "H20",
+        "identifier": "OPENPCB-68",
+        "workItemId": "3dc97e6f-19f3-4222-bb25-ff3708635e47"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-139",
+      "primaryOwner": {
+        "task": "H21",
+        "identifier": "OPENPCB-69",
+        "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-140",
+      "primaryOwner": {
+        "task": "H19",
+        "identifier": "OPENPCB-67",
+        "workItemId": "be0df0bb-179a-4804-acc9-f717c2374b83"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-141",
+      "primaryOwner": {
+        "task": "H16",
+        "identifier": "OPENPCB-64",
+        "workItemId": "e0e3bd08-f44e-4434-9e38-a23af0152a7f"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-142",
+      "primaryOwner": {
+        "task": "H30",
+        "identifier": "OPENPCB-78",
+        "workItemId": "92826d9f-4223-443f-8a7e-98c36df5f2d4"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-143",
+      "primaryOwner": {
+        "task": "H20",
+        "identifier": "OPENPCB-68",
+        "workItemId": "3dc97e6f-19f3-4222-bb25-ff3708635e47"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-144",
+      "primaryOwner": {
+        "task": "H40",
+        "identifier": "OPENPCB-88",
+        "workItemId": "015292e9-6dc4-40c5-b563-35f7b89f20a8"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-145",
+      "primaryOwner": {
+        "task": "H16",
+        "identifier": "OPENPCB-64",
+        "workItemId": "e0e3bd08-f44e-4434-9e38-a23af0152a7f"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-146",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-147",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-148",
+      "primaryOwner": {
+        "task": "H21",
+        "identifier": "OPENPCB-69",
+        "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-149",
+      "primaryOwner": {
+        "task": "H21",
+        "identifier": "OPENPCB-69",
+        "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-150",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-151",
+      "primaryOwner": {
+        "task": "H16",
+        "identifier": "OPENPCB-64",
+        "workItemId": "e0e3bd08-f44e-4434-9e38-a23af0152a7f"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-152",
+      "primaryOwner": {
+        "task": "H19",
+        "identifier": "OPENPCB-67",
+        "workItemId": "be0df0bb-179a-4804-acc9-f717c2374b83"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-153",
+      "primaryOwner": {
+        "task": "H20",
+        "identifier": "OPENPCB-68",
+        "workItemId": "3dc97e6f-19f3-4222-bb25-ff3708635e47"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-154",
+      "primaryOwner": {
+        "task": "H21",
+        "identifier": "OPENPCB-69",
+        "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-155",
+      "primaryOwner": {
+        "task": "H21",
+        "identifier": "OPENPCB-69",
+        "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-156",
+      "primaryOwner": {
+        "task": "H21",
+        "identifier": "OPENPCB-69",
+        "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-157",
+      "primaryOwner": {
+        "task": "H21",
+        "identifier": "OPENPCB-69",
+        "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-158",
+      "primaryOwner": {
+        "task": "H20",
+        "identifier": "OPENPCB-68",
+        "workItemId": "3dc97e6f-19f3-4222-bb25-ff3708635e47"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-159",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-160",
+      "primaryOwner": {
+        "task": "H30",
+        "identifier": "OPENPCB-78",
+        "workItemId": "92826d9f-4223-443f-8a7e-98c36df5f2d4"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-161",
+      "primaryOwner": {
+        "task": "H16",
+        "identifier": "OPENPCB-64",
+        "workItemId": "e0e3bd08-f44e-4434-9e38-a23af0152a7f"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-162",
+      "primaryOwner": {
+        "task": "H17",
+        "identifier": "OPENPCB-65",
+        "workItemId": "5d3f33fa-b234-4bb2-8d25-d7e3b8725f62"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-163",
+      "primaryOwner": {
+        "task": "H17",
+        "identifier": "OPENPCB-65",
+        "workItemId": "5d3f33fa-b234-4bb2-8d25-d7e3b8725f62"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-164",
+      "primaryOwner": {
+        "task": "H19",
+        "identifier": "OPENPCB-67",
+        "workItemId": "be0df0bb-179a-4804-acc9-f717c2374b83"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-165",
+      "primaryOwner": {
+        "task": "H17",
+        "identifier": "OPENPCB-65",
+        "workItemId": "5d3f33fa-b234-4bb2-8d25-d7e3b8725f62"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-166",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-167",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-168",
+      "primaryOwner": {
+        "task": "H21",
+        "identifier": "OPENPCB-69",
+        "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-169",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-170",
+      "primaryOwner": {
+        "task": "H20",
+        "identifier": "OPENPCB-68",
+        "workItemId": "3dc97e6f-19f3-4222-bb25-ff3708635e47"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-171",
+      "primaryOwner": {
+        "task": "H19",
+        "identifier": "OPENPCB-67",
+        "workItemId": "be0df0bb-179a-4804-acc9-f717c2374b83"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-172",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-173",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-174",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-175",
+      "primaryOwner": {
+        "task": "H48",
+        "identifier": "OPENPCB-96",
+        "workItemId": "802c8bd3-157a-43f1-8afb-67ff11a33e0d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-176",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-177",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-178",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-179",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-180",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-181",
+      "primaryOwner": {
+        "task": "H30",
+        "identifier": "OPENPCB-78",
+        "workItemId": "92826d9f-4223-443f-8a7e-98c36df5f2d4"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-182",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-183",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-184",
+      "primaryOwner": {
+        "task": "H20",
+        "identifier": "OPENPCB-68",
+        "workItemId": "3dc97e6f-19f3-4222-bb25-ff3708635e47"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-185",
+      "primaryOwner": {
+        "task": "H20",
+        "identifier": "OPENPCB-68",
+        "workItemId": "3dc97e6f-19f3-4222-bb25-ff3708635e47"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-186",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-187",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-188",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-189",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-190",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-191",
+      "primaryOwner": {
+        "task": "H21",
+        "identifier": "OPENPCB-69",
+        "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-192",
+      "primaryOwner": {
+        "task": "H21",
+        "identifier": "OPENPCB-69",
+        "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-193",
+      "primaryOwner": {
+        "task": "H21",
+        "identifier": "OPENPCB-69",
+        "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-194",
+      "primaryOwner": {
+        "task": "H20",
+        "identifier": "OPENPCB-68",
+        "workItemId": "3dc97e6f-19f3-4222-bb25-ff3708635e47"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-195",
+      "primaryOwner": {
+        "task": "H19",
+        "identifier": "OPENPCB-67",
+        "workItemId": "be0df0bb-179a-4804-acc9-f717c2374b83"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-196",
+      "primaryOwner": {
+        "task": "H18",
+        "identifier": "OPENPCB-66",
+        "workItemId": "dd6310e3-d94f-496d-a102-eebf058f3f7d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-197",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-198",
+      "primaryOwner": {
+        "task": "H21",
+        "identifier": "OPENPCB-69",
+        "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-199",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-200",
+      "primaryOwner": {
+        "task": "H07",
+        "identifier": "OPENPCB-55",
+        "workItemId": "28283575-d9c6-499c-a696-7d2acabe09b1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-201",
+      "primaryOwner": {
+        "task": "H19",
+        "identifier": "OPENPCB-67",
+        "workItemId": "be0df0bb-179a-4804-acc9-f717c2374b83"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-202",
+      "primaryOwner": {
+        "task": "H43",
+        "identifier": "OPENPCB-91",
+        "workItemId": "b9f70bcd-3b88-4c8f-8eb9-97f20e8e42bc"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-203",
+      "primaryOwner": {
+        "task": "H21",
+        "identifier": "OPENPCB-69",
+        "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-204",
+      "primaryOwner": {
+        "task": "H43",
+        "identifier": "OPENPCB-91",
+        "workItemId": "b9f70bcd-3b88-4c8f-8eb9-97f20e8e42bc"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-205",
+      "primaryOwner": {
+        "task": "H19",
+        "identifier": "OPENPCB-67",
+        "workItemId": "be0df0bb-179a-4804-acc9-f717c2374b83"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-206",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-207",
+      "primaryOwner": {
+        "task": "H21",
+        "identifier": "OPENPCB-69",
+        "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-208",
+      "primaryOwner": {
+        "task": "H21",
+        "identifier": "OPENPCB-69",
+        "workItemId": "2d0848b2-a110-42c5-b0d7-a0b677267571"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-209",
+      "primaryOwner": {
+        "task": "H22",
+        "identifier": "OPENPCB-70",
+        "workItemId": "d5ea8e97-11d4-4858-8a60-87e8c9876fd1"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-210",
+      "primaryOwner": {
+        "task": "H16",
+        "identifier": "OPENPCB-64",
+        "workItemId": "e0e3bd08-f44e-4434-9e38-a23af0152a7f"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-211",
+      "primaryOwner": {
+        "task": "H18",
+        "identifier": "OPENPCB-66",
+        "workItemId": "dd6310e3-d94f-496d-a102-eebf058f3f7d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-212",
+      "primaryOwner": {
+        "task": "H16",
+        "identifier": "OPENPCB-64",
+        "workItemId": "e0e3bd08-f44e-4434-9e38-a23af0152a7f"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-213",
+      "primaryOwner": {
+        "task": "H16",
+        "identifier": "OPENPCB-64",
+        "workItemId": "e0e3bd08-f44e-4434-9e38-a23af0152a7f"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-214",
+      "primaryOwner": {
+        "task": "H15",
+        "identifier": "OPENPCB-63",
+        "workItemId": "29bbc010-7433-4219-a3f2-9d4590c35ae8"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-215",
+      "primaryOwner": {
+        "task": "H18",
+        "identifier": "OPENPCB-66",
+        "workItemId": "dd6310e3-d94f-496d-a102-eebf058f3f7d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-216",
+      "primaryOwner": {
+        "task": "H16",
+        "identifier": "OPENPCB-64",
+        "workItemId": "e0e3bd08-f44e-4434-9e38-a23af0152a7f"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-217",
+      "primaryOwner": {
+        "task": "H23",
+        "identifier": "OPENPCB-71",
+        "workItemId": "4201989f-95d4-4247-9216-602e6a09e67a"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-218",
+      "primaryOwner": {
+        "task": "H23",
+        "identifier": "OPENPCB-71",
+        "workItemId": "4201989f-95d4-4247-9216-602e6a09e67a"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-219",
+      "primaryOwner": {
+        "task": "H23",
+        "identifier": "OPENPCB-71",
+        "workItemId": "4201989f-95d4-4247-9216-602e6a09e67a"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-220",
+      "primaryOwner": {
+        "task": "H23",
+        "identifier": "OPENPCB-71",
+        "workItemId": "4201989f-95d4-4247-9216-602e6a09e67a"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-221",
+      "primaryOwner": {
+        "task": "H24",
+        "identifier": "OPENPCB-72",
+        "workItemId": "2faf11d7-a644-477d-992d-b5e123070d66"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-222",
+      "primaryOwner": {
+        "task": "H23",
+        "identifier": "OPENPCB-71",
+        "workItemId": "4201989f-95d4-4247-9216-602e6a09e67a"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-223",
+      "primaryOwner": {
+        "task": "H24",
+        "identifier": "OPENPCB-72",
+        "workItemId": "2faf11d7-a644-477d-992d-b5e123070d66"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-224",
+      "primaryOwner": {
+        "task": "H23",
+        "identifier": "OPENPCB-71",
+        "workItemId": "4201989f-95d4-4247-9216-602e6a09e67a"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-225",
+      "primaryOwner": {
+        "task": "H23",
+        "identifier": "OPENPCB-71",
+        "workItemId": "4201989f-95d4-4247-9216-602e6a09e67a"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-226",
+      "primaryOwner": {
+        "task": "H24",
+        "identifier": "OPENPCB-72",
+        "workItemId": "2faf11d7-a644-477d-992d-b5e123070d66"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-227",
+      "primaryOwner": {
+        "task": "H24",
+        "identifier": "OPENPCB-72",
+        "workItemId": "2faf11d7-a644-477d-992d-b5e123070d66"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-228",
+      "primaryOwner": {
+        "task": "H24",
+        "identifier": "OPENPCB-72",
+        "workItemId": "2faf11d7-a644-477d-992d-b5e123070d66"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-229",
+      "primaryOwner": {
+        "task": "H23",
+        "identifier": "OPENPCB-71",
+        "workItemId": "4201989f-95d4-4247-9216-602e6a09e67a"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-230",
+      "primaryOwner": {
+        "task": "H24",
+        "identifier": "OPENPCB-72",
+        "workItemId": "2faf11d7-a644-477d-992d-b5e123070d66"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-231",
+      "primaryOwner": {
+        "task": "H42",
+        "identifier": "OPENPCB-90",
+        "workItemId": "e611b406-c969-4794-b804-2f3ce2798542"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-232",
+      "primaryOwner": {
+        "task": "H42",
+        "identifier": "OPENPCB-90",
+        "workItemId": "e611b406-c969-4794-b804-2f3ce2798542"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-233",
+      "primaryOwner": {
+        "task": "H42",
+        "identifier": "OPENPCB-90",
+        "workItemId": "e611b406-c969-4794-b804-2f3ce2798542"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-234",
+      "primaryOwner": {
+        "task": "H42",
+        "identifier": "OPENPCB-90",
+        "workItemId": "e611b406-c969-4794-b804-2f3ce2798542"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-235",
+      "primaryOwner": {
+        "task": "H42",
+        "identifier": "OPENPCB-90",
+        "workItemId": "e611b406-c969-4794-b804-2f3ce2798542"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-236",
+      "primaryOwner": {
+        "task": "H42",
+        "identifier": "OPENPCB-90",
+        "workItemId": "e611b406-c969-4794-b804-2f3ce2798542"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-237",
+      "primaryOwner": {
+        "task": "H42",
+        "identifier": "OPENPCB-90",
+        "workItemId": "e611b406-c969-4794-b804-2f3ce2798542"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-238",
+      "primaryOwner": {
+        "task": "H43",
+        "identifier": "OPENPCB-91",
+        "workItemId": "b9f70bcd-3b88-4c8f-8eb9-97f20e8e42bc"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-239",
+      "primaryOwner": {
+        "task": "H43",
+        "identifier": "OPENPCB-91",
+        "workItemId": "b9f70bcd-3b88-4c8f-8eb9-97f20e8e42bc"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-240",
+      "primaryOwner": {
+        "task": "H42",
+        "identifier": "OPENPCB-90",
+        "workItemId": "e611b406-c969-4794-b804-2f3ce2798542"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-241",
+      "primaryOwner": {
+        "task": "H42",
+        "identifier": "OPENPCB-90",
+        "workItemId": "e611b406-c969-4794-b804-2f3ce2798542"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-242",
+      "primaryOwner": {
+        "task": "H42",
+        "identifier": "OPENPCB-90",
+        "workItemId": "e611b406-c969-4794-b804-2f3ce2798542"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-243",
+      "primaryOwner": {
+        "task": "H42",
+        "identifier": "OPENPCB-90",
+        "workItemId": "e611b406-c969-4794-b804-2f3ce2798542"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-244",
+      "primaryOwner": {
+        "task": "H13",
+        "identifier": "OPENPCB-61",
+        "workItemId": "0ea36631-a23f-4d4c-b0a1-f5af0735eb09"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-245",
+      "primaryOwner": {
+        "task": "H14",
+        "identifier": "OPENPCB-62",
+        "workItemId": "34cd7b55-609d-4722-8767-b8e72dffdb75"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-246",
+      "primaryOwner": {
+        "task": "H14",
+        "identifier": "OPENPCB-62",
+        "workItemId": "34cd7b55-609d-4722-8767-b8e72dffdb75"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-247",
+      "primaryOwner": {
+        "task": "H14",
+        "identifier": "OPENPCB-62",
+        "workItemId": "34cd7b55-609d-4722-8767-b8e72dffdb75"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-248",
+      "primaryOwner": {
+        "task": "H14",
+        "identifier": "OPENPCB-62",
+        "workItemId": "34cd7b55-609d-4722-8767-b8e72dffdb75"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-249",
+      "primaryOwner": {
+        "task": "H14",
+        "identifier": "OPENPCB-62",
+        "workItemId": "34cd7b55-609d-4722-8767-b8e72dffdb75"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-250",
+      "primaryOwner": {
+        "task": "H14",
+        "identifier": "OPENPCB-62",
+        "workItemId": "34cd7b55-609d-4722-8767-b8e72dffdb75"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-251",
+      "primaryOwner": {
+        "task": "H14",
+        "identifier": "OPENPCB-62",
+        "workItemId": "34cd7b55-609d-4722-8767-b8e72dffdb75"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-252",
+      "primaryOwner": {
+        "task": "H14",
+        "identifier": "OPENPCB-62",
+        "workItemId": "34cd7b55-609d-4722-8767-b8e72dffdb75"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-253",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-254",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-255",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-256",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-257",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-258",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-259",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-260",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-261",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-262",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-263",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-264",
+      "primaryOwner": {
+        "task": "H48",
+        "identifier": "OPENPCB-96",
+        "workItemId": "802c8bd3-157a-43f1-8afb-67ff11a33e0d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-265",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-266",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-267",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-268",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-269",
+      "primaryOwner": {
+        "task": "H33",
+        "identifier": "OPENPCB-81",
+        "workItemId": "ae3ebcb9-b328-46e6-9bda-e8c6c171158e"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-270",
+      "primaryOwner": {
+        "task": "H34",
+        "identifier": "OPENPCB-82",
+        "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-271",
+      "primaryOwner": {
+        "task": "H34",
+        "identifier": "OPENPCB-82",
+        "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-272",
+      "primaryOwner": {
+        "task": "H34",
+        "identifier": "OPENPCB-82",
+        "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-273",
+      "primaryOwner": {
+        "task": "H34",
+        "identifier": "OPENPCB-82",
+        "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-274",
+      "primaryOwner": {
+        "task": "H34",
+        "identifier": "OPENPCB-82",
+        "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-275",
+      "primaryOwner": {
+        "task": "H34",
+        "identifier": "OPENPCB-82",
+        "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-276",
+      "primaryOwner": {
+        "task": "H34",
+        "identifier": "OPENPCB-82",
+        "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-277",
+      "primaryOwner": {
+        "task": "H34",
+        "identifier": "OPENPCB-82",
+        "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-278",
+      "primaryOwner": {
+        "task": "H34",
+        "identifier": "OPENPCB-82",
+        "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-279",
+      "primaryOwner": {
+        "task": "H34",
+        "identifier": "OPENPCB-82",
+        "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-280",
+      "primaryOwner": {
+        "task": "H34",
+        "identifier": "OPENPCB-82",
+        "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-281",
+      "primaryOwner": {
+        "task": "H34",
+        "identifier": "OPENPCB-82",
+        "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-282",
+      "primaryOwner": {
+        "task": "H34",
+        "identifier": "OPENPCB-82",
+        "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-283",
+      "primaryOwner": {
+        "task": "H34",
+        "identifier": "OPENPCB-82",
+        "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-284",
+      "primaryOwner": {
+        "task": "H48",
+        "identifier": "OPENPCB-96",
+        "workItemId": "802c8bd3-157a-43f1-8afb-67ff11a33e0d"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-285",
+      "primaryOwner": {
+        "task": "H34",
+        "identifier": "OPENPCB-82",
+        "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-286",
+      "primaryOwner": {
+        "task": "H43",
+        "identifier": "OPENPCB-91",
+        "workItemId": "b9f70bcd-3b88-4c8f-8eb9-97f20e8e42bc"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-287",
+      "primaryOwner": {
+        "task": "H34",
+        "identifier": "OPENPCB-82",
+        "workItemId": "d0ce44d3-fbf7-4ee2-84d5-e9abc1197b67"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-288",
+      "primaryOwner": {
+        "task": "H35",
+        "identifier": "OPENPCB-83",
+        "workItemId": "262996c1-819f-4460-87b9-1b80f4528088"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-289",
+      "primaryOwner": {
+        "task": "H35",
+        "identifier": "OPENPCB-83",
+        "workItemId": "262996c1-819f-4460-87b9-1b80f4528088"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-290",
+      "primaryOwner": {
+        "task": "H35",
+        "identifier": "OPENPCB-83",
+        "workItemId": "262996c1-819f-4460-87b9-1b80f4528088"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-291",
+      "primaryOwner": {
+        "task": "H35",
+        "identifier": "OPENPCB-83",
+        "workItemId": "262996c1-819f-4460-87b9-1b80f4528088"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-292",
+      "primaryOwner": {
+        "task": "H36",
+        "identifier": "OPENPCB-84",
+        "workItemId": "20266bbc-6e00-4301-b05a-4c17bdb7cefa"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-293",
+      "primaryOwner": {
+        "task": "H36",
+        "identifier": "OPENPCB-84",
+        "workItemId": "20266bbc-6e00-4301-b05a-4c17bdb7cefa"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-294",
+      "primaryOwner": {
+        "task": "H11",
+        "identifier": "OPENPCB-59",
+        "workItemId": "805c57e8-3636-40ca-bfc9-4cf5dc9d06d3"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-295",
+      "primaryOwner": {
+        "task": "H36",
+        "identifier": "OPENPCB-84",
+        "workItemId": "20266bbc-6e00-4301-b05a-4c17bdb7cefa"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-296",
+      "primaryOwner": {
+        "task": "H36",
+        "identifier": "OPENPCB-84",
+        "workItemId": "20266bbc-6e00-4301-b05a-4c17bdb7cefa"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-297",
+      "primaryOwner": {
+        "task": "H36",
+        "identifier": "OPENPCB-84",
+        "workItemId": "20266bbc-6e00-4301-b05a-4c17bdb7cefa"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-298",
+      "primaryOwner": {
+        "task": "H43",
+        "identifier": "OPENPCB-91",
+        "workItemId": "b9f70bcd-3b88-4c8f-8eb9-97f20e8e42bc"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-299",
+      "primaryOwner": {
+        "task": "H36",
+        "identifier": "OPENPCB-84",
+        "workItemId": "20266bbc-6e00-4301-b05a-4c17bdb7cefa"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-300",
+      "primaryOwner": {
+        "task": "H36",
+        "identifier": "OPENPCB-84",
+        "workItemId": "20266bbc-6e00-4301-b05a-4c17bdb7cefa"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-301",
+      "primaryOwner": {
+        "task": "H36",
+        "identifier": "OPENPCB-84",
+        "workItemId": "20266bbc-6e00-4301-b05a-4c17bdb7cefa"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-302",
+      "primaryOwner": {
+        "task": "H36",
+        "identifier": "OPENPCB-84",
+        "workItemId": "20266bbc-6e00-4301-b05a-4c17bdb7cefa"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-303",
+      "primaryOwner": {
+        "task": "H36",
+        "identifier": "OPENPCB-84",
+        "workItemId": "20266bbc-6e00-4301-b05a-4c17bdb7cefa"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-304",
+      "primaryOwner": {
+        "task": "H01",
+        "identifier": "OPENPCB-49",
+        "workItemId": "8f124ec0-f385-42cf-a9c5-5acbdcbedb88"
+      },
+      "disposition": "unapproved P6 proposal; no implementation implied"
+    },
+    {
+      "tid": "T-305",
+      "primaryOwner": {
+        "task": "H01",
+        "identifier": "OPENPCB-49",
+        "workItemId": "8f124ec0-f385-42cf-a9c5-5acbdcbedb88"
+      },
+      "disposition": "unapproved P6 proposal; no implementation implied"
+    },
+    {
+      "tid": "T-306",
+      "primaryOwner": {
+        "task": "H36",
+        "identifier": "OPENPCB-84",
+        "workItemId": "20266bbc-6e00-4301-b05a-4c17bdb7cefa"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-307",
+      "primaryOwner": {
+        "task": "H36",
+        "identifier": "OPENPCB-84",
+        "workItemId": "20266bbc-6e00-4301-b05a-4c17bdb7cefa"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-308",
+      "primaryOwner": {
+        "task": "H01",
+        "identifier": "OPENPCB-49",
+        "workItemId": "8f124ec0-f385-42cf-a9c5-5acbdcbedb88"
+      },
+      "disposition": "unapproved P6 proposal; no implementation implied"
+    },
+    {
+      "tid": "T-309",
+      "primaryOwner": {
+        "task": "H37",
+        "identifier": "OPENPCB-85",
+        "workItemId": "3d39d43a-0d27-45ff-8f8d-5cefe03b6cb2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-310",
+      "primaryOwner": {
+        "task": "H37",
+        "identifier": "OPENPCB-85",
+        "workItemId": "3d39d43a-0d27-45ff-8f8d-5cefe03b6cb2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-311",
+      "primaryOwner": {
+        "task": "H37",
+        "identifier": "OPENPCB-85",
+        "workItemId": "3d39d43a-0d27-45ff-8f8d-5cefe03b6cb2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-312",
+      "primaryOwner": {
+        "task": "H37",
+        "identifier": "OPENPCB-85",
+        "workItemId": "3d39d43a-0d27-45ff-8f8d-5cefe03b6cb2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-313",
+      "primaryOwner": {
+        "task": "H37",
+        "identifier": "OPENPCB-85",
+        "workItemId": "3d39d43a-0d27-45ff-8f8d-5cefe03b6cb2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-314",
+      "primaryOwner": {
+        "task": "H37",
+        "identifier": "OPENPCB-85",
+        "workItemId": "3d39d43a-0d27-45ff-8f8d-5cefe03b6cb2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-315",
+      "primaryOwner": {
+        "task": "H37",
+        "identifier": "OPENPCB-85",
+        "workItemId": "3d39d43a-0d27-45ff-8f8d-5cefe03b6cb2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-316",
+      "primaryOwner": {
+        "task": "H15",
+        "identifier": "OPENPCB-63",
+        "workItemId": "29bbc010-7433-4219-a3f2-9d4590c35ae8"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-317",
+      "primaryOwner": {
+        "task": "H13",
+        "identifier": "OPENPCB-61",
+        "workItemId": "0ea36631-a23f-4d4c-b0a1-f5af0735eb09"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-318",
+      "primaryOwner": {
+        "task": "H37",
+        "identifier": "OPENPCB-85",
+        "workItemId": "3d39d43a-0d27-45ff-8f8d-5cefe03b6cb2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-319",
+      "primaryOwner": {
+        "task": "H15",
+        "identifier": "OPENPCB-63",
+        "workItemId": "29bbc010-7433-4219-a3f2-9d4590c35ae8"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-320",
+      "primaryOwner": {
+        "task": "H37",
+        "identifier": "OPENPCB-85",
+        "workItemId": "3d39d43a-0d27-45ff-8f8d-5cefe03b6cb2"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-321",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-322",
+      "primaryOwner": {
+        "task": "H39",
+        "identifier": "OPENPCB-87",
+        "workItemId": "030664c9-5178-4637-89c9-90657e983520"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-323",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-324",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-325",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-326",
+      "primaryOwner": {
+        "task": "H39",
+        "identifier": "OPENPCB-87",
+        "workItemId": "030664c9-5178-4637-89c9-90657e983520"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-327",
+      "primaryOwner": {
+        "task": "H39",
+        "identifier": "OPENPCB-87",
+        "workItemId": "030664c9-5178-4637-89c9-90657e983520"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-328",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-329",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-330",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-331",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-332",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-333",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-334",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-335",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-336",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-337",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-338",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-339",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-340",
+      "primaryOwner": {
+        "task": "H39",
+        "identifier": "OPENPCB-87",
+        "workItemId": "030664c9-5178-4637-89c9-90657e983520"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-341",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-342",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-343",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-344",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-345",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-346",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-347",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-348",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-349",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-350",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-351",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-352",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-353",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-354",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-355",
+      "primaryOwner": {
+        "task": "H39",
+        "identifier": "OPENPCB-87",
+        "workItemId": "030664c9-5178-4637-89c9-90657e983520"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-356",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-357",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-358",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-359",
+      "primaryOwner": {
+        "task": "H38",
+        "identifier": "OPENPCB-86",
+        "workItemId": "1ac193e3-8976-4ebc-8be6-2094a0cace80"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-360",
+      "primaryOwner": {
+        "task": "H25",
+        "identifier": "OPENPCB-73",
+        "workItemId": "887f320b-c830-4677-b53f-ef31d6c6da75"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-361",
+      "primaryOwner": {
+        "task": "H26",
+        "identifier": "OPENPCB-74",
+        "workItemId": "aa2b687f-8396-4c29-b7a2-9355e44830e9"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-362",
+      "primaryOwner": {
+        "task": "H26",
+        "identifier": "OPENPCB-74",
+        "workItemId": "aa2b687f-8396-4c29-b7a2-9355e44830e9"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-363",
+      "primaryOwner": {
+        "task": "H25",
+        "identifier": "OPENPCB-73",
+        "workItemId": "887f320b-c830-4677-b53f-ef31d6c6da75"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-364",
+      "primaryOwner": {
+        "task": "H27",
+        "identifier": "OPENPCB-75",
+        "workItemId": "f4bbad08-838d-4084-980a-09b0ef96caba"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-365",
+      "primaryOwner": {
+        "task": "H27",
+        "identifier": "OPENPCB-75",
+        "workItemId": "f4bbad08-838d-4084-980a-09b0ef96caba"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-366",
+      "primaryOwner": {
+        "task": "H27",
+        "identifier": "OPENPCB-75",
+        "workItemId": "f4bbad08-838d-4084-980a-09b0ef96caba"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-367",
+      "primaryOwner": {
+        "task": "H25",
+        "identifier": "OPENPCB-73",
+        "workItemId": "887f320b-c830-4677-b53f-ef31d6c6da75"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-368",
+      "primaryOwner": {
+        "task": "H27",
+        "identifier": "OPENPCB-75",
+        "workItemId": "f4bbad08-838d-4084-980a-09b0ef96caba"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-369",
+      "primaryOwner": {
+        "task": "H27",
+        "identifier": "OPENPCB-75",
+        "workItemId": "f4bbad08-838d-4084-980a-09b0ef96caba"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-370",
+      "primaryOwner": {
+        "task": "H27",
+        "identifier": "OPENPCB-75",
+        "workItemId": "f4bbad08-838d-4084-980a-09b0ef96caba"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-371",
+      "primaryOwner": {
+        "task": "H27",
+        "identifier": "OPENPCB-75",
+        "workItemId": "f4bbad08-838d-4084-980a-09b0ef96caba"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-372",
+      "primaryOwner": {
+        "task": "H26",
+        "identifier": "OPENPCB-74",
+        "workItemId": "aa2b687f-8396-4c29-b7a2-9355e44830e9"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-373",
+      "primaryOwner": {
+        "task": "H27",
+        "identifier": "OPENPCB-75",
+        "workItemId": "f4bbad08-838d-4084-980a-09b0ef96caba"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-374",
+      "primaryOwner": {
+        "task": "H27",
+        "identifier": "OPENPCB-75",
+        "workItemId": "f4bbad08-838d-4084-980a-09b0ef96caba"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-375",
+      "primaryOwner": {
+        "task": "H27",
+        "identifier": "OPENPCB-75",
+        "workItemId": "f4bbad08-838d-4084-980a-09b0ef96caba"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-376",
+      "primaryOwner": {
+        "task": "H27",
+        "identifier": "OPENPCB-75",
+        "workItemId": "f4bbad08-838d-4084-980a-09b0ef96caba"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-377",
+      "primaryOwner": {
+        "task": "H26",
+        "identifier": "OPENPCB-74",
+        "workItemId": "aa2b687f-8396-4c29-b7a2-9355e44830e9"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-378",
+      "primaryOwner": {
+        "task": "H27",
+        "identifier": "OPENPCB-75",
+        "workItemId": "f4bbad08-838d-4084-980a-09b0ef96caba"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-379",
+      "primaryOwner": {
+        "task": "H27",
+        "identifier": "OPENPCB-75",
+        "workItemId": "f4bbad08-838d-4084-980a-09b0ef96caba"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-380",
+      "primaryOwner": {
+        "task": "H27",
+        "identifier": "OPENPCB-75",
+        "workItemId": "f4bbad08-838d-4084-980a-09b0ef96caba"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-381",
+      "primaryOwner": {
+        "task": "H25",
+        "identifier": "OPENPCB-73",
+        "workItemId": "887f320b-c830-4677-b53f-ef31d6c6da75"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-382",
+      "primaryOwner": {
+        "task": "H25",
+        "identifier": "OPENPCB-73",
+        "workItemId": "887f320b-c830-4677-b53f-ef31d6c6da75"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-383",
+      "primaryOwner": {
+        "task": "H27",
+        "identifier": "OPENPCB-75",
+        "workItemId": "f4bbad08-838d-4084-980a-09b0ef96caba"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-384",
+      "primaryOwner": {
+        "task": "H41",
+        "identifier": "OPENPCB-89",
+        "workItemId": "78a1f88a-2d89-4c38-9352-388d0805aa89"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-385",
+      "primaryOwner": {
+        "task": "H41",
+        "identifier": "OPENPCB-89",
+        "workItemId": "78a1f88a-2d89-4c38-9352-388d0805aa89"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-386",
+      "primaryOwner": {
+        "task": "H41",
+        "identifier": "OPENPCB-89",
+        "workItemId": "78a1f88a-2d89-4c38-9352-388d0805aa89"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-387",
+      "primaryOwner": {
+        "task": "H40",
+        "identifier": "OPENPCB-88",
+        "workItemId": "015292e9-6dc4-40c5-b563-35f7b89f20a8"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-388",
+      "primaryOwner": {
+        "task": "H40",
+        "identifier": "OPENPCB-88",
+        "workItemId": "015292e9-6dc4-40c5-b563-35f7b89f20a8"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-389",
+      "primaryOwner": {
+        "task": "H40",
+        "identifier": "OPENPCB-88",
+        "workItemId": "015292e9-6dc4-40c5-b563-35f7b89f20a8"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-390",
+      "primaryOwner": {
+        "task": "H40",
+        "identifier": "OPENPCB-88",
+        "workItemId": "015292e9-6dc4-40c5-b563-35f7b89f20a8"
+      },
+      "disposition": "implementation or verification required; not asserted freshly reproduced"
+    },
+    {
+      "tid": "T-391",
+      "primaryOwner": {
+        "task": "H01",
+        "identifier": "OPENPCB-49",
+        "workItemId": "8f124ec0-f385-42cf-a9c5-5acbdcbedb88"
+      },
+      "disposition": "intentional decision retained"
+    },
+    {
+      "tid": "T-392",
+      "primaryOwner": {
+        "task": "H01",
+        "identifier": "OPENPCB-49",
+        "workItemId": "8f124ec0-f385-42cf-a9c5-5acbdcbedb88"
+      },
+      "disposition": "intentional decision retained"
+    },
+    {
+      "tid": "T-393",
+      "primaryOwner": {
+        "task": "H01",
+        "identifier": "OPENPCB-49",
+        "workItemId": "8f124ec0-f385-42cf-a9c5-5acbdcbedb88"
+      },
+      "disposition": "intentional decision retained"
+    },
+    {
+      "tid": "T-394",
+      "primaryOwner": {
+        "task": "H01",
+        "identifier": "OPENPCB-49",
+        "workItemId": "8f124ec0-f385-42cf-a9c5-5acbdcbedb88"
+      },
+      "disposition": "intentional decision retained"
+    },
+    {
+      "tid": "T-395",
+      "primaryOwner": {
+        "task": "H01",
+        "identifier": "OPENPCB-49",
+        "workItemId": "8f124ec0-f385-42cf-a9c5-5acbdcbedb88"
+      },
+      "disposition": "refuted finding retained"
+    }
+  ]
+}
