@@ -454,13 +454,22 @@
       "scopeExpansion": false,
       "resolution": "pending",
       "reproductionState": "unverified",
-      "implementationCommit": null,
-      "regressionTest": null,
+      "implementationCommit": "a3c6591732df526c29f8076a3cf739260f8adbb7",
+      "regressionTest": {
+        "kind": "behavioral",
+        "path": "src/shared/frontend/keyboard/shortcut-guard.test.ts",
+        "name": "recognizes editable-role ancestors and composed paths",
+        "command": "npx --no-install vitest run --config src/core/frontend/vitest.config.ts src/shared/frontend/keyboard/shortcut-guard.test.ts src/shared/frontend/ui/shortcut.test.ts src/shared/frontend/context-menu/use-context-menu-store.test.ts src/core/frontend/src/ui-discipline.test.ts",
+        "result": "passed",
+        "commit": "a3c6591732df526c29f8076a3cf739260f8adbb7",
+        "evidencePath": "docs/qa/2026-10-hardening/evidence/keyboard-safety-regressions.json",
+        "evidenceSha256": "9c083eecbaaf24fc5fc3a91e73f56561e547e4a8f1ef527013fae9863796a822"
+      },
       "localEvidence": null,
       "historicalEvidence": [
         "shots/q4/dark/094-comment-typing.png"
       ],
-      "remainingBlocker": "Fresh isolated reproduction, implementation verification, behavioral regression and commit evidence outstanding."
+      "remainingBlocker": "Focused shared-guard and eight mocked-HTTP browser regressions pass at a3c6591; complete consumer audit, Library wizard/editor adoption, native text editing and nested Escape/focus ordering, and isolated persisted-design acceptance remain outstanding."
     },
     {
       "tid": "T-003",
@@ -7497,15 +7506,24 @@
       "scopeExpansion": false,
       "resolution": "pending",
       "reproductionState": "unverified",
-      "implementationCommit": null,
-      "regressionTest": null,
+      "implementationCommit": "a3c6591732df526c29f8076a3cf739260f8adbb7",
+      "regressionTest": {
+        "kind": "behavioral",
+        "path": "src/shared/frontend/keyboard/shortcut-guard.test.ts",
+        "name": "blocks visible child and sibling overlays even with leaked canvas focus",
+        "command": "npx --no-install vitest run --config src/core/frontend/vitest.config.ts src/shared/frontend/keyboard/shortcut-guard.test.ts src/shared/frontend/ui/shortcut.test.ts src/shared/frontend/context-menu/use-context-menu-store.test.ts src/core/frontend/src/ui-discipline.test.ts",
+        "result": "passed",
+        "commit": "a3c6591732df526c29f8076a3cf739260f8adbb7",
+        "evidencePath": "docs/qa/2026-10-hardening/evidence/keyboard-safety-regressions.json",
+        "evidenceSha256": "9c083eecbaaf24fc5fc3a91e73f56561e547e4a8f1ef527013fae9863796a822"
+      },
       "localEvidence": null,
       "historicalEvidence": [
         "shots/q4/dark/094-comment-typing.png",
         "shots/vq4/dark/005-backspace-composer-deletes-trace.png",
         "shots/q5/dark/077-pcb-comment-thread.png"
       ],
-      "remainingBlocker": "Fresh isolated reproduction, implementation verification, behavioral regression and commit evidence outstanding."
+      "remainingBlocker": "Focused real-canvas fixture regressions pass at a3c6591 with mocked HTTP and in-memory hashes. Actual Assistant/comment/thread composers, free-pad inspector and Export dialog need isolated SQLite/native text-editing reproduction, command/history counts, persisted design hashes and save/reopen; archived root remains unverified."
     },
     {
       "tid": "T-134",
