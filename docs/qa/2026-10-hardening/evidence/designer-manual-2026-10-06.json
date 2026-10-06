@@ -1,0 +1,243 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-06",
+  "method": "Native macOS Electron interactions through Computer Use; clicks, drags and native keyboard. No Playwright, DOM evaluation, capture bridge or API-driven UI actions in this pass.",
+  "status": "Partial manual qualification; no task marked Done",
+  "head": "badc726",
+  "implementationChanged": false,
+  "platform": "macOS arm64; Electron 41.6.1; development shell, production renderer bundle",
+  "fixture": {
+    "name": "QA-f2a-golden",
+    "designId": "847e94e7-36e6-4284-b22c-17725e0f5b02",
+    "initialRevision": 145,
+    "finalRevision": 166,
+    "source": ".build/hardening/2026-10-05/qa-copy/db-snapshots/A",
+    "sourceDatabaseSha256": "faf6186bc7a3eeaf5eb36753bc2fd960b035c505106205f3c8d256dc3aace1d2",
+    "profile": "/var/folders/z5/x_0nvl9n33nd463_mpr617p00000gn/T/openpcb-manual-designer-JfZ5pc/user-data",
+    "originalUserAndArchiveDatabasesUsedAsRuntime": false,
+    "note": "All mutations were in the disposable copy. Two GND ports occupy the same location: the first placement was not immediately visible in Computer Use, and a second placement was made. The command log resolves this observation ambiguity; do not count it as an app duplication defect.",
+    "sourceDatabaseUnchanged": true
+  },
+  "builds": {
+    "main": {
+      "renderer": "src/core/frontend/dist",
+      "indexSha256": "f6f6183fe5b31ce41ae38e5b0a9ebb098efdb03f1aabf65fabf6f7ee40079def",
+      "result": "Schematic and PCB shells load, but both canvas areas remain black with external renderer networking denied. Fit does not recover the schematic. Logs show denied unicode-font-resolver CDN requests."
+    },
+    "candidate": {
+      "renderer": "/private/tmp/openpcb-h05-consumer-E7nzVl/app/src/core/frontend/dist",
+      "indexSha256": "198fd1c6b08492280c3e6acb6b276f26b21b6e1c186e78f54dbce74ecd36d28e",
+      "canvasArtifactSha256": "5b4ee06c6b04b12371ca2bae40a18ba3bab0e8e3b952cd022e0c0ae939877db1",
+      "sharedSource": "920ab9c",
+      "result": "Candidate renders text and geometry under the same renderer network guard. All subsequent feature observations use this unpublished candidate, not the main dependency or packaged release."
+    },
+    "networkScope": "Electron default-session renderer/worker external requests blocked; loopback and local protocols allowed. Main-process traffic was not instrumented. This is not an OS-wide offline test."
+  },
+  "passedObservations": [
+    {
+      "id": "M01",
+      "area": "Schematic",
+      "check": "Fit",
+      "evidence": "Fit changes initial 80% close-up to complete 17% schematic."
+    },
+    {
+      "id": "M02",
+      "area": "Schematic",
+      "check": "Outline selection and inspector",
+      "evidence": "R1 selection highlights symbol and exposes value, footprint, placement and pin nets."
+    },
+    {
+      "id": "M03",
+      "area": "Schematic",
+      "check": "Grid-snapped drag",
+      "evidence": "R1 moves from -29.988 / 11.980 mm to -26.670 / 15.240 mm on 1.27 mm grid; persisted revision 146."
+    },
+    {
+      "id": "M04",
+      "area": "Schematic",
+      "check": "Rotation",
+      "evidence": "Canvas-focused R changes R1 from 0 to 90 degrees; persisted revision 147."
+    },
+    {
+      "id": "M05",
+      "area": "Schematic",
+      "check": "Toolbar history",
+      "evidence": "Toolbar Undo restores rotation to 0; toolbar Redo restores 90."
+    },
+    {
+      "id": "M06",
+      "area": "Schematic",
+      "check": "Inspector typing safety and commit",
+      "evidence": "Typing GRP test 10k into Value does not invoke placement/rotation tools. Replaced with 12kΩ and committed; outline, PCB and restart retain 12kΩ at revision 150."
+    },
+    {
+      "id": "M07",
+      "area": "Schematic",
+      "check": "Net outline highlight",
+      "evidence": "Selecting VCC highlights its wire network."
+    },
+    {
+      "id": "M08",
+      "area": "Schematic",
+      "check": "ERC execution and staleness UI",
+      "evidence": "Run ERC completes with 0 displayed violations. Later placement displays schematic-changed warning. This verifies execution/staleness only, not ERC completeness or electrical correctness."
+    },
+    {
+      "id": "M09",
+      "area": "Schematic",
+      "check": "Palette search, Enter and placement",
+      "evidence": "Search resistor, Enter, canvas click creates R4 at 12.700 / -27.940 mm; outline gains one part, revision 151. Escape exits placement."
+    },
+    {
+      "id": "M10",
+      "area": "Schematic",
+      "check": "Ground anchor and pin wiring",
+      "evidence": "GND placed; clicking R4.1 then ground anchor creates wire. Inspector shows R4.1 GND. Command revision 154 addresses sourcePinId and primitive target, rather than rounded free points."
+    },
+    {
+      "id": "M11",
+      "area": "Both",
+      "check": "Cross-probe",
+      "evidence": "View on PCB opens R4 with matching reference, footprint and GND pin data; PCB list includes R1 12kΩ."
+    },
+    {
+      "id": "M12",
+      "area": "PCB",
+      "check": "Selection, rotation and flip",
+      "evidence": "Canvas-selected U1 responds to R with 90 degrees, then F with Bottom/B.Cu. Toolbar Undo returns Top/F.Cu; another Undo restores 0 degrees."
+    },
+    {
+      "id": "M13",
+      "area": "PCB",
+      "check": "Grid pitch and independent visibility",
+      "evidence": "Pitch changes 0.25 to 0.5 mm; Show grid off leaves Snap to grid on."
+    },
+    {
+      "id": "M14",
+      "area": "PCB",
+      "check": "Hole placement with hidden grid",
+      "evidence": "Canvas-focused H then click creates Ø3.2 mm hole at 12.5 / 10.5 mm. Inspector and persisted pcb_add_free_hole agree; revision 160."
+    },
+    {
+      "id": "M15",
+      "area": "PCB",
+      "check": "Hole toolbar Undo/Redo",
+      "evidence": "Undo removes hole geometry; Redo restores it. Stale selection after Undo recorded separately."
+    },
+    {
+      "id": "M16",
+      "area": "PCB",
+      "check": "DRC execution",
+      "evidence": "Run DRC replaces old 44 warnings with 11 errors and 55 warnings, including overlap, short circuit, clearance and unrouted GND findings. No waivers or rule changes applied."
+    },
+    {
+      "id": "M17",
+      "area": "PCB",
+      "check": "Manufacturing quarantine",
+      "evidence": "Export opens Manufacturing exports unavailable; Download ZIP disabled; explanation explicitly refuses Gerber, drill and placement output."
+    },
+    {
+      "id": "M18",
+      "area": "PCB",
+      "check": "Routing activation and width",
+      "evidence": "Route tool starts at J1 pad with VCC status. W changes 0.250 to 0.500 mm. Trace creation is NOT qualified: attempted corner/Enter produces no pcb_add_trace command."
+    },
+    {
+      "id": "M19",
+      "area": "PCB",
+      "check": "Top/bottom view",
+      "evidence": "Bottom view mirrors hole from right to left, displays bottom badge and switches active layer; top view restores orientation. Revisions 163-166."
+    },
+    {
+      "id": "M20",
+      "area": "PCB",
+      "check": "Overlay visibility",
+      "evidence": "DRC markers toggle off/on visually while DRC result counts remain. Markers restored on before restart; no finding waived."
+    },
+    {
+      "id": "M21",
+      "area": "Both",
+      "check": "Restart persistence",
+      "evidence": "Restart returns Home at r166. Reopened schematic AX exposes R1 12kΩ, R4 12.700 / -27.940 mm and R4.1 GND. PCB AX restores grid off, snap on, pitch 0.5 mm and stale DRC66. Consistent SQLite backup confirms hole remains. Post-restart canvas visual proof is blocked by stale capture."
+    }
+  ],
+  "failedOrUnresolvedObservations": [
+    {
+      "id": "F01",
+      "task": "OPENPCB-53/H05",
+      "severity": "blocker",
+      "finding": "Main dependency cold-offline canvases black",
+      "reproduction": "Fresh isolated profile; deny external renderer/worker network; open QA-f2a-golden; Fit schematic; switch PCB. Both canvases black, shells populated. Candidate renders under same guard."
+    },
+    {
+      "id": "F02",
+      "task": "OPENPCB-79/H31",
+      "tid": "T-094",
+      "severity": "high",
+      "finding": "Native Cmd+Z/Cmd+Shift+Z did not change canvas history",
+      "reproduction": "Rotate R1 with canvas focused; Cmd+Z leaves 90 degrees; toolbar Undo changes to 0. Cmd+Shift+Z leaves 0; toolbar Redo changes to 90. PCB Cmd+Z similarly leaves flipped U1 unchanged; toolbar Undo restores Top. Treat as failed in this native-input pass, despite earlier Playwright keyboard pass; investigate Electron menu/accelerator path. Capture/input transport uncertainty remains; root cause not established."
+    },
+    {
+      "id": "F03",
+      "task": "OPENPCB-79/H31",
+      "severity": "medium",
+      "finding": "Designer tab revision remains stale",
+      "reproduction": "Tab remains r145 during confirmed writes through r166; Home after restart reports r166. Command log confirms commits were persisted."
+    },
+    {
+      "id": "F04",
+      "task": "OPENPCB-79/H31",
+      "severity": "medium",
+      "finding": "Removed hole remains selected after Undo",
+      "reproduction": "Select new hole, toolbar Undo. Geometry disappears, but inspector says 1 item selected / Holes 1 and status says Hole. Redo restores geometry."
+    },
+    {
+      "id": "F05",
+      "task": "OPENPCB-79/H31",
+      "severity": "unqualified",
+      "finding": "PCB drag and completed route not demonstrated",
+      "reproduction": "Dense overlapping fixture caused attempted footprint drags to select another placement or trace; no pcb_move_placement persisted. Routing activates and width changes, but corner/Enter attempt leaves no created trace. Retest on a clear fixture with stable visual capture before attributing failure."
+    },
+    {
+      "id": "F06",
+      "task": "OPENPCB-79/H31",
+      "severity": "visual",
+      "finding": "Schematic text and glyph fidelity remain unqualified",
+      "reproduction": "Fitted view shows overlapping NE555 top-pin names and literal ~{RST}; rotated R1 reference/value overlap. Capacitor symbol strokes appear incomplete at fit scale. No source/candidate comparison proving cause was performed."
+    },
+    {
+      "id": "F07",
+      "severity": "QA environment blocker",
+      "finding": "Post-restart screenshots stop reflecting AX changes",
+      "reproduction": "Screenshot remains initial schematic 80% close-up after AX reports fitted 17%, R4 inspector, then PCB. Rebind, Raise, zoom-window and CUA kernel reset do not repair capture. Intermittent noWindowsAvailable and user-changed-window errors also occur. Do not classify this as a confirmed app rendering defect without a foreground recapture."
+    }
+  ],
+  "notQualified": [
+    "Packaged/release build, main dependency feature pass, OS-wide offline startup",
+    "Injected failed writes, ambiguous acknowledgements, concurrent revisions, crash during pending write",
+    "Bulk selection/delete atomicity, duplicate actions, rename collision, full keyboard shortcut matrix",
+    "Complete PCB trace/via editing, routing cancellation rollback and negative/off-grid pin fixtures",
+    "Zone/keepout authoring, board shape/rules edits, net portal/power variants and comments",
+    "Numerical manufacturing outputs, multilayer qualification, import completeness, 3D and BOM workflows",
+    "All theme, viewport, platform, large-design and accessibility permutations"
+  ],
+  "evidence": {
+    "screenshotsAndAX": "Computer Use outputs in the originating Codex chat; not exported as standalone image files",
+    "localDirectory": ".build/manual-designer-2026-10-06/evidence",
+    "logs": [
+      "electron.log",
+      "electron-restart.log"
+    ],
+    "readOnlyCorroboration": [
+      "commands.json",
+      "after.sqlite"
+    ],
+    "note": "SQLite inspection corroborates native actions and restart persistence; it was not used to perform UI test mutations. No automated test pass is substituted for missing manual coverage.",
+    "sha256": {
+      "electron.log": "5491d8320a563f9f01bf4757802c93f5afa2b1b216a0fa6f9cbecc1d9f4e4f6c",
+      "electron-restart.log": "3f38d447c5c34be40203f69251f7c140fae6aa51ad5ee717f91eed9a8a3c0038",
+      "commands.json": "bf060d2e8a4d25051eb0be9300f1c5b3e86a30cc38b7f311ce93a3f271e79ee5",
+      "after.sqlite": "cf37d7b1b2010b06c862a03873daf62acf1541f9e5d14b4f149096db712d298e"
+    }
+  }
+}
