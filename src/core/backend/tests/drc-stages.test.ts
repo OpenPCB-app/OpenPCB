@@ -185,9 +185,10 @@ describe("tick — stage checkpoints", () => {
 });
 
 describe("tick — results-neutral", () => {
-  test("drafts and report bytes are identical with and without a tick, in both modes", () => {
-    for (const { projection } of goldens) {
-      for (const broadPhase of ["grid", "exhaustive"] as const) {
+  // Keep the default timeout per board/mode instead of sharing it across all golden runs.
+  for (const { name, projection } of goldens) {
+    for (const broadPhase of ["grid", "exhaustive"] as const) {
+      test(`${name} (${broadPhase}): drafts and report bytes are identical with and without a tick`, () => {
         const plainDrafts = JSON.stringify(drcDrafts(projection, { broadPhase }));
         const tickedDrafts = JSON.stringify(
           drcDrafts(projection, { broadPhase, tick: () => {} }),
@@ -198,9 +199,9 @@ describe("tick — results-neutral", () => {
           runDrc(projection, { broadPhase, tick: () => {} }),
         );
         expect(ticked).toBe(plain);
-      }
+      });
     }
-  });
+  }
 });
 
 describe("tick — cancellation", () => {
