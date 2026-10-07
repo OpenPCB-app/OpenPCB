@@ -1,5 +1,6 @@
 import { ValidationError } from "../../../core/contracts/errors";
-import { isFeatureEnabled } from "../../../core/contracts/feature-flags/backend";
+import { ProviderCredentials } from "./providers/provider-credentials";
+import { CredentialError } from "../../../core/contracts/credentials/secret-store";
 import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
 import type {
   AssistantProviderConfig,
@@ -11,7 +12,9 @@ import type {
 import { AI_PROVIDER_PRESETS, getPresetByKind } from "@openpcb/ai-core";
 
 export interface InternalProviderConfig extends AssistantProviderConfig {
-  apiKey: string | null;
+  /** Ephemeral managed-cloud bearer only; persisted API keys use secretRef. */
+  apiKey?: string | null;
+  secretRef?: string | null;
   /** Manual tool-calling override: null = auto (probe), true = on, false = off. */
   toolCallingOverride: boolean | null;
 }
@@ -54,11 +57,6 @@ function id(): string {
 }
 function bool(v: unknown): boolean {
   return Number(v) === 1 || v === true;
-}
-function apiKeyPreview(apiKey: string | null): string | null {
-  if (!apiKey) return null;
-  if (apiKey.length <= 8) return "••••";
-  return `${apiKey.slice(0, 4)}••••${apiKey.slice(-4)}`;
 }
 
 function rowToCapabilities(
@@ -122,9 +120,13 @@ const CLOUD_PROVIDER_ROW_ID = "openpcb-cloud";
 
 export class ProviderStore {
   private readonly rawSql: RawSqlFn;
+  readonly credentials: ProviderCredentials;
+  private readonly ctxTransaction: <T>(operation: () => T) => T;
 
   constructor(ctx: CoreBackendModuleContext) {
     this.rawSql = rawSqlFrom(ctx);
+    this.ctxTransaction = (operation) => ctx.db.transaction(operation);
+    this.credentials = new ProviderCredentials(ctx);
   }
 
   ensureDefaults(): void {
@@ -139,19 +141,14 @@ export class ProviderStore {
       )[0];
       if (existing) continue;
       const env = CLOUD_ENV[preset.kind];
-      // Cloud provider presets (OpenAI / OpenRouter) are gated dev-only; local
-      // providers (LM Studio / oMLX / Ollama) always seed. Skip only the
-      // cloud-backed presets when the flag is off.
-      if (env && !isFeatureEnabled("cloud.assistantProviders")) continue;
-      const apiKey = env ? (process.env[env.key] ?? null) : null;
       const baseUrl = env
         ? (process.env[env.base] ?? preset.defaultBaseUrl)
         : preset.defaultBaseUrl;
       const defaultModel = env
         ? (process.env[env.model] ?? preset.defaultModel)
         : preset.defaultModel;
-      // Cloud providers activate once a key exists; local providers stay disabled until configured.
-      const enabled = env ? (apiKey ? 1 : 0) : 0;
+      // Keyed presets are enabled only after a durable vault acknowledgement.
+      const enabled = 0;
       this.rawSql(
         "INSERT INTO assistant_provider_config (id,label,kind,base_url,api_key,default_model,enabled,is_builtin,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
@@ -159,7 +156,7 @@ export class ProviderStore {
           preset.label,
           preset.kind,
           baseUrl,
-          apiKey,
+          null,
           defaultModel,
           enabled,
           1,
@@ -253,76 +250,133 @@ export class ProviderStore {
     return row ? this.rowToInternal(row) : null;
   }
 
-  createProvider(input: AssistantProviderConfigInput): AssistantProviderConfig {
-    const timestamp = now();
-    const providerId = id();
+  async createProvider(
+    input: AssistantProviderConfigInput,
+  ): Promise<AssistantProviderConfig> {
     this.assertProviderInput(input, true);
+    const providerId = id();
+    const secretRef = input.apiKey?.trim()
+      ? await this.credentials.write(input.apiKey.trim())
+      : null;
+    const timestamp = now();
     this.rawSql(
-      "INSERT INTO assistant_provider_config (id,label,kind,base_url,api_key,default_model,enabled,is_builtin,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO assistant_provider_config (id,label,kind,base_url,api_key,secret_ref,default_model,enabled,is_builtin,created_at,updated_at) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, 0, ?, ?)",
       [
         providerId,
         input.label,
         input.kind ?? "openai-compatible",
         input.baseUrl,
-        input.apiKey?.trim() || null,
+        secretRef,
         input.defaultModel,
         input.enabled === false ? 0 : 1,
-        0,
         timestamp,
         timestamp,
       ],
     );
-    const provider = this.getProvider(providerId);
-    if (!provider) throw new Error("Provider insert failed");
-    return provider;
+    return this.requirePublic(providerId);
   }
 
-  updateProvider(
+  async updateProvider(
     idValue: string,
     input: AssistantProviderConfigInput,
-  ): AssistantProviderConfig {
-    const current = this.getProviderInternal(idValue);
-    if (!current) throw new ValidationError(`Provider not found: ${idValue}`);
-    const next = {
-      label: input.label ?? current.label,
-      kind: input.kind ?? current.kind,
-      baseUrl: input.baseUrl ?? current.baseUrl,
-      apiKey: input.clearApiKey
+  ): Promise<AssistantProviderConfig> {
+    return this.credentials.serialize(idValue, async () => {
+      const current = this.getProviderInternal(idValue);
+      if (!current) throw new ValidationError(`Provider not found: ${idValue}`);
+      const prior = this.credentials.row(idValue)!;
+      const next = {
+        label: input.label ?? current.label,
+        kind: input.kind ?? current.kind,
+        baseUrl: input.baseUrl ?? current.baseUrl,
+        defaultModel: input.defaultModel ?? current.defaultModel,
+        enabled: input.enabled ?? current.enabled,
+      };
+      this.assertProviderInput(next, true);
+      const apiKey = input.apiKey?.trim() || null;
+      const reference = input.clearApiKey
         ? null
-        : input.apiKey && input.apiKey.trim().length > 0
-          ? input.apiKey.trim()
-          : current.apiKey,
-      defaultModel: input.defaultModel ?? current.defaultModel,
-      enabled: input.enabled ?? current.enabled,
-    };
-    this.assertProviderInput(
-      { ...next, apiKey: next.apiKey ?? undefined },
-      true,
-    );
-    this.rawSql(
-      "UPDATE assistant_provider_config SET label=?, kind=?, base_url=?, api_key=?, default_model=?, enabled=?, updated_at=? WHERE id=?",
-      [
-        next.label,
-        next.kind,
-        next.baseUrl,
-        next.apiKey,
-        next.defaultModel,
-        next.enabled ? 1 : 0,
-        now(),
-        idValue,
-      ],
-    );
-    const provider = this.getProvider(idValue);
-    if (!provider) throw new Error("Provider update failed");
-    return provider;
+        : apiKey
+          ? await this.credentials.write(apiKey)
+          : prior.api_key
+            ? await this.credentials.write(prior.api_key)
+            : prior.secret_ref;
+      this.ctxTransaction(() => {
+        this.credentials.associate(idValue, prior, reference);
+        this.rawSql(
+          "UPDATE assistant_provider_config SET label=?, kind=?, base_url=?, default_model=?, enabled=?, updated_at=? WHERE id=?",
+          [
+            next.label,
+            next.kind,
+            next.baseUrl,
+            next.defaultModel,
+            next.enabled ? 1 : 0,
+            now(),
+            idValue,
+          ],
+        );
+      });
+      return this.requirePublic(idValue);
+    });
   }
 
-  deleteProvider(idValue: string): void {
+  async deleteProvider(idValue: string): Promise<void> {
+    await this.credentials.serialize(idValue, async () => {
+      const provider = this.getProviderInternal(idValue);
+      if (!provider)
+        throw new ValidationError(`Provider not found: ${idValue}`);
+      if (provider.isBuiltin)
+        throw new ValidationError("Builtin providers cannot be deleted");
+      this.rawSql("DELETE FROM assistant_provider_config WHERE id=?", [
+        idValue,
+      ]);
+    });
+  }
+
+  async snapshotProvider(idValue: string): Promise<InternalProviderConfig> {
+    await this.credentials.migrate(idValue);
     const provider = this.getProviderInternal(idValue);
     if (!provider) throw new ValidationError(`Provider not found: ${idValue}`);
-    if (provider.isBuiltin)
-      throw new ValidationError("Builtin providers cannot be deleted");
-    this.rawSql("DELETE FROM assistant_provider_config WHERE id=?", [idValue]);
+    return {
+      ...this.publicView(provider),
+      secretRef: provider.secretRef,
+      toolCallingOverride: provider.toolCallingOverride,
+    };
+  }
+
+  async resolveApiKey(
+    provider: InternalProviderConfig,
+  ): Promise<string | undefined> {
+    if (provider.secretRef) return this.credentials.resolve(provider.secretRef);
+    if (provider.hasApiKey) throw new CredentialError("RECONNECT_REQUIRED");
+    return undefined;
+  }
+
+  async migrateLegacyCredentials(): Promise<void> {
+    this.ensureDefaults();
+    const legacy = this.rawSql(
+      "SELECT id FROM assistant_provider_config WHERE api_key IS NOT NULL",
+    );
+    for (const row of legacy) await this.credentials.migrate(String(row.id));
+    for (const [kind, env] of Object.entries(CLOUD_ENV)) {
+      const secret = process.env[env.key]?.trim();
+      const provider = this.getProviderInternal(kind);
+      if (secret && provider && !provider.hasApiKey) {
+        await this.updateProvider(kind, { apiKey: secret, enabled: true });
+      }
+    }
+  }
+
+  credentialStatus(providerId: string): { configured: boolean } {
+    const provider = this.getProviderInternal(providerId);
+    if (!provider)
+      throw new ValidationError(`Provider not found: ${providerId}`);
+    return { configured: provider.hasApiKey };
+  }
+
+  private requirePublic(providerId: string): AssistantProviderConfig {
+    const provider = this.getProvider(providerId);
+    if (!provider) throw new Error("Provider write failed");
+    return provider;
   }
 
   listModels(providerId: string): AssistantProviderModel[] {
@@ -423,7 +477,8 @@ export class ProviderStore {
   }
 
   private rowToInternal(row: Record<string, unknown>): InternalProviderConfig {
-    const apiKey = row.api_key ? String(row.api_key) : null;
+    const secretRef = row.secret_ref ? String(row.secret_ref) : null;
+    const hasApiKey = Boolean(secretRef || row.api_key);
     const override =
       row.tool_calling_override === null ||
       row.tool_calling_override === undefined
@@ -440,13 +495,13 @@ export class ProviderStore {
       label: String(row.label),
       kind: String(row.kind) as AiProviderKind,
       baseUrl: String(row.base_url),
-      apiKey,
+      secretRef,
       toolCallingOverride: override,
       defaultModel: String(row.default_model),
       enabled: bool(row.enabled),
       isBuiltin: bool(row.is_builtin),
-      hasApiKey: Boolean(apiKey),
-      apiKeyPreview: apiKeyPreview(apiKey),
+      hasApiKey,
+      apiKeyPreview: hasApiKey ? "••••" : null,
       capabilities: caps,
       createdAt: String(row.created_at),
       updatedAt: String(row.updated_at),

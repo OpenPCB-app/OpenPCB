@@ -90,6 +90,18 @@ export class AssistantService {
   constructor(private readonly ctx: CoreBackendModuleContext) {
     this.providers = new ProviderStore(ctx);
     this.providers.ensureDefaults();
+    ctx.sdk.registerValue("core.provider-credentials", {
+      set: async (providerId: string, apiKey: string) => {
+        await this.providers.updateProvider(providerId, { apiKey });
+        return this.providers.credentialStatus(providerId);
+      },
+      clear: async (providerId: string) => {
+        await this.providers.updateProvider(providerId, { clearApiKey: true });
+        return this.providers.credentialStatus(providerId);
+      },
+      status: async (providerId: string) =>
+        this.providers.credentialStatus(providerId),
+    });
     this.conversation = new ConversationStore(ctx);
     this.settings = new SettingsStore(ctx, this.providers);
     this.settings.ensureDefaults();
@@ -210,7 +222,13 @@ export class AssistantService {
     // Cloud mode talks to the copilot service — no local provider involved.
     const provider = cloudMode
       ? null
-      : this.requireUsableProvider(input.providerConfigId ?? chat.providerConfigId);
+      : await this.providers.snapshotProvider(
+          input.providerConfigId ?? chat.providerConfigId,
+        );
+    if (provider) {
+      this.requireUsableProviderSnapshot(provider);
+      await this.providers.resolveApiKey(provider);
+    }
     // The openpcb-cloud provider runs the LOCAL agent loop against the metered
     // LLM proxy; it carries no stored key, so a signed-in session is mandatory.
     if (provider?.kind === "openpcb-cloud" && !cloudCreds) {
@@ -269,6 +287,7 @@ export class AssistantService {
             chatId,
             assistantMessageId: assistantMessage.id,
             providerConfigId: provider!.id,
+            providerSnapshot: provider!,
             model,
             // openpcb-cloud: seal the live bearer into the detached task (D8).
             ...(provider!.kind === "openpcb-cloud" && cloudCreds
@@ -685,17 +704,19 @@ export class AssistantService {
   listProviders(): AssistantProviderConfig[] {
     return this.providers.listProviders();
   }
-  createProvider(input: AssistantProviderConfigInput): AssistantProviderConfig {
+  createProvider(
+    input: AssistantProviderConfigInput,
+  ): Promise<AssistantProviderConfig> {
     return this.providers.createProvider(input);
   }
   updateProvider(
     id: string,
     input: AssistantProviderConfigInput,
-  ): AssistantProviderConfig {
+  ): Promise<AssistantProviderConfig> {
     return this.providers.updateProvider(id, input);
   }
-  deleteProvider(id: string): void {
-    this.providers.deleteProvider(id);
+  deleteProvider(id: string): Promise<void> {
+    return this.providers.deleteProvider(id);
   }
   listProviderModels(id: string): AssistantProviderModel[] {
     return this.providers.listModels(id);
@@ -713,7 +734,12 @@ export class AssistantService {
     provider: InternalProviderConfig,
     cloudCreds?: CloudCredentials | null,
   ) {
-    if (provider.kind !== "openpcb-cloud") return buildAiProviderClient(provider);
+    if (provider.kind !== "openpcb-cloud") {
+      const snapshot = await this.providers.snapshotProvider(provider.id);
+      return buildAiProviderClient(snapshot, {
+        resolveApiKey: (value) => this.providers.resolveApiKey(value),
+      });
+    }
     if (!cloudCreds)
       throw new ValidationError(
         "OpenPCB Cloud requires a signed-in session (x-cloud-bearer / x-cloud-api-url).",
@@ -734,7 +760,9 @@ export class AssistantService {
     const models = await client.listModels();
     const ids = models.map((m) => m.modelId);
     if (ids.length > 0 && !ids.includes(provider.defaultModel)) {
-      this.providers.updateProvider(provider.id, { defaultModel: ids[0] });
+      await this.providers.updateProvider(provider.id, {
+        defaultModel: ids[0],
+      });
     }
     return this.providers.replaceModels(provider.id, ids);
   }
@@ -819,11 +847,17 @@ export class AssistantService {
 
   private requireUsableProvider(providerId: string): InternalProviderConfig {
     const provider = this.requireProvider(providerId);
+    return this.requireUsableProviderSnapshot(provider);
+  }
+
+  private requireUsableProviderSnapshot(
+    provider: InternalProviderConfig,
+  ): InternalProviderConfig {
     if (!provider.enabled)
       throw new ValidationError(`Provider disabled: ${provider.label}`);
     if (!provider.baseUrl.trim())
       throw new ValidationError(`Provider ${provider.label} has no base URL`);
-    if (providerRequiresApiKey(provider) && !provider.apiKey) {
+    if (providerRequiresApiKey(provider) && !provider.hasApiKey) {
       throw new ValidationError(
         `API key required for provider: ${provider.label}`,
       );

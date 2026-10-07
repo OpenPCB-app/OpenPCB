@@ -4,6 +4,7 @@ import {
   resolveToolLimits,
   AiToolRegistry,
   type AiChatMessage,
+  type AiProviderClient,
   type AiRunEvent,
   type AiTool,
   type AiToolCall,
@@ -33,7 +34,10 @@ import {
 import type { SettingsStore } from "./settings-store";
 import type { PromptService } from "./prompt-service";
 import type { ContextResolver } from "./context-resolver";
-import { buildAiProviderClient } from "./providers/openpcb-provider-factory";
+import {
+  buildAiProviderClient,
+  type ProviderClientOptions,
+} from "./providers/openpcb-provider-factory";
 import { loadRemoteTools } from "./cloud/remote-tool";
 import {
   cloudProxyHeaders,
@@ -53,6 +57,8 @@ export interface SubmitPayload {
   chatId: string;
   assistantMessageId: string;
   providerConfigId: string;
+  /** Nonsecret configuration pinned when the run is submitted. */
+  providerSnapshot?: Omit<InternalProviderConfig, "apiKey">;
   model: string;
   /**
    * AES-GCM-sealed {bearer, apiUrl, copilotUrl} (see cloud/token-crypto.ts).
@@ -72,7 +78,10 @@ export interface RunServiceOptions {
   contextResolver: ContextResolver;
   buildRegistry: (allowRawToolData: boolean) => AiToolRegistry;
   /** Injectable provider-client factory (defaults to buildAiProviderClient); tests override. */
-  buildClient?: typeof buildAiProviderClient;
+  buildClient?: (
+    provider: InternalProviderConfig,
+    options?: ProviderClientOptions,
+  ) => AiProviderClient | Promise<AiProviderClient>;
 }
 
 /** Per-turn signals captured from ai-core events for fallback decisions + metadata. */
@@ -402,8 +411,9 @@ export class RunService {
     runState: AssistantTurnState,
     runProvider: InternalProviderConfig,
     remoteTools: AiTool[],
-    cloudHeaders: Record<string, string> | undefined,
     aiRunId: string,
+    client: AiProviderClient,
+    settings: ReturnType<SettingsStore["getSettings"]>,
   ): Promise<DeficiencyReport | null> {
     const designer = this.designerSdk();
     if (!designer) return null;
@@ -436,14 +446,11 @@ export class RunService {
       callSummaries.clear();
       toolEventsByCall.clear();
       const passRegistry = this.options.buildRegistry(
-        this.options.settings.getSettings().allowRawToolData,
+        settings.allowRawToolData,
       );
       this.registerRemoteTools(passRegistry, remoteTools);
       for await (const event of runChat({
-        client: (this.options.buildClient ?? buildAiProviderClient)(
-          runProvider,
-          cloudHeaders ? { extraHeaders: cloudHeaders } : undefined,
-        ),
+        client,
         registry: passRegistry,
         // Stitch cloud LLM + tool usage under one run id (matches the
         // x-openpcb-run-id header + the desktop's own emitted-event runId).
@@ -455,7 +462,7 @@ export class RunService {
         messages: correctionMessages,
         bindings: this.options.contextResolver.listBindings(payload.chatId),
         limits: resolveToolLimits({
-          preference: this.options.settings.getSettings().contextSizePreference,
+          preference: settings.contextSizePreference,
           modelContextTokens: runProvider.capabilities?.maxContextTokens,
         }),
         chatId: payload.chatId,
@@ -505,9 +512,9 @@ export class RunService {
     provider: InternalProviderConfig;
     cloudCreds: CloudCredentials | null;
   } {
-    const provider = this.options.providers.getProviderInternal(
-      payload.providerConfigId,
-    );
+    const provider =
+      payload.providerSnapshot ??
+      this.options.providers.getProviderInternal(payload.providerConfigId);
     if (!provider)
       throw new Error(`Provider not found: ${payload.providerConfigId}`);
     if (provider.kind !== "openpcb-cloud")
@@ -656,9 +663,12 @@ export class RunService {
         )
       : [];
     this.registerRemoteTools(registry, remoteTools);
-    const client = (this.options.buildClient ?? buildAiProviderClient)(
+    const client = await (this.options.buildClient ?? buildAiProviderClient)(
       provider,
-      cloudHeaders ? { extraHeaders: cloudHeaders } : undefined,
+      {
+        extraHeaders: cloudHeaders,
+        resolveApiKey: (value) => this.options.providers.resolveApiKey(value),
+      },
     );
     const limits = resolveToolLimits({
       preference: settings.contextSizePreference,
@@ -896,8 +906,9 @@ export class RunService {
               runState,
               provider,
               remoteTools,
-              cloudHeaders,
               aiRunId,
+              client,
+              settings,
             )
           : null;
 

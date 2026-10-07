@@ -3,6 +3,7 @@
 // to the main process logger (and disk).
 import "electron-log/preload";
 import { contextBridge, ipcRenderer } from "electron";
+import type { RendererCredentials } from "../../../src/core/contracts/credentials/renderer.js";
 
 interface BackendReadyPayload {
   url: string;
@@ -39,6 +40,12 @@ interface McpConfig {
   url: string | null;
   token: string;
 }
+
+const credentials: RendererCredentials = {
+  set: (request) => ipcRenderer.invoke("credentials:set", request),
+  clear: (request) => ipcRenderer.invoke("credentials:clear", request),
+  status: (request) => ipcRenderer.invoke("credentials:status", request),
+};
 
 contextBridge.exposeInMainWorld("electronAPI", {
   // Dev-only marketing-capture flag (M0.2). Renderer-side capture hooks mount
@@ -78,6 +85,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke("shell:open-external", url),
+  credentials,
+  // Cloud-only compatibility; main validates the exact Supabase namespace.
   secureStorage: {
     get: (key: string): Promise<string | null> =>
       ipcRenderer.invoke("secure-storage:get", key),

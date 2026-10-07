@@ -49,12 +49,10 @@ export function buildAssistantSdk(): AssistantSDK {
       Promise.resolve(getAssistantService().updateSettings(input)),
 
     listProviders: () => Promise.resolve(getAssistantService().listProviders()),
-    createProvider: (input) =>
-      Promise.resolve(getAssistantService().createProvider(input)),
+    createProvider: (input) => getAssistantService().createProvider(input),
     updateProvider: (id, input) =>
-      Promise.resolve(getAssistantService().updateProvider(id, input)),
-    deleteProvider: (id) =>
-      Promise.resolve(getAssistantService().deleteProvider(id)),
+      getAssistantService().updateProvider(id, input),
+    deleteProvider: (id) => getAssistantService().deleteProvider(id),
     listProviderModels: (id) =>
       Promise.resolve(getAssistantService().listProviderModels(id)),
     refreshProviderModels: (id) =>

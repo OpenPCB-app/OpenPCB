@@ -12,6 +12,7 @@ import {
 import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
+import { RuntimeSdkRegistry } from "../modules/sdk-registry";
 import { ModuleRouterRegistry } from "../router/module-registry";
 
 process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "test-key";
@@ -26,6 +27,7 @@ const ASSISTANT_DB_PATH = path.join(
 process.env.OPENPCB_DB_PATH = ASSISTANT_DB_PATH;
 
 const tempDirs: string[] = [];
+const fixtureSecrets = new Map<string, string>();
 
 async function createWorkspace(): Promise<string> {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "openpcb-assistant-"));
@@ -154,8 +156,24 @@ async function bootAssistantWorkspace(): Promise<{
   );
 
   const moduleRegistry = new ModuleRouterRegistry();
+  const sdkRegistry = new RuntimeSdkRegistry();
+  sdkRegistry.registerValue("core.secret-store", {
+    async get(reference: string) {
+      return fixtureSecrets.get(reference) ?? null;
+    },
+    async set(reference: string, secret: string) {
+      fixtureSecrets.set(reference, secret);
+    },
+    async delete(reference: string) {
+      fixtureSecrets.delete(reference);
+    },
+    async listRefs() {
+      return [...fixtureSecrets.keys()];
+    },
+  });
   const moduleRuntime = new ModuleRuntime({
     moduleRegistry,
+    sdkRegistry,
     workspaceRoot: workspace,
   });
   await moduleRuntime.bootstrap();
@@ -501,6 +519,70 @@ describe("assistant module", () => {
     expect(openrouter?.defaultModel).toBe("anthropic/claude-3.5-sonnet");
     expect(openrouter?.hasApiKey).toBe(false);
     expect(openrouter?.enabled).toBe(false);
+  });
+
+  test("provider HTTP mutations reject credential fields without changing saved keys", async () => {
+    const { server } = await bootAssistantWorkspace();
+    const service = getAssistantService();
+    const provider = await service.createProvider({
+      label: "HTTP boundary",
+      kind: "openai-compatible",
+      baseUrl: "http://127.0.0.1:43210/v1",
+      defaultModel: "fixture-model",
+      apiKey: "HTTP_SECRET_CANARY_b10c58",
+    });
+    const before = service.providers.getProviderInternal(provider.id)!;
+    const count = service.listProviders().length;
+    const writes = fixtureSecrets.size;
+    for (const credentials of [
+      { apiKey: "HTTP_REPLACEMENT_CANARY_6d3bf9" },
+      { clearApiKey: true },
+      { apiKey: null },
+      { clearApiKey: false },
+    ]) {
+      for (const method of ["POST", "PUT"]) {
+        const endpoint =
+          method === "POST" ? "providers" : `providers/${provider.id}`;
+        const response = await server.fetch(
+          new Request(`http://localhost/api/modules/assistant/${endpoint}`, {
+            method,
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              label: "Rejected",
+              baseUrl: provider.baseUrl,
+              defaultModel: provider.defaultModel,
+              ...credentials,
+            }),
+          }),
+        );
+        expect(response.status).toBe(400);
+        expect(await response.text()).toContain(
+          "Provider credentials must be changed through the desktop credential service",
+        );
+      }
+    }
+    expect(service.listProviders().length).toBe(count);
+    expect(fixtureSecrets.size).toBe(writes);
+    expect(service.providers.getProviderInternal(provider.id)).toEqual(before);
+    const response = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/assistant/providers/${provider.id}`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ label: "Updated metadata" }),
+        },
+      ),
+    );
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { label: string }).label).toBe(
+      "Updated metadata",
+    );
+    expect(
+      await service.providers.resolveApiKey(
+        await service.providers.snapshotProvider(provider.id),
+      ),
+    ).toBe("HTTP_SECRET_CANARY_b10c58");
   });
 
   test("settings endpoint returns assistant defaults", async () => {

@@ -1,13 +1,13 @@
 import { app, BrowserWindow } from "electron";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { log as electronLog } from "./logger.js";
 import { Sentry } from "./sentry.js";
 import { getTelemetryOptIn } from "./preferences.js";
+import { configureProviderCredentials, getCredentialSecretStore } from "./credential-runtime.js";
 import { startBackendRuntime } from "../../../src/core/backend/runtime";
 import type { StartedBackendRuntime } from "../../../src/core/backend/runtime";
 import type { ModuleRegistryResponse } from "../../../src/core/contracts/modules/registry";
-import { resetSharedSqlite } from "../../../src/core/backend/db/sqlite-client";
 import {
   disposeDrcWorker,
   setDrcWorkerEntry,
@@ -139,52 +139,25 @@ function configureDrcWorkerEntry(): void {
 }
 
 async function closeCurrentRuntime(): Promise<void> {
-  if (!runtime) return;
   const current = runtime;
   runtime = null;
+  backendPayload = null;
+  configureProviderCredentials(null);
   // The worker holds a thread that outlives the runtime otherwise.
   await disposeDrcWorker().catch((error: unknown) => {
     log.warn(`Failed to dispose the DRC worker: ${String(error)}`);
   });
-  await current.close().catch((error: unknown) => {
+  await current?.close().catch((error: unknown) => {
     log.warn(`Failed to close backend after startup failure: ${String(error)}`);
   });
 }
 
-function resetDesktopDatabase(): void {
-  const dbPath = process.env.OPENPCB_DB_PATH;
-  if (!dbPath) return;
-
-  resetSharedSqlite();
-  for (const candidate of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
-    rmSync(candidate, { force: true });
-  }
-  log.warn(`Reset local desktop database after module startup failure: ${dbPath}`);
-}
-
 async function startRuntimeWithRequiredModules(): Promise<StartedBackendRuntime> {
-  runtime = await startBackendRuntime({ host: "127.0.0.1", port: 0 });
+  runtime = await startBackendRuntime({ host: "127.0.0.1", port: 0, secretStore: getCredentialSecretStore() });
   log.info(`Module registry:\n${summarizeModuleSnapshot(runtime.snapshot)}`);
-
-  try {
-    assertRequiredModulesLoaded(runtime.snapshot);
-    return runtime;
-  } catch {
-    // Pre-1.0 desktop builds are allowed to discard local data. This recovers
-    // stale development databases after schema resets instead of surfacing
-    // misleading module 404s to the renderer.
-    await closeCurrentRuntime();
-    resetDesktopDatabase();
-
-    runtime = await startBackendRuntime({ host: "127.0.0.1", port: 0 });
-    log.info(
-      `Module registry after database reset:\n${summarizeModuleSnapshot(
-        runtime.snapshot,
-      )}`,
-    );
-    assertRequiredModulesLoaded(runtime.snapshot);
-    return runtime;
-  }
+  assertRequiredModulesLoaded(runtime.snapshot);
+  configureProviderCredentials(runtime.providerCredentials ?? null);
+  return runtime;
 }
 
 export async function startBackendServer(): Promise<BackendReadyPayload> {
@@ -214,12 +187,20 @@ export async function startBackendServer(): Promise<BackendReadyPayload> {
       port: startedRuntime.port,
     });
 
-    log.info(`Backend ready at ${runtime.url}`);
+    log.info(`Backend ready at ${startedRuntime.url}`);
     return backendPayload;
   } catch (error) {
-    Sentry.captureException(error, {
-      tags: { component: "backend", phase: "start" },
-    });
+    await closeCurrentRuntime();
+    try {
+      removeMcpPortfile(getAppDataDir());
+      Sentry.captureException(error, {
+        tags: { component: "backend", phase: "start" },
+      });
+    } catch (reportingError) {
+      log.warn(
+        `Failed to report backend startup failure: ${String(reportingError)}`,
+      );
+    }
     throw error;
   }
 }
@@ -228,10 +209,11 @@ export async function stopBackendServer(): Promise<void> {
   // Drop the portfile even if the runtime is already gone, so a stale URL is
   // never left pointing at a dead port.
   removeMcpPortfile(getAppDataDir());
+  backendPayload = null;
+  configureProviderCredentials(null);
   if (!runtime) return;
   const current = runtime;
   runtime = null;
-  backendPayload = null;
   // The DRC worker thread would keep the process alive past a clean quit —
   // `unref()` is not relied on (execution contract 09 §2.3).
   await disposeDrcWorker().catch((error: unknown) => {

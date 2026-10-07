@@ -25,6 +25,19 @@ async function body<T>(req: Request): Promise<T> {
   return (await req.json()) as T;
 }
 
+async function providerInput(req: Request): Promise<AssistantProviderConfigInput> {
+  const input = await body<AssistantProviderConfigInput>(req);
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new ValidationError("Provider configuration must be an object");
+  }
+  if (Object.hasOwn(input, "apiKey") || Object.hasOwn(input, "clearApiKey")) {
+    throw new ValidationError(
+      "Provider credentials must be changed through the desktop credential service",
+    );
+  }
+  return input;
+}
+
 function chatId(ctx: { params: { getOrThrow(name: string): string } }): string {
   const id = ctx.params.getOrThrow("id");
   if (id === "undefined" || id === "null")
@@ -360,8 +373,8 @@ export function registerRoutes(
   router.get("/providers", () => json(getAssistantService().listProviders()));
   router.post("/providers", async (ctx) =>
     json(
-      getAssistantService().createProvider(
-        await body<AssistantProviderConfigInput>(ctx.req),
+      await getAssistantService().createProvider(
+        await providerInput(ctx.req),
       ),
       201,
     ),
@@ -375,14 +388,14 @@ export function registerRoutes(
   });
   router.put("/providers/:id", async (ctx) =>
     json(
-      getAssistantService().updateProvider(
+      await getAssistantService().updateProvider(
         ctx.params.getOrThrow("id"),
-        await body<AssistantProviderConfigInput>(ctx.req),
+        await providerInput(ctx.req),
       ),
     ),
   );
-  router.delete("/providers/:id", (ctx) => {
-    getAssistantService().deleteProvider(ctx.params.getOrThrow("id"));
+  router.delete("/providers/:id", async (ctx) => {
+    await getAssistantService().deleteProvider(ctx.params.getOrThrow("id"));
     return json({ ok: true });
   });
   router.get("/providers/:id/models", (ctx) =>

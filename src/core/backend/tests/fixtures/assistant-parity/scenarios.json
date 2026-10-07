@@ -1,0 +1,98 @@
+{
+  "place": {
+    "id": "place-call",
+    "name": "designer_place_components",
+    "arguments": {
+      "action_id": "place_parity_$designId",
+      "components": [
+        {
+          "componentId": "$componentId",
+          "quantity": 2
+        }
+      ]
+    }
+  },
+  "inspect": {
+    "id": "inspect-call",
+    "name": "designer_get_schematic_connectivity",
+    "arguments": {}
+  },
+  "move": {
+    "id": "move-call",
+    "name": "designer_propose_schematic_updates",
+    "arguments": {
+      "action_id": "move_parity_$designId",
+      "title": "Move C1",
+      "summary": "Move the existing capacitor.",
+      "partUpdates": [
+        {
+          "ref": "C1",
+          "positionNm": {
+            "x": 30000000,
+            "y": 10000000
+          }
+        }
+      ]
+    }
+  },
+  "wire": {
+    "id": "wire-call",
+    "name": "designer_propose_schematic_wires",
+    "arguments": {
+      "action_id": "wire_parity_$designId",
+      "title": "Join capacitors",
+      "summary": "Join C1.1 and C2.1.",
+      "wires": [
+        {
+          "source": "C1.1",
+          "target": "C2.1"
+        }
+      ]
+    }
+  },
+  "update": {
+    "id": "update-call",
+    "name": "designer_propose_schematic_updates",
+    "arguments": {
+      "action_id": "update_parity_$designId",
+      "title": "Set value",
+      "summary": "Set C1 value to 22nF.",
+      "partUpdates": [
+        {
+          "ref": "C1",
+          "value": "22nF"
+        }
+      ]
+    }
+  },
+  "delete": {
+    "id": "delete-call",
+    "name": "designer_propose_schematic_deletions",
+    "arguments": {
+      "action_id": "delete_parity_$designId",
+      "title": "Delete C1",
+      "summary": "Remove the first capacitor.",
+      "entities": [
+        {
+          "entityId": "C1",
+          "entityKind": "part"
+        }
+      ]
+    }
+  },
+  "partial": {
+    "id": "partial-call",
+    "name": "designer_place_components",
+    "arguments": {
+      "action_id": "partial_parity_$designId",
+      "components": [
+        {
+          "componentId": "$componentId"
+        },
+        {
+          "componentId": "parity.missing-component"
+        }
+      ]
+    }
+  }
+}

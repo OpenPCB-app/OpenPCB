@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ChevronDown,
@@ -21,6 +21,13 @@ import { useAuth } from "../../cloud/AuthProvider";
 import { cloudRequestHeaders } from "../../cloud/request-headers";
 import { cn } from "@/lib/utils";
 import { McpSection } from "./McpSection";
+import {
+  providerMetadata,
+  readAssistantJson as readJson,
+  removeProviderKey as clearProviderCredential,
+  saveProviderDraft as saveProviderConfiguration,
+  type ProviderDraft as ProviderInput,
+} from "./provider-credentials";
 import { Pill } from "@shared/frontend/ui/pill";
 import { StackedCard } from "@shared/frontend/ui/stacked-card";
 import type {
@@ -29,15 +36,6 @@ import type {
   AssistantProviderModel,
   AssistantSettings,
 } from "../../../../../sdks/assistant";
-
-type ProviderInput = {
-  label: string;
-  kind: AiProviderKind;
-  baseUrl: string;
-  apiKey: string;
-  defaultModel: string;
-  enabled: boolean;
-};
 
 const emptyProvider: ProviderInput = {
   label: "Custom OpenAI-compatible",
@@ -78,23 +76,6 @@ function maskedKey(provider: AssistantProviderConfig): {
   return { dots: "••••••••••••••••", hint };
 }
 
-async function readJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
-  if (!response.ok) {
-    const body = (await response
-      .json()
-      .catch(() => ({ detail: response.statusText }))) as {
-      detail?: string;
-      error?: string;
-      title?: string;
-    };
-    throw new Error(
-      body.detail ?? body.error ?? body.title ?? `HTTP ${response.status}`,
-    );
-  }
-  return response.json() as Promise<T>;
-}
-
 export function AssistantPanel() {
   const { backendURL } = useRuntime();
   const { session } = useAuth();
@@ -106,6 +87,7 @@ export function AssistantPanel() {
   const [providers, setProviders] = useState<AssistantProviderConfig[]>([]);
   const [models, setModels] = useState<AssistantProviderModel[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const selectedProviderId = useRef<string | null>(null);
   const [draft, setDraft] = useState<ProviderInput>(emptyProvider);
   const [includeCompletion, setIncludeCompletion] = useState(false);
   const [replacingKey, setReplacingKey] = useState(false);
@@ -123,6 +105,15 @@ export function AssistantPanel() {
   const expanded =
     providers.find((provider) => provider.id === expandedId) ?? null;
   const modelIds = models.map((entry) => entry.modelId);
+
+  const selectProvider = (providerId: string | null) => {
+    selectedProviderId.current = providerId;
+    setDraft({ ...emptyProvider });
+    setShowKey(false);
+    setMessage(null);
+    setError(null);
+    setExpandedId(providerId);
+  };
 
   const load = async () => {
     if (!base) return;
@@ -168,22 +159,18 @@ export function AssistantPanel() {
   const removeProviderKey = async () => {
     if (!base || !expanded) return;
     setError(null);
-    const updated = await readJson<AssistantProviderConfig>(
-      `${base}/providers/${expanded.id}`,
-      {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ clearApiKey: true }),
-      },
-    );
+    setMessage(null);
+    const updated = await clearProviderCredential(base, expanded.id);
     setProviders((current) =>
       current.map((provider) =>
         provider.id === updated.id ? updated : provider,
       ),
     );
-    setReplacingKey(true);
-    setDraft((current) => ({ ...current, apiKey: "" }));
-    setMessage("API key removed.");
+    if (selectedProviderId.current === expanded.id) {
+      setReplacingKey(true);
+      setDraft((current) => ({ ...current, apiKey: "" }));
+      setMessage("API key removed.");
+    }
   };
 
   const updateToolCalling = async (mode: ToolCallingMode) => {
@@ -199,8 +186,10 @@ export function AssistantPanel() {
     await load();
   };
 
-  const reportError = (err: unknown) =>
+  const reportError = (err: unknown) => {
+    setMessage(null);
     setError(err instanceof Error ? err.message : String(err));
+  };
 
   const saveSettings = async (patch: Partial<AssistantSettings>) => {
     if (!base || !settings) return;
@@ -218,29 +207,22 @@ export function AssistantPanel() {
     async (): Promise<AssistantProviderConfig | null> => {
       if (!base || !expanded) return null;
       setError(null);
-      const payload = {
-        ...draft,
-        ...(draft.apiKey.trim() ? { apiKey: draft.apiKey.trim() } : {}),
-      };
-      const updated = await readJson<AssistantProviderConfig>(
-        `${base}/providers/${expanded.id}`,
-        {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(payload),
-        },
-      );
+      setMessage(null);
+      const updated = await saveProviderConfiguration(base, expanded.id, draft);
       setProviders((current) =>
         current.map((provider) =>
           provider.id === updated.id ? updated : provider,
         ),
       );
-      setDraft((current) => ({ ...current, apiKey: "" }));
+      if (selectedProviderId.current === expanded.id) {
+        setDraft((current) => ({ ...current, apiKey: "" }));
+      }
       return updated;
     };
 
   const saveProvider = async () => {
-    await saveProviderDraft();
+    const updated = await saveProviderDraft();
+    if (!updated || selectedProviderId.current !== updated.id) return;
     setReplacingKey(false);
     setMessage("Provider saved.");
   };
@@ -253,11 +235,11 @@ export function AssistantPanel() {
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(emptyProvider),
+        body: JSON.stringify(providerMetadata(emptyProvider)),
       },
     );
     setProviders((current) => [...current, created]);
-    setExpandedId(created.id);
+    selectProvider(created.id);
   };
 
   const deleteProvider = async (provider: AssistantProviderConfig) => {
@@ -266,7 +248,7 @@ export function AssistantPanel() {
     await readJson<{ ok: true }>(`${base}/providers/${provider.id}`, {
       method: "DELETE",
     });
-    setExpandedId(null);
+    selectProvider(null);
     await load();
     setMessage("Provider deleted.");
   };
@@ -459,9 +441,7 @@ export function AssistantPanel() {
                 key={provider.id}
                 open={isOpen}
                 onToggle={() =>
-                  setExpandedId((cur) =>
-                    cur === provider.id ? null : provider.id,
-                  )
+                  selectProvider(expandedId === provider.id ? null : provider.id)
                 }
                 tone={tone}
                 summary={

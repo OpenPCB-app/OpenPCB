@@ -3,11 +3,19 @@ import { MODULE_SDK_TOKENS } from "../../../sdks";
 import { initializeAssistantService } from "./assistant-service";
 import { buildAssistantSdk } from "./sdk";
 import { registerRoutes } from "./routes";
+import { publicCredentialError } from "../../../core/contracts/credentials/secret-store";
 
 export const definition: ModuleDefinition = {
   id: "assistant",
-  onActivate(ctx) {
-    initializeAssistantService(ctx);
+  async onActivate(ctx) {
+    const service = initializeAssistantService(ctx);
+    try {
+      await service.providers.migrateLegacyCredentials();
+    } catch (error) {
+      ctx.logger.warn("assistant credential migration deferred", {
+        code: publicCredentialError(error).code,
+      });
+    }
     ctx.logger.info("assistant activated", { tablePrefix: ctx.db.tablePrefix });
   },
   registerSdk(ctx) {

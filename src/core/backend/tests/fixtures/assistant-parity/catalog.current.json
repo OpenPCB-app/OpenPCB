@@ -1,0 +1,4031 @@
+{
+  "sha256": "a64bdf2045794bd54b250887d6b6af2c4d42e16355e9681b0a41723325aefb01",
+  "data": {
+    "formatVersion": 1,
+    "scope": "Legacy desktop contracts; isolated library/designer/tasks/assistant migrations; no packaged qualification",
+    "providers": [
+      {
+        "kind": "lmstudio",
+        "label": "LM Studio",
+        "defaultBaseUrl": "http://127.0.0.1:1234/v1",
+        "defaultModel": "local-model",
+        "requiresApiKey": false,
+        "docsUrl": "https://lmstudio.ai/docs/local-server",
+        "notes": "Run LM Studio locally and start its OpenAI-compatible server. Tool calling depends on the loaded model.",
+        "probeBaseUrls": [
+          "http://127.0.0.1:1234/v1"
+        ]
+      },
+      {
+        "kind": "omlx",
+        "label": "oMLX",
+        "defaultBaseUrl": "",
+        "defaultModel": "",
+        "requiresApiKey": false,
+        "docsUrl": "https://github.com/ml-explore/mlx",
+        "notes": "Apple-Silicon-optimized local provider. Start the oMLX server then fill in the base URL and model below.",
+        "probeBaseUrls": [
+          "http://127.0.0.1:8080/v1",
+          "http://127.0.0.1:8000/v1",
+          "http://127.0.0.1:11434/v1"
+        ]
+      },
+      {
+        "kind": "openai",
+        "label": "OpenAI",
+        "defaultBaseUrl": "https://api.openai.com/v1",
+        "defaultModel": "gpt-4o-mini",
+        "requiresApiKey": true,
+        "docsUrl": "https://platform.openai.com/docs/api-reference",
+        "notes": "Cloud provider. Requires an API key."
+      },
+      {
+        "kind": "openai-compatible",
+        "label": "Custom OpenAI-compatible",
+        "defaultBaseUrl": "http://127.0.0.1:8000/v1",
+        "defaultModel": "local-model",
+        "requiresApiKey": false,
+        "notes": "Generic OpenAI-compatible endpoint (vLLM, llama.cpp, Ollama, etc.)."
+      },
+      {
+        "kind": "openrouter",
+        "label": "OpenRouter",
+        "defaultBaseUrl": "https://openrouter.ai/api/v1",
+        "defaultModel": "anthropic/claude-3.5-sonnet",
+        "requiresApiKey": true,
+        "docsUrl": "https://openrouter.ai/docs",
+        "notes": "Cloud aggregator routing to many model providers via one OpenAI-compatible API. Requires an API key from openrouter.ai/keys. Models use vendor/model slugs (e.g. anthropic/claude-3.5-sonnet)."
+      }
+    ],
+    "inAppTools": [
+      {
+        "name": "compile_circuit",
+        "version": "1",
+        "effect": "write",
+        "capability": "designer.write.schematic.compile",
+        "description": "Build a schematic from a declarative circuit-spec IR: block instances + port-level nets. Prefer this over hand placing+wiring for standard multi-part circuits — each block owns its own pin-accurate internal wiring and part values (Ohm's law etc.) are computed deterministically, so you connect only a few semantic ports and never touch pins. Part roles resolve to INSTALLED library components; a missing role is reported (import it) — parts are never substituted. The composed result is ERC-checked and auto-applied in one pass (revertible step-by-step via designer undo). Available block recipes: led_indicator (led_indicator ports: IN, GND; params: supplyV, vf, currentA). Connect nets by port ref \"<blockId>.<PORT>\" (e.g. \"led0.IN\"); name your vcc/gnd rails in `power`.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "designId": {
+              "type": "string",
+              "description": "Target design id. Omit to use the design bound to this chat."
+            },
+            "version": {
+              "type": "integer",
+              "enum": [
+                1
+              ],
+              "description": "IR schema version — must be 1."
+            },
+            "blocks": {
+              "type": "array",
+              "description": "Block instances to place.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Unique handle within this IR (e.g. \"led0\")."
+                  },
+                  "recipe": {
+                    "type": "string",
+                    "description": "Block recipe name. Available: led_indicator."
+                  },
+                  "params": {
+                    "type": "object",
+                    "description": "Recipe parameters (e.g. supplyV, vf, currentA for led_indicator).",
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "id",
+                  "recipe"
+                ]
+              }
+            },
+            "nets": {
+              "type": "array",
+              "description": "Port-level nets. Each connects block ports named \"<blockId>.<PORT>\".",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "ports": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Port refs, e.g. [\"led0.IN\", \"led1.IN\"]."
+                  }
+                },
+                "required": [
+                  "name",
+                  "ports"
+                ]
+              }
+            },
+            "power": {
+              "type": "object",
+              "description": "Names of the vcc/gnd rail nets — lowered to power/ground port symbols, not plain wires.",
+              "properties": {
+                "vcc": {
+                  "type": "string"
+                },
+                "gnd": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "vcc",
+                "gnd"
+              ]
+            }
+          },
+          "required": [
+            "version",
+            "blocks",
+            "nets",
+            "power"
+          ]
+        }
+      },
+      {
+        "name": "designer_arrange_schematic",
+        "version": "1",
+        "effect": "write",
+        "capability": "designer.write.schematic.arrange",
+        "description": "Tidy the whole schematic: deterministically group net-connected parts with routing channels, slide power/ground flags with their pins, and re-route every wire around bodies, flags and other wires. Non-destructive, auto-applies, single undo step. Use when the layout looks messy or overlapping.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "designId": {
+              "type": "string"
+            },
+            "action_id": {
+              "type": "string",
+              "description": "Stable idempotency key you generate: `<verb>_<primaryKey>_<designId>` (e.g. `place_R1_<designId>`, `wire_U1.OUT__R1.1_<designId>`). Re-using the same action_id is a safe no-op."
+            }
+          }
+        }
+      },
+      {
+        "name": "designer_create_design",
+        "version": "1",
+        "effect": "write",
+        "capability": "designer.write.create_design",
+        "description": "Create a new empty OpenPCB design and bind this chat to it. Use after the user has chosen a project direction and wants a new schematic canvas.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Short human-readable design name.",
+              "maxLength": 120
+            }
+          }
+        }
+      },
+      {
+        "name": "designer_get_design_summary",
+        "version": "1",
+        "effect": "read",
+        "capability": "designer.read",
+        "description": "Compact one-shot summary of a design: schematic part/net counts, PCB placement/trace counts, and top ERC violations. Uses the bound design if designId is omitted.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "designId": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "designer_get_part_detail",
+        "version": "1",
+        "effect": "read",
+        "capability": "designer.read",
+        "description": "Resolve a placed schematic part by reference (e.g. U1) within the bound design. Returns pin/net mapping and PCB placement if available.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "designId": {
+              "type": "string"
+            },
+            "referenceOrPartId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "referenceOrPartId"
+          ]
+        }
+      },
+      {
+        "name": "designer_get_schematic_connectivity",
+        "version": "1",
+        "effect": "read",
+        "capability": "designer.read.schematic.connectivity",
+        "description": "Return compact schematic connectivity for the bound design: placed parts, exact pin IDs/coordinates, nets, wires, and primitive pin IDs for planning safe wiring proposals.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "designId": {
+              "type": "string"
+            },
+            "includePins": {
+              "type": "boolean"
+            },
+            "includeNets": {
+              "type": "boolean"
+            },
+            "includeWires": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      {
+        "name": "designer_place_components",
+        "version": "1",
+        "effect": "write",
+        "capability": "designer.write.schematic.place_components",
+        "description": "Place installed library components onto the bound design's schematic canvas. Non-destructive: auto-applies immediately and is undoable. Prefer designer_propose_schematic_edits for placement (it also adds labels/power ports and wires in one batch); use this only for a plain quantity-based drop.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "designId": {
+              "type": "string"
+            },
+            "action_id": {
+              "type": "string",
+              "description": "Stable idempotency key you generate: `<verb>_<primaryKey>_<designId>` (e.g. `place_R1_<designId>`, `wire_U1.OUT__R1.1_<designId>`). Re-using the same action_id is a safe no-op."
+            },
+            "components": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "componentId": {
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20
+                  },
+                  "rotationDeg": {
+                    "type": "integer",
+                    "enum": [
+                      0,
+                      90,
+                      180,
+                      270
+                    ]
+                  },
+                  "mirrored": {
+                    "type": "boolean"
+                  },
+                  "value": {
+                    "type": "string",
+                    "description": "Optional displayed part value/intended value, e.g. 330Ω, 10k, 10µF, red LED."
+                  },
+                  "properties": {
+                    "type": "object",
+                    "description": "Optional string metadata such as color, role, tolerance, voltage, current, or package intent."
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "componentId"
+                ]
+              }
+            },
+            "layout": {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "auto-grid"
+                  ]
+                },
+                "columns": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 8
+                }
+              }
+            }
+          },
+          "required": [
+            "components"
+          ]
+        }
+      },
+      {
+        "name": "designer_propose_schematic_deletions",
+        "version": "1",
+        "effect": "write",
+        "capability": "designer.write.schematic.propose_deletions",
+        "description": "Delete existing schematic parts, wires, labels, or primitives. Destructive: stays pending for explicit user confirmation (does NOT auto-apply). Parts may be addressed by reference (e.g. \"U1\") or ID; wires/labels/primitives by ID.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "designId": {
+              "type": "string"
+            },
+            "action_id": {
+              "type": "string",
+              "description": "Stable idempotency key you generate: `<verb>_<primaryKey>_<designId>` (e.g. `place_R1_<designId>`, `wire_U1.OUT__R1.1_<designId>`). Re-using the same action_id is a safe no-op."
+            },
+            "title": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "entities": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "entityId": {
+                    "type": "string",
+                    "description": "Entity ID; for parts a reference like \"U1\" is also accepted."
+                  },
+                  "entityKind": {
+                    "type": "string",
+                    "enum": [
+                      "part",
+                      "wire",
+                      "label",
+                      "primitive"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "entityId",
+                  "entityKind"
+                ]
+              }
+            }
+          },
+          "required": [
+            "title",
+            "summary",
+            "entities"
+          ]
+        }
+      },
+      {
+        "name": "designer_propose_schematic_edits",
+        "version": "1",
+        "effect": "write",
+        "capability": "designer.write.schematic.propose_edits",
+        "description": "Batch small schematic edits: place library parts, add net labels / power ports / net portals, and wire existing pins. Do NOT pass coordinates — omit positionNm and wire geometry; the layout is auto-arranged from connectivity and wires are auto-routed when this proposal applies. Just choose components and how their pins connect. Non-destructive, so it auto-applies. To wire freshly-placed parts, run this once to place them, then call designer_get_schematic_connectivity and wire by REF.PIN.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "designId": {
+              "type": "string"
+            },
+            "action_id": {
+              "type": "string",
+              "description": "Stable idempotency key you generate: `<verb>_<primaryKey>_<designId>` (e.g. `place_R1_<designId>`, `wire_U1.OUT__R1.1_<designId>`). Re-using the same action_id is a safe no-op."
+            },
+            "title": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "parts": {
+              "type": "array",
+              "description": "Library components to place.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "componentId": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  },
+                  "positionNm": {
+                    "type": "object",
+                    "description": "Optional. Omit it — placement is auto-arranged from connectivity after this proposal applies. Only pass coordinates to pin a specific part.",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ]
+                  },
+                  "rotationDeg": {
+                    "type": "integer",
+                    "enum": [
+                      0,
+                      90,
+                      180,
+                      270
+                    ]
+                  },
+                  "mirrored": {
+                    "type": "boolean"
+                  },
+                  "properties": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "componentId"
+                ]
+              }
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "positionNm": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ]
+                  }
+                },
+                "required": [
+                  "text",
+                  "positionNm"
+                ]
+              }
+            },
+            "powerPorts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "gnd",
+                      "pwr",
+                      "net_portal"
+                    ]
+                  },
+                  "text": {
+                    "type": "string",
+                    "description": "Rail/portal name (e.g. \"+5V\", \"SDA\"); ignored for gnd."
+                  },
+                  "positionNm": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ]
+                  },
+                  "rotationDeg": {
+                    "type": "integer",
+                    "enum": [
+                      0,
+                      90,
+                      180,
+                      270
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "positionNm"
+                ]
+              }
+            },
+            "wires": {
+              "type": "array",
+              "description": "Connect existing pins (or a pin to a named net). Geometry is auto-routed.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "description": "Pin or net. A pin: \"U1.VCC\" / \"U1.1\", or { ref, pin }, or { pinId }. A net: { net: \"GND\" } (auto-places a power/ground/net-portal primitive and wires to it).",
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "ref": {
+                            "type": "string"
+                          },
+                          "pin": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "ref",
+                          "pin"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "pinId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pinId"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "net": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "net"
+                        ]
+                      }
+                    ]
+                  },
+                  "target": {
+                    "description": "Pin or net. A pin: \"U1.VCC\" / \"U1.1\", or { ref, pin }, or { pinId }. A net: { net: \"GND\" } (auto-places a power/ground/net-portal primitive and wires to it).",
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "ref": {
+                            "type": "string"
+                          },
+                          "pin": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "ref",
+                          "pin"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "pinId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pinId"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "net": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "net"
+                        ]
+                      }
+                    ]
+                  },
+                  "netName": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source",
+                  "target"
+                ]
+              }
+            }
+          },
+          "required": [
+            "title",
+            "summary"
+          ]
+        }
+      },
+      {
+        "name": "designer_propose_schematic_updates",
+        "version": "1",
+        "effect": "write",
+        "capability": "designer.write.schematic.propose_updates",
+        "description": "Move/rotate/mirror schematic parts, edit part value/reference/properties, move/rename labels, or move/rotate/retext power & net-portal primitives. Address parts by \"partId\" or reference \"ref\" (e.g. \"U1\"). Connected wires reflow automatically on move/rotate/mirror. Non-destructive, so it auto-applies.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "designId": {
+              "type": "string"
+            },
+            "action_id": {
+              "type": "string",
+              "description": "Stable idempotency key you generate: `<verb>_<primaryKey>_<designId>` (e.g. `place_R1_<designId>`, `wire_U1.OUT__R1.1_<designId>`). Re-using the same action_id is a safe no-op."
+            },
+            "title": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "partUpdates": {
+              "type": "array",
+              "description": "Changes to existing parts. Each entry needs partId or ref.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "partId": {
+                    "type": "string",
+                    "description": "Part UUID (from connectivity)."
+                  },
+                  "ref": {
+                    "type": "string",
+                    "description": "Reference designator, e.g. \"U1\". Alternative to partId."
+                  },
+                  "positionNm": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "description": "New position (nanometers). Connected wires reflow automatically."
+                  },
+                  "rotationDeg": {
+                    "type": "integer",
+                    "enum": [
+                      0,
+                      90,
+                      180,
+                      270
+                    ]
+                  },
+                  "mirrored": {
+                    "type": "boolean"
+                  },
+                  "reference": {
+                    "type": "string",
+                    "description": "New reference designator."
+                  },
+                  "value": {
+                    "type": "string"
+                  },
+                  "properties": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "labelUpdates": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "labelId": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "positionNm": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "labelId"
+                ]
+              }
+            },
+            "primitiveUpdates": {
+              "type": "array",
+              "description": "Changes to gnd/pwr/net-portal primitives.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "primitiveId": {
+                    "type": "string"
+                  },
+                  "positionNm": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ]
+                  },
+                  "rotationDeg": {
+                    "type": "integer",
+                    "enum": [
+                      0,
+                      90,
+                      180,
+                      270
+                    ]
+                  },
+                  "text": {
+                    "type": "string",
+                    "description": "Rail/portal text (ignored for gnd)."
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "primitiveId"
+                ]
+              }
+            }
+          },
+          "required": [
+            "title",
+            "summary"
+          ]
+        }
+      },
+      {
+        "name": "designer_propose_schematic_wires",
+        "version": "1",
+        "effect": "write",
+        "capability": "designer.write.schematic.propose_wires",
+        "description": "Wire schematic pins together, or connect a pin to a named net. Address pins by \"REF.PIN\" (e.g. \"U1.VCC\", \"R1.2\") — call designer_get_schematic_connectivity first to learn references and pin names. Do NOT pass coordinates: routing is automatic and obstacle-aware. After wiring, the whole sheet is auto-arranged — components are MOVED to group what is now connected and wires re-routed cleanly. Non-destructive, so it auto-applies.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "designId": {
+              "type": "string"
+            },
+            "action_id": {
+              "type": "string",
+              "description": "Stable idempotency key you generate: `<verb>_<primaryKey>_<designId>` (e.g. `place_R1_<designId>`, `wire_U1.OUT__R1.1_<designId>`). Re-using the same action_id is a safe no-op."
+            },
+            "title": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "wires": {
+              "type": "array",
+              "description": "Connections to make. Each joins a source to a target; geometry is auto-routed.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "description": "Pin or net. A pin: \"U1.VCC\" / \"U1.1\", or { ref, pin }, or { pinId }. A net: { net: \"GND\" } (auto-places a power/ground/net-portal primitive and wires to it).",
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "ref": {
+                            "type": "string"
+                          },
+                          "pin": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "ref",
+                          "pin"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "pinId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pinId"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "net": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "net"
+                        ]
+                      }
+                    ]
+                  },
+                  "target": {
+                    "description": "Pin or net. A pin: \"U1.VCC\" / \"U1.1\", or { ref, pin }, or { pinId }. A net: { net: \"GND\" } (auto-places a power/ground/net-portal primitive and wires to it).",
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "ref": {
+                            "type": "string"
+                          },
+                          "pin": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "ref",
+                          "pin"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "pinId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pinId"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "net": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "net"
+                        ]
+                      }
+                    ]
+                  },
+                  "netName": {
+                    "type": "string",
+                    "description": "Optional display label for the resulting net."
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source",
+                  "target"
+                ]
+              }
+            },
+            "junctions": {
+              "type": "array",
+              "description": "Tap a pin onto an existing wire at an exact on-wire point (creates a junction).",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "description": "A pin: \"U1.VCC\" / \"U1.1\", or { ref, pin }, or { pinId }.",
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "ref": {
+                            "type": "string"
+                          },
+                          "pin": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "ref",
+                          "pin"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "pinId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pinId"
+                        ]
+                      }
+                    ]
+                  },
+                  "wireId": {
+                    "type": "string",
+                    "description": "ID of the existing wire to tap (from connectivity)."
+                  },
+                  "targetPointNm": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "description": "A point lying on the target wire (nanometers)."
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source",
+                  "wireId",
+                  "targetPointNm"
+                ]
+              }
+            }
+          },
+          "required": [
+            "title",
+            "summary"
+          ]
+        }
+      },
+      {
+        "name": "designer_resolve_design",
+        "version": "1",
+        "effect": "read",
+        "capability": "designer.read",
+        "description": "Resolve a design by natural-language name. On a clean unambiguous match in an unbound chat, binds the chat to that design.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            },
+            "allowAlreadyBound": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      },
+      {
+        "name": "library_get_component_detail",
+        "version": "1",
+        "effect": "read",
+        "capability": "library.read",
+        "description": "Fetch full compact detail for one installed library component (symbol summary, footprint summary, variants, provenance). `componentId` may be the UUID returned by library_search_components OR the component name (e.g. \"ATMEGA16U4-AU\"); name lookup falls back to a library search.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "componentId": {
+              "type": "string",
+              "description": "Component UUID (preferred) or exact/partial component name. Name lookup will use library_search_components and pick the best match."
+            },
+            "includeRaw": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "componentId"
+          ]
+        }
+      },
+      {
+        "name": "library_resolve_bom",
+        "version": "1",
+        "effect": "read",
+        "capability": "library.read.bom",
+        "description": "Resolve a multi-item circuit BOM against the local OpenPCB library. Use this for circuit creation/planning before creating a design or placing components. Treat values/colors as instance properties when only generic components exist.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "goal": {
+              "type": "string"
+            },
+            "defaults": {
+              "type": "object",
+              "properties": {
+                "supplyVoltage": {
+                  "type": "string"
+                },
+                "blinkRate": {
+                  "type": "string"
+                },
+                "packagePreference": {
+                  "type": "string"
+                }
+              }
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string"
+                  },
+                  "query": {
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                  },
+                  "value": {
+                    "type": "string"
+                  },
+                  "values": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "attributes": {
+                    "type": "object"
+                  },
+                  "requirements": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "role",
+                  "query"
+                ]
+              }
+            },
+            "limitPerItem": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10
+            }
+          },
+          "required": [
+            "items"
+          ]
+        }
+      },
+      {
+        "name": "library_search_components",
+        "version": "1",
+        "effect": "read",
+        "capability": "library.read",
+        "description": "Search the local OpenPCB component library by query, or list all installed components when query is omitted. Supports optional requirements (voltage/current/package/etc.). Returns ranked matches paginated by limit (default 10, max 50). If none match, returns generic suggestions and import guidance.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Natural-language description of the component. Omit (or leave empty) to list all installed components."
+            },
+            "requirements": {
+              "type": "object",
+              "properties": {
+                "function": {
+                  "type": "string"
+                },
+                "voltage": {
+                  "type": "string"
+                },
+                "current": {
+                  "type": "string"
+                },
+                "package": {
+                  "type": "string"
+                },
+                "mountType": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                },
+                "tolerance": {
+                  "type": "string"
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          "required": []
+        }
+      }
+    ],
+    "mcpReadOnly": {
+      "tools": [
+        {
+          "name": "designer_export_manufacturing",
+          "description": "Generate the manufacturing bundle (Gerbers, Excellon drills, optional BOM and pick-and-place) and return its manifest: bundle name, per-file names and byte sizes, and any preflight warnings. File contents are NOT returned — read the openpcb://design/{id}/export/gerber resource for the ZIP.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string",
+                "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
+              },
+              "includeBom": {
+                "type": "boolean"
+              },
+              "includePickAndPlace": {
+                "type": "boolean"
+              },
+              "includeInnerLayers": {
+                "type": "boolean"
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_get_bom",
+          "description": "Bill of materials for a design: grouped lines with reference designators, value, footprint, quantity and MPN, plus a summary of unique/total parts and unresolved rows.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string",
+                "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_get_design_summary",
+          "description": "Compact one-shot summary of a design: schematic part/net counts, PCB placement/trace counts, and top ERC violations. Uses the bound design if designId is omitted.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string"
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_get_part_detail",
+          "description": "Resolve a placed schematic part by reference (e.g. U1) within the bound design. Returns pin/net mapping and PCB placement if available.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string"
+              },
+              "referenceOrPartId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "referenceOrPartId"
+            ]
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_get_pcb_state",
+          "description": "Summary of the PCB side of a design: board size/outline/layers, counts of placements, traces, vias and zones, unrouted ratsnest count, and the active net classes. Returns counts and settings, not full geometry — use designer_run_drc for violations.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string",
+                "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_get_schematic_connectivity",
+          "description": "Return compact schematic connectivity for the bound design: placed parts, exact pin IDs/coordinates, nets, wires, and primitive pin IDs for planning safe wiring proposals.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string"
+              },
+              "includePins": {
+                "type": "boolean"
+              },
+              "includeNets": {
+                "type": "boolean"
+              },
+              "includeWires": {
+                "type": "boolean"
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_list_designs",
+          "description": "List every design in this OpenPCB installation (id, name, revision, last updated). Use this to discover a designId when the user names a project that is not currently open.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_resolve_design",
+          "description": "Resolve a design by natural-language name. On a clean unambiguous match in an unbound chat, binds the chat to that design.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "allowAlreadyBound": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "query"
+            ]
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_run_drc",
+          "description": "Run Design Rule Check over the PCB and return the violations (clearance, width, annular ring, unrouted nets). OpenPCB stays the authoritative DRC engine — always re-run this after applying layout changes rather than trusting an external calculation.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string",
+                "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_run_erc",
+          "description": "Run Electrical Rule Check over the schematic and return the violations (unconnected pins, conflicting drivers, missing power). Read-only — it computes from the current projection and persists nothing.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string",
+                "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_use_design",
+          "description": "Pin this MCP session to a design so later calls do not need designId. The pin beats the design the user has focused in the OpenPCB UI; pass null to drop it and follow the UI again. Call designer_list_designs first to get an id.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Design id to pin, or null to clear the pin."
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "library_get_component_detail",
+          "description": "Fetch full compact detail for one installed library component (symbol summary, footprint summary, variants, provenance). `componentId` may be the UUID returned by library_search_components OR the component name (e.g. \"ATMEGA16U4-AU\"); name lookup falls back to a library search.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "componentId": {
+                "type": "string",
+                "description": "Component UUID (preferred) or exact/partial component name. Name lookup will use library_search_components and pick the best match."
+              },
+              "includeRaw": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "componentId"
+            ]
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "library_resolve_bom",
+          "description": "Resolve a multi-item circuit BOM against the local OpenPCB library. Use this for circuit creation/planning before creating a design or placing components. Treat values/colors as instance properties when only generic components exist.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "goal": {
+                "type": "string"
+              },
+              "defaults": {
+                "type": "object",
+                "properties": {
+                  "supplyVoltage": {
+                    "type": "string"
+                  },
+                  "blinkRate": {
+                    "type": "string"
+                  },
+                  "packagePreference": {
+                    "type": "string"
+                  }
+                }
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string"
+                    },
+                    "query": {
+                      "type": "string"
+                    },
+                    "quantity": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 50
+                    },
+                    "value": {
+                      "type": "string"
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "attributes": {
+                      "type": "object"
+                    },
+                    "requirements": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "query"
+                  ]
+                }
+              },
+              "limitPerItem": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10
+              }
+            },
+            "required": [
+              "items"
+            ]
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "library_search_components",
+          "description": "Search the local OpenPCB component library by query, or list all installed components when query is omitted. Supports optional requirements (voltage/current/package/etc.). Returns ranked matches paginated by limit (default 10, max 50). If none match, returns generic suggestions and import guidance.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language description of the component. Omit (or leave empty) to list all installed components."
+              },
+              "requirements": {
+                "type": "object",
+                "properties": {
+                  "function": {
+                    "type": "string"
+                  },
+                  "voltage": {
+                    "type": "string"
+                  },
+                  "current": {
+                    "type": "string"
+                  },
+                  "package": {
+                    "type": "string"
+                  },
+                  "mountType": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  },
+                  "tolerance": {
+                    "type": "string"
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50
+              }
+            },
+            "required": []
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        }
+      ],
+      "resourceTemplates": {
+        "resourceTemplates": [
+          {
+            "name": "openpcb-design",
+            "uriTemplate": "openpcb://design/{designId}/{kind}",
+            "title": "OpenPCB design data",
+            "description": "Read-only JSON views of a design. kind is one of: schematic, pcb, bom, erc, drc. Use designer_list_designs for valid designIds.",
+            "mimeType": "application/json"
+          }
+        ]
+      },
+      "prompts": [
+        {
+          "name": "openpcb-bom-check",
+          "title": "Check the BOM",
+          "description": "Read the BOM and flag rows that would block ordering or assembly."
+        },
+        {
+          "name": "openpcb-build-circuit",
+          "title": "Build a circuit in OpenPCB",
+          "description": "Resolve a BOM from the installed library, create/choose a design, place the parts and wire them — in one pass.",
+          "arguments": [
+            {
+              "name": "spec",
+              "description": "What to build, e.g. '5V blinking red LED indicator at ~1Hz'.",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "openpcb-drc-triage",
+          "title": "Triage DRC violations",
+          "description": "Run DRC on the open board and group the violations by root cause, most severe first."
+        },
+        {
+          "name": "openpcb-review-schematic",
+          "title": "Review the current schematic",
+          "description": "Read the connectivity, run ERC, and report concrete problems with the design."
+        }
+      ],
+      "promptBodies": [
+        {
+          "name": "openpcb-bom-check",
+          "result": {
+            "messages": [
+              {
+                "role": "user",
+                "content": {
+                  "type": "text",
+                  "text": "Check the bill of materials of the design currently open in OpenPCB.\n\n1. Call designer_get_bom.\n2. Flag: rows with no MPN, parts marked DNP that still look required, duplicate reference designators, values that do not match the component's package or rating, and any row the projection warned about.\n3. Finish with the count of orderable vs. blocked lines.\n\nReport only what the BOM data supports — do not invent part numbers or suppliers."
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "openpcb-build-circuit",
+          "result": {
+            "messages": [
+              {
+                "role": "user",
+                "content": {
+                  "type": "text",
+                  "text": "Build this circuit in OpenPCB: Parity fixture circuit\n\nFollow these rules:\n- Use tools for OpenPCB project/library facts; prefer compact targeted tools, and say so if a result is truncated. Ask for clarification when a design/part/component is ambiguous.\n- Search by generic component family first; treat colors, values, packages, tolerances, and ratings as requirements, not literal names (search `LED` color=red, not `LED red`). Browse the whole library by calling `library_search_components` with an empty query.\n- Never declare a component missing until broad/local fallback search has been tried. Prefer adequate installed generics, then optionally suggest exact-variant imports.\n- For circuit creation, decompose into a BOM (`library_resolve_bom`) and prefer the simplest topology realizable with installed components (no extra transistors/inverters/ICs). When the user asks you to build/create/wire a specific circuit, EXECUTE the entire build in one run — BOM → create design → place → wire — WITHOUT pausing for confirmation. Only stop to ask when the request is genuinely vague; for mild under-specification assume 5V, ~1Hz blink, 0603 SMD and STATE the assumptions instead of blocking.\n- Reply in plain markdown — never wrap output in <response>…</response>, HTML, or other envelopes. When a tool returns component results, reference them by name in prose; do NOT repeat them as a table (the UI renders structured cards).\n- Draw a diagram only when the user explicitly asks to SEE the design — NEVER as a substitute for actually building it. For diagrams/flows/state machines, prefer fenced Mermaid (```mermaid, `flowchart LR`, simple IDs like `VCC`/`R1`, quoted labels like `R1[\"R1 10k\"]`) over ASCII art. Strict security: no HTML, <br/>, links, click directives, embedded CSS/JS, or comments (`classDef`/`class`/`style`/`linkStyle` ARE allowed). Represent power rails/nets as explicit nodes, keep labels short, and ensure every block is syntactically complete — else use a wiring table.\n- Color Mermaid nodes by meaning using ONLY this palette (`classDef` lines at the end, assign via `class NodeId className`; omit unused):\n  `classDef power fill:#13191F,stroke:#E0573A,color:#F3F4F6;` `classDef ground fill:#13191F,stroke:#5DCAA5,color:#F3F4F6;` `classDef timing fill:#13191F,stroke:#FBBF24,color:#F3F4F6;` `classDef signal fill:#13191F,stroke:#94A3B8,color:#F3F4F6;` `classDef ok fill:#13191F,stroke:#34D399,color:#F3F4F6;` `classDef err fill:#13191F,stroke:#F87171,color:#F3F4F6;`\n- Work on the SCHEMATIC only unless the user explicitly asks for PCB/layout/routing — do not touch the board or place footprints on your own initiative.\n- PREFER `compile_circuit` for standard block-expressible circuits (e.g. indicator LEDs): emit a circuit-spec IR (block instances + port-level nets, connect ports by \"<blockId>.<PORT>\", name vcc/gnd rails in `power`) in ONE call — it resolves INSTALLED parts, computes values, places, wires, adds power rails, and ERC-checks atomically as one undoable batch. If it reports a missing role, offer to import that part — never hand-substitute. Fall back to the manual place+wire flow below only for circuits no block recipe covers.\n- When the user asks you to build/place/wire a circuit, you are EXPECTED to finish it in this one run: actually CALL the write tools — do NOT just describe the plan, draw a diagram, or end your turn with \"would you like me to…\". Canonical flow, all in one run: `library_resolve_bom` → `designer_create_design` (if no design yet) → `designer_propose_schematic_edits` (place) → `designer_get_schematic_connectivity` → ONE `designer_propose_schematic_wires` call (the sheet auto-arranges). Keep calling tools across iterations until the circuit is both PLACED and WIRED — only then write your summary. Non-destructive edits (place/wire/move/update) auto-apply immediately and are undoable, so chain them freely; only deletions need a separate explicit confirmation. Report what the tool/apply results say — do not assume.\n- Place parts: `designer_propose_schematic_edits` (parts, labels, power ports, net portals).\n- Wiring: connect pins by REFERENCE.PIN — e.g. `{ source: \"U1.OUT\", target: \"R1.1\" }`, or `{ source: \"R2.2\", target: { net: \"GND\" } }` to tie a pin to a power/ground/named net (rails like `+5V`/`VCC`/`3V3` and `GND` are placed as power/ground symbols automatically — never as plain portals). Call `designer_get_schematic_connectivity` first to learn references and pin names. DO NOT pass coordinates/pointsNm — routing is automatic and obstacle-aware.\n- Put ALL wires for a circuit in ONE `designer_propose_schematic_wires` call (it accepts up to 40) rather than many small calls. When a pin name is decorated/active-low (e.g. `~{RST}`, shown over-lined), prefer the pin NUMBER (`\"U1.4\"`) — decorated names also resolve, but numbers are unambiguous. The batch applies every valid wire even if one is skipped, and the result lists any skips for you to retry.\n- To wire parts you just placed in this SAME run: placements auto-apply, so re-call `designer_get_schematic_connectivity` to get the new references, then `designer_propose_schematic_wires` — no need to wait for the user.\n- Move/rotate/edit existing parts: `designer_propose_schematic_updates` (address parts by `ref` like \"U1\"); connected wires reflow automatically.\n- Deletions: `designer_propose_schematic_deletions` only after explicit confirmation; destructive (does not auto-apply).\n\nIf no design is open, create one. Finish the build — placed AND wired — before summarising."
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "openpcb-drc-triage",
+          "result": {
+            "messages": [
+              {
+                "role": "user",
+                "content": {
+                  "type": "text",
+                  "text": "Triage the DRC state of the board currently open in OpenPCB.\n\n1. Call designer_get_pcb_state for the board setup and net classes.\n2. Call designer_run_drc.\n3. Group violations by root cause rather than listing them one by one — e.g. 'clearance too tight for the default net class', 'unrouted power net', 'annular ring below fab minimum'. Order by severity.\n4. For each group, say what would fix it and whether the fix is a rule change or a layout change.\n\nOpenPCB is the authoritative DRC engine — never compute clearances yourself, and re-run designer_run_drc after any change."
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "openpcb-review-schematic",
+          "result": {
+            "messages": [
+              {
+                "role": "user",
+                "content": {
+                  "type": "text",
+                  "text": "Review the schematic currently open in OpenPCB.\n\n1. Call designer_get_design_summary, then designer_get_schematic_connectivity.\n2. Call designer_run_erc.\n3. Report: unconnected or floating pins, missing decoupling, missing pull-ups on open-drain/reset lines, power rails that are not driven, and any part whose value looks wrong for its role.\n\nGround every claim in a tool result — cite the reference designators and net names you saw. Do not propose edits unless asked; this is a review.\n\n- Use tools for OpenPCB project/library facts; prefer compact targeted tools, and say so if a result is truncated. Ask for clarification when a design/part/component is ambiguous.\n- Search by generic component family first; treat colors, values, packages, tolerances, and ratings as requirements, not literal names (search `LED` color=red, not `LED red`). Browse the whole library by calling `library_search_components` with an empty query.\n- Never declare a component missing until broad/local fallback search has been tried. Prefer adequate installed generics, then optionally suggest exact-variant imports.\n- For circuit creation, decompose into a BOM (`library_resolve_bom`) and prefer the simplest topology realizable with installed components (no extra transistors/inverters/ICs). When the user asks you to build/create/wire a specific circuit, EXECUTE the entire build in one run — BOM → create design → place → wire — WITHOUT pausing for confirmation. Only stop to ask when the request is genuinely vague; for mild under-specification assume 5V, ~1Hz blink, 0603 SMD and STATE the assumptions instead of blocking.\n- Reply in plain markdown — never wrap output in <response>…</response>, HTML, or other envelopes. When a tool returns component results, reference them by name in prose; do NOT repeat them as a table (the UI renders structured cards).\n- Draw a diagram only when the user explicitly asks to SEE the design — NEVER as a substitute for actually building it. For diagrams/flows/state machines, prefer fenced Mermaid (```mermaid, `flowchart LR`, simple IDs like `VCC`/`R1`, quoted labels like `R1[\"R1 10k\"]`) over ASCII art. Strict security: no HTML, <br/>, links, click directives, embedded CSS/JS, or comments (`classDef`/`class`/`style`/`linkStyle` ARE allowed). Represent power rails/nets as explicit nodes, keep labels short, and ensure every block is syntactically complete — else use a wiring table.\n- Color Mermaid nodes by meaning using ONLY this palette (`classDef` lines at the end, assign via `class NodeId className`; omit unused):\n  `classDef power fill:#13191F,stroke:#E0573A,color:#F3F4F6;` `classDef ground fill:#13191F,stroke:#5DCAA5,color:#F3F4F6;` `classDef timing fill:#13191F,stroke:#FBBF24,color:#F3F4F6;` `classDef signal fill:#13191F,stroke:#94A3B8,color:#F3F4F6;` `classDef ok fill:#13191F,stroke:#34D399,color:#F3F4F6;` `classDef err fill:#13191F,stroke:#F87171,color:#F3F4F6;`"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "mcpWithWrites": {
+      "tools": [
+        {
+          "name": "compile_circuit",
+          "description": "Build a schematic from a declarative circuit-spec IR: block instances + port-level nets. Prefer this over hand placing+wiring for standard multi-part circuits — each block owns its own pin-accurate internal wiring and part values (Ohm's law etc.) are computed deterministically, so you connect only a few semantic ports and never touch pins. Part roles resolve to INSTALLED library components; a missing role is reported (import it) — parts are never substituted. The composed result is ERC-checked and auto-applied in one pass (revertible step-by-step via designer undo). Available block recipes: led_indicator (led_indicator ports: IN, GND; params: supplyV, vf, currentA). Connect nets by port ref \"<blockId>.<PORT>\" (e.g. \"led0.IN\"); name your vcc/gnd rails in `power`.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string",
+                "description": "Target design id. Omit to use the design bound to this chat."
+              },
+              "version": {
+                "type": "integer",
+                "enum": [
+                  1
+                ],
+                "description": "IR schema version — must be 1."
+              },
+              "blocks": {
+                "type": "array",
+                "description": "Block instances to place.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Unique handle within this IR (e.g. \"led0\")."
+                    },
+                    "recipe": {
+                      "type": "string",
+                      "description": "Block recipe name. Available: led_indicator."
+                    },
+                    "params": {
+                      "type": "object",
+                      "description": "Recipe parameters (e.g. supplyV, vf, currentA for led_indicator).",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "recipe"
+                  ]
+                }
+              },
+              "nets": {
+                "type": "array",
+                "description": "Port-level nets. Each connects block ports named \"<blockId>.<PORT>\".",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "ports": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Port refs, e.g. [\"led0.IN\", \"led1.IN\"]."
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "ports"
+                  ]
+                }
+              },
+              "power": {
+                "type": "object",
+                "description": "Names of the vcc/gnd rail nets — lowered to power/ground port symbols, not plain wires.",
+                "properties": {
+                  "vcc": {
+                    "type": "string"
+                  },
+                  "gnd": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "vcc",
+                  "gnd"
+                ]
+              }
+            },
+            "required": [
+              "version",
+              "blocks",
+              "nets",
+              "power"
+            ]
+          },
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_arrange_schematic",
+          "description": "Tidy the whole schematic: deterministically group net-connected parts with routing channels, slide power/ground flags with their pins, and re-route every wire around bodies, flags and other wires. Non-destructive, auto-applies, single undo step. Use when the layout looks messy or overlapping.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string"
+              },
+              "action_id": {
+                "type": "string",
+                "description": "Stable idempotency key you generate: `<verb>_<primaryKey>_<designId>` (e.g. `place_R1_<designId>`, `wire_U1.OUT__R1.1_<designId>`). Re-using the same action_id is a safe no-op."
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_create_design",
+          "description": "Create a new empty OpenPCB design and bind this chat to it. Use after the user has chosen a project direction and wants a new schematic canvas.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Short human-readable design name.",
+                "maxLength": 120
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_export_manufacturing",
+          "description": "Generate the manufacturing bundle (Gerbers, Excellon drills, optional BOM and pick-and-place) and return its manifest: bundle name, per-file names and byte sizes, and any preflight warnings. File contents are NOT returned — read the openpcb://design/{id}/export/gerber resource for the ZIP.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string",
+                "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
+              },
+              "includeBom": {
+                "type": "boolean"
+              },
+              "includePickAndPlace": {
+                "type": "boolean"
+              },
+              "includeInnerLayers": {
+                "type": "boolean"
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_get_bom",
+          "description": "Bill of materials for a design: grouped lines with reference designators, value, footprint, quantity and MPN, plus a summary of unique/total parts and unresolved rows.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string",
+                "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_get_design_summary",
+          "description": "Compact one-shot summary of a design: schematic part/net counts, PCB placement/trace counts, and top ERC violations. Uses the bound design if designId is omitted.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string"
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_get_part_detail",
+          "description": "Resolve a placed schematic part by reference (e.g. U1) within the bound design. Returns pin/net mapping and PCB placement if available.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string"
+              },
+              "referenceOrPartId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "referenceOrPartId"
+            ]
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_get_pcb_state",
+          "description": "Summary of the PCB side of a design: board size/outline/layers, counts of placements, traces, vias and zones, unrouted ratsnest count, and the active net classes. Returns counts and settings, not full geometry — use designer_run_drc for violations.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string",
+                "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_get_schematic_connectivity",
+          "description": "Return compact schematic connectivity for the bound design: placed parts, exact pin IDs/coordinates, nets, wires, and primitive pin IDs for planning safe wiring proposals.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string"
+              },
+              "includePins": {
+                "type": "boolean"
+              },
+              "includeNets": {
+                "type": "boolean"
+              },
+              "includeWires": {
+                "type": "boolean"
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_list_designs",
+          "description": "List every design in this OpenPCB installation (id, name, revision, last updated). Use this to discover a designId when the user names a project that is not currently open.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_place_components",
+          "description": "Place installed library components onto the bound design's schematic canvas. Non-destructive: auto-applies immediately and is undoable. Prefer designer_propose_schematic_edits for placement (it also adds labels/power ports and wires in one batch); use this only for a plain quantity-based drop.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string"
+              },
+              "action_id": {
+                "type": "string",
+                "description": "Stable idempotency key you generate: `<verb>_<primaryKey>_<designId>` (e.g. `place_R1_<designId>`, `wire_U1.OUT__R1.1_<designId>`). Re-using the same action_id is a safe no-op."
+              },
+              "components": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "componentId": {
+                      "type": "string"
+                    },
+                    "quantity": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 20
+                    },
+                    "rotationDeg": {
+                      "type": "integer",
+                      "enum": [
+                        0,
+                        90,
+                        180,
+                        270
+                      ]
+                    },
+                    "mirrored": {
+                      "type": "boolean"
+                    },
+                    "value": {
+                      "type": "string",
+                      "description": "Optional displayed part value/intended value, e.g. 330Ω, 10k, 10µF, red LED."
+                    },
+                    "properties": {
+                      "type": "object",
+                      "description": "Optional string metadata such as color, role, tolerance, voltage, current, or package intent."
+                    },
+                    "note": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "componentId"
+                  ]
+                }
+              },
+              "layout": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "auto-grid"
+                    ]
+                  },
+                  "columns": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8
+                  }
+                }
+              }
+            },
+            "required": [
+              "components"
+            ]
+          },
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_propose_schematic_deletions",
+          "description": "Delete existing schematic parts, wires, labels, or primitives. Destructive: stays pending for explicit user confirmation (does NOT auto-apply). Parts may be addressed by reference (e.g. \"U1\") or ID; wires/labels/primitives by ID.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string"
+              },
+              "action_id": {
+                "type": "string",
+                "description": "Stable idempotency key you generate: `<verb>_<primaryKey>_<designId>` (e.g. `place_R1_<designId>`, `wire_U1.OUT__R1.1_<designId>`). Re-using the same action_id is a safe no-op."
+              },
+              "title": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "entities": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "entityId": {
+                      "type": "string",
+                      "description": "Entity ID; for parts a reference like \"U1\" is also accepted."
+                    },
+                    "entityKind": {
+                      "type": "string",
+                      "enum": [
+                        "part",
+                        "wire",
+                        "label",
+                        "primitive"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "entityId",
+                    "entityKind"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "title",
+              "summary",
+              "entities"
+            ]
+          },
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_propose_schematic_edits",
+          "description": "Batch small schematic edits: place library parts, add net labels / power ports / net portals, and wire existing pins. Do NOT pass coordinates — omit positionNm and wire geometry; the layout is auto-arranged from connectivity and wires are auto-routed when this proposal applies. Just choose components and how their pins connect. Non-destructive, so it auto-applies. To wire freshly-placed parts, run this once to place them, then call designer_get_schematic_connectivity and wire by REF.PIN.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string"
+              },
+              "action_id": {
+                "type": "string",
+                "description": "Stable idempotency key you generate: `<verb>_<primaryKey>_<designId>` (e.g. `place_R1_<designId>`, `wire_U1.OUT__R1.1_<designId>`). Re-using the same action_id is a safe no-op."
+              },
+              "title": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "parts": {
+                "type": "array",
+                "description": "Library components to place.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "componentId": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    },
+                    "positionNm": {
+                      "type": "object",
+                      "description": "Optional. Omit it — placement is auto-arranged from connectivity after this proposal applies. Only pass coordinates to pin a specific part.",
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ]
+                    },
+                    "rotationDeg": {
+                      "type": "integer",
+                      "enum": [
+                        0,
+                        90,
+                        180,
+                        270
+                      ]
+                    },
+                    "mirrored": {
+                      "type": "boolean"
+                    },
+                    "properties": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "componentId"
+                  ]
+                }
+              },
+              "labels": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "positionNm": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "positionNm"
+                  ]
+                }
+              },
+              "powerPorts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "gnd",
+                        "pwr",
+                        "net_portal"
+                      ]
+                    },
+                    "text": {
+                      "type": "string",
+                      "description": "Rail/portal name (e.g. \"+5V\", \"SDA\"); ignored for gnd."
+                    },
+                    "positionNm": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ]
+                    },
+                    "rotationDeg": {
+                      "type": "integer",
+                      "enum": [
+                        0,
+                        90,
+                        180,
+                        270
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "positionNm"
+                  ]
+                }
+              },
+              "wires": {
+                "type": "array",
+                "description": "Connect existing pins (or a pin to a named net). Geometry is auto-routed.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "description": "Pin or net. A pin: \"U1.VCC\" / \"U1.1\", or { ref, pin }, or { pinId }. A net: { net: \"GND\" } (auto-places a power/ground/net-portal primitive and wires to it).",
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "ref": {
+                              "type": "string"
+                            },
+                            "pin": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "ref",
+                            "pin"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "pinId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "pinId"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "net": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "net"
+                          ]
+                        }
+                      ]
+                    },
+                    "target": {
+                      "description": "Pin or net. A pin: \"U1.VCC\" / \"U1.1\", or { ref, pin }, or { pinId }. A net: { net: \"GND\" } (auto-places a power/ground/net-portal primitive and wires to it).",
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "ref": {
+                              "type": "string"
+                            },
+                            "pin": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "ref",
+                            "pin"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "pinId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "pinId"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "net": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "net"
+                          ]
+                        }
+                      ]
+                    },
+                    "netName": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "target"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "title",
+              "summary"
+            ]
+          },
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_propose_schematic_updates",
+          "description": "Move/rotate/mirror schematic parts, edit part value/reference/properties, move/rename labels, or move/rotate/retext power & net-portal primitives. Address parts by \"partId\" or reference \"ref\" (e.g. \"U1\"). Connected wires reflow automatically on move/rotate/mirror. Non-destructive, so it auto-applies.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string"
+              },
+              "action_id": {
+                "type": "string",
+                "description": "Stable idempotency key you generate: `<verb>_<primaryKey>_<designId>` (e.g. `place_R1_<designId>`, `wire_U1.OUT__R1.1_<designId>`). Re-using the same action_id is a safe no-op."
+              },
+              "title": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "partUpdates": {
+                "type": "array",
+                "description": "Changes to existing parts. Each entry needs partId or ref.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "partId": {
+                      "type": "string",
+                      "description": "Part UUID (from connectivity)."
+                    },
+                    "ref": {
+                      "type": "string",
+                      "description": "Reference designator, e.g. \"U1\". Alternative to partId."
+                    },
+                    "positionNm": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ],
+                      "description": "New position (nanometers). Connected wires reflow automatically."
+                    },
+                    "rotationDeg": {
+                      "type": "integer",
+                      "enum": [
+                        0,
+                        90,
+                        180,
+                        270
+                      ]
+                    },
+                    "mirrored": {
+                      "type": "boolean"
+                    },
+                    "reference": {
+                      "type": "string",
+                      "description": "New reference designator."
+                    },
+                    "value": {
+                      "type": "string"
+                    },
+                    "properties": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "labelUpdates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "labelId": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "positionNm": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "labelId"
+                  ]
+                }
+              },
+              "primitiveUpdates": {
+                "type": "array",
+                "description": "Changes to gnd/pwr/net-portal primitives.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "primitiveId": {
+                      "type": "string"
+                    },
+                    "positionNm": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ]
+                    },
+                    "rotationDeg": {
+                      "type": "integer",
+                      "enum": [
+                        0,
+                        90,
+                        180,
+                        270
+                      ]
+                    },
+                    "text": {
+                      "type": "string",
+                      "description": "Rail/portal text (ignored for gnd)."
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "primitiveId"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "title",
+              "summary"
+            ]
+          },
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_propose_schematic_wires",
+          "description": "Wire schematic pins together, or connect a pin to a named net. Address pins by \"REF.PIN\" (e.g. \"U1.VCC\", \"R1.2\") — call designer_get_schematic_connectivity first to learn references and pin names. Do NOT pass coordinates: routing is automatic and obstacle-aware. After wiring, the whole sheet is auto-arranged — components are MOVED to group what is now connected and wires re-routed cleanly. Non-destructive, so it auto-applies.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string"
+              },
+              "action_id": {
+                "type": "string",
+                "description": "Stable idempotency key you generate: `<verb>_<primaryKey>_<designId>` (e.g. `place_R1_<designId>`, `wire_U1.OUT__R1.1_<designId>`). Re-using the same action_id is a safe no-op."
+              },
+              "title": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "wires": {
+                "type": "array",
+                "description": "Connections to make. Each joins a source to a target; geometry is auto-routed.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "description": "Pin or net. A pin: \"U1.VCC\" / \"U1.1\", or { ref, pin }, or { pinId }. A net: { net: \"GND\" } (auto-places a power/ground/net-portal primitive and wires to it).",
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "ref": {
+                              "type": "string"
+                            },
+                            "pin": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "ref",
+                            "pin"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "pinId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "pinId"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "net": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "net"
+                          ]
+                        }
+                      ]
+                    },
+                    "target": {
+                      "description": "Pin or net. A pin: \"U1.VCC\" / \"U1.1\", or { ref, pin }, or { pinId }. A net: { net: \"GND\" } (auto-places a power/ground/net-portal primitive and wires to it).",
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "ref": {
+                              "type": "string"
+                            },
+                            "pin": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "ref",
+                            "pin"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "pinId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "pinId"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "net": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "net"
+                          ]
+                        }
+                      ]
+                    },
+                    "netName": {
+                      "type": "string",
+                      "description": "Optional display label for the resulting net."
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "target"
+                  ]
+                }
+              },
+              "junctions": {
+                "type": "array",
+                "description": "Tap a pin onto an existing wire at an exact on-wire point (creates a junction).",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "description": "A pin: \"U1.VCC\" / \"U1.1\", or { ref, pin }, or { pinId }.",
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "ref": {
+                              "type": "string"
+                            },
+                            "pin": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "ref",
+                            "pin"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "pinId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "pinId"
+                          ]
+                        }
+                      ]
+                    },
+                    "wireId": {
+                      "type": "string",
+                      "description": "ID of the existing wire to tap (from connectivity)."
+                    },
+                    "targetPointNm": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ],
+                      "description": "A point lying on the target wire (nanometers)."
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "wireId",
+                    "targetPointNm"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "title",
+              "summary"
+            ]
+          },
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_resolve_design",
+          "description": "Resolve a design by natural-language name. On a clean unambiguous match in an unbound chat, binds the chat to that design.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "allowAlreadyBound": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "query"
+            ]
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_run_drc",
+          "description": "Run Design Rule Check over the PCB and return the violations (clearance, width, annular ring, unrouted nets). OpenPCB stays the authoritative DRC engine — always re-run this after applying layout changes rather than trusting an external calculation.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string",
+                "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_run_erc",
+          "description": "Run Electrical Rule Check over the schematic and return the violations (unconnected pins, conflicting drivers, missing power). Read-only — it computes from the current projection and persists nothing.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": "string",
+                "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "designer_use_design",
+          "description": "Pin this MCP session to a design so later calls do not need designId. The pin beats the design the user has focused in the OpenPCB UI; pass null to drop it and follow the UI again. Call designer_list_designs first to get an id.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "designId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Design id to pin, or null to clear the pin."
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "library_get_component_detail",
+          "description": "Fetch full compact detail for one installed library component (symbol summary, footprint summary, variants, provenance). `componentId` may be the UUID returned by library_search_components OR the component name (e.g. \"ATMEGA16U4-AU\"); name lookup falls back to a library search.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "componentId": {
+                "type": "string",
+                "description": "Component UUID (preferred) or exact/partial component name. Name lookup will use library_search_components and pick the best match."
+              },
+              "includeRaw": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "componentId"
+            ]
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "library_resolve_bom",
+          "description": "Resolve a multi-item circuit BOM against the local OpenPCB library. Use this for circuit creation/planning before creating a design or placing components. Treat values/colors as instance properties when only generic components exist.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "goal": {
+                "type": "string"
+              },
+              "defaults": {
+                "type": "object",
+                "properties": {
+                  "supplyVoltage": {
+                    "type": "string"
+                  },
+                  "blinkRate": {
+                    "type": "string"
+                  },
+                  "packagePreference": {
+                    "type": "string"
+                  }
+                }
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string"
+                    },
+                    "query": {
+                      "type": "string"
+                    },
+                    "quantity": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 50
+                    },
+                    "value": {
+                      "type": "string"
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "attributes": {
+                      "type": "object"
+                    },
+                    "requirements": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "query"
+                  ]
+                }
+              },
+              "limitPerItem": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10
+              }
+            },
+            "required": [
+              "items"
+            ]
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "library_search_components",
+          "description": "Search the local OpenPCB component library by query, or list all installed components when query is omitted. Supports optional requirements (voltage/current/package/etc.). Returns ranked matches paginated by limit (default 10, max 50). If none match, returns generic suggestions and import guidance.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language description of the component. Omit (or leave empty) to list all installed components."
+              },
+              "requirements": {
+                "type": "object",
+                "properties": {
+                  "function": {
+                    "type": "string"
+                  },
+                  "voltage": {
+                    "type": "string"
+                  },
+                  "current": {
+                    "type": "string"
+                  },
+                  "package": {
+                    "type": "string"
+                  },
+                  "mountType": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  },
+                  "tolerance": {
+                    "type": "string"
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50
+              }
+            },
+            "required": []
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        }
+      ],
+      "resourceTemplates": {
+        "resourceTemplates": [
+          {
+            "name": "openpcb-design",
+            "uriTemplate": "openpcb://design/{designId}/{kind}",
+            "title": "OpenPCB design data",
+            "description": "Read-only JSON views of a design. kind is one of: schematic, pcb, bom, erc, drc. Use designer_list_designs for valid designIds.",
+            "mimeType": "application/json"
+          }
+        ]
+      },
+      "prompts": [
+        {
+          "name": "openpcb-bom-check",
+          "title": "Check the BOM",
+          "description": "Read the BOM and flag rows that would block ordering or assembly."
+        },
+        {
+          "name": "openpcb-build-circuit",
+          "title": "Build a circuit in OpenPCB",
+          "description": "Resolve a BOM from the installed library, create/choose a design, place the parts and wire them — in one pass.",
+          "arguments": [
+            {
+              "name": "spec",
+              "description": "What to build, e.g. '5V blinking red LED indicator at ~1Hz'.",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "openpcb-drc-triage",
+          "title": "Triage DRC violations",
+          "description": "Run DRC on the open board and group the violations by root cause, most severe first."
+        },
+        {
+          "name": "openpcb-review-schematic",
+          "title": "Review the current schematic",
+          "description": "Read the connectivity, run ERC, and report concrete problems with the design."
+        }
+      ],
+      "promptBodies": [
+        {
+          "name": "openpcb-bom-check",
+          "result": {
+            "messages": [
+              {
+                "role": "user",
+                "content": {
+                  "type": "text",
+                  "text": "Check the bill of materials of the design currently open in OpenPCB.\n\n1. Call designer_get_bom.\n2. Flag: rows with no MPN, parts marked DNP that still look required, duplicate reference designators, values that do not match the component's package or rating, and any row the projection warned about.\n3. Finish with the count of orderable vs. blocked lines.\n\nReport only what the BOM data supports — do not invent part numbers or suppliers."
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "openpcb-build-circuit",
+          "result": {
+            "messages": [
+              {
+                "role": "user",
+                "content": {
+                  "type": "text",
+                  "text": "Build this circuit in OpenPCB: Parity fixture circuit\n\nFollow these rules:\n- Use tools for OpenPCB project/library facts; prefer compact targeted tools, and say so if a result is truncated. Ask for clarification when a design/part/component is ambiguous.\n- Search by generic component family first; treat colors, values, packages, tolerances, and ratings as requirements, not literal names (search `LED` color=red, not `LED red`). Browse the whole library by calling `library_search_components` with an empty query.\n- Never declare a component missing until broad/local fallback search has been tried. Prefer adequate installed generics, then optionally suggest exact-variant imports.\n- For circuit creation, decompose into a BOM (`library_resolve_bom`) and prefer the simplest topology realizable with installed components (no extra transistors/inverters/ICs). When the user asks you to build/create/wire a specific circuit, EXECUTE the entire build in one run — BOM → create design → place → wire — WITHOUT pausing for confirmation. Only stop to ask when the request is genuinely vague; for mild under-specification assume 5V, ~1Hz blink, 0603 SMD and STATE the assumptions instead of blocking.\n- Reply in plain markdown — never wrap output in <response>…</response>, HTML, or other envelopes. When a tool returns component results, reference them by name in prose; do NOT repeat them as a table (the UI renders structured cards).\n- Draw a diagram only when the user explicitly asks to SEE the design — NEVER as a substitute for actually building it. For diagrams/flows/state machines, prefer fenced Mermaid (```mermaid, `flowchart LR`, simple IDs like `VCC`/`R1`, quoted labels like `R1[\"R1 10k\"]`) over ASCII art. Strict security: no HTML, <br/>, links, click directives, embedded CSS/JS, or comments (`classDef`/`class`/`style`/`linkStyle` ARE allowed). Represent power rails/nets as explicit nodes, keep labels short, and ensure every block is syntactically complete — else use a wiring table.\n- Color Mermaid nodes by meaning using ONLY this palette (`classDef` lines at the end, assign via `class NodeId className`; omit unused):\n  `classDef power fill:#13191F,stroke:#E0573A,color:#F3F4F6;` `classDef ground fill:#13191F,stroke:#5DCAA5,color:#F3F4F6;` `classDef timing fill:#13191F,stroke:#FBBF24,color:#F3F4F6;` `classDef signal fill:#13191F,stroke:#94A3B8,color:#F3F4F6;` `classDef ok fill:#13191F,stroke:#34D399,color:#F3F4F6;` `classDef err fill:#13191F,stroke:#F87171,color:#F3F4F6;`\n- Work on the SCHEMATIC only unless the user explicitly asks for PCB/layout/routing — do not touch the board or place footprints on your own initiative.\n- PREFER `compile_circuit` for standard block-expressible circuits (e.g. indicator LEDs): emit a circuit-spec IR (block instances + port-level nets, connect ports by \"<blockId>.<PORT>\", name vcc/gnd rails in `power`) in ONE call — it resolves INSTALLED parts, computes values, places, wires, adds power rails, and ERC-checks atomically as one undoable batch. If it reports a missing role, offer to import that part — never hand-substitute. Fall back to the manual place+wire flow below only for circuits no block recipe covers.\n- When the user asks you to build/place/wire a circuit, you are EXPECTED to finish it in this one run: actually CALL the write tools — do NOT just describe the plan, draw a diagram, or end your turn with \"would you like me to…\". Canonical flow, all in one run: `library_resolve_bom` → `designer_create_design` (if no design yet) → `designer_propose_schematic_edits` (place) → `designer_get_schematic_connectivity` → ONE `designer_propose_schematic_wires` call (the sheet auto-arranges). Keep calling tools across iterations until the circuit is both PLACED and WIRED — only then write your summary. Non-destructive edits (place/wire/move/update) auto-apply immediately and are undoable, so chain them freely; only deletions need a separate explicit confirmation. Report what the tool/apply results say — do not assume.\n- Place parts: `designer_propose_schematic_edits` (parts, labels, power ports, net portals).\n- Wiring: connect pins by REFERENCE.PIN — e.g. `{ source: \"U1.OUT\", target: \"R1.1\" }`, or `{ source: \"R2.2\", target: { net: \"GND\" } }` to tie a pin to a power/ground/named net (rails like `+5V`/`VCC`/`3V3` and `GND` are placed as power/ground symbols automatically — never as plain portals). Call `designer_get_schematic_connectivity` first to learn references and pin names. DO NOT pass coordinates/pointsNm — routing is automatic and obstacle-aware.\n- Put ALL wires for a circuit in ONE `designer_propose_schematic_wires` call (it accepts up to 40) rather than many small calls. When a pin name is decorated/active-low (e.g. `~{RST}`, shown over-lined), prefer the pin NUMBER (`\"U1.4\"`) — decorated names also resolve, but numbers are unambiguous. The batch applies every valid wire even if one is skipped, and the result lists any skips for you to retry.\n- To wire parts you just placed in this SAME run: placements auto-apply, so re-call `designer_get_schematic_connectivity` to get the new references, then `designer_propose_schematic_wires` — no need to wait for the user.\n- Move/rotate/edit existing parts: `designer_propose_schematic_updates` (address parts by `ref` like \"U1\"); connected wires reflow automatically.\n- Deletions: `designer_propose_schematic_deletions` only after explicit confirmation; destructive (does not auto-apply).\n\nIf no design is open, create one. Finish the build — placed AND wired — before summarising."
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "openpcb-drc-triage",
+          "result": {
+            "messages": [
+              {
+                "role": "user",
+                "content": {
+                  "type": "text",
+                  "text": "Triage the DRC state of the board currently open in OpenPCB.\n\n1. Call designer_get_pcb_state for the board setup and net classes.\n2. Call designer_run_drc.\n3. Group violations by root cause rather than listing them one by one — e.g. 'clearance too tight for the default net class', 'unrouted power net', 'annular ring below fab minimum'. Order by severity.\n4. For each group, say what would fix it and whether the fix is a rule change or a layout change.\n\nOpenPCB is the authoritative DRC engine — never compute clearances yourself, and re-run designer_run_drc after any change."
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "openpcb-review-schematic",
+          "result": {
+            "messages": [
+              {
+                "role": "user",
+                "content": {
+                  "type": "text",
+                  "text": "Review the schematic currently open in OpenPCB.\n\n1. Call designer_get_design_summary, then designer_get_schematic_connectivity.\n2. Call designer_run_erc.\n3. Report: unconnected or floating pins, missing decoupling, missing pull-ups on open-drain/reset lines, power rails that are not driven, and any part whose value looks wrong for its role.\n\nGround every claim in a tool result — cite the reference designators and net names you saw. Do not propose edits unless asked; this is a review.\n\n- Use tools for OpenPCB project/library facts; prefer compact targeted tools, and say so if a result is truncated. Ask for clarification when a design/part/component is ambiguous.\n- Search by generic component family first; treat colors, values, packages, tolerances, and ratings as requirements, not literal names (search `LED` color=red, not `LED red`). Browse the whole library by calling `library_search_components` with an empty query.\n- Never declare a component missing until broad/local fallback search has been tried. Prefer adequate installed generics, then optionally suggest exact-variant imports.\n- For circuit creation, decompose into a BOM (`library_resolve_bom`) and prefer the simplest topology realizable with installed components (no extra transistors/inverters/ICs). When the user asks you to build/create/wire a specific circuit, EXECUTE the entire build in one run — BOM → create design → place → wire — WITHOUT pausing for confirmation. Only stop to ask when the request is genuinely vague; for mild under-specification assume 5V, ~1Hz blink, 0603 SMD and STATE the assumptions instead of blocking.\n- Reply in plain markdown — never wrap output in <response>…</response>, HTML, or other envelopes. When a tool returns component results, reference them by name in prose; do NOT repeat them as a table (the UI renders structured cards).\n- Draw a diagram only when the user explicitly asks to SEE the design — NEVER as a substitute for actually building it. For diagrams/flows/state machines, prefer fenced Mermaid (```mermaid, `flowchart LR`, simple IDs like `VCC`/`R1`, quoted labels like `R1[\"R1 10k\"]`) over ASCII art. Strict security: no HTML, <br/>, links, click directives, embedded CSS/JS, or comments (`classDef`/`class`/`style`/`linkStyle` ARE allowed). Represent power rails/nets as explicit nodes, keep labels short, and ensure every block is syntactically complete — else use a wiring table.\n- Color Mermaid nodes by meaning using ONLY this palette (`classDef` lines at the end, assign via `class NodeId className`; omit unused):\n  `classDef power fill:#13191F,stroke:#E0573A,color:#F3F4F6;` `classDef ground fill:#13191F,stroke:#5DCAA5,color:#F3F4F6;` `classDef timing fill:#13191F,stroke:#FBBF24,color:#F3F4F6;` `classDef signal fill:#13191F,stroke:#94A3B8,color:#F3F4F6;` `classDef ok fill:#13191F,stroke:#34D399,color:#F3F4F6;` `classDef err fill:#13191F,stroke:#F87171,color:#F3F4F6;`"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "sqliteSchema": [
+      {
+        "type": "index",
+        "name": "designer_bom_overrides_design_id_idx",
+        "tbl_name": "designer_bom_overrides",
+        "sql": "CREATE INDEX designer_bom_overrides_design_id_idx\n  on designer_bom_overrides(design_id)"
+      },
+      {
+        "type": "index",
+        "name": "designer_bom_overrides_design_part_uq",
+        "tbl_name": "designer_bom_overrides",
+        "sql": "CREATE UNIQUE INDEX designer_bom_overrides_design_part_uq\n  on designer_bom_overrides(design_id, part_id)"
+      },
+      {
+        "type": "index",
+        "name": "designer_bom_overrides_design_ref_unbound_uq",
+        "tbl_name": "designer_bom_overrides",
+        "sql": "CREATE UNIQUE INDEX designer_bom_overrides_design_ref_unbound_uq\n  on designer_bom_overrides(design_id, refdes)\n  where part_id is null"
+      },
+      {
+        "type": "index",
+        "name": "designer_capture_auto_copper_cmd_idx",
+        "tbl_name": "designer_capture_auto_copper",
+        "sql": "CREATE INDEX designer_capture_auto_copper_cmd_idx\n  on designer_capture_auto_copper (created_by_command_id)"
+      },
+      {
+        "type": "index",
+        "name": "designer_capture_auto_copper_design_net_idx",
+        "tbl_name": "designer_capture_auto_copper",
+        "sql": "CREATE INDEX designer_capture_auto_copper_design_net_idx\n  on designer_capture_auto_copper (design_id, net_id)"
+      },
+      {
+        "type": "index",
+        "name": "designer_capture_autolayout_jobs_design_idx",
+        "tbl_name": "designer_capture_autolayout_jobs",
+        "sql": "CREATE INDEX designer_capture_autolayout_jobs_design_idx\n  on designer_capture_autolayout_jobs (design_id)"
+      },
+      {
+        "type": "index",
+        "name": "designer_capture_sessions_design_idx",
+        "tbl_name": "designer_capture_sessions",
+        "sql": "CREATE INDEX designer_capture_sessions_design_idx\n  on designer_capture_sessions (design_id)"
+      },
+      {
+        "type": "index",
+        "name": "designer_capture_upload_queue_status_idx",
+        "tbl_name": "designer_capture_upload_queue",
+        "sql": "CREATE INDEX designer_capture_upload_queue_status_idx\n  on designer_capture_upload_queue (status, next_attempt_at)"
+      },
+      {
+        "type": "index",
+        "name": "designer_command_log_design_id_idx",
+        "tbl_name": "designer_command_log",
+        "sql": "CREATE INDEX `designer_command_log_design_id_idx` ON `designer_command_log` (`design_id`)"
+      },
+      {
+        "type": "index",
+        "name": "designer_comment_attachments_message_id_idx",
+        "tbl_name": "designer_comment_attachments",
+        "sql": "CREATE INDEX designer_comment_attachments_message_id_idx\n  on designer_comment_attachments(message_id)"
+      },
+      {
+        "type": "index",
+        "name": "designer_comment_attachments_thread_id_idx",
+        "tbl_name": "designer_comment_attachments",
+        "sql": "CREATE INDEX designer_comment_attachments_thread_id_idx\n  on designer_comment_attachments(thread_id)"
+      },
+      {
+        "type": "index",
+        "name": "designer_comment_messages_design_id_idx",
+        "tbl_name": "designer_comment_messages",
+        "sql": "CREATE INDEX designer_comment_messages_design_id_idx\n  on designer_comment_messages(design_id)"
+      },
+      {
+        "type": "index",
+        "name": "designer_comment_messages_thread_id_idx",
+        "tbl_name": "designer_comment_messages",
+        "sql": "CREATE INDEX designer_comment_messages_thread_id_idx\n  on designer_comment_messages(thread_id)"
+      },
+      {
+        "type": "index",
+        "name": "designer_comment_outbox_design_id_idx",
+        "tbl_name": "designer_comment_outbox",
+        "sql": "CREATE INDEX designer_comment_outbox_design_id_idx\n  on designer_comment_outbox(design_id)"
+      },
+      {
+        "type": "index",
+        "name": "designer_comment_outbox_status_idx",
+        "tbl_name": "designer_comment_outbox",
+        "sql": "CREATE INDEX designer_comment_outbox_status_idx\n  on designer_comment_outbox(status)"
+      },
+      {
+        "type": "index",
+        "name": "designer_comment_reactions_message_id_idx",
+        "tbl_name": "designer_comment_reactions",
+        "sql": "CREATE INDEX designer_comment_reactions_message_id_idx\n  on designer_comment_reactions(message_id)"
+      },
+      {
+        "type": "index",
+        "name": "designer_comment_reactions_thread_id_idx",
+        "tbl_name": "designer_comment_reactions",
+        "sql": "CREATE INDEX designer_comment_reactions_thread_id_idx\n  on designer_comment_reactions(thread_id)"
+      },
+      {
+        "type": "index",
+        "name": "designer_comment_threads_design_id_idx",
+        "tbl_name": "designer_comment_threads",
+        "sql": "CREATE INDEX designer_comment_threads_design_id_idx\n  on designer_comment_threads(design_id)"
+      },
+      {
+        "type": "index",
+        "name": "designer_comment_threads_design_surface_idx",
+        "tbl_name": "designer_comment_threads",
+        "sql": "CREATE INDEX designer_comment_threads_design_surface_idx\n  on designer_comment_threads(design_id, surface)"
+      },
+      {
+        "type": "index",
+        "name": "designer_design_heads_name_idx",
+        "tbl_name": "designer_design_heads",
+        "sql": "CREATE INDEX `designer_design_heads_name_idx` ON `designer_design_heads` (`name`)"
+      },
+      {
+        "type": "index",
+        "name": "designer_pcb_entities_design_id_idx",
+        "tbl_name": "designer_pcb_entities",
+        "sql": "CREATE INDEX `designer_pcb_entities_design_id_idx` ON `designer_pcb_entities` (`design_id`)"
+      },
+      {
+        "type": "index",
+        "name": "designer_pcb_entities_design_kind_idx",
+        "tbl_name": "designer_pcb_entities",
+        "sql": "CREATE INDEX `designer_pcb_entities_design_kind_idx` ON `designer_pcb_entities` (`design_id`, `kind`)"
+      },
+      {
+        "type": "index",
+        "name": "designer_schematic_labels_design_id_idx",
+        "tbl_name": "designer_schematic_labels",
+        "sql": "CREATE INDEX `designer_schematic_labels_design_id_idx` ON `designer_schematic_labels` (`design_id`)"
+      },
+      {
+        "type": "index",
+        "name": "designer_schematic_parts_design_id_idx",
+        "tbl_name": "designer_schematic_parts",
+        "sql": "CREATE INDEX `designer_schematic_parts_design_id_idx` ON `designer_schematic_parts` (`design_id`)"
+      },
+      {
+        "type": "index",
+        "name": "designer_schematic_parts_design_ref_uq",
+        "tbl_name": "designer_schematic_parts",
+        "sql": "CREATE UNIQUE INDEX `designer_schematic_parts_design_ref_uq` ON `designer_schematic_parts` (`design_id`, `reference`)"
+      },
+      {
+        "type": "index",
+        "name": "designer_schematic_pins_design_id_idx",
+        "tbl_name": "designer_schematic_pins",
+        "sql": "CREATE INDEX `designer_schematic_pins_design_id_idx` ON `designer_schematic_pins` (`design_id`)"
+      },
+      {
+        "type": "index",
+        "name": "designer_schematic_pins_part_id_idx",
+        "tbl_name": "designer_schematic_pins",
+        "sql": "CREATE INDEX `designer_schematic_pins_part_id_idx` ON `designer_schematic_pins` (`part_id`)"
+      },
+      {
+        "type": "index",
+        "name": "designer_schematic_pins_part_origin_key_uq",
+        "tbl_name": "designer_schematic_pins",
+        "sql": "CREATE UNIQUE INDEX `designer_schematic_pins_part_origin_key_uq` ON `designer_schematic_pins` (`part_id`, `origin_pin_key`)"
+      },
+      {
+        "type": "index",
+        "name": "designer_schematic_primitives_design_id_idx",
+        "tbl_name": "designer_schematic_primitives",
+        "sql": "CREATE INDEX `designer_schematic_primitives_design_id_idx` ON `designer_schematic_primitives` (`design_id`)"
+      },
+      {
+        "type": "index",
+        "name": "designer_schematic_primitives_design_kind_idx",
+        "tbl_name": "designer_schematic_primitives",
+        "sql": "CREATE INDEX `designer_schematic_primitives_design_kind_idx` ON `designer_schematic_primitives` (`design_id`, `kind`)"
+      },
+      {
+        "type": "index",
+        "name": "designer_schematic_wires_design_id_idx",
+        "tbl_name": "designer_schematic_wires",
+        "sql": "CREATE INDEX `designer_schematic_wires_design_id_idx` ON `designer_schematic_wires` (`design_id`)"
+      },
+      {
+        "type": "index",
+        "name": "designer_schematic_wires_source_pin_idx",
+        "tbl_name": "designer_schematic_wires",
+        "sql": "CREATE INDEX `designer_schematic_wires_source_pin_idx` ON `designer_schematic_wires` (`source_pin_id`)"
+      },
+      {
+        "type": "index",
+        "name": "designer_schematic_wires_target_pin_idx",
+        "tbl_name": "designer_schematic_wires",
+        "sql": "CREATE INDEX `designer_schematic_wires_target_pin_idx` ON `designer_schematic_wires` (`target_pin_id`)"
+      },
+      {
+        "type": "index",
+        "name": "designer_session_histories_design_id_idx",
+        "tbl_name": "designer_session_histories",
+        "sql": "CREATE INDEX `designer_session_histories_design_id_idx` ON `designer_session_histories` (`design_id`)"
+      },
+      {
+        "type": "index",
+        "name": "designer_session_histories_design_session_uq",
+        "tbl_name": "designer_session_histories",
+        "sql": "CREATE UNIQUE INDEX `designer_session_histories_design_session_uq` ON `designer_session_histories` (`design_id`, `session_id`)"
+      },
+      {
+        "type": "index",
+        "name": "idx_assistant_build_intent_chat",
+        "tbl_name": "assistant_build_intent",
+        "sql": "CREATE INDEX idx_assistant_build_intent_chat\n  ON assistant_build_intent(chat_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_assistant_build_intent_chat_task",
+        "tbl_name": "assistant_build_intent",
+        "sql": "CREATE UNIQUE INDEX idx_assistant_build_intent_chat_task\n  ON assistant_build_intent(chat_id, task_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_assistant_build_intent_item_parent",
+        "tbl_name": "assistant_build_intent_item",
+        "sql": "CREATE INDEX idx_assistant_build_intent_item_parent\n  ON assistant_build_intent_item(build_intent_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_assistant_chat_updated",
+        "tbl_name": "assistant_chat",
+        "sql": "CREATE INDEX idx_assistant_chat_updated ON assistant_chat(updated_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_assistant_context_binding_chat",
+        "tbl_name": "assistant_context_binding",
+        "sql": "CREATE INDEX idx_assistant_context_binding_chat ON assistant_context_binding(chat_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_assistant_message_chat_created",
+        "tbl_name": "assistant_message",
+        "sql": "CREATE INDEX idx_assistant_message_chat_created ON assistant_message(chat_id, created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_assistant_message_chat_index",
+        "tbl_name": "assistant_message",
+        "sql": "CREATE UNIQUE INDEX idx_assistant_message_chat_index\n  ON assistant_message(chat_id, message_index)"
+      },
+      {
+        "type": "index",
+        "name": "idx_assistant_provider_config_enabled",
+        "tbl_name": "assistant_provider_config",
+        "sql": "CREATE INDEX idx_assistant_provider_config_enabled ON assistant_provider_config(enabled)"
+      },
+      {
+        "type": "index",
+        "name": "idx_assistant_tool_event_chat",
+        "tbl_name": "assistant_tool_event",
+        "sql": "CREATE INDEX idx_assistant_tool_event_chat ON assistant_tool_event(chat_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_assistant_tool_event_message",
+        "tbl_name": "assistant_tool_event",
+        "sql": "CREATE INDEX idx_assistant_tool_event_message ON assistant_tool_event(message_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_assistant_write_proposal_action",
+        "tbl_name": "assistant_write_proposal",
+        "sql": "CREATE UNIQUE INDEX idx_assistant_write_proposal_action\n  ON assistant_write_proposal(design_id, action_id)\n  WHERE action_id IS NOT NULL"
+      },
+      {
+        "type": "index",
+        "name": "idx_assistant_write_proposal_chat",
+        "tbl_name": "assistant_write_proposal",
+        "sql": "CREATE INDEX idx_assistant_write_proposal_chat ON assistant_write_proposal(chat_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_assistant_write_proposal_cloud",
+        "tbl_name": "assistant_write_proposal",
+        "sql": "CREATE UNIQUE INDEX idx_assistant_write_proposal_cloud\n  ON assistant_write_proposal(design_id, cloud_proposal_id)\n  WHERE cloud_proposal_id IS NOT NULL"
+      },
+      {
+        "type": "index",
+        "name": "idx_assistant_write_proposal_status",
+        "tbl_name": "assistant_write_proposal",
+        "sql": "CREATE INDEX idx_assistant_write_proposal_status ON assistant_write_proposal(status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_designer_cloud_link_cloud_id",
+        "tbl_name": "designer_cloud_link",
+        "sql": "CREATE INDEX idx_designer_cloud_link_cloud_id\n  on designer_cloud_link(cloud_design_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_mention_entity",
+        "tbl_name": "assistant_message_mention",
+        "sql": "CREATE INDEX idx_mention_entity ON assistant_message_mention(entity_type, entity_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_mention_entity_type",
+        "tbl_name": "assistant_message_mention",
+        "sql": "CREATE INDEX idx_mention_entity_type ON assistant_message_mention(entity_type)"
+      },
+      {
+        "type": "index",
+        "name": "idx_mention_message",
+        "tbl_name": "assistant_message_mention",
+        "sql": "CREATE INDEX idx_mention_message ON assistant_message_mention(message_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_tasks_task_chunk_task_seq",
+        "tbl_name": "tasks_task_chunk",
+        "sql": "CREATE INDEX idx_tasks_task_chunk_task_seq ON tasks_task_chunk(task_id, seq)"
+      },
+      {
+        "type": "index",
+        "name": "idx_tasks_task_depends_on",
+        "tbl_name": "tasks_task",
+        "sql": "CREATE INDEX idx_tasks_task_depends_on ON tasks_task(depends_on)"
+      },
+      {
+        "type": "index",
+        "name": "idx_tasks_task_event_task_time",
+        "tbl_name": "tasks_task_event",
+        "sql": "CREATE INDEX idx_tasks_task_event_task_time ON tasks_task_event(task_id, timestamp)"
+      },
+      {
+        "type": "index",
+        "name": "idx_tasks_task_queue_status",
+        "tbl_name": "tasks_task",
+        "sql": "CREATE INDEX idx_tasks_task_queue_status ON tasks_task(queue_key, status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_tasks_task_status",
+        "tbl_name": "tasks_task",
+        "sql": "CREATE INDEX idx_tasks_task_status ON tasks_task(status)"
+      },
+      {
+        "type": "index",
+        "name": "library_component_footprints_component_idx",
+        "tbl_name": "library_component_footprints",
+        "sql": "CREATE INDEX `library_component_footprints_component_idx` ON `library_component_footprints` (`component_id`)"
+      },
+      {
+        "type": "index",
+        "name": "library_component_footprints_default_idx",
+        "tbl_name": "library_component_footprints",
+        "sql": "CREATE INDEX `library_component_footprints_default_idx` ON `library_component_footprints` (`component_id`, `is_default`)"
+      },
+      {
+        "type": "index",
+        "name": "library_components_is_builtin_idx",
+        "tbl_name": "library_components",
+        "sql": "CREATE INDEX `library_components_is_builtin_idx` ON `library_components` (`is_builtin`)"
+      },
+      {
+        "type": "index",
+        "name": "library_components_name_idx",
+        "tbl_name": "library_components",
+        "sql": "CREATE INDEX `library_components_name_idx` ON `library_components` (`name`)"
+      },
+      {
+        "type": "index",
+        "name": "library_components_source_idx",
+        "tbl_name": "library_components",
+        "sql": "CREATE INDEX library_components_source_idx\n  ON library_components(source_id)"
+      },
+      {
+        "type": "index",
+        "name": "library_footprint_models_status_idx",
+        "tbl_name": "library_footprint_models",
+        "sql": "CREATE INDEX library_footprint_models_status_idx\n  ON library_footprint_models(status)"
+      },
+      {
+        "type": "index",
+        "name": "library_footprints_source_idx",
+        "tbl_name": "library_footprints",
+        "sql": "CREATE INDEX library_footprints_source_idx\n  ON library_footprints(source_id)"
+      },
+      {
+        "type": "index",
+        "name": "library_releases_source_idx",
+        "tbl_name": "library_releases",
+        "sql": "CREATE INDEX library_releases_source_idx\n  ON library_releases(source_id)"
+      },
+      {
+        "type": "index",
+        "name": "library_symbols_source_idx",
+        "tbl_name": "library_symbols",
+        "sql": "CREATE INDEX library_symbols_source_idx\n  ON library_symbols(source_id)"
+      },
+      {
+        "type": "table",
+        "name": "assistant_build_intent",
+        "tbl_name": "assistant_build_intent",
+        "sql": "CREATE TABLE assistant_build_intent (\n  id TEXT PRIMARY KEY,\n  chat_id TEXT NOT NULL REFERENCES assistant_chat(id) ON DELETE CASCADE,\n  task_id TEXT NOT NULL,\n  goal TEXT NOT NULL,\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "assistant_build_intent_item",
+        "tbl_name": "assistant_build_intent_item",
+        "sql": "CREATE TABLE assistant_build_intent_item (\n  id TEXT PRIMARY KEY,\n  build_intent_id TEXT NOT NULL REFERENCES assistant_build_intent(id) ON DELETE CASCADE,\n  role TEXT NOT NULL,\n  component_id TEXT NOT NULL,\n  quantity INTEGER NOT NULL DEFAULT 1,\n  value TEXT,\n  required_nets_json TEXT NOT NULL DEFAULT '[]'\n)"
+      },
+      {
+        "type": "table",
+        "name": "assistant_chat",
+        "tbl_name": "assistant_chat",
+        "sql": "CREATE TABLE assistant_chat (\n  id TEXT PRIMARY KEY,\n  title TEXT NOT NULL,\n  provider TEXT NOT NULL,\n  model TEXT NOT NULL,\n  metadata TEXT,\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL,\n  last_message_at TEXT\n, provider_config_id TEXT DEFAULT 'openai', prompt_preset_id TEXT NOT NULL DEFAULT 'strict-grounded')"
+      },
+      {
+        "type": "table",
+        "name": "assistant_context_binding",
+        "tbl_name": "assistant_context_binding",
+        "sql": "CREATE TABLE assistant_context_binding (\n  id TEXT PRIMARY KEY,\n  chat_id TEXT NOT NULL REFERENCES assistant_chat(id) ON DELETE CASCADE,\n  kind TEXT NOT NULL,\n  ref_id TEXT NOT NULL,\n  label TEXT NOT NULL,\n  role TEXT NOT NULL,\n  status TEXT NOT NULL DEFAULT 'active',\n  metadata TEXT,\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "assistant_message",
+        "tbl_name": "assistant_message",
+        "sql": "CREATE TABLE assistant_message (\n  id TEXT PRIMARY KEY,\n  chat_id TEXT NOT NULL REFERENCES assistant_chat(id) ON DELETE CASCADE,\n  role TEXT NOT NULL,\n  content TEXT NOT NULL,\n  task_id TEXT,\n  metadata TEXT,\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL\n, tool_call_id TEXT, tool_calls_json TEXT, tool_name TEXT, message_index INTEGER NOT NULL DEFAULT 0)"
+      },
+      {
+        "type": "table",
+        "name": "assistant_message_mention",
+        "tbl_name": "assistant_message_mention",
+        "sql": "CREATE TABLE assistant_message_mention (\n  id TEXT PRIMARY KEY,\n  message_id TEXT NOT NULL REFERENCES assistant_message(id) ON DELETE CASCADE,\n  entity_type TEXT NOT NULL,\n  entity_id TEXT NOT NULL,\n  display_text TEXT NOT NULL,\n  snapshot_data TEXT NOT NULL,\n  snapshot_created_at TEXT NOT NULL,\n  entity_version TEXT NOT NULL,\n  position INTEGER NOT NULL DEFAULT 0,\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "assistant_provider_capability",
+        "tbl_name": "assistant_provider_capability",
+        "sql": "CREATE TABLE assistant_provider_capability (\n  provider_id TEXT PRIMARY KEY REFERENCES assistant_provider_config(id) ON DELETE CASCADE,\n  streaming INTEGER NOT NULL DEFAULT 1,\n  tool_calling INTEGER NOT NULL DEFAULT 0,\n  model_list INTEGER NOT NULL DEFAULT 0,\n  vision INTEGER,\n  json_mode INTEGER,\n  max_context_tokens INTEGER,\n  checked_at TEXT,\n  warning TEXT,\n  updated_at TEXT NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "assistant_provider_config",
+        "tbl_name": "assistant_provider_config",
+        "sql": "CREATE TABLE assistant_provider_config (\n  id TEXT PRIMARY KEY,\n  label TEXT NOT NULL,\n  kind TEXT NOT NULL,\n  base_url TEXT NOT NULL,\n  api_key TEXT,\n  default_model TEXT NOT NULL,\n  enabled INTEGER NOT NULL DEFAULT 1,\n  is_builtin INTEGER NOT NULL DEFAULT 0,\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL\n, tool_calling_override INTEGER, secret_ref TEXT)"
+      },
+      {
+        "type": "table",
+        "name": "assistant_provider_model_cache",
+        "tbl_name": "assistant_provider_model_cache",
+        "sql": "CREATE TABLE assistant_provider_model_cache (\n  provider_id TEXT NOT NULL REFERENCES assistant_provider_config(id) ON DELETE CASCADE,\n  model_id TEXT NOT NULL,\n  display_name TEXT,\n  fetched_at TEXT NOT NULL,\n  PRIMARY KEY(provider_id, model_id)\n)"
+      },
+      {
+        "type": "table",
+        "name": "assistant_settings",
+        "tbl_name": "assistant_settings",
+        "sql": "CREATE TABLE \"assistant_settings\" (\n  id TEXT PRIMARY KEY,\n  default_provider_id TEXT NOT NULL,\n  tool_execution_policy TEXT NOT NULL,\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL,\n  default_prompt_preset_id TEXT NOT NULL DEFAULT 'strict-grounded',\n  context_size_preference TEXT NOT NULL DEFAULT 'medium',\n  allow_raw_tool_data INTEGER NOT NULL DEFAULT 0\n, mcp_enabled INTEGER NOT NULL DEFAULT 0, mcp_allow_writes INTEGER NOT NULL DEFAULT 0)"
+      },
+      {
+        "type": "table",
+        "name": "assistant_task_tool_event",
+        "tbl_name": "assistant_task_tool_event",
+        "sql": "CREATE TABLE assistant_task_tool_event (\n  id TEXT PRIMARY KEY,\n  chat_id TEXT NOT NULL,\n  assistant_message_id TEXT,\n  task_id TEXT NOT NULL,\n  seq INTEGER NOT NULL,\n  kind TEXT NOT NULL,\n  tool_call_id TEXT,\n  tool_name TEXT,\n  args_json TEXT,\n  result_json TEXT,\n  is_error INTEGER NOT NULL DEFAULT 0,\n  created_at TEXT NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "assistant_tool_event",
+        "tbl_name": "assistant_tool_event",
+        "sql": "CREATE TABLE assistant_tool_event (\n  id TEXT PRIMARY KEY,\n  chat_id TEXT NOT NULL REFERENCES assistant_chat(id) ON DELETE CASCADE,\n  task_id TEXT,\n  message_id TEXT,\n  tool_call_id TEXT NOT NULL,\n  tool_name TEXT NOT NULL,\n  status TEXT NOT NULL,\n  arguments_json TEXT NOT NULL,\n  result_json TEXT,\n  error_json TEXT,\n  sources_json TEXT NOT NULL DEFAULT '[]',\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "assistant_write_proposal",
+        "tbl_name": "assistant_write_proposal",
+        "sql": "CREATE TABLE assistant_write_proposal (\n  id TEXT PRIMARY KEY,\n  chat_id TEXT NOT NULL REFERENCES assistant_chat(id) ON DELETE CASCADE,\n  tool_event_id TEXT REFERENCES assistant_tool_event(id) ON DELETE SET NULL,\n  kind TEXT NOT NULL,\n  status TEXT NOT NULL DEFAULT 'pending',\n  design_id TEXT NOT NULL,\n  base_revision INTEGER,\n  proposal_json TEXT NOT NULL,\n  apply_result_json TEXT,\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL\n, tool_name TEXT, title TEXT, summary TEXT, risk_level TEXT, operations_json TEXT, sources_json TEXT, warnings_json TEXT, envelope_json TEXT, action_id TEXT, origin TEXT NOT NULL DEFAULT 'local', cloud_run_id TEXT, cloud_proposal_id TEXT)"
+      },
+      {
+        "type": "table",
+        "name": "designer_bom_overrides",
+        "tbl_name": "designer_bom_overrides",
+        "sql": "CREATE TABLE \"designer_bom_overrides\" (\n  id text primary key,\n  design_id text not null references designer_design_heads(id) on delete cascade,\n  part_id text,\n  refdes text not null,\n  manufacturer text,\n  manufacturer_part_number text,\n  lcsc_part_number text,\n  supplier text,\n  unit_price_micros integer,\n  currency text,\n  dnp integer not null default 0,\n  assembly_side text,\n  notes text,\n  created_at text not null,\n  updated_at text not null\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_capture_auto_copper",
+        "tbl_name": "designer_capture_auto_copper",
+        "sql": "CREATE TABLE designer_capture_auto_copper (\n  geometry_id text primary key,\n  design_id text not null,\n  kind text not null,\n  net_id text,\n  job_id text not null,\n  applied_candidate_id text,\n  created_by_command_id text not null,\n  status text not null default 'active',\n  touches_json text not null default '[]',\n  created_at text not null,\n  updated_at text not null\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_capture_autolayout_jobs",
+        "tbl_name": "designer_capture_autolayout_jobs",
+        "sql": "CREATE TABLE designer_capture_autolayout_jobs (\n  job_id text primary key,\n  design_id text not null,\n  applied_candidate_id text,\n  capture_session_ulid text not null,\n  applied_at text not null,\n  snapshot_hash text,\n  engine_version text,\n  result_summary_json text,\n  preexisting_net_copper_json text not null default '{}'\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_capture_sessions",
+        "tbl_name": "designer_capture_sessions",
+        "sql": "CREATE TABLE designer_capture_sessions (\n  session_ulid text primary key,\n  design_id text not null,\n  started_at text not null,\n  ended_at text,\n  log_dir text not null,\n  seq integer not null default 0,\n  commands_since_snapshot integer not null default 0,\n  bytes_on_disk integer not null default 0,\n  capped integer not null default 0\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_capture_upload_queue",
+        "tbl_name": "designer_capture_upload_queue",
+        "sql": "CREATE TABLE designer_capture_upload_queue (\n  id text primary key,\n  kind text not null,\n  payload_path text not null,\n  design_id text,\n  session_ulid text,\n  status text not null default 'pending',\n  attempts integer not null default 0,\n  next_attempt_at text,\n  last_error text,\n  created_at text not null,\n  updated_at text not null\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_cloud_link",
+        "tbl_name": "designer_cloud_link",
+        "sql": "CREATE TABLE designer_cloud_link (\n  design_id text primary key references designer_design_heads(id) on delete cascade,\n  cloud_design_id text not null,\n  cloud_workspace_id text not null,\n  cloud_user_id text not null,\n  last_synced_revision integer not null default -1,\n  linked_at text not null,\n  failed_attempts integer not null default 0,\n  last_error text\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_command_log",
+        "tbl_name": "designer_command_log",
+        "sql": "CREATE TABLE `designer_command_log` (\n\t`command_id` text PRIMARY KEY NOT NULL,\n\t`design_id` text NOT NULL,\n\t`session_id` text NOT NULL,\n\t`command_type` text NOT NULL,\n\t`command_json` text NOT NULL,\n\t`result_json` text NOT NULL,\n\t`issued_at` integer NOT NULL,\n\t`applied_revision` integer NOT NULL,\n\t`created_at` text NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_comment_attachments",
+        "tbl_name": "designer_comment_attachments",
+        "sql": "CREATE TABLE designer_comment_attachments (\n  id text primary key,\n  design_id text not null references designer_design_heads(id) on delete cascade,\n  thread_id text not null references designer_comment_threads(id) on delete cascade,\n  message_id text references designer_comment_messages(id) on delete set null,\n  file_name text not null,\n  mime_type text not null check (mime_type in ('image/png', 'image/jpeg', 'image/webp')),\n  byte_size integer not null check (byte_size <= 5242880),\n  local_path text,\n  storage_key text,\n  created_at text not null,\n  deleted_at text\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_comment_messages",
+        "tbl_name": "designer_comment_messages",
+        "sql": "CREATE TABLE designer_comment_messages (\n  id text primary key,\n  design_id text not null references designer_design_heads(id) on delete cascade,\n  thread_id text not null references designer_comment_threads(id) on delete cascade,\n  kind text not null default 'user' check (kind in ('user', 'system', 'assistant')),\n  body text,\n  mentions_json text not null default '[]',\n  created_by text,\n  created_at text not null,\n  updated_at text not null,\n  edited_at text,\n  deleted_at text,\n  revision integer not null default 0\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_comment_outbox",
+        "tbl_name": "designer_comment_outbox",
+        "sql": "CREATE TABLE designer_comment_outbox (\n  command_id text primary key,\n  design_id text not null references designer_design_heads(id) on delete cascade,\n  thread_id text,\n  base_revision integer,\n  command_type text not null,\n  command_json text not null,\n  status text not null default 'pending' check (status in ('pending', 'synced', 'failed', 'conflict')),\n  attempts integer not null default 0,\n  last_error text,\n  created_at text not null,\n  updated_at text not null,\n  synced_at text\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_comment_reactions",
+        "tbl_name": "designer_comment_reactions",
+        "sql": "CREATE TABLE designer_comment_reactions (\n  id text primary key,\n  design_id text not null references designer_design_heads(id) on delete cascade,\n  thread_id text not null references designer_comment_threads(id) on delete cascade,\n  message_id text not null references designer_comment_messages(id) on delete cascade,\n  emoji text not null,\n  created_by text,\n  created_at text not null,\n  deleted_at text\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_comment_threads",
+        "tbl_name": "designer_comment_threads",
+        "sql": "CREATE TABLE designer_comment_threads (\n  id text primary key,\n  design_id text not null references designer_design_heads(id) on delete cascade,\n  surface text not null check (surface in ('schematic', 'pcb', 'design')),\n  anchor_json text,\n  status text not null default 'open' check (status in ('open', 'resolved', 'archived')),\n  todo_status text not null default 'none' check (todo_status in ('none', 'todo', 'in_progress', 'done')),\n  title text,\n  created_by text,\n  created_at text not null,\n  updated_at text not null,\n  last_message_at text,\n  message_count integer not null default 0,\n  revision integer not null default 0,\n  sync_state text not null default 'local' check (sync_state in ('local', 'pending', 'synced', 'failed', 'conflict')),\n  deleted_at text\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_design_heads",
+        "tbl_name": "designer_design_heads",
+        "sql": "CREATE TABLE `designer_design_heads` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`name` text NOT NULL,\n\t`revision` integer DEFAULT 0 NOT NULL,\n\t`created_at` text NOT NULL,\n\t`updated_at` text NOT NULL\n, schematic_preview_json text)"
+      },
+      {
+        "type": "table",
+        "name": "designer_drc_results",
+        "tbl_name": "designer_drc_results",
+        "sql": "CREATE TABLE designer_drc_results (\n  design_id text primary key references designer_design_heads(id) on delete cascade,\n  ran_at_revision integer not null,\n  ran_at text not null,\n  error_count integer not null,\n  warning_count integer not null,\n  info_count integer not null,\n  violations_json text not null,\n  options_json text not null default '{}',\n  created_at text not null,\n  updated_at text not null\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_pcb_entities",
+        "tbl_name": "designer_pcb_entities",
+        "sql": "CREATE TABLE `designer_pcb_entities` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`design_id` text NOT NULL,\n\t`kind` text NOT NULL,\n\t`payload_json` text NOT NULL,\n\t`created_at` text NOT NULL,\n\t`updated_at` text NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_schematic_labels",
+        "tbl_name": "designer_schematic_labels",
+        "sql": "CREATE TABLE `designer_schematic_labels` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`design_id` text NOT NULL,\n\t`text` text NOT NULL,\n\t`x_nm` integer NOT NULL,\n\t`y_nm` integer NOT NULL,\n\t`created_at` text NOT NULL,\n\t`updated_at` text NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_schematic_parts",
+        "tbl_name": "designer_schematic_parts",
+        "sql": "CREATE TABLE `designer_schematic_parts` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`design_id` text NOT NULL,\n\t`component_id` text NOT NULL,\n\t`reference` text NOT NULL,\n\t`value` text NOT NULL,\n\t`position_x_nm` integer NOT NULL,\n\t`position_y_nm` integer NOT NULL,\n\t`rotation_deg` integer DEFAULT 0 NOT NULL,\n\t`mirrored` integer DEFAULT 0 NOT NULL,\n\t`symbol_snapshot_json` text NOT NULL,\n\t`footprint_snapshot_json` text NOT NULL,\n\t`created_at` text NOT NULL,\n\t`updated_at` text NOT NULL\n, properties_json TEXT NOT NULL DEFAULT '{}')"
+      },
+      {
+        "type": "table",
+        "name": "designer_schematic_pins",
+        "tbl_name": "designer_schematic_pins",
+        "sql": "CREATE TABLE `designer_schematic_pins` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`design_id` text NOT NULL,\n\t`part_id` text NOT NULL,\n\t`origin_pin_key` text NOT NULL,\n\t`number` text,\n\t`name` text NOT NULL,\n\t`electrical_type` text NOT NULL,\n\t`unit` integer NOT NULL,\n\t`local_x_nm` integer NOT NULL,\n\t`local_y_nm` integer NOT NULL,\n\t`world_x_nm` integer NOT NULL,\n\t`world_y_nm` integer NOT NULL,\n\t`created_at` text NOT NULL,\n\t`updated_at` text NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_schematic_primitives",
+        "tbl_name": "designer_schematic_primitives",
+        "sql": "CREATE TABLE `designer_schematic_primitives` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`design_id` text NOT NULL,\n\t`kind` text NOT NULL,\n\t`position_x_nm` integer NOT NULL,\n\t`position_y_nm` integer NOT NULL,\n\t`rotation_deg` integer NOT NULL DEFAULT 0,\n\t`payload_json` text NOT NULL,\n\t`created_at` text NOT NULL,\n\t`updated_at` text NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_schematic_wires",
+        "tbl_name": "designer_schematic_wires",
+        "sql": "CREATE TABLE `designer_schematic_wires` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`design_id` text NOT NULL,\n\t`source_pin_id` text NOT NULL,\n\t`target_pin_id` text NOT NULL,\n\t`points_json` text NOT NULL,\n\t`created_at` text NOT NULL,\n\t`updated_at` text NOT NULL\n, route_status text)"
+      },
+      {
+        "type": "table",
+        "name": "designer_session_histories",
+        "tbl_name": "designer_session_histories",
+        "sql": "CREATE TABLE `designer_session_histories` (\n  `id` text PRIMARY KEY NOT NULL,\n  `design_id` text NOT NULL,\n  `session_id` text NOT NULL,\n  `undo_stack_json` text NOT NULL,\n  `redo_stack_json` text NOT NULL,\n  `updated_at` text NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "library_cloud_sync",
+        "tbl_name": "library_cloud_sync",
+        "sql": "CREATE TABLE library_cloud_sync (\n  id                  text primary key,\n  cloud_workspace_id  text,\n  last_pack_id        text,\n  last_package_sha256 text,\n  component_count     integer not null default 0,\n  last_synced_at      text,\n  failed_attempts     integer not null default 0,\n  last_error          text\n)"
+      },
+      {
+        "type": "table",
+        "name": "library_component_footprints",
+        "tbl_name": "library_component_footprints",
+        "sql": "CREATE TABLE `library_component_footprints` (\n\t`component_id` text NOT NULL,\n\t`footprint_id` text NOT NULL,\n\t`is_default` integer NOT NULL DEFAULT 0,\n\t`variant_label` text NOT NULL,\n\t`sort_order` integer NOT NULL DEFAULT 0, `pinmap_json` text,\n\tPRIMARY KEY (`component_id`, `footprint_id`),\n\tFOREIGN KEY (`component_id`) REFERENCES `library_components`(`id`) ON DELETE CASCADE,\n\tFOREIGN KEY (`footprint_id`) REFERENCES `library_footprints`(`id`) ON DELETE CASCADE\n)"
+      },
+      {
+        "type": "table",
+        "name": "library_components",
+        "tbl_name": "library_components",
+        "sql": "CREATE TABLE `library_components` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`name` text NOT NULL,\n\t`description` text NOT NULL,\n\t`symbol_id` text NOT NULL,\n\t`footprint_id` text NOT NULL,\n\t`tags_json` text NOT NULL,\n\t`created_at` text NOT NULL\n, `is_builtin` INTEGER NOT NULL DEFAULT 0, source_id TEXT, version   TEXT, uuid      TEXT, content_sha256 TEXT, origin_json TEXT, manufacturer TEXT, manufacturer_part_number TEXT, lcsc_part_number TEXT, supplier TEXT, subcategory TEXT, datasheet_url TEXT, keywords_json TEXT)"
+      },
+      {
+        "type": "table",
+        "name": "library_footprint_models",
+        "tbl_name": "library_footprint_models",
+        "sql": "CREATE TABLE `library_footprint_models` (\n\t`footprint_id` text PRIMARY KEY NOT NULL REFERENCES `library_footprints`(`id`) ON DELETE CASCADE,\n\t`status` text NOT NULL,\n\t`glb_path` text,\n\t`glb_sha256` text,\n\t`source_step_path` text,\n\t`source_step_sha256` text,\n\t`source_filename` text,\n\t`source_byte_size` integer,\n\t`model_ref_json` text,\n\t`tessellation_params_json` text,\n\t`converter_version` text,\n\t`byte_size` integer,\n\t`error_message` text,\n\t`created_at` text NOT NULL,\n\t`updated_at` text NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "library_footprints",
+        "tbl_name": "library_footprints",
+        "sql": "CREATE TABLE `library_footprints` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`name` text NOT NULL,\n\t`data_json` text NOT NULL,\n\t`created_at` text NOT NULL\n, source_id TEXT, version   TEXT, uuid      TEXT, content_sha256 TEXT)"
+      },
+      {
+        "type": "table",
+        "name": "library_preview_svgs",
+        "tbl_name": "library_preview_svgs",
+        "sql": "CREATE TABLE library_preview_svgs (\n  content_sha256  TEXT PRIMARY KEY,\n  kind            TEXT NOT NULL,           -- 'symbol' | 'footprint'\n  svg             TEXT NOT NULL,\n  generated_at    TEXT NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "library_releases",
+        "tbl_name": "library_releases",
+        "sql": "CREATE TABLE library_releases (\n  source_id        TEXT NOT NULL REFERENCES library_sources(id),\n  version          TEXT NOT NULL,\n  channel          TEXT NOT NULL,\n  install_origin   TEXT NOT NULL,\n  package_sha256   TEXT NOT NULL,\n  signature_valid  INTEGER NOT NULL DEFAULT 0,\n  installed_at     TEXT NOT NULL,\n  manifest_json    TEXT NOT NULL,\n  PRIMARY KEY (source_id, version)\n)"
+      },
+      {
+        "type": "table",
+        "name": "library_sources",
+        "tbl_name": "library_sources",
+        "sql": "CREATE TABLE library_sources (\n  id            TEXT PRIMARY KEY,\n  name          TEXT NOT NULL,\n  kind          TEXT NOT NULL,\n  license       TEXT,\n  homepage      TEXT,\n  is_read_only  INTEGER NOT NULL DEFAULT 0,\n  created_at    TEXT NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "library_symbols",
+        "tbl_name": "library_symbols",
+        "sql": "CREATE TABLE `library_symbols` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`name` text NOT NULL,\n\t`data_json` text NOT NULL,\n\t`created_at` text NOT NULL\n, source_id TEXT, version   TEXT, uuid      TEXT, content_sha256 TEXT)"
+      },
+      {
+        "type": "table",
+        "name": "openpcb_migrations",
+        "tbl_name": "openpcb_migrations",
+        "sql": "CREATE TABLE openpcb_migrations (\n       module_id TEXT NOT NULL,\n       migration_name TEXT NOT NULL,\n       applied_at TEXT NOT NULL,\n       PRIMARY KEY (module_id, migration_name)\n     )"
+      },
+      {
+        "type": "table",
+        "name": "tasks_task",
+        "tbl_name": "tasks_task",
+        "sql": "CREATE TABLE tasks_task (\n  id TEXT PRIMARY KEY,\n  type TEXT NOT NULL,\n  status TEXT NOT NULL,\n  priority INTEGER NOT NULL DEFAULT 5,\n  queue_key TEXT NOT NULL,\n  depends_on TEXT,\n  waiting_tasks TEXT NOT NULL DEFAULT '[]',\n  payload TEXT NOT NULL,\n  result TEXT,\n  error TEXT,\n  retry_count INTEGER NOT NULL DEFAULT 0,\n  max_retries INTEGER NOT NULL DEFAULT 3,\n  request_id TEXT,\n  correlation TEXT,\n  tags TEXT NOT NULL DEFAULT '[]',\n  metadata TEXT,\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL,\n  started_at TEXT,\n  completed_at TEXT\n)"
+      },
+      {
+        "type": "table",
+        "name": "tasks_task_chunk",
+        "tbl_name": "tasks_task_chunk",
+        "sql": "CREATE TABLE tasks_task_chunk (\n  id TEXT PRIMARY KEY,\n  task_id TEXT NOT NULL REFERENCES tasks_task(id) ON DELETE CASCADE,\n  seq INTEGER NOT NULL,\n  content TEXT NOT NULL,\n  kind TEXT NOT NULL DEFAULT 'text',\n  metadata TEXT,\n  created_at TEXT NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "tasks_task_event",
+        "tbl_name": "tasks_task_event",
+        "sql": "CREATE TABLE tasks_task_event (\n  id TEXT PRIMARY KEY,\n  task_id TEXT NOT NULL REFERENCES tasks_task(id) ON DELETE CASCADE,\n  type TEXT NOT NULL,\n  status TEXT,\n  data TEXT,\n  timestamp TEXT NOT NULL\n)"
+      }
+    ],
+    "migrations": [
+      {
+        "module_id": "assistant",
+        "migration_name": "0000_init.sql"
+      },
+      {
+        "module_id": "assistant",
+        "migration_name": "0001_provider_settings.sql"
+      },
+      {
+        "module_id": "assistant",
+        "migration_name": "0002_v1_ai.sql"
+      },
+      {
+        "module_id": "assistant",
+        "migration_name": "0003_write_proposals.sql"
+      },
+      {
+        "module_id": "assistant",
+        "migration_name": "0004_enable_safe_write_tools.sql"
+      },
+      {
+        "module_id": "assistant",
+        "migration_name": "0005_remove_write_tools_beta.sql"
+      },
+      {
+        "module_id": "assistant",
+        "migration_name": "0006_message_order.sql"
+      },
+      {
+        "module_id": "assistant",
+        "migration_name": "0007_generic_write_proposals.sql"
+      },
+      {
+        "module_id": "assistant",
+        "migration_name": "0008_remove_builtin_openai_compatible.sql"
+      },
+      {
+        "module_id": "assistant",
+        "migration_name": "0009_build_intent.sql"
+      },
+      {
+        "module_id": "assistant",
+        "migration_name": "0010_write_proposal_action_id.sql"
+      },
+      {
+        "module_id": "assistant",
+        "migration_name": "0011_tool_calling_override.sql"
+      },
+      {
+        "module_id": "assistant",
+        "migration_name": "0012_mentions.sql"
+      },
+      {
+        "module_id": "assistant",
+        "migration_name": "0013_cloud_proposals.sql"
+      },
+      {
+        "module_id": "assistant",
+        "migration_name": "0014_mcp_settings.sql"
+      },
+      {
+        "module_id": "assistant",
+        "migration_name": "0015_provider_secret_refs.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0000_init.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0002_breaking_normalized_schematic.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0003_session_histories.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0004_pcb_foundation.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0005_pcb_traces.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0006_schematic_primitives.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0007_part_properties.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0008_pcb_free_entities.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0009_legacy_builtin_id_rewrite.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0009_pcb_zones_and_outline.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0010_cloud_link.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0011_bom_overrides.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0012_schematic_preview.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0013_drc_results.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0014_canvas_comments.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0015_comment_reactions.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0016_wire_route_status.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0017_dataset_capture.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0018_pcb_zone_v2_keepouts.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0019_bom_override_part_binding.sql"
+      },
+      {
+        "module_id": "library",
+        "migration_name": "0000_init.sql"
+      },
+      {
+        "module_id": "library",
+        "migration_name": "0001_builtin_flag.sql"
+      },
+      {
+        "module_id": "library",
+        "migration_name": "0002_component_footprints.sql"
+      },
+      {
+        "module_id": "library",
+        "migration_name": "0002_footprint_3d_models.sql"
+      },
+      {
+        "module_id": "library",
+        "migration_name": "0003_footprint_models_status_index.sql"
+      },
+      {
+        "module_id": "library",
+        "migration_name": "0004_component_footprint_pinmap.sql"
+      },
+      {
+        "module_id": "library",
+        "migration_name": "0005_library_sources.sql"
+      },
+      {
+        "module_id": "library",
+        "migration_name": "0006_legacy_builtin_id_migration.sql"
+      },
+      {
+        "module_id": "library",
+        "migration_name": "0007_preview_svg_cache.sql"
+      },
+      {
+        "module_id": "library",
+        "migration_name": "0008_component_sourcing.sql"
+      },
+      {
+        "module_id": "library",
+        "migration_name": "0009_cloud_sync.sql"
+      },
+      {
+        "module_id": "library",
+        "migration_name": "0010_component_metadata.sql"
+      },
+      {
+        "module_id": "library",
+        "migration_name": "0011_untrusted_core_sources.sql"
+      },
+      {
+        "module_id": "tasks",
+        "migration_name": "0000_init.sql"
+      }
+    ]
+  }
+}

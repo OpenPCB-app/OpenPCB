@@ -7,10 +7,14 @@ import {
 import { MentionRegistry } from "./mentions";
 import type { StartedRuntimeServer } from "./http/create-http-server";
 import type { ModuleRegistryResponse } from "../contracts/modules/registry";
+import type { SecretStore } from "../contracts/credentials/secret-store";
+import type { ProviderCredentialAccess } from "../contracts/credentials/renderer";
+import { RuntimeSdkRegistry } from "./modules/sdk-registry";
 
 export interface BackendRuntimeOptions {
   host?: string;
   port?: number;
+  secretStore?: SecretStore;
 }
 
 export interface StartedBackendRuntime {
@@ -18,6 +22,7 @@ export interface StartedBackendRuntime {
   port: number;
   url: string;
   snapshot: ModuleRegistryResponse;
+  providerCredentials?: ProviderCredentialAccess;
   close(): Promise<void>;
 }
 
@@ -30,7 +35,9 @@ export async function startBackendRuntime(
   const diagnosticsStore = new DiagnosticsStore(100);
   const moduleRegistry = new ModuleRouterRegistry();
   MentionRegistry.init();
-  const moduleRuntime = new ModuleRuntime({ moduleRegistry });
+  const sdkRegistry = new RuntimeSdkRegistry();
+  if (options.secretStore) sdkRegistry.registerValue("core.secret-store", options.secretStore);
+  const moduleRuntime = new ModuleRuntime({ moduleRegistry, sdkRegistry });
 
   await moduleRuntime.bootstrap();
   const snapshot = moduleRuntime.snapshot();
@@ -50,6 +57,7 @@ export async function startBackendRuntime(
     port: started.port,
     url,
     snapshot,
+    providerCredentials: sdkRegistry.get<ProviderCredentialAccess>("core.provider-credentials") ?? undefined,
     close: () => started.close(),
   };
 }

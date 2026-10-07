@@ -21,6 +21,8 @@ import {
   removeSecureItem,
 } from "./secure-storage.js";
 import { getTelemetryOptIn, setTelemetryOptIn } from "./preferences.js";
+import { registerCredentialIpc } from "./credential-ipc.js";
+import { getProviderCredentials } from "./credential-runtime.js";
 
 initLogger();
 initCrashReporter();
@@ -282,12 +284,14 @@ ipcMain.handle("shell:open-external", (_e, url: string) => {
   void shell.openExternal(url);
 });
 
-ipcMain.handle("secure-storage:get", (_e, key: string) => getSecureItem(key));
-ipcMain.handle("secure-storage:set", (_e, key: string, value: string) =>
-  setSecureItem(key, value),
-);
-ipcMain.handle("secure-storage:remove", (_e, key: string) =>
-  removeSecureItem(key),
+registerCredentialIpc(
+  ipcMain,
+  {
+    mainContents: () => mainWindow?.webContents ?? null,
+    rendererOrigin: () => app.isPackaged ? getBackendPayload()?.url ?? null : "http://127.0.0.1:1420",
+  },
+  getProviderCredentials,
+  { get: getSecureItem, set: setSecureItem, remove: removeSecureItem },
 );
 
 ipcMain.handle("prefs:get-telemetry-opt-in", () => getTelemetryOptIn());
