@@ -5,62 +5,10 @@ import {
   type SecretStore,
 } from "../../../../core/contracts/credentials/secret-store";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
-import type { AiProviderClient } from "@openpcb/ai-core";
 
 interface CredentialRow {
   api_key: string | null;
   secret_ref: string | null;
-}
-
-/** Provider error bodies can echo authorization values into persisted events or diagnostics. */
-export function redactProviderCredential(
-  client: AiProviderClient,
-  secret: string,
-): AiProviderClient {
-  const redact = (text: string): string =>
-    text
-      .split(secret)
-      .join("[REDACTED]")
-      .split(encodeURIComponent(secret))
-      .join("[REDACTED]");
-  const sanitize = <T>(value: T): T =>
-    JSON.parse(
-      JSON.stringify(value, (_key: string, entry: unknown) =>
-        typeof entry === "string" ? redact(entry) : entry,
-      ),
-    ) as T;
-  const safeError = (error: unknown): Error =>
-    new Error(
-      redact(
-        error instanceof Error ? error.message : "Provider request failed",
-      ),
-    );
-  return {
-    id: client.id,
-    kind: client.kind,
-    async capabilities(signal, model) {
-      try {
-        return sanitize(await client.capabilities(signal, model));
-      } catch (error) {
-        throw safeError(error);
-      }
-    },
-    async listModels(signal) {
-      try {
-        return sanitize(await client.listModels(signal));
-      } catch (error) {
-        throw safeError(error);
-      }
-    },
-    async *streamChat(input) {
-      try {
-        for await (const event of client.streamChat(input))
-          yield sanitize(event);
-      } catch (error) {
-        throw safeError(error);
-      }
-    },
-  };
 }
 
 const locks = new WeakMap<object, Map<string, Promise<unknown>>>();

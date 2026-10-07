@@ -16,6 +16,7 @@ import { createCorsMiddleware } from "../middleware/cors-middleware";
 import { createErrorMiddleware } from "../middleware/error-middleware";
 import { requestLoggingMiddleware } from "../middleware/request-logging-middleware";
 import { requestIdMiddleware } from "../middleware/request-id-middleware";
+import { boundedJsonBodyMiddleware, createLocalApiSecurityMiddleware } from "./local-api-security";
 
 function resolveStaticDir(): string | null {
   const fromEnv = process.env.OPENPCB_STATIC_DIR;
@@ -83,11 +84,10 @@ export interface RuntimeServer {
 
 function buildRequest(
   req: IncomingMessage,
-  hostname: string,
+  backendOrigin: string,
   controller: AbortController,
 ): Request {
-  const host = req.headers.host ?? `${hostname}:0`;
-  const url = new URL(req.url ?? "/", `http://${host}`);
+  const url = new URL(req.url ?? "/", backendOrigin);
   const headers = new Headers();
   for (const [key, value] of Object.entries(req.headers)) {
     if (Array.isArray(value)) {
@@ -156,6 +156,7 @@ function applyMiddlewares(
 }
 
 export function createHttpServer(config: HttpServerConfig): RuntimeServer {
+  let backendOrigin = `http://${config.host ?? "127.0.0.1"}:${config.port ?? 3000}`;
   const router = new HttpRouter();
   const diagnosticsController = new DiagnosticsController(config.diagnosticsStore);
   const moduleRuntimeDiagnosticsController = config.moduleRuntime
@@ -186,11 +187,16 @@ export function createHttpServer(config: HttpServerConfig): RuntimeServer {
     );
   }
   const allowedOrigins = resolveAllowedOrigins({ allowedOrigins: config.allowedOrigins });
+  for (const origin of config.localApi?.rendererOrigins ?? []) allowedOrigins.add(origin);
+  if (config.localApi?.allowOpaqueOrigin) allowedOrigins.add("null");
+  allowedOrigins.add(backendOrigin);
   const middlewares: Middleware[] = [
     requestIdMiddleware,
     requestLoggingMiddleware,
+    createLocalApiSecurityMiddleware(config.localApi, () => backendOrigin),
     createCorsMiddleware(allowedOrigins),
     createErrorMiddleware(config.diagnosticsStore),
+    boundedJsonBodyMiddleware,
   ];
 
   const staticDir = resolveStaticDir();
@@ -249,9 +255,9 @@ export function createHttpServer(config: HttpServerConfig): RuntimeServer {
       outgoing.on("close", () => {
         if (!outgoing.writableFinished) controller.abort();
       });
-      void fetch(buildRequest(incoming, hostname, controller))
+      void Promise.resolve().then(() => fetch(buildRequest(incoming, backendOrigin, controller)))
         .then((response) => writeResponse(response, outgoing))
-        .catch((error: unknown) => {
+        .catch(() => {
           if (!outgoing.headersSent) {
             outgoing.statusCode = 500;
             outgoing.setHeader("content-type", "application/problem+json");
@@ -261,7 +267,7 @@ export function createHttpServer(config: HttpServerConfig): RuntimeServer {
               type: "about:blank",
               title: "Internal Server Error",
               status: 500,
-              detail: error instanceof Error ? error.message : "Unknown error",
+              detail: "Request could not be processed",
             }),
           );
         });
@@ -276,6 +282,8 @@ export function createHttpServer(config: HttpServerConfig): RuntimeServer {
           reject(new Error("Backend server did not expose a TCP address"));
           return;
         }
+        backendOrigin = `http://${hostname}:${address.port}`;
+        allowedOrigins.add(backendOrigin);
         resolve({
           hostname,
           port: address.port,

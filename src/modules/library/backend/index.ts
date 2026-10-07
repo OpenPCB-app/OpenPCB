@@ -1,4 +1,4 @@
-import type { ModuleDefinition } from "../../../core/contracts/modules/backend-module";
+import type { CoreBackendModuleContext, ModuleDefinition } from "../../../core/contracts/modules/backend-module";
 import { MODULE_SDK_TOKENS } from "../../../sdks";
 import { MentionRegistry } from "../../../core/backend/mentions";
 import { getDb } from "./queries";
@@ -6,8 +6,10 @@ import { rebuildPreviewModelsIfStale } from "./builtins/migrate-preview-models";
 import { buildSdk } from "./queries";
 import { registerRoutes } from "./routes";
 import { bootstrapCoreLibrary } from "./sync/bootstrap";
-import { startCoreLibraryDevWatcher } from "./sync/core-library-dev-watch";
+import { startCoreLibraryDevWatcher, type CoreLibraryDevWatcher } from "./sync/core-library-dev-watch";
 import { LibraryComponentMentionProvider } from "./providers/mention-provider";
+
+const devWatchers = new WeakMap<CoreBackendModuleContext, CoreLibraryDevWatcher>();
 
 /**
  * `openpcb.core` is shipped as a `.opclib` package and imported on boot via
@@ -22,11 +24,12 @@ export const definition: ModuleDefinition = {
     MentionRegistry.get().register(mentionProvider);
 
     const bootstrap = await bootstrapCoreLibrary(ctx);
-    void startCoreLibraryDevWatcher(ctx, bootstrap.bundledPath).catch((error) => {
+    const watcher = await startCoreLibraryDevWatcher(ctx, bootstrap.bundledPath).catch((error) => {
       ctx.logger.warn("core-library: dev watcher unavailable", {
         error: error instanceof Error ? error.message : String(error),
       });
     });
+    if (watcher) devWatchers.set(ctx, watcher);
     const rebuildResult = rebuildPreviewModelsIfStale(ctx);
     ctx.logger.info("library activated", {
       tablePrefix: ctx.db.tablePrefix,
@@ -46,6 +49,12 @@ export const definition: ModuleDefinition = {
       rebuiltSymbols: rebuildResult.rebuiltSymbols,
       rebuildMs: rebuildResult.ms,
     });
+  },
+
+  async onDeactivate(ctx) {
+    const watcher = devWatchers.get(ctx);
+    devWatchers.delete(ctx);
+    await watcher?.close();
   },
 
   async registerSdk(ctx) {

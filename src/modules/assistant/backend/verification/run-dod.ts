@@ -4,8 +4,6 @@ import type {
   ErcReport,
   ErcViolation,
 } from "../../../../sdks";
-import type { ConversationStore } from "../conversation-store";
-import type { BuildIntentStore } from "./build-intent-store";
 import type {
   BuildIntent,
   CheckResult,
@@ -15,12 +13,14 @@ import type {
 
 export interface RunDefinitionOfDoneInput {
   designer: DesignerSDK;
-  conversation: ConversationStore;
-  buildIntents: BuildIntentStore;
+  conversation: { listWriteProposals(chatId: string): Array<{ status: string }> };
+  buildIntents: { get(chatId: string, taskId: string): BuildIntent | null };
   chatId: string;
   taskId: string;
   /** Design the run is bound to. When absent, every check is a no-op pass. */
   designId: string | null;
+  /** Native mutation verification cannot silently pass an unavailable bound snapshot. */
+  requireSnapshot?: boolean;
 }
 
 /**
@@ -310,6 +310,11 @@ export async function runDefinitionOfDone(
   // verify. With an intent present, a missing snapshot must fall through so the
   // individual checks fail closed.
   if (!schematic && !intentExists) {
+    if (input.requireSnapshot) {
+      const unavailable = passReport("Schematic projection unavailable; cannot verify attempted native mutations.");
+      return { status: "partial", checks: unavailable.checks.map((check) => ({ ...check, passed: false })),
+        failing: unavailable.checks.map((check) => check.id) };
+    }
     return passReport("No schematic projection; nothing to verify.");
   }
 

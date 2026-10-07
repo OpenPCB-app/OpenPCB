@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import { ChevronDown, RefreshCw, Settings } from "lucide-react";
-import { getPresetByKind } from "@openpcb/ai-core";
+import { getPresetByKind } from "agentkit/core";
 import type {
   AssistantPromptPreset,
   AssistantPromptPresetId,

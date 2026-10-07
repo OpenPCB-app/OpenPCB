@@ -14,6 +14,7 @@
 
 import type {
   DesignerCommand,
+  DesignerCommandEnvelope,
   DesignerSchematicProjection,
   DesignerSDK,
 } from "../../../../sdks";
@@ -37,6 +38,7 @@ export interface ApplyCompiledPlanInput {
   designId: string;
   baseRevision: number | null;
   plan: CompiledPlan;
+  dispatchCommand?: (envelope: DesignerCommandEnvelope) => ReturnType<DesignerSDK["dispatchCommand"]>;
 }
 
 export interface ApplyCompiledPlanResult {
@@ -81,18 +83,16 @@ export async function applyCompiledPlan(
   const groupId = crypto.randomUUID();
   let revision = design.head.revision;
   const dispatch = async (command: DesignerCommand) => {
-    const result = await designer.dispatchCommand(
-      designId,
-      {
-        commandId: crypto.randomUUID(),
-        sessionId: COMPILER_SESSION_ID,
-        aggregateId: designId,
-        baseRevision: revision,
-        issuedAt: Date.now(),
-        command,
-      },
-      { actor: "assistant", groupId },
-    );
+    const envelope: DesignerCommandEnvelope = {
+      commandId: crypto.randomUUID(),
+      sessionId: COMPILER_SESSION_ID,
+      aggregateId: designId,
+      baseRevision: revision,
+      issuedAt: Date.now(),
+      command,
+    };
+    const result = await (input.dispatchCommand ? input.dispatchCommand(envelope)
+      : designer.dispatchCommand(designId, envelope, { actor: "assistant", groupId }));
     if (result.ok) revision = result.revision;
     return result;
   };

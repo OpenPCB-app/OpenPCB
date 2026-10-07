@@ -50,42 +50,6 @@ export interface GeneratedModuleManifest {
 
 export const ALL_MODULE_MANIFESTS: GeneratedModuleManifest[] = [
     {
-        id: "tasks",
-        label: "Tasks",
-        sidebarLabel: "Tasks",
-        namespace: "system.tasks",
-        version: "0.1.0",
-        moduleEntry: "src/modules/tasks/module.frontend.ts",
-        kind: "tool",
-        apiVersion: 2,
-        tags: [],
-        coreCapabilities: ["projects","contentEditor","toolRegistry"],
-        dependsOn: [],
-        exports: {"services":[],"widgets":[]},
-        registerAsSpaceInTopBar: false,
-        defaultPinned: false,
-        resolvedDependencies: [],
-        loadOrder: 0
-    },
-    {
-        id: "assistant",
-        label: "Assistant",
-        sidebarLabel: "Assistant",
-        namespace: "space.assistant",
-        version: "0.2.0",
-        moduleEntry: "src/modules/assistant/module.frontend.ts",
-        kind: "space",
-        apiVersion: 2,
-        tags: [],
-        coreCapabilities: ["projects","contentEditor","toolRegistry"],
-        dependsOn: [{"id":"tasks","minVersion":"0.1.0","optional":false}],
-        exports: {"services":[],"widgets":[]},
-        registerAsSpaceInTopBar: true,
-        defaultPinned: true,
-        resolvedDependencies: [{"id":"tasks","minVersion":"0.1.0","optional":false,"version":"0.1.0","missing":false,"satisfied":true}],
-        loadOrder: 1
-    },
-    {
         id: "library",
         label: "Library",
         sidebarLabel: "Library",
@@ -101,7 +65,7 @@ export const ALL_MODULE_MANIFESTS: GeneratedModuleManifest[] = [
         registerAsSpaceInTopBar: true,
         defaultPinned: false,
         resolvedDependencies: [],
-        loadOrder: 2
+        loadOrder: 0
     },
     {
         id: "designer",
@@ -119,7 +83,25 @@ export const ALL_MODULE_MANIFESTS: GeneratedModuleManifest[] = [
         registerAsSpaceInTopBar: true,
         defaultPinned: true,
         resolvedDependencies: [{"id":"library","minVersion":"0.1.0","optional":false,"version":"0.1.0","missing":false,"satisfied":true}],
-        loadOrder: 3
+        loadOrder: 1
+    },
+    {
+        id: "assistant",
+        label: "Assistant",
+        sidebarLabel: "Assistant",
+        namespace: "space.assistant",
+        version: "0.2.0",
+        moduleEntry: "src/modules/assistant/module.frontend.ts",
+        kind: "space",
+        apiVersion: 2,
+        tags: [],
+        coreCapabilities: ["projects","contentEditor","toolRegistry"],
+        dependsOn: [{"id":"designer","minVersion":"0.1.0","optional":false}],
+        exports: {"services":[],"widgets":[]},
+        registerAsSpaceInTopBar: true,
+        defaultPinned: true,
+        resolvedDependencies: [{"id":"designer","minVersion":"0.1.0","optional":false,"version":"0.1.0","missing":false,"satisfied":true}],
+        loadOrder: 2
     },
     {
         id: "knowledge",
@@ -137,6 +119,24 @@ export const ALL_MODULE_MANIFESTS: GeneratedModuleManifest[] = [
         registerAsSpaceInTopBar: true,
         defaultPinned: true,
         resolvedDependencies: [],
+        loadOrder: 3
+    },
+    {
+        id: "tasks",
+        label: "Tasks",
+        sidebarLabel: "Tasks",
+        namespace: "system.tasks",
+        version: "0.1.0",
+        moduleEntry: "src/modules/tasks/module.frontend.ts",
+        kind: "tool",
+        apiVersion: 2,
+        tags: [],
+        coreCapabilities: ["projects","contentEditor","toolRegistry"],
+        dependsOn: [{"id":"assistant","minVersion":"0.2.0","optional":false}],
+        exports: {"services":[],"widgets":[]},
+        registerAsSpaceInTopBar: false,
+        defaultPinned: false,
+        resolvedDependencies: [{"id":"assistant","minVersion":"0.2.0","optional":false,"version":"0.2.0","missing":false,"satisfied":true}],
         loadOrder: 4
     }
 ];

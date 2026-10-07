@@ -15,7 +15,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import os from "node:os";
 import path from "node:path";
-import { AiToolRegistry, type AiTool, type AiToolExecutionContext } from "@openpcb/ai-core";
+import { AiToolRegistry, type AiTool, type AiToolExecutionContext } from "agentkit/core";
 import type { CoreBackendModuleContext } from "../../contracts/modules/backend-module";
 import type { ContextResolver } from "../../../modules/assistant/backend/context-resolver";
 import { applyCompiledPlan } from "../../../modules/assistant/backend/compiler/apply";

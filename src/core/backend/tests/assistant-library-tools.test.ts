@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AiTool, AiToolExecutionContext } from "@openpcb/ai-core";
+import type { AiTool, AiToolExecutionContext } from "agentkit/core";
 import type { CoreBackendModuleContext } from "../../contracts/modules/backend-module";
 import { makeLibraryResolveBomTool, makeLibrarySearchComponentsTool } from "../../../modules/assistant/backend/tools/library-tools";
 import { MODULE_SDK_TOKENS, type LibraryComponent, type LibrarySDK } from "../../../sdks";

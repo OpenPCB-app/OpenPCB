@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { coreLibraryTest as test } from "./helpers/core-library-fixture";
+import { describe, expect } from "bun:test";
 import os from "node:os";
 import path from "node:path";
 import { resetSharedSqliteForTesting } from "../db/sqlite-client";
@@ -48,7 +49,7 @@ async function fetchModelRef(
 }
 
 describe("library model-ref propagation from .opclib manifest", () => {
-  test("Pin headers/sockets ship baked GLBs without runtime modelRef", async () => {
+  test("imports baked pin-header/socket fixture models without runtime modelRef", async () => {
     const server = await bootServer("library-model-ref-pin-header");
 
     for (const footprintId of [
@@ -62,7 +63,7 @@ describe("library model-ref propagation from .opclib manifest", () => {
     }
   });
 
-  test("LEDs ship baked GLBs without runtime modelRef", async () => {
+  test("imports baked LED fixture models without runtime modelRef", async () => {
     const server = await bootServer("library-model-ref-led");
 
     for (const footprintId of [

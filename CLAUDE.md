@@ -14,10 +14,10 @@ records only the deltas and traps that are not obvious from it.
 
 ## Project
 
-OpenPCB — desktop PCB design suite. Bun HTTP backend + React 19 / Vite 7 / Tailwind 4 frontend +
+OpenPCB — desktop PCB design suite. Node HTTP backend + React 19 / Vite 7 / Tailwind 4 frontend +
 Electron shell + SQLite (Drizzle ORM). Root uses **npm workspaces** (`src/core/backend`,
-`src/core/frontend`, `electron`); Bun is the backend runtime and test runner, not the root package
-manager. The root `bun.lock` is stale — `package-lock.json` is dependency truth.
+`src/core/frontend`, `electron`); Node/Electron host the backend, Bun runs domain tests, and npm
+manages packages. The root `bun.lock` is stale — `package-lock.json` is dependency truth.
 
 ## Working agreements
 
@@ -83,7 +83,7 @@ Local iteration against the sibling checkout: `npm run shared:link` → `npm run
 ```
 src/
 ├── core/
-│   ├── backend/        Bun HTTP runtime, module loader, router, DB (own workspace)
+│   ├── backend/        Node HTTP runtime, module loader, router, DB (own workspace)
 │   │   ├── main.ts     entry — boots ModuleRuntime, then createHttpServer
 │   │   ├── http/       server, CORS, middleware, problem-details
 │   │   ├── router/     HttpRouter, ModuleRouter, route matcher, registry
@@ -158,8 +158,8 @@ The shared tree has **nine** subtrees, listed above. There is no `src/shared/bac
 | ----------- | ---------- | --------------------------------------------------------------------------- |
 | `library`   | —          | component catalog: symbols, footprints, KiCad import, built-in seeding       |
 | `designer`  | `library`  | schematic + PCB editor: commands, history, projections, ECS world, DRC, `pcb/` |
-| `tasks`     | —          | task tracking + SSE                                                         |
-| `assistant` | `tasks`    | AI assistant (OpenAI / Ollama / LM Studio providers); hosts the MCP server   |
+| `tasks`     | `assistant` | visible paged AgentKit run monitor; canonical Stop/Continue                   |
+| `assistant` | `designer` | one AgentKit host, API-key/local providers, app native tools and MCP          |
 | `knowledge` | —          | read `src/modules/knowledge/manifest.json` — scope not documented here       |
 
 `designer` declares a required dependency on `library >= 0.1.0`.
@@ -212,6 +212,9 @@ Context carries `moduleId`, `manifest`, `db` (prefixed SQLite via Drizzle — ta
 - Consume: `ctx.sdk.get<T>(MODULE_SDK_TOKENS.LIBRARY)`. Never import another module directly.
 - Publish: in the module's `registerSdk()` lifecycle hook.
 - `src/sdks/` holds **pure interfaces and types only** — no implementations.
+- TasksSDK is a monitor port only. `openpcb.agentkit-monitor` delegates reads/cancel/resume to the
+  existing canonical host; no app executor registry, enqueue API or second scheduler. Assistant
+  domain DTOs import generic contracts from `agentkit/contracts`; no generic AssistantSDK remains.
 - The frontend consumes **generated typed stubs** at `src/core/frontend/src/generated/sdk/`. They
   are codegen output; regenerate with `npm run sdk:generate` (or `npm run gen`) and commit.
 - **Adding a designer command requires updating the `DesignerCommand` union** in
@@ -228,7 +231,7 @@ component receiving `{ moduleId, namespace, backendURL }`. Navigation is **Zusta
 
 ### Backend HTTP stack
 
-Boot: `main.ts` → `ModuleRuntime.bootstrap()` → `createHttpServer()` → `Bun.serve()`.
+Boot: `main.ts` → `ModuleRuntime.bootstrap()` → `createHttpServer()` → Node `http.createServer()`.
 Middleware chain: requestId → logging → CORS → error handler.
 
 Built-in routes: `GET /api/health`, `GET /api/diagnostics` (error stats, ring buffer of the last
@@ -240,8 +243,9 @@ are prefixed `https://openpcb.dev/problems/`.
 
 ### SQLite runtime
 
-One SQLite file via a native driver + Drizzle ORM. Facts that constrain how you write code against
-it:
+The application domain uses one SQLite file via a native driver + Drizzle ORM. AgentKit uses a
+separate `agentkit.sqlite` for generic conversations/tasks/events/proposals; never point that store
+at the application file or import historical assistant/task rows. Domain database invariants:
 
 - The client is a **singleton**, **WAL enabled**, **foreign keys on**. There is one writer.
 - Module tables are **prefix-partitioned** — each module gets a `DrizzleModuleDbClient` with its own
@@ -302,14 +306,24 @@ no `frameloop="always"`. Use demand rendering and `invalidate()`.
 
 ## Security model
 
-OpenPCB is a **single-user desktop app with no auth layer**. Loopback is the security boundary.
+OpenPCB is a **single-user desktop app**. Loopback remains mandatory; Assistant and Tasks additionally
+require a per-launch application token.
 
 - The backend binds `127.0.0.1` by default (`HOST`). **Do not bind `0.0.0.0` or a public
   interface** — many endpoints are unauthenticated by design.
-- The CORS allowlist (`OPENPCB_ALLOWED_ORIGINS`, default localhost/Tauri only) is the **only**
-  same-origin boundary. It makes browsers refuse cross-origin reads; it does **not** stop a
-  determined caller that can already reach the loopback socket. Treat the backend as trusting
-  anything on loopback.
+- Assistant and Tasks REST/SSE paths, including legacy aliases and provider operations, require
+  `X-OpenPCB-Token` before body parsing or application work. Host must match the actual backend
+  host and port; Origin must match its origin or an explicitly configured renderer origin.
+  Missing token configuration fails closed, including standalone development.
+- Electron main generates the application token in memory. Only the current trusted window's
+  main frame can obtain it through `local-api:bootstrap`. Never put it in environment variables,
+  logs, diagnostics, query strings or persistent renderer storage. Use
+  `src/shared/frontend/http/local-api.ts` for authenticated fetch and fetch-based streams; its
+  transport refuses other origins, unrelated routes, inbound MCP and redirects.
+- Assistant/Tasks request bodies are limited to 1 MiB, including attachments; JSON is validated
+  before dispatch. Public health remains accessible. Other module endpoints retain their existing
+  loopback boundary and body limits. CORS is not authorization; the obsolete
+  `OPENPCB_ALLOW_UNAUTHENTICATED_API` flag does not grant access.
 - Two endpoints depend entirely on that assumption:
   - `GET /api/modules/library/models/export` — streams the **entire library** (manifest plus every
     footprint GLB/STEP) as a ZIP. **Never expose to a network.**
@@ -318,8 +332,8 @@ OpenPCB is a **single-user desktop app with no auth layer**. Loopback is the sec
 - **Re-audit trigger:** if a future deployment widens the boundary at all — multi-user, a remote
   backend, a browser-extension surface — gate `models/export` and `models/import` behind an env flag
   or session token and re-audit every unauthenticated module endpoint before shipping.
-- The one exception to pure loopback trust is the MCP endpoint, which additionally requires a bearer
-  token (below).
+- Inbound MCP uses its separate bearer token (below), never the application token. Its exact
+  endpoint still passes through the Host/Origin and body-limit guards.
 
 ## MCP server
 
@@ -327,14 +341,14 @@ OpenPCB exposes its assistant tool registry over **MCP** so external agents (Cla
 Desktop, Codex) can drive the design the user has open. It lives **inside the assistant module**,
 which owns the registry, `ContextResolver`, proposals and the write policy.
 
-- **Endpoint:** Streamable HTTP at `/api/modules/assistant/mcp` (POST/GET/DELETE), built on
-  `@modelcontextprotocol/server` v2's `createMcpHandler`, whose `fetch(Request) → Response` matches
-  the module router natively. Code under `src/modules/assistant/backend/mcp/`.
-- **Sessions are backed by a real assistant chat**, one per client, matched on
-  `metadata.mcp.clientKey` derived from the `X-OpenPCB-MCP-Client` header or User-Agent — it must be
-  **header-stable, never the display name**. This is what lets every existing designer tool work
-  unchanged: they resolve their design through `contextResolver.getPrimaryDesign(chatId)`. It also
-  means MCP tool calls and pending proposals render in the assistant panel.
+- **Endpoint:** Streamable HTTP at `/api/modules/assistant/mcp` (POST/GET/DELETE), served by
+  AgentKit's public `createMcpServerHandler` and staged tool source. The embedding lives in
+  `src/modules/assistant/backend/agentkit/native-mcp*.ts`; app resources and prompts remain in `mcp/`.
+- **Sessions are backed by a real assistant chat** and a framework-generated actor identity.
+  Client headers provide display text only, never reusable session authority. Native scopes bind
+  actor, chat and design; disconnect revokes that actor's exact and scoped write allowances.
+  Tools resolve the explicit session design through the app context resolver. Native mutations,
+  receipt recovery and Undo use the same domain adapter as the in-app assistant.
 - **Tools:** the 15 in-app `AiTool`s projected 1:1 (`AiToolDefinition` is already MCP-shaped;
   `fromJsonSchema` takes `inputSchema` verbatim), plus MCP-only extended reads in
   `tools/read-tools.ts` (`designer_list_designs`, `get_pcb_state`, `run_erc`, `run_drc`, `get_bom`,
@@ -366,14 +380,15 @@ Full list in `DEVELOPER.md`. What is not obvious from it:
 | `npm run build` **runs `npm run corelib:fetch` automatically**                                             | The build verifies the fetched `.opclib`: SHA-256, Ed25519 signature, manifest id and component count. A build failure here is a **library integrity failure**, not a bundler bug |
 | `npm run gen:contracts -- --check` is **wired into CI**                                                    | `bun scripts/gen-contract-types.ts` regenerates `board-snapshot.generated.ts`; commit the result or CI fails |
 | `npm run gen:check` fails if the generated module registry / SDK stubs are dirty                           | Any manifest change needs `npm run gen` + a commit                          |
-| Backend tests are **Bun** (`npm run test:backend`), frontend tests are **Vitest** (`npm run test:react`)    | Never cross them                                                            |
+| Domain tests are **Bun** (`npm run test:backend`); native AgentKit host/HTTP tests execute **Node/Electron**; frontend tests are **Vitest** | Never create the production AgentKit host in Bun; use the checked-in Node runners |
 | Frontend Vitest `include` covers `src/core/frontend/src/**`, `src/modules/*/frontend/**` and `src/shared/frontend/**` only | A `*.test.ts` under any other `src/shared/*` subtree runs in **neither** runner — put kernel tests under `src/core/backend/tests/` (Bun) |
 | `npm run db:migrate` is a no-op message                                                                    | Module SQL migrations apply on backend startup                              |
 | The module CLI (`npm run module`, `module:create`, `module:validate`, `module:codegen`) does **registry + SDK codegen only** | There is no Rust, no bridge and no Cargo anywhere in this repo, whatever older script docs claim |
 
-CI order worth mirroring locally: `npm ci` → rebuild installed `@openpcb/*` dists →
-`npm run corelib:fetch` → `typecheck` → `gen:check` → `gen:contracts -- --check` → backend tests →
-frontend tests → Playwright.
+CI runs CoreLibrary trust regressions and the required production fetch in an independent job.
+Other checks can therefore execute while release bootstrap is blocked: install/rebuild package
+dists → typecheck → codegen checks → backend/host/parity/shell tests → frontend tests → Electron
+worker smoke → Playwright. A failed trust job still fails the workflow.
 
 ### Playwright
 

@@ -12,7 +12,7 @@ on:
         required: false
         default: "smoke"
       corelib_tag:
-        description: "Override CoreLibrary tag to bundle (default: latest stable). Example: v0.1.0-beta.0"
+        description: "Confirm the committed CoreLibrary tag (empty uses the reviewed release pin)"
         required: false
         default: ""
 
@@ -119,19 +119,22 @@ jobs:
         with:
           bun-version: 1.3.0
 
+      - name: CoreLibrary trust regressions
+        run: bun test scripts/core-library
+
       - name: Fetch + verify CoreLibrary release
         id: corelib
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUESTED_CORELIB_TAG: ${{ inputs.corelib_tag }}
         run: |
           set -euo pipefail
-          # On tag-triggered builds: latest stable. On workflow_dispatch:
-          # honour corelib_tag input if provided.
-          args=""
-          if [ -n "${{ github.event.inputs.corelib_tag }}" ]; then
-            args="--tag=${{ github.event.inputs.corelib_tag }}"
+          # An optional input may only confirm the committed release pin.
+          args=()
+          if [ -n "$REQUESTED_CORELIB_TAG" ]; then
+            args+=("--tag=$REQUESTED_CORELIB_TAG")
           fi
-          summary="$(bun scripts/fetch-core-library.ts $args)"
+          summary="$(bun scripts/fetch-core-library.ts "${args[@]}")"
           echo "$summary"
           {
             echo "tag=$(echo "$summary" | jq -r .tag)"

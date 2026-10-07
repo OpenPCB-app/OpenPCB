@@ -1,3 +1,4 @@
+import { commentAttachmentResponse } from "./comments/attachment-response";
 import type {
   CoreBackendModuleContext,
   ModuleRouterHandle,
@@ -3253,12 +3254,7 @@ export function registerRoutes(
       if (!attachment?.localPath) {
         throw new NotFoundError(`Attachment '${attachmentId}' not found`);
       }
-      return new Response(Bun.file(attachment.localPath), {
-        headers: {
-          "Content-Type": attachment.mimeType,
-          "Cache-Control": "private, max-age=86400",
-        },
-      });
+      return commentAttachmentResponse(attachment.localPath, attachment.mimeType);
     },
   );
 

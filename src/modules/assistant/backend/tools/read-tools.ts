@@ -1,9 +1,8 @@
+import type { AiTool, AiToolRegistry } from "agentkit/core";
 import type {
   AiJsonSchemaObject,
-  AiTool,
-  AiToolRegistry,
   AiToolResult,
-} from "@openpcb/ai-core";
+} from "agentkit/contracts";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import { MODULE_SDK_TOKENS, type DesignerSDK } from "../../../../sdks";
 

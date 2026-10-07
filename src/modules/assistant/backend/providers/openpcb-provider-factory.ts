@@ -3,9 +3,9 @@ import {
   OpenAiCompatibleClient,
   getPresetByKind,
   type AiProviderClient,
-} from "@openpcb/ai-core";
+} from "agentkit/core";
 import type { InternalProviderConfig } from "../provider-store";
-import { redactProviderCredential } from "./provider-credentials";
+import { redactCredentialClient } from "../agentkit/redaction";
 
 /**
  * Build an AiProviderClient from a stored OpenPCB provider config.
@@ -27,10 +27,9 @@ export async function buildAiProviderClient(
       `Provider ${provider.label} has no base URL configured.`,
     );
   }
-  // Only the legacy managed-cloud adapter supplies an ephemeral apiKey directly.
-  const apiKey = provider.apiKey ?? (opts?.resolveApiKey
+  const apiKey = opts?.resolveApiKey
     ? await opts.resolveApiKey(provider)
-    : undefined);
+    : undefined;
   if ((provider.hasApiKey || providerRequiresApiKey(provider)) && !apiKey) {
     throw new ValidationError(
       `API key required for provider: ${provider.label}`,
@@ -41,11 +40,9 @@ export async function buildAiProviderClient(
     kind: provider.kind,
     baseUrl: provider.baseUrl,
     apiKey,
-    // The OpenPCB Cloud metered proxy requires x-openpcb-workspace-id and
-    // stitches usage via x-openpcb-run-id; run-service resolves + passes them.
     extraHeaders: opts?.extraHeaders,
   });
-  return apiKey ? redactProviderCredential(client, apiKey) : client;
+  return apiKey ? redactCredentialClient(client, apiKey) : client;
 }
 
 /**

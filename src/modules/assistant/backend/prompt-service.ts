@@ -1,4 +1,5 @@
-import { composeSystemPrompt, type AiPromptPreset } from "@openpcb/ai-core";
+import { composeSystemPrompt } from "agentkit/core";
+import type { AiPromptPreset } from "agentkit/contracts";
 import type {
   AssistantPromptPreset,
   AssistantPromptPresetId,
@@ -22,7 +23,7 @@ export const CORE_TOOL_INSTRUCTIONS = `
 // are dead weight — and payload bloat — when the chat has no design context.
 export const WRITE_TOOL_INSTRUCTIONS = `
 - Work on the SCHEMATIC only unless the user explicitly asks for PCB/layout/routing — do not touch the board or place footprints on your own initiative.
-- PREFER \`compile_circuit\` for standard block-expressible circuits (e.g. indicator LEDs): emit a circuit-spec IR (block instances + port-level nets, connect ports by "<blockId>.<PORT>", name vcc/gnd rails in \`power\`) in ONE call — it resolves INSTALLED parts, computes values, places, wires, adds power rails, and ERC-checks atomically as one undoable batch. If it reports a missing role, offer to import that part — never hand-substitute. Fall back to the manual place+wire flow below only for circuits no block recipe covers.
+- PREFER \`compile_circuit\` for standard block-expressible circuits (e.g. indicator LEDs): emit a circuit-spec IR (block instances + port-level nets, connect ports by "<blockId>.<PORT>", name vcc/gnd rails in \`power\`) in ONE call — it resolves INSTALLED parts, computes values, places, wires, adds power rails, and ERC-checks. Each committed domain command has its own durable receipt and Undo step; report partial outcomes accurately. If it reports a missing role, offer to import that part — never hand-substitute. Fall back to the manual place+wire flow below only for circuits no block recipe covers.
 - When the user asks you to build/place/wire a circuit, you are EXPECTED to finish it in this one run: actually CALL the write tools — do NOT just describe the plan, draw a diagram, or end your turn with "would you like me to…". Canonical flow, all in one run: \`library_resolve_bom\` → \`designer_create_design\` (if no design yet) → \`designer_propose_schematic_edits\` (place) → \`designer_get_schematic_connectivity\` → ONE \`designer_propose_schematic_wires\` call (the sheet auto-arranges). Keep calling tools across iterations until the circuit is both PLACED and WIRED — only then write your summary. Non-destructive edits (place/wire/move/update) auto-apply immediately and are undoable, so chain them freely; only deletions need a separate explicit confirmation. Report what the tool/apply results say — do not assume.
 - Place parts: \`designer_propose_schematic_edits\` (parts, labels, power ports, net portals).
 - Wiring: connect pins by REFERENCE.PIN — e.g. \`{ source: "U1.OUT", target: "R1.1" }\`, or \`{ source: "R2.2", target: { net: "GND" } }\` to tie a pin to a power/ground/named net (rails like \`+5V\`/\`VCC\`/\`3V3\` and \`GND\` are placed as power/ground symbols automatically — never as plain portals). Call \`designer_get_schematic_connectivity\` first to learn references and pin names. DO NOT pass coordinates/pointsNm — routing is automatic and obstacle-aware.

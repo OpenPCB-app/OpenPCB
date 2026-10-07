@@ -46,6 +46,9 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
 
   return {
     createDesign: (input) => store.createDesign(input),
+    createDesignOperation: (input, identity) => store.createDesignOperation(input, identity),
+    getDesignCreationReceipt: (identity) => store.getDesignCreationReceipt(identity),
+    listDesignCreationReceipts: (actorScope, operationId) => store.listDesignCreationReceipts(actorScope, operationId),
     listDesigns: () => store.listDesigns(),
     getActiveDesignId: () => getActiveDesignId(),
     getDesign: (designId) => store.getDesign(designId),
@@ -58,6 +61,12 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
       store.resolveLibraryComponentForPlacement(componentId),
     dispatchCommand: (designId, envelope, capture) =>
       store.dispatchCommand(designId, envelope, undefined, capture),
+    dispatchOperation: (designId, envelope, identity, capture) =>
+      store.dispatchOperation(designId, envelope, identity, capture),
+    getOperationReceipt: (commandId, identity) =>
+      store.getOperationReceipt(commandId, identity),
+    listOperationReceipts: (actorScope, operationId) =>
+      store.listOperationReceipts(actorScope, operationId),
     getHistory: (designId, sessionId) => store.getHistory(designId, sessionId),
     undo: (designId, sessionId) => store.undo(designId, sessionId),
     redo: (designId, sessionId) => store.redo(designId, sessionId),

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AiTool, AiToolExecutionContext } from "@openpcb/ai-core";
+import type { AiTool, AiToolExecutionContext } from "agentkit/core";
 import type { CoreBackendModuleContext } from "../../contracts/modules/backend-module";
 import type { ContextResolver } from "../../../modules/assistant/backend/context-resolver";
 import { makeDesignerCompileCircuitTool, type CompileCircuitData } from "../../../modules/assistant/backend/compiler/compile-circuit-tool";

@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { coreLibraryTest as test, coreLibraryFixturePath } from "./helpers/core-library-fixture";
+import { describe, expect } from "bun:test";
 import os from "node:os";
 import path from "node:path";
 import { resetSharedSqliteForTesting } from "../db/sqlite-client";
@@ -7,16 +8,11 @@ import { ModuleRouterRegistry } from "../router/module-registry";
 import { MODULE_SDK_TOKENS, type LibrarySDK } from "../../../sdks";
 import { readOpclibFromPath } from "../../../modules/library/backend/sync/opclib-reader";
 import { importOpclib } from "../../../modules/library/backend/sync/opclib-importer";
-import { locateBundledOpclib } from "../../../modules/library/backend/sync/package-locator";
 import { getDb } from "../../../modules/library/backend/queries";
 import { componentFootprints } from "../../../modules/library/backend/schema";
 import { eq } from "drizzle-orm";
 
 const REPO_ROOT = path.resolve(import.meta.dir, "../../..");
-// Resolve the bundled .opclib via the same locator the production code uses.
-// Returns null in environments where no .opclib exists yet (e.g. fresh checkout
-// before `npm run corelib:fetch`) — tests below short-circuit in that case.
-const BUNDLED = await locateBundledOpclib({ repoRoot: REPO_ROOT });
 
 function isolateTestDb(label: string): void {
   resetSharedSqliteForTesting();
@@ -26,12 +22,8 @@ function isolateTestDb(label: string): void {
   );
 }
 
-// Skip the whole suite when no bundled .opclib is locatable (fresh checkout
-// before `npm run corelib:fetch`). The bootstrap-based first test would error
-// on missing library at module activation; better to surface a clear skip.
-const describeWithLib = BUNDLED ? describe : describe.skip;
 
-describeWithLib("opclib importer idempotent re-import", () => {
+describe("opclib importer idempotent re-import", () => {
   test("re-import of same package: variants updated, no duplicates", async () => {
     isolateTestDb("opclib-reimport");
     const moduleRegistry = new ModuleRouterRegistry();
@@ -120,7 +112,7 @@ describeWithLib("opclib importer idempotent re-import", () => {
     expect(libLoaded).toBeDefined();
     const ctx = libLoaded!.context as Parameters<typeof importOpclib>[0];
 
-    const pkg = await readOpclibFromPath(BUNDLED!);
+    const pkg = await readOpclibFromPath(coreLibraryFixturePath());
     const result = await importOpclib(ctx, pkg, { installOrigin: "bundled" });
 
     // Counts come from the manifest so the test stays accurate as the library

@@ -17,7 +17,10 @@ export type ActiveRunStatus =
   | "failed"
   | "cancelled"
   | "paused"
-  | "disconnected";
+  | "disconnected"
+  | "interrupted"
+  | "incomplete"
+  | "waiting_approval";
 
 export interface ActiveToolState {
   callId: string;
@@ -63,7 +66,7 @@ export function AssistantRunStatusCard({
   onRetry?: () => void;
 }): ReactElement | null {
   if (run.status === "completed") return null;
-  const terminal = ["failed", "cancelled", "paused", "disconnected"].includes(
+  const terminal = ["failed", "cancelled", "paused", "disconnected", "interrupted", "incomplete", "waiting_approval"].includes(
     run.status,
   );
   return (
@@ -113,13 +116,13 @@ export function AssistantRunStatusCard({
             >
               <Square className="h-3 w-3" /> Stop
             </button>
-          ) : onRetry ? (
+          ) : onRetry && run.status === "interrupted" ? (
             <button
               type="button"
               onClick={onRetry}
               className="inline-flex items-center gap-1 rounded bg-slate-200 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-300 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             >
-              <RotateCcw className="h-3 w-3" /> Retry
+              <RotateCcw className="h-3 w-3" /> Continue
             </button>
           ) : null}
         </div>

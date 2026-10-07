@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { SqliteAssistantStore } from "agentkit/adapters-sqlite";
+import { PROVIDER_SECRET_REF_KEY } from "agentkit/host";
+import { pinProviderGeneration, buildAgentKitProviderClient } from "../../../modules/assistant/backend/agentkit/providers";
 import { ProviderStore } from "../../../modules/assistant/backend/provider-store";
 import { buildAiProviderClient } from "../../../modules/assistant/backend/providers/openpcb-provider-factory";
 import {
@@ -8,63 +11,36 @@ import {
   input,
   insertLegacy,
   credentialRow,
-  queuedAssistant,
   closeProviderFixtures,
 } from "./fixtures/provider-credentials";
 
 afterEach(closeProviderFixtures);
 
 describe("provider vault boundary", () => {
-  test("queued runs pin nonsecret config and credential refs through later default changes/rotation/deletion", async () => {
-    const { ctx } = fixture();
-    const queued = queuedAssistant(ctx);
-    const { service } = queued;
-    const provider = await service.createProvider(
-      input({ kind: "openai", apiKey: CANARY }),
-    );
-    const chat = service.createChat({
-      providerConfigId: provider.id,
-      model: "fixture-model",
-    });
-    await service.submitMessage(chat.id, { content: "Hello" });
-    const payload = queued.payload();
-    expect(payload.providerSnapshot?.baseUrl).toBe("http://127.0.0.1:43210/v1");
-    expect(JSON.stringify(payload)).not.toContain(CANARY);
-    expect(Object.hasOwn(payload.providerSnapshot!, "apiKey")).toBe(false);
-    await service.updateProvider(provider.id, {
-      apiKey: "replacement-secret",
-      baseUrl: "http://127.0.0.1:43211/v1",
-      defaultModel: "replacement-model",
-    });
-    service.updateSettings({ defaultProviderId: "lmstudio" });
-    await service.deleteProvider(provider.id);
-    const seen: Array<{ url: string; authorization: string; model: unknown }> =
-      [];
+  test("canonical provider generations retain nonsecret endpoint/model/ref through rotation and deletion", async () => {
+    const { store } = fixture();
+    const canonical = new SqliteAssistantStore(":memory:");
+    const provider = await store.createProvider(input({ kind: "openai", apiKey: CANARY }));
+    const pinned = await pinProviderGeneration(store, canonical, provider.id, "selected-model");
+    expect(pinned.baseUrl).toBe("http://127.0.0.1:43210/v1");
+    expect(JSON.stringify(pinned)).not.toContain(CANARY);
+    expect(Object.hasOwn(pinned, "apiKey")).toBe(false);
+    await store.updateProvider(provider.id, { apiKey: "replacement-secret", baseUrl: "http://127.0.0.1:43211/v1", defaultModel: "replacement-model" });
+    await store.deleteProvider(provider.id);
+    const seen: Array<{ url: string; authorization: string; model: unknown }> = [];
     const previousFetch = globalThis.fetch;
     globalThis.fetch = (async (request: unknown, options?: RequestInit) => {
-      seen.push({
-        url: String(request),
-        authorization: new Headers(options?.headers).get("authorization") ?? "",
-        model: (JSON.parse(String(options?.body)) as Record<string, unknown>)
-          .model,
-      });
-      return new Response(
-        'data: {"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n\ndata: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
-        { headers: { "content-type": "text/event-stream" } },
-      );
+      seen.push({ url: String(request), authorization: new Headers(options?.headers).get("authorization") ?? "",
+        model: (JSON.parse(String(options?.body)) as Record<string, unknown>).model });
+      return new Response('data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":null}]}\n\ndata: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', { headers: { "content-type": "text/event-stream" } });
     }) as typeof fetch;
     try {
-      await queued.execute();
-      expect(seen).toEqual([
-        {
-          url: "http://127.0.0.1:43210/v1/chat/completions",
-          authorization: `Bearer ${CANARY}`,
-          model: "fixture-model",
-        },
-      ]);
-    } finally {
-      globalThis.fetch = previousFetch;
-    }
+      const reference = String(pinned.metadata?.[PROVIDER_SECRET_REF_KEY]);
+      const client = buildAgentKitProviderClient({ ...pinned, apiKey: await store.credentials.resolve(reference) });
+      for await (const _event of client.streamChat({ runId: "pin-test", model: pinned.defaultModel, messages: [{ role: "user", content: "Hello" }] })) { /* Drain real transport. */ }
+      expect(seen).toEqual([{ url: "http://127.0.0.1:43210/v1/chat/completions", authorization: `Bearer ${CANARY}`, model: "selected-model" }]);
+      expect(await canonical.providers.getProvider(pinned.id)).toEqual(pinned);
+    } finally { globalThis.fetch = previousFetch; canonical.close(); }
   });
 
   test("new keys never enter SQLite, public DTOs or prefix/suffix previews", async () => {

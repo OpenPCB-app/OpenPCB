@@ -8,14 +8,15 @@ import { createLogger } from "../../../logging/logger";
 import { MentionRegistry } from "../../../mentions";
 import { applyModuleMigrations } from "../../../migrations/module-migrator";
 import { RuntimeSdkRegistry } from "../../../modules/sdk-registry";
-import { AssistantService } from "../../../../../modules/assistant/backend/assistant-service";
+import { ProviderStore } from "../../../../../modules/assistant/backend/provider-store";
+import { SettingsStore } from "../../../../../modules/assistant/backend/settings-store";
+import { ContextResolver } from "../../../../../modules/assistant/backend/context-resolver";
+import { NativeContextStore } from "../../../../../modules/assistant/backend/agentkit/native-context-store";
 import { buildOpenpcbToolRegistry } from "../../../../../modules/assistant/backend/tools/openpcb-tool-registry";
 import { buildDesignerSdk } from "../../../../../modules/designer/backend/sdk";
 import { buildSdk } from "../../../../../modules/library/backend/queries";
 import { commitKicadImport } from "../../../../../modules/library/backend/import/commit-kicad";
 import { buildInspectResponse } from "../../../../../modules/library/backend/import/inspect-kicad";
-import { initializeTaskRuntime, resetTaskRuntimeForTesting } from "../../../../../modules/tasks/backend/runtime-singleton";
-import { buildTasksSdk } from "../../../../../modules/tasks/backend/sdk";
 import { MODULE_SDK_TOKENS } from "../../../../../sdks";
 
 const MODULES_ROOT = path.resolve(import.meta.dir, "../../../../../modules");
@@ -37,19 +38,6 @@ function context(moduleId: string, sdk: RuntimeSdkRegistry): CoreBackendModuleCo
   };
 }
 
-function fixtureService(ctx: CoreBackendModuleContext): AssistantService {
-  const names = ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "OPENROUTER_API_KEY", "OPENROUTER_BASE_URL", "OPENROUTER_MODEL"];
-  const previous = names.map((name) => [name, process.env[name]] as const);
-  for (const name of names) delete process.env[name];
-  try { return new AssistantService(ctx); }
-  finally {
-    for (const [name, value] of previous) {
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
-    }
-  }
-}
-
 async function importFixture(ctx: CoreBackendModuleContext): Promise<string> {
   const existing = ctx.db.rawSql<{ id: string }>(
     "SELECT id FROM library_components WHERE name = ?", ["Parity Capacitor"],
@@ -67,9 +55,8 @@ async function importFixture(ctx: CoreBackendModuleContext): Promise<string> {
   }).componentId;
 }
 
-/** Real migrations, library import, designer and task storage; no bundled-pack bootstrap. */
+/** Real app migrations, library import and designer; no assistant engine or bundled-pack bootstrap. */
 export async function openDomain(dbPath: string) {
-  resetTaskRuntimeForTesting();
   resetSharedSqliteForTesting();
   process.env.OPENPCB_DB_PATH = dbPath;
   MentionRegistry.init();
@@ -89,18 +76,13 @@ export async function openDomain(dbPath: string) {
   sdk.registerValue(MODULE_SDK_TOKENS.LIBRARY, buildSdk(libraryCtx));
   const designer = buildDesignerSdk(context("designer", sdk));
   sdk.registerValue(MODULE_SDK_TOKENS.DESIGNER, designer);
-  await initializeTaskRuntime(context("tasks", sdk));
-  const tasks = buildTasksSdk();
-  sdk.registerValue(MODULE_SDK_TOKENS.TASKS, tasks);
   const ctx = context("assistant", sdk);
-  const service = fixtureService(ctx);
-  await service.providers.updateProvider("lmstudio", { enabled: true });
-  service.settings.updateSettings({ defaultProviderId: "lmstudio" });
-  const registry = buildOpenpcbToolRegistry(ctx, service.contextResolver, service.conversation, {
-    allowRawToolData: false,
-    designerTools: { isSessionAutoApplyAllowed: (input) => input.riskLevel !== "destructive" || service.writeSessionPolicy.isAllowed(input) },
-  });
-  return { ctx, designer, tasks, service, registry, componentId: await importFixture(libraryCtx) };
+  const providers = new ProviderStore(ctx);
+  const settings = new SettingsStore(ctx, providers);
+  const contextStore = new NativeContextStore(ctx);
+  const contextResolver = new ContextResolver(ctx, contextStore);
+  const registry = buildOpenpcbToolRegistry(ctx, contextResolver, undefined, { allowRawToolData: false });
+  return { ctx, designer, providers, settings, contextStore, contextResolver, registry, componentId: await importFixture(libraryCtx) };
 }
 
 export async function isolatedDomain() {
@@ -108,7 +90,6 @@ export async function isolatedDomain() {
   const dir = await mkdtemp(path.join(os.tmpdir(), "openpcb-assistant-parity-"));
   const dbPath = path.join(dir, "fixture.sqlite");
   const cleanup = async (): Promise<void> => {
-    resetTaskRuntimeForTesting();
     resetSharedSqliteForTesting();
     if (previousDb === undefined) delete process.env.OPENPCB_DB_PATH;
     else process.env.OPENPCB_DB_PATH = previousDb;
@@ -120,8 +101,7 @@ export async function isolatedDomain() {
   return {
     ...domain, dbPath,
     async close(): Promise<void> {
-      try { await domain.service.mcp.close(); }
-      finally { await cleanup(); }
+      await cleanup();
     },
   };
 }

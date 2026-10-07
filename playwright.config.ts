@@ -68,7 +68,8 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testIgnore: ELECTRON_SPECS,
+      // AgentKit owns an authenticated, isolated Node runtime and a dedicated config.
+      testIgnore: [ELECTRON_SPECS, /assistant-agentkit.*\.spec\.ts$/],
       use: { ...devices["Desktop Chrome"] },
     },
     {

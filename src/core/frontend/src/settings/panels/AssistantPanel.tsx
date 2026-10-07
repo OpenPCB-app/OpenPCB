@@ -17,10 +17,9 @@ import {
   Wifi,
 } from "lucide-react";
 import { useRuntime } from "../../providers/RuntimeProvider";
-import { useAuth } from "../../cloud/AuthProvider";
-import { cloudRequestHeaders } from "../../cloud/request-headers";
 import { cn } from "@/lib/utils";
 import { McpSection } from "./McpSection";
+import { useAgentKitAppCache } from "../../../../../shared/frontend/assistant/AgentKitAppProvider";
 import {
   providerMetadata,
   readAssistantJson as readJson,
@@ -78,7 +77,7 @@ function maskedKey(provider: AssistantProviderConfig): {
 
 export function AssistantPanel() {
   const { backendURL } = useRuntime();
-  const { session } = useAuth();
+  const { refreshPreferences } = useAgentKitAppCache();
   const base = useMemo(
     () => (backendURL ? `${backendURL}/api/modules/assistant` : null),
     [backendURL],
@@ -161,6 +160,7 @@ export function AssistantPanel() {
     setError(null);
     setMessage(null);
     const updated = await clearProviderCredential(base, expanded.id);
+    await refreshPreferences();
     setProviders((current) =>
       current.map((provider) =>
         provider.id === updated.id ? updated : provider,
@@ -182,6 +182,7 @@ export function AssistantPanel() {
       body: JSON.stringify({ mode }),
     });
     setToolCallingMode(mode);
+    await refreshPreferences();
     // Reload so capabilities (and the chat's grounded/ungrounded state) reflect it.
     await load();
   };
@@ -200,6 +201,7 @@ export function AssistantPanel() {
       body: JSON.stringify({ ...settings, ...patch }),
     });
     setSettings(next);
+    await refreshPreferences();
     setMessage("Assistant defaults saved.");
   };
 
@@ -209,6 +211,7 @@ export function AssistantPanel() {
       setError(null);
       setMessage(null);
       const updated = await saveProviderConfiguration(base, expanded.id, draft);
+      await refreshPreferences();
       setProviders((current) =>
         current.map((provider) =>
           provider.id === updated.id ? updated : provider,
@@ -239,6 +242,7 @@ export function AssistantPanel() {
       },
     );
     setProviders((current) => [...current, created]);
+    await refreshPreferences();
     selectProvider(created.id);
   };
 
@@ -249,7 +253,7 @@ export function AssistantPanel() {
       method: "DELETE",
     });
     selectProvider(null);
-    await load();
+    await Promise.all([load(), refreshPreferences()]);
     setMessage("Provider deleted.");
   };
 
@@ -259,10 +263,7 @@ export function AssistantPanel() {
     await saveProviderDraft();
     const nextModels = await readJson<AssistantProviderModel[]>(
       `${base}/providers/${expanded.id}/models/refresh`,
-      // B2: the openpcb-cloud provider stores no API key — it authenticates
-      // with the live session and needs the workspace header the backend
-      // derives from these. Ignored server-side for BYO providers.
-      { method: "POST", headers: cloudRequestHeaders(session) },
+      { method: "POST" },
     );
     setModels(nextModels);
     const nextModelIds = nextModels.map((entry) => entry.modelId);
@@ -270,7 +271,7 @@ export function AssistantPanel() {
       setDraft((current) => ({ ...current, defaultModel: nextModelIds[0]! }));
     }
     setMessage("Model list refreshed.");
-    await load();
+    await Promise.all([load(), refreshPreferences()]);
   };
 
   const testProvider = async (provider: AssistantProviderConfig) => {
@@ -284,7 +285,6 @@ export function AssistantPanel() {
           method: "POST",
           headers: {
             "content-type": "application/json",
-            ...cloudRequestHeaders(session),
           },
           body: JSON.stringify({ includeCompletion }),
         },
@@ -297,7 +297,7 @@ export function AssistantPanel() {
         text: err instanceof Error ? err.message : String(err),
       });
     }
-    await load();
+    await Promise.all([load(), refreshPreferences()]);
   };
 
   const defaultProviderId = settings?.defaultProviderId;

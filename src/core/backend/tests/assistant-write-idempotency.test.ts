@@ -11,7 +11,7 @@ import type {
 import { MODULE_SDK_TOKENS } from "../../../sdks";
 import type { CoreBackendModuleContext } from "../../contracts/modules/backend-module";
 import type { ContextResolver } from "../../../modules/assistant/backend/context-resolver";
-import type { ConversationStore } from "../../../modules/assistant/backend/conversation-store";
+import type { ProposalConversationPort } from "../../../modules/assistant/backend/tools/designer-tools";
 
 // ─── test doubles ──────────────────────────────────────────────────────
 
@@ -23,10 +23,10 @@ interface DispatchRecord {
 }
 
 /**
- * Minimal in-memory ConversationStore: the write tools only touch
+ * Minimal in-memory ProposalConversationPort: the write tools only touch
  * listWriteProposals / createWriteProposal / updateWriteProposalStatus.
  */
-function makeConversation(): ConversationStore {
+function makeConversation(): ProposalConversationPort {
   const rows = new Map<string, AssistantWriteProposalDto>();
   return {
     createWriteProposal(input: {
@@ -70,7 +70,7 @@ function makeConversation(): ConversationStore {
       rows.set(id, next);
       return next;
     },
-  } as unknown as ConversationStore;
+  } as unknown as ProposalConversationPort;
 }
 
 function makeContextResolver(): ContextResolver {

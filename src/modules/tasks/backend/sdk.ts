@@ -1,18 +1,16 @@
-import type { TasksSDK } from "../../../sdks/tasks";
-import { getTaskRuntime } from "./runtime-singleton";
+import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
+import { AGENTKIT_MONITOR_TOKEN, type TasksSDK } from "../../../sdks/tasks";
 
-export function buildTasksSdk(): TasksSDK {
+export function buildTasksSdk(context: CoreBackendModuleContext): TasksSDK {
+  const monitor = (): TasksSDK => {
+    const value = context.sdk.get<TasksSDK>(AGENTKIT_MONITOR_TOKEN);
+    if (!value) throw new Error("AgentKit run monitor is unavailable");
+    return value;
+  };
   return {
-    createTask: (input) => getTaskRuntime().createTask(input),
-    getTask: (taskId) => getTaskRuntime().getTask(taskId),
-    listTasks: (filter) => getTaskRuntime().listTasks(filter),
-    cancelTask: (taskId) => getTaskRuntime().cancelTask(taskId),
-    retryTask: (taskId) => getTaskRuntime().retryTask(taskId),
-    getChunks: (taskId, fromSeq) => getTaskRuntime().storage.getChunks(taskId, fromSeq),
-    getEvents: (taskId) => getTaskRuntime().storage.listEvents(taskId),
-    getQueueStatus: () => getTaskRuntime().getQueueStatus(),
-    registerExecutor: (type, executor) => getTaskRuntime().registerExecutor(type, executor),
-    onEvent: (handler) => getTaskRuntime().onEvent(handler),
-    onTaskEvent: (taskId, handler) => getTaskRuntime().onTaskEvent(taskId, handler),
+    listTasks: (input) => monitor().listTasks(input),
+    getTask: (id) => monitor().getTask(id),
+    cancelTask: (id) => monitor().cancelTask(id),
+    resumeTask: (id) => monitor().resumeTask(id),
   };
 }

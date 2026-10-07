@@ -1,0 +1,12 @@
+{
+  "name": "agentkit",
+  "version": "0.6.0",
+  "profile": "second-pass-foundation",
+  "archive": "agentkit-0.6.0-foundation-pending-publication.tgz",
+  "sha256": "a37680d7d7d5b73735ddf4a710d576744e7a2ed9ba8ecee59e5e84c60f8a58c6",
+  "publication": "pending",
+  "distributionApproved": false,
+  "developmentOnly": true,
+  "nativePeer": "better-sqlite3@13.0.3",
+  "electron": "41.6.1"
+}

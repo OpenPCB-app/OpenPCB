@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { coreLibraryTest as test } from "./helpers/core-library-fixture";
+import { describe, expect } from "bun:test";
 import os from "node:os";
 import path from "node:path";
 import type { LibrarySDK, LibraryTagStat } from "../../../sdks";

@@ -1,4 +1,3 @@
-import type { ReactElement } from "react";
 import {
   AlertTriangle,
   ChevronRight,
@@ -6,32 +5,32 @@ import {
   Sparkles,
   Wrench,
 } from "lucide-react";
-import { MarkdownContent } from "../../../../shared/frontend/markdown";
+import type { ReactElement } from "react";
 import { useTheme } from "../../../../core/frontend/src/providers/ThemeProvider";
 import type {
   AssistantMessage,
-  AssistantToolEventDto,
-  AssistantWriteProposalDto,
+  AssistantToolEventDto
 } from "../../../../sdks/assistant";
-import { MessageTextWithMentions } from "./MessageTextWithMentions";
+import { toolDisplay } from "../../../../shared/frontend/assistant/tool-display-names";
+import type { PresentedProposal } from "../agentkit-projections";
 import type { MentionReference } from "../types/mention";
-import { ToolCard } from "./ToolCard";
-import {
-  PlacementProposalCard,
-  parsePlacementProposal,
-} from "./PlacementProposalCard";
 import {
   AssistantRunStatusCard,
   type ActiveRunState,
 } from "./AssistantRunStatusCard";
+import { BomResultCard, type BomResultPayload } from "./BomResultCard";
+import { toolDurationMs } from "./chat-format";
 import {
   ComponentResultsBlock,
   type ComponentResultsPayload,
 } from "./ComponentResultCard";
-import { BomResultCard, type BomResultPayload } from "./BomResultCard";
 import { GenericProposalCard } from "./GenericProposalCard";
-import { toolDisplay } from "../../../../shared/frontend/assistant/tool-display-names";
-import { toolDurationMs } from "./chat-format";
+import { MessageTextWithMentions } from "./MessageTextWithMentions";
+import {
+  PlacementProposalCard,
+  parsePlacementProposal,
+} from "./PlacementProposalCard";
+import { ToolCard } from "./ToolCard";
 
 const PROSE_CLASSES = [
   "prose",
@@ -168,63 +167,6 @@ function extractPlacementProposals(events: AssistantToolEventDto[]): Array<{
   });
 }
 
-function extractGenericToolProposals(
-  events: AssistantToolEventDto[],
-  writeProposals: AssistantWriteProposalDto[],
-): AssistantWriteProposalDto[] {
-  const recordsById = new Map(
-    writeProposals.map((record) => [record.id, record]),
-  );
-  const out: AssistantWriteProposalDto[] = [];
-  for (const event of events) {
-    if (event.status !== "succeeded" || !event.resultJson) continue;
-    try {
-      const parsed = JSON.parse(event.resultJson) as {
-        id?: string;
-        kind?: string;
-        designId?: string;
-        baseRevision?: number | null;
-      };
-      if (
-        !parsed.id ||
-        !parsed.kind ||
-        parsed.kind === "designer_place_components"
-      ) {
-        continue;
-      }
-      const record = recordsById.get(parsed.id);
-      out.push(
-        record
-          ? { ...record, toolEventId: record.toolEventId ?? event.id }
-          : ({
-              id: parsed.id,
-              chatId: event.chatId,
-              toolEventId: event.id,
-              kind: parsed.kind,
-              status: "pending",
-              designId: parsed.designId ?? "",
-              baseRevision: parsed.baseRevision ?? null,
-              toolName: event.toolName,
-              title: null,
-              summary: null,
-              riskLevel: null,
-              operations: [],
-              sources: event.sources,
-              warnings: [],
-              proposal: parsed,
-              envelope: null,
-              applyResult: null,
-              createdAt: event.createdAt,
-              updatedAt: event.updatedAt,
-            } as AssistantWriteProposalDto),
-      );
-    } catch {
-      // ignore malformed tool result
-    }
-  }
-  return out;
-}
-
 /**
  * Drop component-search hits already represented by another result block (a BOM
  * selection or a placement proposal) or by an earlier component block, so the
@@ -292,7 +234,7 @@ export function MessageCard({
   runState?: ActiveRunState | null;
   assistantBaseUrl?: string | null;
   backendURL?: string | null;
-  writeProposals?: AssistantWriteProposalDto[];
+  writeProposals?: PresentedProposal[];
   onProposalChanged?: (change: {
     kind: "applied" | "rejected";
     designId: string;
@@ -321,12 +263,9 @@ export function MessageCard({
   const placementIds = new Set(
     placementBlocks.map(({ proposal }) => proposal.proposalId),
   );
-  const toolEventIds = new Set(toolEvents.map((event) => event.id));
-  const genericProposals = isUser
-    ? []
-    : extractGenericToolProposals(toolEvents, writeProposals).filter(
-        (record) => !placementIds.has(record.id),
-      );
+  const genericProposals = isUser ? [] : writeProposals.filter(proposal => !placementIds.has(proposal.id) && (
+    proposal.runId === message.taskId || (proposal.toolEventId !== null && toolEvents.some(event => event.id === proposal.toolEventId))
+  ));
   const proposalToolEventIds = new Set([
     ...placementBlocks.map(({ event }) => event.id),
     ...genericProposals.flatMap((proposal) =>
@@ -338,7 +277,7 @@ export function MessageCard({
   );
   const terminalRun =
     !!runState &&
-    ["failed", "cancelled", "paused", "disconnected"].includes(runState.status);
+    ["failed", "cancelled", "paused", "disconnected", "interrupted", "incomplete", "waiting_approval"].includes(runState.status);
   // Actively working = the inline indicator owns the loading UI; result blocks
   // stay hidden until prose finishes (status cleared on completion by the host).
   const runWorking =

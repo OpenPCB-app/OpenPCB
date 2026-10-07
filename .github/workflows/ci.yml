@@ -13,6 +13,29 @@ defaults:
     shell: bash
 
 jobs:
+  core-library-trust:
+    name: CoreLibrary trust and release bootstrap
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.0
+      - name: Install dependencies
+        run: npm ci
+      - name: CoreLibrary trust regressions
+        run: bun test scripts/core-library
+      - name: Verify pinned CoreLibrary release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun scripts/fetch-core-library.ts
+
   typecheck-and-test:
     name: typecheck + test
     runs-on: ubuntu-latest
@@ -47,11 +70,6 @@ jobs:
             fi
           done
 
-      - name: Fetch CoreLibrary (for backend tests that boot the library module)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bun scripts/fetch-core-library.ts
-
       - name: Typecheck
         run: npm run typecheck
 
@@ -63,6 +81,18 @@ jobs:
 
       - name: Backend tests (Bun)
         run: npm run test:backend
+
+      - name: AgentKit host and credential transport (Node)
+        run: npm run test:agentkit-host
+
+      - name: AgentKit native parity (Node)
+        run: npm run test:assistant-parity
+
+      - name: AgentKit distribution guard regressions
+        run: node --test scripts/check-agentkit-distribution.test.mjs
+
+      - name: Electron credential and shutdown regressions
+        run: bun test electron/tests
 
       - name: Frontend tests (Vitest)
         run: npm run test:react
@@ -108,6 +138,9 @@ jobs:
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
+
+      - name: Authenticated AgentKit browser workflow
+        run: npx playwright test --config tests/e2e/support/assistant-agentkit.config.ts
 
       - name: Run E2E tests
         run: npm run test:e2e

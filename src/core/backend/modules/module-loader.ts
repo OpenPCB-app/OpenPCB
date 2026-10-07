@@ -166,6 +166,8 @@ export class ModuleRuntime implements ModuleRuntimeSnapshotProvider {
 
   private readonly loaded = new Map<string, LoadedRuntimeModule>();
 
+  private shutdownPromise: Promise<void> | undefined;
+
   constructor(options: ModuleLoaderOptions) {
     this.moduleRegistry = options.moduleRegistry;
     this.workspaceRoot = resolveWorkspaceRoot(options);
@@ -173,11 +175,52 @@ export class ModuleRuntime implements ModuleRuntimeSnapshotProvider {
     this.staticModules = options.staticModules ?? STATIC_MODULES;
   }
 
+  /** Stop module admission before awaiting hooks; dependents stop before dependencies. */
+  shutdown(): Promise<void> {
+    this.shutdownPromise ??= this.deactivateLoaded();
+    return this.shutdownPromise;
+  }
+
+  private async deactivateLoaded(): Promise<void> {
+    const modules = this.shutdownOrder();
+    this.loaded.clear();
+    for (const module of modules)
+      this.moduleRegistry.unregister(module.manifest.id);
+    const errors: unknown[] = [];
+    for (const module of modules) {
+      try {
+        await module.definition.onDeactivate?.(module.context);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length)
+      throw new AggregateError(errors, "Module shutdown failed");
+  }
+
+  private shutdownOrder(): LoadedRuntimeModule[] {
+    const ordered: LoadedRuntimeModule[] = [];
+    const visited = new Set<string>();
+    const visit = (module: LoadedRuntimeModule) => {
+      if (visited.has(module.manifest.id)) return;
+      visited.add(module.manifest.id);
+      for (const dependency of module.manifest.dependsOn) {
+        const loaded = this.loaded.get(dependency.id);
+        if (loaded) visit(loaded);
+      }
+      ordered.push(module);
+    };
+    for (const module of this.loaded.values()) visit(module);
+    return ordered.reverse();
+  }
+
   getSdkRegistry(): RuntimeSdkRegistry {
     return this.sdkRegistry;
   }
 
   async bootstrap(): Promise<void> {
+    if (this.shutdownPromise || this.loaded.size)
+      throw new Error("Module runtime cannot bootstrap twice");
     // Core-infra singleton the module system depends on (library/knowledge
     // register mention providers in onActivate). Idempotent; initializing at
     // the bootstrap choke-point makes every ModuleRuntime construction path
@@ -467,25 +510,26 @@ export class ModuleRuntime implements ModuleRuntimeSnapshotProvider {
       });
     }
 
-    // 4. Run module lifecycle: onActivate → registerSdk → registerRoutes.
-    if (definition.onActivate) {
-      await Promise.resolve(definition.onActivate(context));
+    // A failed registration can still leave a fully initialized service behind.
+    try {
+      await definition.onActivate?.(context);
+      await definition.registerSdk?.(context);
+      const router = new ModuleRouter(manifest.id, definition.errorBoundary);
+      await definition.registerRoutes?.(router, context);
+      this.moduleRegistry.register(router);
+      this.loaded.set(manifest.id, { manifest, definition, context });
+    } catch (error) {
+      this.moduleRegistry.unregister(manifest.id);
+      try {
+        await definition.onDeactivate?.(context);
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          `Module '${manifest.id}' initialization and cleanup failed`,
+        );
+      }
+      throw error;
     }
-    if (definition.registerSdk) {
-      await Promise.resolve(definition.registerSdk(context));
-    }
-
-    const router = new ModuleRouter(manifest.id, definition.errorBoundary);
-    if (definition.registerRoutes) {
-      await Promise.resolve(definition.registerRoutes(router, context));
-    }
-    this.moduleRegistry.register(router);
-
-    this.loaded.set(manifest.id, {
-      manifest,
-      definition,
-      context,
-    });
   }
 
   private async resolveBackendEntryPath(

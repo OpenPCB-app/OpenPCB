@@ -37,7 +37,7 @@ export function dayKey(iso: string): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
-/** KB budget per context-size preference (from @openpcb/ai-core limits). */
+/** KB budget per context-size preference (for the app context preference). */
 export function contextBudgetKb(
   pref: "small" | "medium" | "large" | undefined,
 ): number {

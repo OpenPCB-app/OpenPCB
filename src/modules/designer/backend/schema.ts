@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
   uniqueIndex,
@@ -182,12 +183,19 @@ export const commandLog = sqliteTable(
     commandType: text("command_type").notNull(),
     commandJson: text("command_json").notNull(),
     resultJson: text("result_json").notNull(),
+    operationIdentityJson: text("operation_identity_json"),
+    actorScope: text("actor_scope"),
+    operationId: text("operation_id"),
     issuedAt: integer("issued_at").notNull(),
     appliedRevision: integer("applied_revision").notNull(),
     createdAt: text("created_at").notNull(),
   },
   (table) => ({
     designIdIdx: index("designer_command_log_design_id_idx").on(table.designId),
+    operationIdx: index("designer_command_log_operation_idx").on(
+      table.actorScope,
+      table.operationId,
+    ),
   }),
 );
 
@@ -208,6 +216,23 @@ export const sessionHistories = sqliteTable(
     designIdIdx: index("designer_session_histories_design_id_idx").on(
       table.designId,
     ),
+  }),
+);
+
+export const designCreationReceipts = sqliteTable(
+  "designer_design_creation_receipts",
+  {
+    actionId: text("action_id").notNull(),
+    actorScope: text("actor_scope").notNull(),
+    operationId: text("operation_id").notNull(),
+    identityJson: text("identity_json").notNull(),
+    inputJson: text("input_json").notNull(),
+    designJson: text("design_json").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => ({
+    identityPk: primaryKey({ columns: [table.actorScope, table.actionId] }),
+    operationIdx: index("designer_design_creation_receipts_operation_idx").on(table.actorScope, table.operationId),
   }),
 );
 

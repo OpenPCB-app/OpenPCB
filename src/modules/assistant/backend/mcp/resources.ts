@@ -1,4 +1,3 @@
-import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/server";
 import { MODULE_SDK_TOKENS, type DesignerSDK } from "../../../../sdks";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 
@@ -58,75 +57,29 @@ function parseDesignUri(
   if (slash <= 0) return null;
   const designId = rest.slice(0, slash);
   const kind = rest.slice(slash + 1);
-  if (!(kind in KIND_LABELS)) return null;
+  if (!Object.hasOwn(KIND_LABELS, kind)) return null;
   return { designId, kind: kind as ResourceKind };
 }
 
-export function registerResources(
-  server: McpServer,
-  ctx: CoreBackendModuleContext,
-): void {
-  server.registerResource(
-    "openpcb-design",
-    // One template covers every design × kind pair. `list` enumerates the
-    // concrete URIs so a client can browse them without guessing ids.
-    new ResourceTemplate(`${SCHEME}design/{designId}/{kind}`, {
-      list: async () => {
-        const designer = designerOf(ctx);
-        if (!designer) return { resources: [] };
-        const designs = await designer.listDesigns();
-        return {
-          resources: designs.flatMap((design) =>
-            (Object.keys(KIND_LABELS) as ResourceKind[]).map((kind) => ({
-              uri: `${SCHEME}design/${design.id}/${kind}`,
-              name: `${design.name} — ${kind}`,
-              description: KIND_LABELS[kind],
-              mimeType: "application/json",
-            })),
-          ),
-        };
-      },
-    }),
-    {
-      title: "OpenPCB design data",
-      description: `Read-only JSON views of a design. kind is one of: ${Object.keys(
-        KIND_LABELS,
-      ).join(", ")}. Use designer_list_designs for valid designIds.`,
-      mimeType: "application/json",
-    },
-    async (uri: URL) => {
-      const parsed = parseDesignUri(uri.href);
-      if (!parsed) {
-        throw new Error(
-          `Unrecognised OpenPCB resource: ${uri.href}. Expected ${SCHEME}design/{designId}/{${Object.keys(
-            KIND_LABELS,
-          ).join("|")}}.`,
-        );
-      }
-      const designer = designerOf(ctx);
-      if (!designer) throw new Error("Designer module is not available.");
-
-      const payload = await readDesignResource(
-        designer,
-        parsed.designId,
-        parsed.kind,
-      );
-      if (payload === null || payload === undefined) {
-        throw new Error(
-          `No ${parsed.kind} data for design '${parsed.designId}'.`,
-        );
-      }
-      return {
-        contents: [
-          {
-            uri: uri.href,
-            mimeType: "application/json",
-            text: JSON.stringify(payload),
-          },
-        ],
-      };
-    },
+export async function listMcpResources(ctx: CoreBackendModuleContext) {
+  const designer = designerOf(ctx);
+  if (!designer) return [];
+  return (await designer.listDesigns()).flatMap((design) =>
+    (Object.keys(KIND_LABELS) as ResourceKind[]).map((kind) => ({
+      uri: `${SCHEME}design/${design.id}/${kind}`, name: `${design.name} — ${kind}`,
+      description: KIND_LABELS[kind], mimeType: "application/json",
+    })),
   );
+}
+
+export async function readMcpResource(ctx: CoreBackendModuleContext, uri: string) {
+  const parsed = parseDesignUri(uri);
+  if (!parsed) throw new Error(`Unrecognised OpenPCB resource: ${uri}. Expected ${SCHEME}design/{designId}/{${Object.keys(KIND_LABELS).join("|")}}.`);
+  const designer = designerOf(ctx);
+  if (!designer) throw new Error("Designer module is not available.");
+  const payload = await readDesignResource(designer, parsed.designId, parsed.kind);
+  if (payload === null || payload === undefined) throw new Error(`No ${parsed.kind} data for design '${parsed.designId}'.`);
+  return { contents: [{ uri, mimeType: "application/json", text: JSON.stringify(payload) }] };
 }
 
 export { KIND_LABELS as MCP_RESOURCE_KINDS };

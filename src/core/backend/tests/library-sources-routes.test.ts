@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { coreLibraryTest as test } from "./helpers/core-library-fixture";
+import { afterEach, describe, expect } from "bun:test";
 import { rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";

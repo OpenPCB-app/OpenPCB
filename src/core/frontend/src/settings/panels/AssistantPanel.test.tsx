@@ -9,6 +9,10 @@ vi.mock("../../providers/RuntimeProvider", () => ({ useRuntime: () => ({ backend
 vi.mock("../../cloud/AuthProvider", () => ({ useAuth: () => ({ session: null }) }));
 vi.mock("./McpSection", () => ({ McpSection: () => null }));
 
+const cache = vi.hoisted(() => ({ refreshPreferences: vi.fn(async () => {}) }));
+vi.mock("../../../../../shared/frontend/assistant/AgentKitAppProvider", () => ({ useAgentKitAppCache: () => cache }));
+vi.mock("../../../../../shared/frontend/http/local-api", () => ({ localApiFetch: (input: RequestInfo | URL, init?: RequestInit) => fetch(String(input), init) }));
+
 const CANARY = "sk-react-draft-canary-78185c";
 let container: HTMLDivElement;
 let root: Root;
@@ -41,6 +45,7 @@ async function enterKey(): Promise<void> {
 
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  cache.refreshPreferences.mockClear();
   configured = false;
   requests = [];
   credentials = {
@@ -72,9 +77,18 @@ afterEach(async () => {
 });
 
 describe("AssistantPanel credential drafts", () => {
+  test("settings, creation and deletion refresh the mounted canonical provider cache", async () => {
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+    await act(async () => { select.value = "Provider B"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(cache.refreshPreferences).toHaveBeenCalledTimes(1);
+    await click("Add provider"); expect(cache.refreshPreferences).toHaveBeenCalledTimes(2);
+    const remove = container.querySelector<HTMLButtonElement>('button[aria-label="Delete provider"]')!;
+    await act(async () => remove.click()); expect(cache.refreshPreferences).toHaveBeenCalledTimes(3);
+  });
   test("successful save clears ephemeral key, reloads masked state, and never sends credentials over HTTP", async () => {
     await enterKey();
     await click("Save provider");
+    expect(cache.refreshPreferences).toHaveBeenCalledTimes(1);
     expect(credentials.set).toHaveBeenCalledWith({ providerId: "Provider A", apiKey: CANARY });
     expect(container.textContent).toContain("Provider saved.");
     expect(container.querySelector('input[type="password"]')).toBeNull();
@@ -92,6 +106,7 @@ describe("AssistantPanel credential drafts", () => {
     expect(container.querySelector<HTMLInputElement>('input[type="password"]')!.value).toBe(CANARY);
     expect(container.textContent).toContain("LOCKED: Unlock the system keychain and retry.");
     expect(container.textContent).not.toContain("Provider saved.");
+    expect(cache.refreshPreferences).not.toHaveBeenCalled();
     expect(JSON.stringify(requests)).not.toContain(CANARY);
     expect(JSON.stringify(requests)).not.toContain("apiKey");
   });
@@ -101,6 +116,7 @@ describe("AssistantPanel credential drafts", () => {
     await click("Save provider");
     const start = requests.length;
     await click("Remove");
+    expect(cache.refreshPreferences).toHaveBeenCalledTimes(2);
     expect(credentials.clear).toHaveBeenCalledWith({ providerId: "Provider A" });
     expect(container.textContent).toContain("API key removed.");
     expect(container.textContent).not.toContain("Provider saved.");

@@ -1,4 +1,3 @@
-import { fromJsonSchema, type McpServer } from "@modelcontextprotocol/server";
 import {
   CORE_TOOL_INSTRUCTIONS,
   WRITE_TOOL_INSTRUCTIONS,
@@ -23,26 +22,15 @@ function userText(text: string) {
   };
 }
 
-export function registerPrompts(server: McpServer): void {
-  server.registerPrompt(
-    "openpcb-build-circuit",
-    {
-      title: "Build a circuit in OpenPCB",
-      description:
-        "Resolve a BOM from the installed library, create/choose a design, place the parts and wire them — in one pass.",
-      argsSchema: fromJsonSchema<{ spec: string }>({
-        type: "object",
-        properties: {
-          spec: {
-            type: "string",
-            description:
-              "What to build, e.g. '5V blinking red LED indicator at ~1Hz'.",
-          },
-        },
-        required: ["spec"],
-      }),
-    },
-    ({ spec }) =>
+export const MCP_PROMPT_DEFINITIONS = [
+  { name: "openpcb-build-circuit", title: "Build a circuit in OpenPCB", description: "Resolve a BOM from the installed library, create/choose a design, place the parts and wire them — in one pass.", arguments: [{ name: "spec", description: "What to build, e.g. '5V blinking red LED indicator at ~1Hz'.", required: true }] },
+  { name: "openpcb-review-schematic", title: "Review the current schematic", description: "Read the connectivity, run ERC, and report concrete problems with the design." },
+  { name: "openpcb-drc-triage", title: "Triage DRC violations", description: "Run DRC on the open board and group the violations by root cause, most severe first." },
+  { name: "openpcb-bom-check", title: "Check the BOM", description: "Read the BOM and flag rows that would block ordering or assembly." },
+];
+
+const promptBuilders: Record<string, (args: Record<string, string>) => ReturnType<typeof userText>> = {
+  "openpcb-build-circuit": ({ spec }: Record<string, string>) =>
       userText(
         [
           `Build this circuit in OpenPCB: ${spec}`,
@@ -54,16 +42,7 @@ export function registerPrompts(server: McpServer): void {
           "If no design is open, create one. Finish the build — placed AND wired — before summarising.",
         ].join("\n"),
       ),
-  );
-
-  server.registerPrompt(
-    "openpcb-review-schematic",
-    {
-      title: "Review the current schematic",
-      description:
-        "Read the connectivity, run ERC, and report concrete problems with the design.",
-    },
-    () =>
+  "openpcb-review-schematic": () =>
       userText(
         [
           "Review the schematic currently open in OpenPCB.",
@@ -77,16 +56,7 @@ export function registerPrompts(server: McpServer): void {
           CORE_TOOL_INSTRUCTIONS,
         ].join("\n"),
       ),
-  );
-
-  server.registerPrompt(
-    "openpcb-drc-triage",
-    {
-      title: "Triage DRC violations",
-      description:
-        "Run DRC on the open board and group the violations by root cause, most severe first.",
-    },
-    () =>
+  "openpcb-drc-triage": () =>
       userText(
         [
           "Triage the DRC state of the board currently open in OpenPCB.",
@@ -99,16 +69,7 @@ export function registerPrompts(server: McpServer): void {
           "OpenPCB is the authoritative DRC engine — never compute clearances yourself, and re-run designer_run_drc after any change.",
         ].join("\n"),
       ),
-  );
-
-  server.registerPrompt(
-    "openpcb-bom-check",
-    {
-      title: "Check the BOM",
-      description:
-        "Read the BOM and flag rows that would block ordering or assembly.",
-    },
-    () =>
+  "openpcb-bom-check": () =>
       userText(
         [
           "Check the bill of materials of the design currently open in OpenPCB.",
@@ -120,5 +81,10 @@ export function registerPrompts(server: McpServer): void {
           "Report only what the BOM data supports — do not invent part numbers or suppliers.",
         ].join("\n"),
       ),
-  );
+};
+
+export function getMcpPrompt(name: string, args: Record<string, string>) {
+  const build = promptBuilders[name];
+  if (!build) throw new Error(`Unknown OpenPCB prompt: ${name}`);
+  return build(args);
 }

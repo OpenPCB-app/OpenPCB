@@ -1,7 +1,7 @@
-import { AiToolRegistry, type AiTool } from "@openpcb/ai-core";
+import { AiToolRegistry, type AiTool } from "agentkit/core";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import type { ContextResolver } from "../context-resolver";
-import type { ConversationStore } from "../conversation-store";
+import type { ProposalConversationPort } from "./designer-tools";
 import { makeDesignerCompileCircuitTool } from "../compiler/compile-circuit-tool";
 import { registerLibraryTools } from "./library-tools";
 import { registerDesignerTools, type DesignerToolOptions } from "./designer-tools";
@@ -9,8 +9,11 @@ import { registerDesignerTools, type DesignerToolOptions } from "./designer-tool
 export function buildOpenpcbToolRegistry(
   ctx: CoreBackendModuleContext,
   contextResolver: ContextResolver,
-  conversation: ConversationStore,
-  options: { allowRawToolData: boolean; designerTools?: DesignerToolOptions },
+  conversation: ProposalConversationPort | undefined,
+  options: {
+    allowRawToolData: boolean; designerTools?: DesignerToolOptions;
+    stageCompilation?: Parameters<typeof makeDesignerCompileCircuitTool>[2];
+  },
 ): AiToolRegistry {
   const registry = new AiToolRegistry();
   registerLibraryTools(registry, ctx, options);
@@ -24,7 +27,7 @@ export function buildOpenpcbToolRegistry(
   // Compiler-agent tool — registered here (not in registerDesignerTools) to keep
   // its designer-tools helper imports one-way and avoid an import cycle.
   registry.register(
-    makeDesignerCompileCircuitTool(ctx, contextResolver) as unknown as AiTool,
+    makeDesignerCompileCircuitTool(ctx, contextResolver, options.stageCompilation) as unknown as AiTool,
   );
   return registry;
 }

@@ -1,4 +1,5 @@
 {
+  "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -8,10 +9,16 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": "..",
     "declaration": false,
     "noUncheckedIndexedAccess": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "electron": ["node_modules/electron"],
+      "@modules/*": ["src/modules/*"],
+      "@sdks/*": ["src/sdks/*"],
+      "@shared/*": ["src/shared/*"]
+    }
   },
   "include": ["src/**/*.ts"]
 }

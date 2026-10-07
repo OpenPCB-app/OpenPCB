@@ -69,9 +69,15 @@ mock.module("../src/main/mcp-portfile.js", () => ({
   removeMcpPortfile: removePortfile,
 }));
 
-const { startBackendServer, stopBackendServer, getBackendPayload } = await import(
-  "../src/main/backend-server"
-);
+type BackendServer = typeof import("../src/main/backend-server");
+let server: BackendServer;
+let launch = 0;
+async function freshLaunch(): Promise<void> {
+  server = await import(`../src/main/backend-server.ts?launch=${launch++}`) as BackendServer;
+}
+const startBackendServer = () => server.startBackendServer();
+const stopBackendServer = () => server.stopBackendServer();
+const getBackendPayload = () => server.getBackendPayload();
 
 function seedDatabaseFiles(): Map<string, Buffer> {
   const directory = join(userData, "dev");
@@ -91,12 +97,13 @@ function expectDatabasePreserved(files: Map<string, Buffer>): void {
   expect(resetDatabase).not.toHaveBeenCalled();
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   userData = mkdtempSync(join(tmpdir(), "openpcb-startup-preservation-"));
   snapshot = { modules: [], loadedModules: [...requiredModules] };
   startupFailure = publicationFailure = cleanupFailure = null;
   for (const operation of [start, close, disposeWorker, send, writePortfile,
     removePortfile, resetDatabase, captureException, setWorkerEntry, configureCredentials]) operation.mockClear();
+  await freshLaunch();
 });
 
 afterEach(async () => {
@@ -149,6 +156,7 @@ describe("desktop startup preserves existing database files", () => {
     expect(getBackendPayload()).toBeNull();
     expect(removePortfile).toHaveBeenCalledTimes(1);
     publicationFailure = cleanupFailure = null;
+    await freshLaunch();
     await startBackendServer();
     expect(start).toHaveBeenCalledTimes(2);
   });
@@ -189,7 +197,8 @@ describe("desktop startup preserves existing database files", () => {
     expect(await startBackendServer()).toBe(payload);
     expect(start).toHaveBeenCalledTimes(1);
     expect(send).toHaveBeenCalledWith("backend-ready", payload);
-    expect(start).toHaveBeenCalledWith({ host: "127.0.0.1", port: 0, secretStore });
+    expect(start).toHaveBeenCalledWith({ host: "127.0.0.1", port: 0, secretStore,
+      localApi: { token: expect.stringMatching(/^[a-f0-9]{64}$/), rendererOrigins: ["http://127.0.0.1:1420"] } });
     expect(writePortfile).toHaveBeenCalledTimes(1);
     expect(process.env.OPENPCB_DB_PATH).toBe(join(userData, "dev", "openpcb.sqlite"));
     expect(process.env.PORT).toBe("0");
@@ -201,5 +210,21 @@ describe("desktop startup preserves existing database files", () => {
     expect(disposeWorker).toHaveBeenCalledTimes(1);
     expect(getBackendPayload()).toBeNull();
     expect(configureCredentials).toHaveBeenLastCalledWith(null);
+  });
+
+  test("quit during startup waits for the created runtime and rejects restart", async () => {
+    let finishStartup: (runtime: StartedBackendRuntime) => void = () => {};
+    start.mockImplementationOnce(() => new Promise<StartedBackendRuntime>((resolve) => { finishStartup = resolve; }));
+    const starting = startBackendServer();
+    const stopping = stopBackendServer();
+    expect(stopBackendServer()).toBe(stopping);
+    await expect(startBackendServer()).rejects.toThrow("Backend shutdown has started");
+    expect(close).not.toHaveBeenCalled();
+    finishStartup({ host: "127.0.0.1", port: 43123, url: "http://127.0.0.1:43123", snapshot, close });
+    await starting;
+    await stopping;
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(disposeWorker).toHaveBeenCalledTimes(1);
+    expect(getBackendPayload()).toBeNull();
   });
 });

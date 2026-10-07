@@ -1,10 +1,13 @@
 import { app, BrowserWindow } from "electron";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { randomBytes } from "node:crypto";
+import type { LocalApiBootstrap } from "../../../src/core/contracts/security/local-api";
 import { log as electronLog } from "./logger.js";
 import { Sentry } from "./sentry.js";
 import { getTelemetryOptIn } from "./preferences.js";
 import { configureProviderCredentials, getCredentialSecretStore } from "./credential-runtime.js";
+import { settleShutdownSteps } from "./graceful-quit.js";
 import { startBackendRuntime } from "../../../src/core/backend/runtime";
 import type { StartedBackendRuntime } from "../../../src/core/backend/runtime";
 import type { ModuleRegistryResponse } from "../../../src/core/contracts/modules/registry";
@@ -31,6 +34,10 @@ interface BackendReadyPayload {
 
 let runtime: StartedBackendRuntime | null = null;
 let backendPayload: BackendReadyPayload | null = null;
+let startup: Promise<BackendReadyPayload> | null = null;
+let shutdown: Promise<void> | null = null;
+let drcConfigured = false;
+const localApiToken = randomBytes(32).toString("hex");
 const REQUIRED_DESKTOP_MODULES = ["library", "designer", "assistant"] as const;
 
 function getAppDataDir(): string {
@@ -62,7 +69,7 @@ function configureBackendEnvironment(): void {
   process.env.OPENPCB_DB_PATH = join(appDataDir, "openpcb.sqlite");
   process.env.OPENPCB_WORKSPACE_ROOT = getWorkspaceRoot();
   process.env.NODE_ENV = app.isPackaged ? "production" : "development";
-  process.env.OPENPCB_ALLOW_UNAUTHENTICATED_API = "true";
+  delete process.env.OPENPCB_ALLOW_UNAUTHENTICATED_API;
   process.env.OPENPCB_LOG_DIR = app.getPath("logs");
   process.env.OPENPCB_SENTRY_ENV ??= app.isPackaged
     ? "production"
@@ -91,6 +98,10 @@ function configureBackendEnvironment(): void {
 
 export function getBackendPayload(): BackendReadyPayload | null {
   return backendPayload;
+}
+
+export function getLocalApiBootstrap(): LocalApiBootstrap | null {
+  return backendPayload ? { url: backendPayload.url, token: localApiToken } : null;
 }
 
 function summarizeModuleSnapshot(snapshot: ModuleRegistryResponse): string {
@@ -135,32 +146,37 @@ function configureDrcWorkerEntry(): void {
       )
     : join(app.getAppPath(), "dist", "main", "drc-worker.js");
   setDrcWorkerEntry(entry);
+  drcConfigured = true;
   log.info(`DRC worker entry: ${entry}`);
 }
 
 async function closeCurrentRuntime(): Promise<void> {
   const current = runtime;
-  runtime = null;
-  backendPayload = null;
-  configureProviderCredentials(null);
-  // The worker holds a thread that outlives the runtime otherwise.
-  await disposeDrcWorker().catch((error: unknown) => {
-    log.warn(`Failed to dispose the DRC worker: ${String(error)}`);
-  });
-  await current?.close().catch((error: unknown) => {
-    log.warn(`Failed to close backend after startup failure: ${String(error)}`);
-  });
+  await settleShutdownSteps([
+    () => current?.close(),
+    () => drcConfigured ? disposeDrcWorker() : undefined,
+    () => removeMcpPortfile(getAppDataDir()),
+    () => {
+      runtime = null;
+      backendPayload = null;
+      drcConfigured = false;
+      configureProviderCredentials(null);
+    },
+  ]);
 }
 
 async function startRuntimeWithRequiredModules(): Promise<StartedBackendRuntime> {
-  runtime = await startBackendRuntime({ host: "127.0.0.1", port: 0, secretStore: getCredentialSecretStore() });
+  runtime = await startBackendRuntime({
+    host: "127.0.0.1", port: 0, secretStore: getCredentialSecretStore(),
+    localApi: { token: localApiToken, rendererOrigins: app.isPackaged ? [] : ["http://127.0.0.1:1420"] },
+  });
   log.info(`Module registry:\n${summarizeModuleSnapshot(runtime.snapshot)}`);
   assertRequiredModulesLoaded(runtime.snapshot);
   configureProviderCredentials(runtime.providerCredentials ?? null);
   return runtime;
 }
 
-export async function startBackendServer(): Promise<BackendReadyPayload> {
+async function bootBackendServer(): Promise<BackendReadyPayload> {
   if (runtime && backendPayload) return backendPayload;
 
   configureBackendEnvironment();
@@ -190,9 +206,10 @@ export async function startBackendServer(): Promise<BackendReadyPayload> {
     log.info(`Backend ready at ${startedRuntime.url}`);
     return backendPayload;
   } catch (error) {
-    await closeCurrentRuntime();
+    await closeCurrentRuntime().catch(() => {
+      log.warn("Backend startup cleanup failed after cleanup attempts.");
+    });
     try {
-      removeMcpPortfile(getAppDataDir());
       Sentry.captureException(error, {
         tags: { component: "backend", phase: "start" },
       });
@@ -205,21 +222,19 @@ export async function startBackendServer(): Promise<BackendReadyPayload> {
   }
 }
 
-export async function stopBackendServer(): Promise<void> {
-  // Drop the portfile even if the runtime is already gone, so a stale URL is
-  // never left pointing at a dead port.
-  removeMcpPortfile(getAppDataDir());
-  backendPayload = null;
-  configureProviderCredentials(null);
-  if (!runtime) return;
-  const current = runtime;
-  runtime = null;
-  // The DRC worker thread would keep the process alive past a clean quit —
-  // `unref()` is not relied on (execution contract 09 §2.3).
-  await disposeDrcWorker().catch((error: unknown) => {
-    log.warn(`Failed to dispose the DRC worker: ${String(error)}`);
+export function startBackendServer(): Promise<BackendReadyPayload> {
+  if (shutdown) return Promise.reject(new Error("Backend shutdown has started"));
+  startup ??= bootBackendServer();
+  return startup;
+}
+
+export function stopBackendServer(): Promise<void> {
+  // A quit during startup must also close the runtime that startup creates.
+  shutdown ??= Promise.resolve().then(async () => {
+    await startup?.catch(() => undefined);
+    await closeCurrentRuntime();
   });
-  await current.close();
+  return shutdown;
 }
 
 export function getMcpPortfilePath(): string {

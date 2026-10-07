@@ -4,15 +4,15 @@
   "type": "module",
   "version": "0.1.0-beta.5",
   "scripts": {
-    "dev": "PORT=3000 NODE_ENV=development bun main.ts",
-    "start": "bun main.ts",
+    "dev": "PORT=3000 NODE_ENV=development node --import tsx --watch main.ts",
+    "start": "node --import tsx main.ts",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "typecheck": "npx tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@sentry/node": "^10.53.1",
-    "better-sqlite3": "^12.10.0",
+    "better-sqlite3": "13.0.3",
     "drizzle-orm": "^0.45.1",
     "zod": "^4.1.13"
   },

@@ -2,11 +2,17 @@ import type { CoreBackendModuleContext } from "../../../core/contracts/modules/b
 import {
   MODULE_SDK_TOKENS,
   type AiContextBinding,
+  type AiContextBindingStatus,
   type AssistantContextBindingDto,
   type DesignerSDK,
 } from "../../../sdks";
-import { findPrimary } from "@openpcb/ai-core";
-import type { ConversationStore } from "./conversation-store";
+import { findPrimary } from "agentkit/core";
+
+export interface ContextBindingStore {
+  listBindings(chatId: string): AssistantContextBindingDto[];
+  createBinding(chatId: string, binding: AiContextBinding): AssistantContextBindingDto;
+  updateBindingStatus(bindingId: string, status: AiContextBindingStatus): void;
+}
 
 export interface DesignSummaryHit {
   id: string;
@@ -57,7 +63,7 @@ function score(
 export class ContextResolver {
   constructor(
     private readonly ctx: CoreBackendModuleContext,
-    private readonly store: ConversationStore,
+    private readonly store: ContextBindingStore,
   ) {}
 
   private getDesignerSdk(): DesignerSDK | undefined {

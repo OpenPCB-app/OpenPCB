@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { RendererCredentials } from "../../../../contracts/credentials/renderer";
 import { providerMetadata, removeProviderKey, saveProviderDraft, type ProviderDraft } from "./provider-credentials";
 
@@ -18,6 +18,9 @@ function bridge(configured: boolean): RendererCredentials {
   };
 }
 
+beforeEach(() => {
+  vi.stubGlobal("window", { electronAPI: { localApi: { bootstrap: async () => ({ url: "http://127.0.0.1:3000", token: "a".repeat(64) }) } } });
+});
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("provider credential boundary", () => {
@@ -39,7 +42,7 @@ describe("provider credential boundary", () => {
     expect(credentials.status).toHaveBeenCalledWith({ providerId: "fixture" });
     expect(result.hasApiKey).toBe(true);
     expect(result.apiKeyPreview).toBe("••••");
-    expect(fetchMock.mock.calls[1]?.[1]).toBeUndefined();
+    expect(fetchMock.mock.calls[1]?.[1]?.headers.get("X-OpenPCB-Token")).toBe("a".repeat(64));
     expect(JSON.stringify(fetchMock.mock.calls)).not.toContain(CANARY);
     expect(JSON.stringify(fetchMock.mock.calls)).not.toContain("apiKey");
     expect(JSON.stringify(fetchMock.mock.calls)).not.toContain("clearApiKey");
@@ -82,7 +85,9 @@ describe("provider credential boundary", () => {
     expect((await removeProviderKey(BASE, "fixture", credentials)).hasApiKey).toBe(false);
     expect(credentials.clear).toHaveBeenCalledWith({ providerId: "fixture" });
     expect(credentials.status).toHaveBeenCalledWith({ providerId: "fixture" });
-    expect(fetchMock.mock.calls).toEqual([[`${BASE}/providers/fixture`, undefined]]);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${BASE}/providers/fixture`);
+    expect(fetchMock.mock.calls[0]?.[1]?.headers.get("X-OpenPCB-Token")).toBe("a".repeat(64));
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBeUndefined();
   });
 
   test("unconfirmed status and failed public reload do not return save success", async () => {

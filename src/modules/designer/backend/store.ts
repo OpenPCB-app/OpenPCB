@@ -18,6 +18,12 @@ import {
   type DesignerDesignRecord,
   type DesignerDesignSummary,
   type DesignerDispatchResult,
+  type DesignerOperationIdentity,
+  type DesignerOperationReceipt,
+  type DesignerOperationReceiptLookup,
+  type DesignerDesignCreationResult,
+  type DesignerDesignCreationReceiptLookup,
+  type DesignerDesignCreationReceipt,
   type DesignerHistoryActionResult,
   type DesignerHistorySnapshot,
   type DesignerPcbProjection,
@@ -118,6 +124,20 @@ import { conflict, parseDispatchResultJson } from "./results";
 import { commandTouchesPcb } from "./commands/batch";
 import { listBomOverrides, upsertBomOverride } from "./bom-overrides";
 import { buildBomProjection } from "./export/bom/writer";
+import {
+  canonicalJson,
+  identityConflict,
+  identityMatchesEnvelope,
+  operationRowMatches,
+  readOperationReceipt,
+  listOperationReceipts,
+} from "./operation-receipts";
+import {
+  createDesignOperation,
+  readDesignCreationReceipt,
+  listDesignCreationReceipts,
+} from "./design-creation-receipts";
+import { insertDesign } from "./design-initialization";
 
 type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
@@ -139,6 +159,9 @@ function resolveLibrarySdk(ctx: CoreBackendModuleContext): LibrarySDK {
 
 export interface DesignerStore {
   createDesign(input?: { name?: string }): Promise<DesignerDesignSummary>;
+  createDesignOperation(input: { name?: string }, identity: DesignerOperationIdentity): Promise<DesignerDesignCreationResult>;
+  getDesignCreationReceipt(identity: DesignerOperationIdentity): Promise<DesignerDesignCreationReceiptLookup>;
+  listDesignCreationReceipts(actorScope: string, operationId: string): Promise<DesignerDesignCreationReceipt[]>;
   listDesigns(): Promise<DesignerDesignSummary[]>;
   getDesign(designId: string): Promise<DesignerDesignRecord | null>;
   /** Just the head row's name — for export file names; null when missing. */
@@ -179,7 +202,16 @@ export interface DesignerStore {
     envelope: DesignerCommandEnvelope,
     cloud?: { bearer?: string; apiUrl?: string },
     captureMeta?: DispatchCaptureMeta,
+    identity?: DesignerOperationIdentity,
   ): Promise<DesignerDispatchResult>;
+  dispatchOperation(
+    designId: string,
+    envelope: DesignerCommandEnvelope,
+    identity: DesignerOperationIdentity,
+    captureMeta?: DispatchCaptureMeta,
+  ): Promise<DesignerDispatchResult>;
+  getOperationReceipt(commandId: string, identity: DesignerOperationIdentity): Promise<DesignerOperationReceiptLookup>;
+  listOperationReceipts(actorScope: string, operationId: string): Promise<DesignerOperationReceipt[]>;
   linkDesignToCloud(
     designId: string,
     cloud: {
@@ -215,6 +247,7 @@ export interface DesignerStore {
 
 export function createDesignerStore(
   ctx: CoreBackendModuleContext,
+  hooks?: { afterCommandCommit?: (commandId: string) => void },
 ): DesignerStore {
   const db = getDb(ctx.db);
   // Process-wide singleton: both store instances (sdk.ts / routes.ts) feed one
@@ -232,6 +265,8 @@ export function createDesignerStore(
     const key = historySessionKey(designId, sessionId);
     const existing = sessionHistories.get(key);
     if (existing) {
+      // Routes and SDK own separate stores; SQLite is the shared history authority.
+      hydrateSessionHistory(db, designId, sessionId, existing);
       return existing;
     }
     const created = new CommandHistory<DesignerCommand, DesignerWorldComponent>(
@@ -274,20 +309,11 @@ export function createDesignerStore(
     return preview;
   }
 
-  function persistSessionHistory(designId: string, sessionId: string): void {
-    const history = resolveSessionHistory(designId, sessionId);
-    persistSessionHistorySnapshot({
-      db,
-      designId,
-      sessionId,
-      history,
-      timestamp: nowIso(),
-    });
-  }
-
   function applyHistoryPatches(
     designId: string,
     patches: EcsPatch<DesignerWorldComponent>[],
+    sessionId: string,
+    history: CommandHistory<DesignerCommand, DesignerWorldComponent>,
   ): number | null {
     const timestamp = nowIso();
     return ctx.db.transaction((txRaw) => {
@@ -357,37 +383,32 @@ export function createDesignerStore(
       replacePcbOverlayShapes(tx, designId, next.overlayShapes, timestamp);
       replacePcbZones(tx, designId, next.zones, timestamp);
       replacePcbKeepouts(tx, designId, next.keepouts, timestamp);
+      persistSessionHistorySnapshot({ db: tx, designId, sessionId, history, timestamp });
       return nextRevision;
     });
   }
 
   return {
+    async createDesignOperation(input, identity) {
+      const result = createDesignOperation(ctx.db, input, identity);
+      if (result.ok) hooks?.afterCommandCommit?.(identity.actionId);
+      return result;
+    },
+
+    async getDesignCreationReceipt(identity) {
+      return readDesignCreationReceipt(db, identity);
+    },
+
+    async listDesignCreationReceipts(actorScope, operationId) {
+      return listDesignCreationReceipts(db, actorScope, operationId);
+    },
+
     async createDesign(input) {
       const id = crypto.randomUUID();
       const timestamp = nowIso();
-      const name = input?.name?.trim() || "Untitled Design";
-
-      ctx.db.transaction((txRaw) => {
-        const tx = txRaw as DbClient;
-        tx.insert(designHeads)
-          .values({
-            id,
-            name,
-            revision: 0,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          })
-          .run();
-        ensurePcbBoardSettings(tx, id, timestamp);
-      });
-
-      return {
-        id,
-        name,
-        revision: 0,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
+      return ctx.db.transaction((txRaw) =>
+        insertDesign(txRaw as DbClient, input ?? {}, id, timestamp),
+      );
     },
 
     async listDesigns() {
@@ -601,34 +622,51 @@ export function createDesignerStore(
       return library.listTags(options);
     },
 
-    async dispatchCommand(designId, envelope, cloud, captureMeta) {
+    async dispatchOperation(designId, envelope, identity, captureMeta) {
+      if (!identityMatchesEnvelope(designId, envelope, identity)) {
+        return identityConflict(envelope.commandId);
+      }
+      return this.dispatchCommand(designId, envelope, undefined, captureMeta, identity);
+    },
+
+    async getOperationReceipt(commandId, identity) {
+      return readOperationReceipt(db, commandId, identity);
+    },
+
+    async listOperationReceipts(actorScope, operationId) {
+      return listOperationReceipts(db, actorScope, operationId);
+    },
+
+    async dispatchCommand(designId, envelope, cloud, captureMeta, identity) {
+      const replay = (row: typeof commandLog.$inferSelect): DesignerDispatchResult => {
+        if (identity || row.operationIdentityJson) {
+          if (!identity || !operationRowMatches(row, identity, envelope)) {
+            return identityConflict(envelope.commandId);
+          }
+          return JSON.parse(row.resultJson) as DesignerDispatchResult;
+        }
+        if (row.designId !== designId || row.sessionId !== envelope.sessionId ||
+          row.commandType !== envelope.command.type ||
+          row.commandJson !== JSON.stringify(envelope.command)) {
+          return conflict(envelope.baseRevision, row.appliedRevision);
+        }
+        return parseDispatchResultJson(row.resultJson) ?? conflict(envelope.baseRevision, row.appliedRevision);
+      };
+      if (identity && !identityMatchesEnvelope(designId, envelope, identity)) {
+        return identityConflict(envelope.commandId);
+      }
+      const receiptMetadata = identity ? {
+        operationIdentityJson: canonicalJson(identity),
+        actorScope: identity.actorScope,
+        operationId: identity.operationId,
+      } : {};
       const existingLog = db
         .select()
         .from(commandLog)
         .where(eq(commandLog.commandId, envelope.commandId))
         .get();
       if (existingLog) {
-        if (
-          existingLog.designId !== designId ||
-          existingLog.sessionId !== envelope.sessionId ||
-          existingLog.commandType !== envelope.command.type ||
-          existingLog.commandJson !== JSON.stringify(envelope.command)
-        ) {
-          return conflict(envelope.baseRevision, existingLog.appliedRevision);
-        }
-
-        const parsed = parseDispatchResultJson(existingLog.resultJson);
-        if (parsed) {
-          if (parsed.ok) {
-            return {
-              ...parsed,
-              idempotent: true,
-            };
-          }
-          return parsed;
-        }
-
-        return conflict(envelope.baseRevision, existingLog.appliedRevision);
+        return replay(existingLog);
       }
 
       const placeComponentDetail =
@@ -646,10 +684,17 @@ export function createDesignerStore(
           inversePatches: EcsPatch<DesignerWorldComponent>[];
         } | null;
       } = { current: null };
+      const history = resolveSessionHistory(designId, envelope.sessionId);
+      const previousHistory = history.snapshot();
+      let committed = false;
 
       try {
         const result = ctx.db.transaction((txRaw) => {
           const tx = txRaw as DbClient;
+          // Library resolution above can yield; another caller may commit first.
+          const raced = tx.select().from(commandLog)
+            .where(eq(commandLog.commandId, envelope.commandId)).get();
+          if (raced) return replay(raced);
           const head = tx
             .select()
             .from(designHeads)
@@ -659,11 +704,12 @@ export function createDesignerStore(
             const missingResult = conflict(envelope.baseRevision, -1);
             tx.insert(commandLog)
               .values({
+                ...receiptMetadata,
                 commandId: envelope.commandId,
                 designId,
                 sessionId: envelope.sessionId,
                 commandType: envelope.command.type,
-                commandJson: JSON.stringify(envelope.command),
+                commandJson: identity ? canonicalJson(envelope.command) : JSON.stringify(envelope.command),
                 resultJson: JSON.stringify(missingResult),
                 issuedAt: Math.trunc(envelope.issuedAt),
                 appliedRevision: -1,
@@ -683,11 +729,12 @@ export function createDesignerStore(
             );
             tx.insert(commandLog)
               .values({
+                ...receiptMetadata,
                 commandId: envelope.commandId,
                 designId,
                 sessionId: envelope.sessionId,
                 commandType: envelope.command.type,
-                commandJson: JSON.stringify(envelope.command),
+                commandJson: identity ? canonicalJson(envelope.command) : JSON.stringify(envelope.command),
                 resultJson: JSON.stringify(conflictResult),
                 issuedAt: Math.trunc(envelope.issuedAt),
                 appliedRevision: head.revision,
@@ -705,11 +752,12 @@ export function createDesignerStore(
             );
             tx.insert(commandLog)
               .values({
+                ...receiptMetadata,
                 commandId: envelope.commandId,
                 designId,
                 sessionId: envelope.sessionId,
                 commandType: envelope.command.type,
-                commandJson: JSON.stringify(envelope.command),
+                commandJson: identity ? canonicalJson(envelope.command) : JSON.stringify(envelope.command),
                 resultJson: JSON.stringify(missingResult),
                 issuedAt: Math.trunc(envelope.issuedAt),
                 appliedRevision: head.revision,
@@ -865,11 +913,12 @@ export function createDesignerStore(
 
           tx.insert(commandLog)
             .values({
+              ...receiptMetadata,
               commandId: envelope.commandId,
               designId,
               sessionId: envelope.sessionId,
               commandType: command.type,
-              commandJson: JSON.stringify(command),
+              commandJson: identity ? canonicalJson(command) : JSON.stringify(command),
               resultJson: JSON.stringify(result),
               issuedAt: Math.trunc(envelope.issuedAt),
               appliedRevision: result.ok ? result.revision : head.revision,
@@ -877,22 +926,24 @@ export function createDesignerStore(
             })
             .run();
 
+          const pendingHistory = pendingHistoryRef.current;
+          if (pendingHistory) {
+            history.record({ envelope, revision: pendingHistory.revision,
+              forwardPatches: pendingHistory.forwardPatches,
+              inversePatches: pendingHistory.inversePatches,
+              createdEntityId: pendingHistory.createdEntityId, timestamp: envelope.issuedAt });
+            persistSessionHistorySnapshot({
+              db: tx, designId, sessionId: envelope.sessionId, history, timestamp,
+            });
+          }
+
           return result;
         });
+        committed = true;
+        // Test fault injection at the durable commit/publication boundary.
+        hooks?.afterCommandCommit?.(envelope.commandId);
 
         const pendingHistory = pendingHistoryRef.current;
-        if (pendingHistory) {
-          const history = resolveSessionHistory(designId, envelope.sessionId);
-          history.record({
-            envelope,
-            revision: pendingHistory.revision,
-            forwardPatches: pendingHistory.forwardPatches,
-            inversePatches: pendingHistory.inversePatches,
-            createdEntityId: pendingHistory.createdEntityId,
-            timestamp: envelope.issuedAt,
-          });
-          persistSessionHistory(designId, envelope.sessionId);
-        }
 
         // Dataset capture (WP-D4): verbatim envelope + result + derived tags,
         // and AutoCopperRegistry maintenance. Fail-isolated inside the runtime.
@@ -919,6 +970,7 @@ export function createDesignerStore(
 
         return result;
       } catch (error) {
+        if (!committed) history.restore(previousHistory);
         // The returned shape stays a conflict — a caller retrying is the right
         // recovery either way — but a THROW is not a conflict: an aborted
         // transaction (a DRC kernel throw inside the commit gate, a constraint)
@@ -936,16 +988,7 @@ export function createDesignerStore(
           .where(eq(commandLog.commandId, envelope.commandId))
           .get();
         if (racedLog) {
-          const racedResult = parseDispatchResultJson(racedLog.resultJson);
-          if (racedResult) {
-            if (racedResult.ok) {
-              return {
-                ...racedResult,
-                idempotent: true,
-              };
-            }
-            return racedResult;
-          }
+          return replay(racedLog);
         }
 
         return conflict(envelope.baseRevision, -1);
@@ -959,17 +1002,24 @@ export function createDesignerStore(
 
     async undo(designId, sessionId) {
       const history = resolveSessionHistory(designId, sessionId);
+      const previousHistory = history.snapshot();
       const entry = history.consumeUndo();
       if (!entry) {
         return historyEmpty("undo", summarizeHistory(history));
       }
 
-      const revision = applyHistoryPatches(designId, entry.inversePatches);
+      let revision: number | null;
+      try {
+        revision = applyHistoryPatches(designId, entry.inversePatches, sessionId, history);
+      } catch (error) {
+        history.restore(previousHistory);
+        throw error;
+      }
       if (revision === null) {
+        history.restore(previousHistory);
         return historyEmpty("undo", summarizeHistory(history));
       }
 
-      persistSessionHistory(designId, sessionId);
       capture.onHistoryReplay({
         designId,
         editorSessionId: sessionId,
@@ -988,17 +1038,24 @@ export function createDesignerStore(
 
     async redo(designId, sessionId) {
       const history = resolveSessionHistory(designId, sessionId);
+      const previousHistory = history.snapshot();
       const entry = history.consumeRedo();
       if (!entry) {
         return historyEmpty("redo", summarizeHistory(history));
       }
 
-      const revision = applyHistoryPatches(designId, entry.forwardPatches);
+      let revision: number | null;
+      try {
+        revision = applyHistoryPatches(designId, entry.forwardPatches, sessionId, history);
+      } catch (error) {
+        history.restore(previousHistory);
+        throw error;
+      }
       if (revision === null) {
+        history.restore(previousHistory);
         return historyEmpty("redo", summarizeHistory(history));
       }
 
-      persistSessionHistory(designId, sessionId);
       capture.onHistoryReplay({
         designId,
         editorSessionId: sessionId,

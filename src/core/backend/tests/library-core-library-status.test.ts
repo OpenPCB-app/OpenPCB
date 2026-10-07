@@ -1,3 +1,4 @@
+import { coreLibraryTest } from "./helpers/core-library-fixture";
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -136,7 +137,7 @@ async function writePackage(root: string, version: string): Promise<string> {
 }
 
 describe("CoreLibrary status", () => {
-  test("route reports installed and bundled core library", async () => {
+  coreLibraryTest("route reports installed and bundled core library", async () => {
     isolate("corelib-status-route");
     const server = await bootServer();
     const response = await server.fetch(

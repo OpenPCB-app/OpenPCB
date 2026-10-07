@@ -18,6 +18,12 @@
     "backendEntry": "module.backend.ts",
     "frontendEntry": "module.frontend.ts"
   },
-  "dependsOn": [{ "id": "tasks", "minVersion": "0.1.0", "optional": false }],
+  "dependsOn": [
+    {
+      "id": "designer",
+      "minVersion": "0.1.0",
+      "optional": false
+    }
+  ],
   "defaultPinned": true
 }

@@ -1,13 +1,12 @@
 import type {
-  AiSourceRef,
-  AiTool,
-  AiToolRegistry,
   AiToolResult,
-} from "@openpcb/ai-core";
-import { truncateArray } from "@openpcb/ai-core";
+  AiJsonSchemaObject,
+} from "agentkit/contracts";
+import { truncateArray, type AiTool, type AiToolRegistry } from "agentkit/core";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import {
   MODULE_SDK_TOKENS,
+  type AiSourceRef,
   type AssistantPlacementProposal,
   type AssistantWriteProposalDto,
   type DesignerDesignSummary,
@@ -17,7 +16,6 @@ import {
   type DesignerPcbProjection,
 } from "../../../../sdks";
 import type { ContextResolver } from "../context-resolver";
-import type { ConversationStore } from "../conversation-store";
 import { ACTION_ID_DESC, isValidActionId } from "./action-id";
 import {
   buildProjectionIndex,
@@ -35,7 +33,16 @@ const DEFAULT_GRID_SPACING_X_NM = 24_000_000;
 const DEFAULT_GRID_SPACING_Y_NM = 16_000_000;
 const MAX_PLACEMENTS_PER_PROPOSAL = 20;
 
+export interface ProposalConversationPort {
+  listWriteProposals(chatId: string): AssistantWriteProposalDto[];
+  createWriteProposal(input: { id: string; chatId: string; kind: string; designId: string; baseRevision: number;
+    proposal: unknown; envelope: PlacementProposalEnvelope | SchematicProposalEnvelope }): unknown;
+  updateWriteProposalStatus(chatId: string, proposalId: string, status: AssistantWriteProposalDto["status"], result: unknown): unknown;
+}
+
 export interface DesignerToolOptions {
+  stageCreateDesign?: (name: string) => Promise<AiToolResult<unknown>>;
+  stageProposal?: (envelope: PlacementProposalEnvelope | SchematicProposalEnvelope) => Promise<AiToolResult<unknown>>;
   isSessionAutoApplyAllowed?: (input: {
     chatId: string;
     toolName: string;
@@ -44,7 +51,7 @@ export interface DesignerToolOptions {
   }) => boolean;
 }
 
-interface PlacementProposalEnvelope {
+export interface PlacementProposalEnvelope {
   id: string;
   kind: "designer_place_components";
   toolName: "designer_place_components";
@@ -160,13 +167,13 @@ interface WriteToolModelData {
  * ASC) so the dedup decision reflects the latest known state of that action.
  */
 function findPriorByActionId(
-  conversation: ConversationStore,
+  conversation: ProposalConversationPort | undefined,
   chatId: string,
   designId: string,
   actionId: string,
 ): AssistantWriteProposalDto | null {
   let match: AssistantWriteProposalDto | null = null;
-  for (const record of conversation.listWriteProposals(chatId)) {
+  for (const record of conversation?.listWriteProposals(chatId) ?? []) {
     if (record.designId !== designId) continue;
     const envelope = (record as { envelope?: unknown }).envelope as
       | { actionId?: unknown }
@@ -191,7 +198,7 @@ function findPriorByActionId(
  *  - rejected          → user declined; allow a fresh attempt (returns null).
  */
 function dedupByActionId<T>(
-  conversation: ConversationStore,
+  conversation: ProposalConversationPort | undefined,
   chatId: string,
   designId: string,
   actionId: string,
@@ -983,6 +990,7 @@ interface DesignerCreateDesignOutput {
 export function makeDesignerCreateDesignTool(
   ctx: CoreBackendModuleContext,
   contextResolver: ContextResolver,
+  stage?: (name: string) => Promise<AiToolResult<unknown>>,
 ): AiTool<DesignerCreateDesignInput, DesignerCreateDesignOutput | null> {
   return {
     definition: {
@@ -1022,6 +1030,7 @@ export function makeDesignerCreateDesignTool(
       }
 
       const name = normalizeDesignName(input.name);
+      if (stage) return await stage(name) as AiToolResult<DesignerCreateDesignOutput | null>;
       const created = await designer.createDesign({ name });
       await contextResolver.bindDesign(chatId, {
         id: created.id,
@@ -1155,7 +1164,7 @@ function countRequestedPlacements(input: DesignerPlaceComponentsInput): number {
 export function makeDesignerPlaceComponentsTool(
   ctx: CoreBackendModuleContext,
   contextResolver: ContextResolver,
-  conversation: ConversationStore,
+  conversation: ProposalConversationPort | undefined,
   options: DesignerToolOptions = {},
 ): AiTool<DesignerPlaceComponentsInput, AssistantPlacementProposal | null> {
   return {
@@ -1236,7 +1245,7 @@ export function makeDesignerPlaceComponentsTool(
       }
       const idempotencyWarnings: string[] = [];
       const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
-      if (actionId) {
+      if (actionId && !options.stageProposal) {
         const dedup = dedupByActionId<AssistantPlacementProposal>(
           conversation,
           chatId,
@@ -1357,6 +1366,10 @@ export function makeDesignerPlaceComponentsTool(
         warnings: proposalWarnings,
         actionId,
       });
+      if (options.stageProposal) {
+        return await options.stageProposal(envelope) as AiToolResult<AssistantPlacementProposal | null>;
+      }
+      if (!conversation) throw new Error("Proposal persistence is not configured.");
       conversation.createWriteProposal({
         id: proposalId,
         chatId,
@@ -1788,7 +1801,7 @@ interface DesignerProposeSchematicEditsInput {
 export function makeDesignerProposeSchematicEditsTool(
   ctx: CoreBackendModuleContext,
   contextResolver: ContextResolver,
-  conversation: ConversationStore,
+  conversation: ProposalConversationPort | undefined,
   options: DesignerToolOptions = {},
 ): AiTool<
   DesignerProposeSchematicEditsInput,
@@ -1908,7 +1921,7 @@ export function makeDesignerProposeSchematicEditsTool(
         return failedTool(`Design not found: ${designId}`, execCtx.limits);
       const idempotencyWarnings: string[] = [];
       const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
-      if (actionId) {
+      if (actionId && !options.stageProposal) {
         const dedup = dedupByActionId<SchematicProposalEnvelope>(
           conversation,
           chatId,
@@ -2264,7 +2277,7 @@ interface DesignerArrangeSchematicInput {
 export function makeDesignerArrangeSchematicTool(
   ctx: CoreBackendModuleContext,
   contextResolver: ContextResolver,
-  conversation: ConversationStore,
+  conversation: ProposalConversationPort | undefined,
   options: DesignerToolOptions = {},
 ): AiTool<DesignerArrangeSchematicInput, SchematicProposalEnvelope | null> {
   return {
@@ -2302,7 +2315,7 @@ export function makeDesignerArrangeSchematicTool(
         return failedTool(`Design not found: ${designId}`, execCtx.limits);
       const idempotencyWarnings: string[] = [];
       const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
-      if (actionId) {
+      if (actionId && !options.stageProposal) {
         const dedup = dedupByActionId<SchematicProposalEnvelope>(
           conversation,
           chatId,
@@ -2390,7 +2403,7 @@ interface DesignerProposeSchematicWiresInput {
 export function makeDesignerProposeSchematicWiresTool(
   ctx: CoreBackendModuleContext,
   contextResolver: ContextResolver,
-  conversation: ConversationStore,
+  conversation: ProposalConversationPort | undefined,
   options: DesignerToolOptions = {},
 ): AiTool<
   DesignerProposeSchematicWiresInput,
@@ -2483,7 +2496,7 @@ export function makeDesignerProposeSchematicWiresTool(
 
       const idempotencyWarnings: string[] = [];
       const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
-      if (actionId) {
+      if (actionId && !options.stageProposal) {
         const dedup = dedupByActionId<SchematicProposalEnvelope>(
           conversation,
           chatId,
@@ -2733,7 +2746,7 @@ interface DesignerProposeSchematicUpdatesInput {
 export function makeDesignerProposeSchematicUpdatesTool(
   ctx: CoreBackendModuleContext,
   contextResolver: ContextResolver,
-  conversation: ConversationStore,
+  conversation: ProposalConversationPort | undefined,
   options: DesignerToolOptions = {},
 ): AiTool<
   DesignerProposeSchematicUpdatesInput,
@@ -2861,7 +2874,7 @@ export function makeDesignerProposeSchematicUpdatesTool(
 
       const idempotencyWarnings: string[] = [];
       const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
-      if (actionId) {
+      if (actionId && !options.stageProposal) {
         const dedup = dedupByActionId<SchematicProposalEnvelope>(
           conversation,
           chatId,
@@ -3149,7 +3162,7 @@ interface DesignerProposeSchematicDeletionsInput {
 export function makeDesignerProposeSchematicDeletionsTool(
   ctx: CoreBackendModuleContext,
   contextResolver: ContextResolver,
-  conversation: ConversationStore,
+  conversation: ProposalConversationPort | undefined,
   options: DesignerToolOptions = {},
 ): AiTool<
   DesignerProposeSchematicDeletionsInput,
@@ -3235,7 +3248,7 @@ export function makeDesignerProposeSchematicDeletionsTool(
       ];
       const idempotencyWarnings: string[] = [];
       const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
-      if (actionId) {
+      if (actionId && !options.stageProposal) {
         const dedup = dedupByActionId<SchematicProposalEnvelope>(
           conversation,
           chatId,
@@ -3340,7 +3353,7 @@ function snapPoint(point: { x: number; y: number }): { x: number; y: number } {
 }
 
 /** JSON Schema fragment for a wire endpoint (pin or named net). */
-const ENDPOINT_SCHEMA = {
+const ENDPOINT_SCHEMA: AiJsonSchemaObject = {
   description:
     'Pin or net. A pin: "U1.VCC" / "U1.1", or { ref, pin }, or { pinId }. A net: { net: "GND" } (auto-places a power/ground/net-portal primitive and wires to it).',
   oneOf: [
@@ -3361,10 +3374,10 @@ const ENDPOINT_SCHEMA = {
       required: ["net"],
     },
   ],
-} as const;
+};
 
 /** JSON Schema fragment for a pin-only target. */
-const PIN_TARGET_SCHEMA = {
+const PIN_TARGET_SCHEMA: AiJsonSchemaObject = {
   description: 'A pin: "U1.VCC" / "U1.1", or { ref, pin }, or { pinId }.',
   oneOf: [
     { type: "string" },
@@ -3379,7 +3392,7 @@ const PIN_TARGET_SCHEMA = {
       required: ["pinId"],
     },
   ],
-} as const;
+};
 
 /**
  * Persist a schematic proposal and (for non-destructive proposals with no
@@ -3390,7 +3403,7 @@ const PIN_TARGET_SCHEMA = {
  */
 async function finalizeAndMaybeApply(params: {
   designer: DesignerSDK;
-  conversation: ConversationStore;
+  conversation: ProposalConversationPort | undefined;
   chatId: string;
   designId: string;
   baseRevision: number;
@@ -3412,6 +3425,10 @@ async function finalizeAndMaybeApply(params: {
     limits,
     options,
   } = params;
+  if (options.stageProposal) {
+    return await options.stageProposal(envelope) as AiToolResult<SchematicProposalEnvelope | null>;
+  }
+  if (!conversation) throw new Error("Proposal persistence is not configured.");
   conversation.createWriteProposal({
     id: envelope.id,
     chatId,
@@ -3551,6 +3568,7 @@ export async function applySchematicProposalOperations(input: {
   baseRevision: number | null;
   envelope: SchematicProposalEnvelope;
   allowPartial?: boolean;
+  dispatchCommand?: (envelope: DesignerCommandEnvelope) => ReturnType<DesignerSDK["dispatchCommand"]>;
 }): Promise<SchematicApplyResult> {
   const design = await input.designer.getDesign(input.designId);
   if (!design) throw new Error(`Design not found: ${input.designId}`);
@@ -3578,7 +3596,10 @@ export async function applySchematicProposalOperations(input: {
   let stoppedAtOperationId: string | undefined;
 
   const dispatch = (command: DesignerCommandEnvelope["command"]) =>
-    input.designer.dispatchCommand(
+    input.dispatchCommand ? input.dispatchCommand({
+      commandId: crypto.randomUUID(), sessionId: AI_DESIGNER_SESSION_ID,
+      aggregateId: input.designId, baseRevision, issuedAt: Date.now(), command,
+    }) : input.designer.dispatchCommand(
       input.designId,
       {
         commandId: crypto.randomUUID(),
@@ -3743,6 +3764,7 @@ export async function applyDesignerPlaceComponentsProposal(input: {
   designId: string;
   baseRevision: number | null;
   allowPartial: boolean;
+  dispatchCommand?: (envelope: DesignerCommandEnvelope) => ReturnType<DesignerSDK["dispatchCommand"]>;
 }): Promise<{
   proposalId: string;
   status: "applied";
@@ -3806,11 +3828,9 @@ export async function applyDesignerPlaceComponentsProposal(input: {
         mirrored: placement.mirrored,
       },
     };
-    const result = await input.designer.dispatchCommand(
-      input.designId,
-      envelope,
-      { actor: "assistant" },
-    );
+    const result = await (input.dispatchCommand
+      ? input.dispatchCommand(envelope)
+      : input.designer.dispatchCommand(input.designId, envelope, { actor: "assistant" }));
     results.push(result);
     if (result.ok !== true) {
       failWithPartial(
@@ -3852,11 +3872,9 @@ export async function applyDesignerPlaceComponentsProposal(input: {
           ...(propertiesJson ? { propertiesJson } : {}),
         },
       };
-      const updateResult = await input.designer.dispatchCommand(
-        input.designId,
-        updateEnvelope,
-        { actor: "assistant" },
-      );
+      const updateResult = await (input.dispatchCommand
+        ? input.dispatchCommand(updateEnvelope)
+        : input.designer.dispatchCommand(input.designId, updateEnvelope, { actor: "assistant" }));
       results.push(updateResult);
       if (updateResult.ok !== true) {
         failWithPartial(
@@ -3910,7 +3928,7 @@ export function registerDesignerTools(
   registry: AiToolRegistry,
   ctx: CoreBackendModuleContext,
   contextResolver: ContextResolver,
-  conversation: ConversationStore,
+  conversation: ProposalConversationPort | undefined,
   options: DesignerToolOptions = {},
 ): void {
   registry.register(
@@ -3929,7 +3947,7 @@ export function registerDesignerTools(
     ) as unknown as AiTool,
   );
   registry.register(
-    makeDesignerCreateDesignTool(ctx, contextResolver) as unknown as AiTool,
+    makeDesignerCreateDesignTool(ctx, contextResolver, options.stageCreateDesign) as unknown as AiTool,
   );
   registry.register(
     makeDesignerProposeSchematicEditsTool(

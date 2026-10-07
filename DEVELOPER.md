@@ -16,13 +16,13 @@ belongs here.
 | Layer         | Choice                                                                                |
 | ------------- | ------------------------------------------------------------------------------------- |
 | Desktop       | Electron (backend hosted in the main process)                                          |
-| Backend       | Bun HTTP server, RFC 7807 problem-details, JSON structured logging                     |
-| Database      | SQLite via Drizzle ORM, one file, per-module table prefixes                            |
+| Backend       | Node HTTP server, RFC 7807 problem-details, JSON structured logging                     |
+| Database      | SQLite domain DB via Drizzle; separate canonical AgentKit store                            |
 | Frontend      | React 19, Vite 7, Tailwind 4, Zustand, Radix UI, Lucide icons                          |
 | Rendering     | React Three Fiber + three.js, orthographic camera, demand rendering                    |
 | Geometry      | `polygon-clipping`, in-house Manhattan / 45° routers, MST ratsnest                     |
 | 3D import     | `occt-import-js` (STEP → GLB) in a Web Worker                                          |
-| Tests         | Bun Test (backend), Vitest (frontend), Playwright (e2e, Chromium)                      |
+| Tests         | Bun domain tests, Node/Electron AgentKit tests, Vitest, Playwright                      |
 | Observability | Sentry (`@sentry/electron`, `@sentry/react`, `@sentry/node`) — opt-in, off by default   |
 | Packaging     | `electron-builder` → dmg/zip (mac), Setup.exe + nupkg (win), deb/rpm/AppImage (linux)  |
 
@@ -57,7 +57,7 @@ time yet** — ESLint boundary rules are not wired, so it is caught in review.
 ```
 src/
 ├── core/
-│   ├── backend/        Bun HTTP runtime, module loader, router, DB (own workspace)
+│   ├── backend/        Node HTTP runtime, module loader, router, DB (own workspace)
 │   ├── frontend/       React + Vite + Tailwind (own workspace)
 │   └── contracts/      app/* + modules/* contracts + feature-flags/
 ├── modules/            assistant · designer · knowledge · library · tasks
@@ -104,8 +104,8 @@ For local iteration against a sibling checkout: `npm run shared:link`, `npm run 
 | `library`   | space | —          | component catalog: symbols, footprints, KiCad import, built-in seeding, 3D models |
 | `designer`  | space | `library`  | schematic + PCB editor: commands, history, projections, ECS world, DRC, export    |
 | `knowledge` | space | —          | documentation pages: rich-text editor and tree, PDF-as-page, text/markdown import |
-| `tasks`     | tool  | —          | task tracking and SSE progress                                                    |
-| `assistant` | space | `tasks`    | AI assistant (OpenAI / Ollama / LM Studio providers); hosts the MCP server        |
+| `tasks`     | tool  | `assistant` | visible canonical run monitor; paged reads and Stop/Continue                       |
+| `assistant` | space | `designer` | one AgentKit host, API-key/local providers, app native tools and MCP               |
 
 `designer` declares a required dependency on `library`.
 
@@ -223,25 +223,56 @@ Path resolution: `OPENPCB_DB_PATH` → dev `dev-data/openpcb.sqlite` → prod `~
 
 ## Security model
 
-OpenPCB is a single-user desktop app with no auth layer. **Loopback is the security boundary.**
+OpenPCB is a single-user desktop app. **Loopback is mandatory.** Assistant/Tasks additionally
+require a per-launch application token on REST/SSE, including provider configuration, probes
+and legacy aliases.
 
 - The backend binds `127.0.0.1` by default. Do not bind `0.0.0.0` — many endpoints are
   unauthenticated by design.
-- The CORS allowlist (`OPENPCB_ALLOWED_ORIGINS`) is the only same-origin boundary. It makes browsers
-  refuse cross-origin reads; it does not stop anything that can already reach the loopback socket.
+- Assistant/Tasks require `X-OpenPCB-Token`, the exact runtime Host/port, and an exact renderer
+  Origin when present. Their request bodies are limited to 1 MiB, including attachments. JSON
+  must parse before dispatch. Other modules retain their existing body limits.
+- Electron main generates the token in memory. A validated `window.electronAPI.localApi.bootstrap()`
+  returns it only to the current trusted main window's main frame. Backend-ready URL metadata
+  never contains it. Use `localApiFetch` from `src/shared/frontend/http/local-api.ts` for REST and
+  fetch-based SSE. It restricts requests to privileged paths on that backend origin and refuses
+  redirects and inbound MCP. Never persist the token or place it in URLs, environment variables,
+  logs or diagnostics. CORS is not authorization; `OPENPCB_ALLOW_UNAUTHENTICATED_API` is ignored.
 - Two endpoints depend entirely on that assumption:
   `GET /api/modules/library/models/export` streams the entire library as a ZIP, and
   `POST /api/modules/library/models/import` writes content-addressed assets and DB rows for any
   caller.
 - If the boundary ever widens — multi-user, a remote backend, a browser-extension surface — those
   two endpoints must be gated and every unauthenticated module endpoint re-audited before shipping.
-- The MCP endpoint is the one surface with an additional check: a bearer token from
-  `OPENPCB_MCP_TOKEN` plus a loopback-only origin check.
+- Inbound MCP uses only its separate bearer from `OPENPCB_MCP_TOKEN`, plus the Host/Origin and
+  body-limit checks. Application and MCP tokens cannot substitute for each other.
+
+Standalone `npm run dev` has no application token by default; privileged requests fail closed.
+For an explicit programmatic development harness, create a fresh token in trusted backend code
+and inject it through `startBackendRuntime({ localApi: { token, rendererOrigins } })` (or
+`createHttpServer` for tests). For example:
+
+```typescript
+import { randomBytes } from "node:crypto";
+import { startBackendRuntime } from "./src/core/backend/runtime";
+
+const token = randomBytes(32).toString("hex");
+const runtime = await startBackendRuntime({
+  host: "127.0.0.1", port: 3000,
+  localApi: { token, rendererOrigins: ["http://127.0.0.1:1420"] },
+});
+```
+
+Pass `{ url: runtime.url, token }` through the harness's trusted in-memory bootstrap, then use
+`createLocalApiClient(bootstrap)` for direct test clients. A Vite development renderer may
+explicitly call `configureDevelopmentLocalApi(bootstrap)`; production builds reject that setup.
+There is no public bootstrap HTTP route or unauthenticated development exception. Developer
+clients must use the backend's exact URL, not a Vite proxy origin.
 
 ## Running from source
 
-Requirements: **Node 20+** (an active LTS is recommended), **npm 10+**, **Bun ≥ 1.3** for the
-backend runtime and test suite.
+Requirements: **Node 22+** (an active LTS is recommended), **npm 10+**, **Bun ≥ 1.3** for the
+domain test suite. The pinned `better-sqlite3` 13.0.3 requires Node 22 or newer.
 
 ```bash
 git clone https://github.com/OpenPCB-app/OpenPCB.git
@@ -251,8 +282,8 @@ npm install
 
 Install at the root only. The root uses npm workspaces (`src/core/backend`, `src/core/frontend`,
 `electron`); `shared/` and `CoreLibrary/` are **sibling repositories** consumed through published
-GitHub tags, not workspace members. Bun is the backend runtime and test runner, not the package
-manager.
+GitHub tags, not workspace members. Node/Electron host the backend; Bun runs domain tests. npm
+is the package manager.
 
 ### Browser mode (dev backend + Vite)
 
@@ -309,16 +340,19 @@ Run from the repo root unless noted.
 | ------------------------------ | ---------------------------------------------------------------------------- |
 | `npm run dev`                  | Backend + Vite (browser mode)                                                |
 | `npm run dev:electron`         | Vite + Electron shell with the backend hosted in main                        |
-| `npm run dev:backend`          | Bun backend only (`--watch`, port 3000)                                      |
+| `npm run dev:backend`          | Node backend with `tsx` (`--watch`, port 3000)                                      |
 | `npm run dev:frontend`         | Vite dev server only (port 1420)                                             |
 | `npm run dev:browser`          | Backend + the Playwright UI runner against it                                |
 | `npm run dev:corelib`          | Pack `../CoreLibrary`, then browser dev                                      |
 | `npm run dev:electron:corelib` | Pack `../CoreLibrary`, then desktop dev                                      |
-| `npm run build`                | `corelib:fetch` → frontend bundle → electron-builder make                    |
+| `npm run build`                | AgentKit/SIWC distribution guards → CoreLibrary trust → bundles → make                    |
 | `npm run corelib:fetch`        | Fetch + verify the bundled `.opclib` (SHA-256, Ed25519, manifest id, count)  |
 | `npm run typecheck`            | Composite `tsc -b` over backend, frontend and modules — **excludes `electron/`** |
 | `npm run typecheck:frontend`   | `tsc --noEmit` in `src/core/frontend` only                                    |
 | `npm run test:backend`         | Bun test suite                                                               |
+| `npm run test:agentkit-host`   | Node canonical host/native-store tests; explicit Electron profile available   |
+| `npm run test:assistant-parity` | Node real HTTP/domain retirement parity without paid inference              |
+| `npm run check:agentkit-distribution` | Production publication gate; local candidate pins intentionally fail    |
 | `npm run test:react`           | Vitest                                                                       |
 | `npm run test:e2e`             | Playwright (Chromium)                                                        |
 | `npm run module`               | Interactive module CLI                                                       |
@@ -340,9 +374,10 @@ Run from the repo root unless noted.
 | `npm run shared:unlink`        | Restore the GitHub-tag installs                                              |
 | `npm run release:sourcemaps`   | Upload sourcemaps after a release                                            |
 
-Backend tests are Bun and frontend tests are Vitest — never cross them. Vitest's `include` is scoped
-to `src/core/frontend/src/**`, so pure-logic frontend reducers are tested under Bun alongside the
-backend suite.
+Bun runs domain tests. Native AgentKit host/HTTP fixtures run Node or Electron through checked-in
+runners; the production host refuses Bun. Frontend tests run Vitest across core, module and shared
+frontend trees. Use `npm run test:agentkit-host` and `npm run test:assistant-parity` for canonical
+host and native-domain parity; these use real isolated SQLite with controlled provider streams.
 
 Single-file runs:
 

@@ -10,11 +10,13 @@ import type { ModuleRegistryResponse } from "../contracts/modules/registry";
 import type { SecretStore } from "../contracts/credentials/secret-store";
 import type { ProviderCredentialAccess } from "../contracts/credentials/renderer";
 import { RuntimeSdkRegistry } from "./modules/sdk-registry";
+import type { LocalApiSecurityConfig } from "../contracts/security/local-api";
 
 export interface BackendRuntimeOptions {
   host?: string;
   port?: number;
   secretStore?: SecretStore;
+  localApi?: LocalApiSecurityConfig;
 }
 
 export interface StartedBackendRuntime {
@@ -36,28 +38,66 @@ export async function startBackendRuntime(
   const moduleRegistry = new ModuleRouterRegistry();
   MentionRegistry.init();
   const sdkRegistry = new RuntimeSdkRegistry();
-  if (options.secretStore) sdkRegistry.registerValue("core.secret-store", options.secretStore);
+  if (options.secretStore)
+    sdkRegistry.registerValue("core.secret-store", options.secretStore);
   const moduleRuntime = new ModuleRuntime({ moduleRegistry, sdkRegistry });
 
-  await moduleRuntime.bootstrap();
-  const snapshot = moduleRuntime.snapshot();
-
-  const server = createHttpServer({
-    host,
-    port,
-    diagnosticsStore,
-    moduleRegistry,
-    moduleRuntime,
-  });
-  const started: StartedRuntimeServer = await server.start();
-  const url = `http://${started.hostname}:${started.port}`;
-
+  let started: StartedRuntimeServer;
+  let snapshot: ModuleRegistryResponse;
+  try {
+    await moduleRuntime.bootstrap();
+    snapshot = moduleRuntime.snapshot();
+    const server = createHttpServer({
+      host,
+      port,
+      diagnosticsStore,
+      moduleRegistry,
+      moduleRuntime,
+      localApi: options.localApi,
+    });
+    started = await server.start();
+  } catch (error) {
+    try {
+      await moduleRuntime.shutdown();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        "Backend startup and cleanup failed",
+      );
+    }
+    throw error;
+  }
+  let closing: Promise<void> | undefined;
   return {
     host: started.hostname,
     port: started.port,
-    url,
+    url: `http://${started.hostname}:${started.port}`,
     snapshot,
-    providerCredentials: sdkRegistry.get<ProviderCredentialAccess>("core.provider-credentials") ?? undefined,
-    close: () => started.close(),
+    providerCredentials:
+      sdkRegistry.get<ProviderCredentialAccess>("core.provider-credentials") ??
+      undefined,
+    close() {
+      closing ??= closeRuntime(started, moduleRuntime);
+      return closing;
+    },
   };
+}
+
+async function closeRuntime(
+  server: StartedRuntimeServer,
+  modules: ModuleRuntime,
+): Promise<void> {
+  // SSE can await host cancellation; initiate listener close without awaiting it first.
+  let listener: Promise<void>;
+  try {
+    listener = server.close();
+  } catch (error) {
+    listener = Promise.reject(error);
+  }
+  const results = await Promise.allSettled([listener, modules.shutdown()]);
+  const errors = results.flatMap((result) =>
+    result.status === "rejected" ? [result.reason as unknown] : [],
+  );
+  if (errors.length)
+    throw new AggregateError(errors, "Backend shutdown failed");
 }

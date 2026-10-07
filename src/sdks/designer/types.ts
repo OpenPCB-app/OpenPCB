@@ -2259,6 +2259,47 @@ export type DesignerCommand =
 
 export type DesignerCommandEnvelope = CommandEnvelope<DesignerCommand>;
 
+/** Trusted host metadata binding a command to one immutable proposal unit. */
+export interface DesignerOperationIdentity {
+  actorScope: string;
+  operationId: string;
+  actionId: string;
+  toolName: string;
+  argumentFingerprint: string;
+  designId: string;
+  expectedRevision: number | null;
+}
+
+export interface DesignerOperationReceipt {
+  commandId: string;
+  identity: DesignerOperationIdentity;
+  command: DesignerCommand;
+  sessionId: string;
+  result: DesignerDispatchResult;
+  committedAt: string;
+}
+
+export type DesignerOperationReceiptLookup =
+  | { status: "missing" }
+  | { status: "conflict" }
+  | { status: "found"; receipt: DesignerOperationReceipt };
+
+export interface DesignerDesignCreationReceipt {
+  identity: DesignerOperationIdentity;
+  input: CreateDesignerDesignInput;
+  design: DesignerDesignSummary;
+  committedAt: string;
+}
+
+export type DesignerDesignCreationResult =
+  | { ok: true; design: DesignerDesignSummary }
+  | { ok: false; code: "OPERATION_IDENTITY_CONFLICT"; commandId: string };
+
+export type DesignerDesignCreationReceiptLookup =
+  | { status: "missing" }
+  | { status: "conflict" }
+  | { status: "found"; receipt: DesignerDesignCreationReceipt };
+
 export interface DesignerHistorySnapshot {
   canUndo: boolean;
   canRedo: boolean;
@@ -2298,6 +2339,7 @@ export interface DesignerCommandOkResult {
 
 export type DesignerDispatchResult =
   | DesignerCommandOkResult
+  | { ok: false; code: "OPERATION_IDENTITY_CONFLICT"; commandId: string }
   | {
       ok: false;
       code: "PCB_COPPER_ILLEGAL";

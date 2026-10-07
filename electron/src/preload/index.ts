@@ -4,6 +4,7 @@
 import "electron-log/preload";
 import { contextBridge, ipcRenderer } from "electron";
 import type { RendererCredentials } from "../../../src/core/contracts/credentials/renderer.js";
+import type { RendererLocalApi } from "../../../src/core/contracts/security/local-api.js";
 
 interface BackendReadyPayload {
   url: string;
@@ -46,6 +47,7 @@ const credentials: RendererCredentials = {
   clear: (request) => ipcRenderer.invoke("credentials:clear", request),
   status: (request) => ipcRenderer.invoke("credentials:status", request),
 };
+const localApi: RendererLocalApi = { bootstrap: () => ipcRenderer.invoke("local-api:bootstrap") };
 
 contextBridge.exposeInMainWorld("electronAPI", {
   // Dev-only marketing-capture flag (M0.2). Renderer-side capture hooks mount
@@ -86,6 +88,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke("shell:open-external", url),
   credentials,
+  localApi,
   // Cloud-only compatibility; main validates the exact Supabase namespace.
   secureStorage: {
     get: (key: string): Promise<string | null> =>

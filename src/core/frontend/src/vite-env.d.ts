@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import type { RendererCredentials } from "../../contracts/credentials/renderer";
+import type { RendererLocalApi } from "../../contracts/security/local-api";
 
 declare global {
   interface ElectronBackendPayload {
@@ -56,6 +57,7 @@ declare global {
     openCrashDumpsFolder?: () => Promise<FolderOpenResult>;
     openUserDataFolder?: () => Promise<FolderOpenResult>;
     credentials?: RendererCredentials;
+    localApi?: RendererLocalApi;
     /** Supabase cloud session compatibility only; cannot resolve provider or SIWC vault refs. */
     secureStorage?: ElectronSecureStorage;
     preferences?: ElectronPreferences;

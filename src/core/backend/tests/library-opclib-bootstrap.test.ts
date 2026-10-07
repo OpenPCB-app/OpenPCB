@@ -1,3 +1,4 @@
+import { coreLibraryTest } from "./helpers/core-library-fixture";
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -219,7 +220,7 @@ function buildPackageWithModel(input: {
 }
 
 describe("core library .opclib bootstrap", () => {
-  test("imports bundled package and exposes resistor/capacitor with all variants", async () => {
+  coreLibraryTest("imports fixture package and exposes resistor/capacitor with all variants", async () => {
     isolateTestDb("opclib-bootstrap");
     const runtime = await bootRuntime();
 
@@ -253,7 +254,7 @@ describe("core library .opclib bootstrap", () => {
     expect(passive!.count).toBeGreaterThanOrEqual(2);
   });
 
-  test("re-bootstrap is idempotent", async () => {
+  coreLibraryTest("re-bootstrap is idempotent", async () => {
     isolateTestDb("opclib-bootstrap-idempotent");
     await bootRuntime();
     const r2 = await bootRuntime();

@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { getPresetByKind } from "@openpcb/ai-core";
+import { getPresetByKind } from "agentkit/core";
 import type { AssistantProviderConfig } from "../../../../sdks/assistant";
 
 export function ProviderCapabilityBadge({

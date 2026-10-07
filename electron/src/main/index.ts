@@ -12,6 +12,7 @@ import {
   startBackendServer,
   stopBackendServer,
   getBackendPayload,
+  getLocalApiBootstrap,
 } from "./backend-server.js";
 import { initUpdater } from "./updater.js";
 import { initDeepLink, flushPending } from "./deep-link.js";
@@ -22,7 +23,9 @@ import {
 } from "./secure-storage.js";
 import { getTelemetryOptIn, setTelemetryOptIn } from "./preferences.js";
 import { registerCredentialIpc } from "./credential-ipc.js";
+import { registerLocalApiIpc } from "./local-api-ipc.js";
 import { getProviderCredentials } from "./credential-runtime.js";
+import { createGracefulQuitHandler } from "./graceful-quit.js";
 
 initLogger();
 initCrashReporter();
@@ -284,12 +287,14 @@ ipcMain.handle("shell:open-external", (_e, url: string) => {
   void shell.openExternal(url);
 });
 
-registerCredentialIpc(
-  ipcMain,
-  {
+const rendererTrust = {
     mainContents: () => mainWindow?.webContents ?? null,
     rendererOrigin: () => app.isPackaged ? getBackendPayload()?.url ?? null : "http://127.0.0.1:1420",
-  },
+};
+registerLocalApiIpc(ipcMain, rendererTrust, getLocalApiBootstrap);
+registerCredentialIpc(
+  ipcMain,
+  rendererTrust,
   getProviderCredentials,
   { get: getSecureItem, set: setSecureItem, remove: removeSecureItem },
 );
@@ -379,6 +384,8 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("before-quit", () => {
-  void stopBackendServer();
-});
+app.on("before-quit", createGracefulQuitHandler({
+  stop: stopBackendServer,
+  quit: () => app.quit(),
+  reportFailure: () => log.error("Backend shutdown failed after cleanup attempts."),
+}));

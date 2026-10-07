@@ -1,12 +1,10 @@
+import type { AiTool, AiToolRegistry } from "agentkit/core";
 import type {
-  AiSourceRef,
-  AiTool,
-  AiToolRegistry,
   AiToolResult,
-} from "@openpcb/ai-core";
-import { truncateArray } from "@openpcb/ai-core";
+} from "agentkit/contracts";
+import { truncateArray } from "agentkit/core";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
-import { MODULE_SDK_TOKENS, type LibrarySDK } from "../../../../sdks";
+import { MODULE_SDK_TOKENS, type AiSourceRef, type LibrarySDK } from "../../../../sdks";
 
 // ─── library_search_components ─────────────────────────────────────────
 

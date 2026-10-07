@@ -1,20 +1,15 @@
-import { describe, expect, test } from "bun:test";
+import { coreLibraryTest as test, coreLibraryFixturePath } from "./helpers/core-library-fixture";
+import { describe, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 import {
   OpclibFormatError,
   readOpclibFromBytes,
   readOpclibFromPath,
 } from "../../../modules/library/backend/sync/opclib-reader";
-import { locateBundledOpclib } from "../../../modules/library/backend/sync/package-locator";
 
-const REPO_ROOT = path.resolve(import.meta.dir, "../../..");
-const BUNDLED = await locateBundledOpclib({ repoRoot: REPO_ROOT });
-const describeWithLib = BUNDLED ? describe : describe.skip;
-
-describeWithLib("opclib reader", () => {
-  test("reads bundled package and validates manifest digest", async () => {
-    const pkg = await readOpclibFromPath(BUNDLED!);
+describe("opclib reader", () => {
+  test("reads fixture package and validates manifest digest", async () => {
+    const pkg = await readOpclibFromPath(coreLibraryFixturePath());
     expect(pkg.manifest.schemaVersion).toBe("1.0.0");
     expect(pkg.manifest.library.id).toBe("openpcb.core");
     // Counts are content-dependent; assert structural invariants instead.
@@ -27,13 +22,13 @@ describeWithLib("opclib reader", () => {
   });
 
   test("rejects truncated archives", async () => {
-    const bytes = new Uint8Array(await readFile(BUNDLED!));
+    const bytes = new Uint8Array(await readFile(coreLibraryFixturePath()));
     const truncated = bytes.slice(0, 16);
     expect(() => readOpclibFromBytes(truncated)).toThrow();
   });
 
   test("rejects manifest with tampered packageSha256", async () => {
-    const bytes = new Uint8Array(await readFile(BUNDLED!));
+    const bytes = new Uint8Array(await readFile(coreLibraryFixturePath()));
     // Find the packageSha256 field in the (compressed) zip and flip one
     // hex char. The library.json file inside is uncompressed in the
     // packer (level 6 still emits readable bytes for ASCII JSON); the

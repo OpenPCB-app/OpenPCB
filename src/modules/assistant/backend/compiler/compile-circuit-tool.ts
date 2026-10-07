@@ -7,13 +7,15 @@
  * each block owns its own pin-accurate wiring, and part roles are resolved to
  * INSTALLED library components (installed-parts-only — no substitution).
  *
- * Self-correction: the tool records enough in its result for RunService to
+ * Self-correction: the tool records enough in its result for the canonical verification hook to
  * persist a BuildIntent, so the existing Definition-of-Done harness verifies the
  * composed circuit and drives ≤N correction passes if ERC is dirty. The in-tool
  * ERC read below is immediate same-turn feedback, not the enforcement path.
  */
 
-import type { AiTool, AiToolResult } from "@openpcb/ai-core";
+import type { AiTool } from "agentkit/core";
+import type { AiToolResult } from "agentkit/contracts";
+import type { CompiledPlan } from "./lowering";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import {
   MODULE_SDK_TOKENS,
@@ -48,13 +50,14 @@ export interface CompileCircuitData {
   missingRoles: string[];
   ercErrors: Array<{ code: string; message: string }>;
   assumptions: string[];
-  /** Resolved bill of materials — RunService captures this as a BuildIntent. */
+  /** Resolved bill of materials — the native adapter captures this as a BuildIntent. */
   bom: CompileBomItem[];
 }
 
 export function makeDesignerCompileCircuitTool(
   ctx: CoreBackendModuleContext,
   contextResolver: ContextResolver,
+  stage?: (input: { designId: string; baseRevision: number; plan: CompiledPlan; bom: CompileBomItem[]; warnings: string[] }) => Promise<AiToolResult<unknown>>,
 ): AiTool<CompileCircuitInput, CompileCircuitData | null> {
   const recipes = listBlockRecipes().join(", ");
   return {
@@ -241,7 +244,11 @@ export function makeDesignerCompileCircuitTool(
         };
       }
 
-      // Apply the compiled plan (single undo group). Throws only on stale revision.
+      if (stage) {
+        return await stage({ designId, baseRevision, plan, bom, warnings: structuralWarnings }) as AiToolResult<CompileCircuitData | null>;
+      }
+
+      // Commands commit separately and each has a UI undo entry.
       let applyResult: ApplyCompiledPlanResult;
       try {
         applyResult = await applyCompiledPlan({

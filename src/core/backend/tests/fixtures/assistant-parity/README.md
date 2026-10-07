@@ -1,86 +1,71 @@
 # Desktop assistant parity fixtures
 
-These fixtures support OPENPCB-112. They compare executable desktop behavior without a paid
-provider, network inference, application database, or system keychain. They are not packaged
-macOS qualification and do not certify electrical or manufacturing correctness.
+The fixtures retain historical native contracts and exercise the current AgentKit/domain boundary
+without paid inference, the user's database or the OS keychain. They do not certify packaged GUI
+behavior or electrical/manufacturing correctness.
 
 ## Run
 
-From the repository root:
-
 ```sh
-bun test src/core/backend/tests/assistant-parity-catalog.test.ts src/core/backend/tests/assistant-parity-native.test.ts src/core/backend/tests/assistant-parity-lifecycle.test.ts
+bun test src/core/backend/tests/assistant-parity-catalog.test.ts
+npm run test:assistant-parity
 bun scripts/assistant-parity-snapshot.ts --check
 ```
 
-The tests create and remove an isolated temporary SQLite directory. Production migrations,
-library import, LibrarySDK, DesignerSDK, TasksSDK, RunService, the native tool registry, and the
-authenticated MCP endpoint execute normally. Only provider responses and credential storage are
-test doubles. The credential store is an in-memory implementation of the trusted-process port;
-it never opens the user's OS vault. Provider environment keys are excluded from fixture seeding.
+`domain.ts` creates isolated real app migrations, LibrarySDK and DesignerSDK, imports a KiCad fixture
+through the actual parser/commit path, and supplies domain context/tools. It does not create a legacy
+queue or a production AgentKit host in Bun. The catalog uses a canonical in-memory store/proposal
+service and actual MCP socket. `retirement.node.ts` reuses the checked-in Node HTTP/domain harness
+with the real default app host, a separate AgentKit SQLite file, synthetic provider streams and an
+in-memory vault. The Node runner bundles it into a fresh temporary directory and removes that
+directory after execution.
 
-The library fixture is imported through the real KiCad parser and commit path. Its files were
-copied from `@openpcb/kicad-parsers/tests/__fixtures__/simple_capacitor.kicad_sym` and
-`C_0603_1608Metric.kicad_mod` installed at the initial baseline. There is no bundled CoreLibrary
-bootstrap in this harness. This isolates domain parity from the separate OPENPCB-50 trust gate
-without weakening signature checks.
+The capacitor files came from the installed KiCad parser fixtures. Bundled CoreLibrary bootstrap
+is excluded here so its independent trust gate is not bypassed. Legacy assistant/task migrations
+remain present but their old runtime tables receive no active engine writes.
 
-## Contract snapshots
+## Catalogs
 
-`catalog.json` preserves the legacy baseline captured at OpenPCB
-`798f9fdc7d0018f081f2a27f3fa2bc9d96f8e2c4`, before the credential migration. Its SHA-256 is
+`catalog.json` preserves the legacy capture at OpenPCB
+`798f9fdc7d0018f081f2a27f3fa2bc9d96f8e2c4`, SHA-256
 `e752f2a9a5c28beaff7d8d213e6c9371012906831f2ad8f6eb50cd7d4a381b40`.
 
-`catalog.current.json` records the reviewed current database migration, including
-`0015_provider_secret_refs.sql`. Its SHA-256 is
-`a64bdf2045794bd54b250887d6b6af2c4d42e16355e9681b0a41723325aefb01`.
-The tests compare the entire current snapshot and separately require the native tool/MCP
-contracts to match the preserved legacy snapshot.
+`catalog.current.json` captures the reviewed canonical composition, SHA-256
+`473f1eaf94f6eaaf0b3fd932b581bc97108edff789c6b1e831fe1453b025a438`.
+It includes 15 native tools, 14 read-only and 22 write-enabled MCP tools, four prompts, five concrete
+resource types and the current migrated SQLite DDL. The tests compare the complete current snapshot
+and independently require every historical native name/input schema to remain unchanged.
 
-The snapshots capture actual public provider presets, registered tool definitions and JSON
-Schemas, authenticated MCP tools/list in both write modes, resource templates, prompt definitions
-and prompt bodies, SQLite DDL, and applied migration names. They contain no chat rows, provider
-credential rows, environment endpoint values, tokens, user design IDs, or application database
-contents. Counts are derived: 15 in-app tools, 14 read-only MCP tools, 22 write-enabled MCP tools,
-and 47 tables across the isolated library/designer/tasks/assistant schema. These counts describe
-this capture, not an independent contract. Knowledge and other application schemas are excluded.
+AgentKit's accepted public resource extension has no resource-template listing hook. The current
+capture records this explicit gap; it does not silently claim historical template advertisement.
+Actual resource URI IDs are normalized to `{designId}`. Prompt bodies, real registered JSON schemas,
+presets, migration names and DDL are captured without rows, credentials or application data.
 
-Regenerate only after reviewing an intentional contract change:
+After reviewing intentional contract drift:
 
 ```sh
 bun scripts/assistant-parity-snapshot.ts --write
 ```
 
-This updates only `catalog.current.json`; it never overwrites the legacy snapshot. Object keys
-are sorted before hashing. Array order is preserved unless the catalog itself defines an
-unordered collection, such as tools listed by name.
+Only the current catalog is rewritten. Object keys are sorted; array order remains meaningful unless
+the producing catalog defines an unordered collection. The script prints the current content hash
+and derived counts.
 
-## Domain and lifecycle assertions
+## Executable behavior
 
-| Fixture | Executable assertions |
-| --- | --- |
-| Inspect/explain | Real connectivity reaches provider history; part IDs match the domain; revision and undo history do not change. Prose is not an oracle. |
-| Bounded place/move/wire/update | Two capacitors produce revision 2; move produces 3; wire plus automatic arrange produces 5; value update produces 6; undo produces 7. UUIDs stay stable, the wire joins real pin IDs, and undo/redo restore domain state. |
-| Destructive reject/approve | Deletion stays pending without mutation even when model arguments claim medium risk; rejection prevents apply; explicit approval deletes once; another apply is rejected; undo restores the deleted ID. |
-| Stale approval and schema refusal | A changed revision blocks pending deletion before mutation; invalid placement quantity is refused by the registered schema before any proposal or undo entry exists. |
-| Duplicate action | Both repeated submissions and repeated provider call IDs retain one committed action, one proposal, and unchanged revision/part count. |
-| Unresolved placement | Missing component is exposed in model data and proposal; no edit occurs before explicit partial approval; the valid unit commits and can be undone. |
-| Real partial command failure | A fixture proposal commits the first real update; the second real command returns `ENTITY_NOT_FOUND`; per-operation receipts are `applied`/`failed`; undo restores the first value. This proposal is explicitly constructed, not emitted by the fake provider. |
-| Stop/reopen | Stop prevents later provider work and retains the committed edit. Chunks replay from an inclusive sequence cursor. Reopened SQLite retains messages, chunks, cancelled task, part ID, and usable undo history. |
-| Provider compatibility | The actual compatible transport receives scripted SSE for all five installed API-key/local preset kinds. It preserves model, streaming, full native tool definitions, and completed tool-call arguments. No paid connection is tested. |
-| MCP | Missing/wrong bearer is refused; write tools are unavailable in read mode; two client headers keep separate chats/design bindings; reconnect reuses the backing chat. |
+The canonical Node parity suite covers an honest empty-response warning after one retry, successful
+empty-response recovery, refusal to execute printed tool prose, real place/move/wire/value-update
+IDs/revisions/connectivity with Undo/Redo, repeated tool-call deduplication, unresolved placement
+pending until explicit partial approval, and terminal Stop/reopen with durable exclusive-cursor
+replay and zero inference on boot.
 
-## Known baseline limitations
+Complementary real HTTP/native/MCP tests cover destructive reject/approve, stale and tampered
+approval, schema refusal, per-operation partial failure, actor isolation, receipt recovery across
+process death, bounded correction and knowledge/context inputs. Host tests cover immutable pinning,
+replay conflicts, leases, shutdown, cumulative budgets and split-key redaction before persistence.
+Mounted React tests cover canonical HTTP/SSE/remount/retry behavior; Tasks tests cover paged monitoring
+and lifecycle delegation. Old cloud-only and implementation-specific engine fixtures are retired.
 
-- A placement proposal with an unresolved item remains pending. After explicit partial approval,
-  the legacy proposal record says `applied` even though its original payload retains the skipped
-  item. The fixture records this existing limitation; it does not classify it as migration success.
-- The fixture's Stop/reopen test covers a terminal cancelled task. It does not prove crash-after-
-  domain-commit receipt recovery, assistant publication atomicity, or interrupted-run resume.
-- Argument fingerprints and tampered approvals, crash recovery, dock remount/SSE transport, native GUI
-  undo, packaged Node storage, OS credential persistence, and SIWC remain separate gates.
-- The manually composed test modules omit application bootstrap, bundled pack trust verification,
-  module manifests/routes discovery, mention-provider registration, canvas rendering, and native
-  Electron packaging. Existing compiler-live, DoD, MCP endpoint, and UI tests remain complementary.
-- The fake provider does not prove live endpoint compatibility, model quality, account renewal,
-  or professional EDA correctness. No Windows/Linux qualification is claimed.
+Fake transports do not prove live endpoint quality, OS credential persistence, native GUI Undo or
+packaged Electron behavior. SIWC, published dependency pins and release trust are separate gates;
+local candidate evidence never authorizes distribution.

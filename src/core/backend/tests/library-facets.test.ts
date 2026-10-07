@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { coreLibraryTest as test, CORE_LIBRARY_FIXTURE_COUNT } from "./helpers/core-library-fixture";
+import { describe, expect } from "bun:test";
 import os from "node:os";
 import path from "node:path";
 import type { LibraryFacets } from "../../../sdks/library";
@@ -47,15 +48,15 @@ async function fetchFacets(
 }
 
 describe("library facets endpoint", () => {
-  test("returns bucketed counts for the full core catalog", async () => {
+  test("returns bucketed counts for the complete fixture catalog", async () => {
     const server = await bootServer("library-facets-baseline");
     const facets = await fetchFacets(server, "", []);
 
-    // All 17 core components map to a single source bucket ("openpcb.core").
-    expect(facets.total).toBe(17);
+    // The complete synthetic catalog maps to one source bucket.
+    expect(facets.total).toBe(CORE_LIBRARY_FIXTURE_COUNT);
     expect(facets.source.length).toBeGreaterThan(0);
     const sourceCount = facets.source.reduce((s, o) => s + o.count, 0);
-    expect(sourceCount).toBe(17);
+    expect(sourceCount).toBe(CORE_LIBRARY_FIXTURE_COUNT);
 
     // Known core families show up with non-zero counts.
     const familyKeys = new Set(facets.family.map((o) => o.key));
@@ -114,7 +115,7 @@ describe("library facets endpoint", () => {
     const server = await bootServer("library-facets-query");
     const facets = await fetchFacets(server, "transistor", []);
     expect(facets.total).toBeGreaterThan(0);
-    expect(facets.total).toBeLessThan(17);
+    expect(facets.total).toBeLessThan(CORE_LIBRARY_FIXTURE_COUNT);
     // Family bucket should be dominated by transistor-related entries.
     const familyKeys = new Set(facets.family.map((o) => o.key));
     expect(familyKeys.has("transistor")).toBe(true);

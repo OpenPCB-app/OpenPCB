@@ -1,20 +1,15 @@
-import { describe, expect, test } from "bun:test";
+import { coreLibraryTest as test, coreLibraryFixturePath } from "./helpers/core-library-fixture";
+import { describe, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { unzipSync, zipSync } from "fflate";
 import {
   OpclibFormatError,
   readOpclibFromBytes,
 } from "../../../modules/library/backend/sync/opclib-reader";
-import { locateBundledOpclib } from "../../../modules/library/backend/sync/package-locator";
 
-const REPO_ROOT = path.resolve(import.meta.dir, "../../..");
-const BUNDLED = await locateBundledOpclib({ repoRoot: REPO_ROOT });
-const describeWithLib = BUNDLED ? describe : describe.skip;
-
-describeWithLib("opclib reader rejects tampered assets", () => {
+describe("opclib reader rejects tampered assets", () => {
   test("flipping a byte in a symbol JSON triggers sha256 mismatch", async () => {
-    const orig = new Uint8Array(await readFile(BUNDLED!));
+    const orig = new Uint8Array(await readFile(coreLibraryFixturePath()));
     const unzipped = unzipSync(orig);
 
     // Pick the first symbol asset.
@@ -41,7 +36,7 @@ describeWithLib("opclib reader rejects tampered assets", () => {
   });
 
   test("removing a manifest-declared asset triggers asset-missing error", async () => {
-    const orig = new Uint8Array(await readFile(BUNDLED!));
+    const orig = new Uint8Array(await readFile(coreLibraryFixturePath()));
     const unzipped = unzipSync(orig);
     const fpPath = Object.keys(unzipped).find(
       (p) => p.startsWith("footprints/") && p.endsWith(".fp.json"),

@@ -6,6 +6,12 @@ import type {
   DesignerDesignRecord,
   DesignerDesignSummary,
   DesignerDispatchResult,
+  DesignerOperationIdentity,
+  DesignerOperationReceipt,
+  DesignerOperationReceiptLookup,
+  DesignerDesignCreationReceipt,
+  DesignerDesignCreationResult,
+  DesignerDesignCreationReceiptLookup,
   DesignerHistoryActionResult,
   DesignerHistorySnapshot,
   DesignerPcbProjection,
@@ -24,6 +30,12 @@ import type {
 } from "../library";
 
 export type {
+  DesignerDesignCreationReceipt,
+  DesignerDesignCreationResult,
+  DesignerDesignCreationReceiptLookup,
+  DesignerOperationIdentity,
+  DesignerOperationReceipt,
+  DesignerOperationReceiptLookup,
   CreateDesignerDesignInput,
   DesignerAutoArrangeSchematicCommand,
   DesignerCommand,
@@ -256,6 +268,10 @@ export interface DesignerSDK {
   createDesign(
     input?: CreateDesignerDesignInput,
   ): Promise<DesignerDesignSummary>;
+  /** Creates a deterministic design and its receipt atomically; creation is not undoable. */
+  createDesignOperation(input: CreateDesignerDesignInput, identity: DesignerOperationIdentity): Promise<DesignerDesignCreationResult>;
+  getDesignCreationReceipt(identity: DesignerOperationIdentity): Promise<DesignerDesignCreationReceiptLookup>;
+  listDesignCreationReceipts(actorScope: string, operationId: string): Promise<DesignerDesignCreationReceipt[]>;
   listDesigns(): Promise<DesignerDesignSummary[]>;
   /**
    * The design the designer UI currently has focused, or `null` when nothing
@@ -284,6 +300,21 @@ export interface DesignerSDK {
     envelope: DesignerCommandEnvelope,
     capture?: DesignerDispatchCaptureMeta,
   ): Promise<DesignerDispatchResult>;
+  /** Mutation, canonical outcome and undo history commit together. */
+  dispatchOperation(
+    designId: string,
+    envelope: DesignerCommandEnvelope,
+    identity: DesignerOperationIdentity,
+    capture?: DesignerDispatchCaptureMeta,
+  ): Promise<DesignerDispatchResult>;
+  getOperationReceipt(
+    commandId: string,
+    identity: DesignerOperationIdentity,
+  ): Promise<DesignerOperationReceiptLookup>;
+  listOperationReceipts(
+    actorScope: string,
+    operationId: string,
+  ): Promise<DesignerOperationReceipt[]>;
   getHistory(
     designId: string,
     sessionId: string,

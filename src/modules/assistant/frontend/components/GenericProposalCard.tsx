@@ -1,9 +1,10 @@
-import { useEffect, useState, type ReactElement } from "react";
-import { Cloud, ExternalLink } from "lucide-react";
-import type { AssistantWriteProposalDto } from "../../../../sdks/assistant";
+import { ExternalLink } from "lucide-react";
+import { useState, type ReactElement } from "react";
 import { useNavigationStore } from "../../../../core/frontend/src/stores/navigation-store";
-import { useAuth } from "../../../../core/frontend/src/cloud/AuthProvider";
-import { readCloudConfig } from "../../../../core/frontend/src/cloud/config";
+import type { PresentedProposal } from "../agentkit-projections";
+import { useProposalActions } from "./ProposalActions";
+import { ProposalOutcome } from "./ProposalOutcome";
+
 
 type GenericRiskLevel = "low" | "medium" | "high" | "destructive" | string;
 
@@ -23,7 +24,7 @@ interface GenericSource {
   refId?: string;
 }
 
-type GenericProposalRecord = AssistantWriteProposalDto & {
+type GenericProposalRecord = PresentedProposal & {
   toolName?: string | null;
   title?: string | null;
   summary?: string | null;
@@ -59,26 +60,10 @@ export function GenericProposalCard({
 }): ReactElement {
   const [busy, setBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [confirmPartial, setConfirmPartial] = useState(false);
-  const [localStatus, setLocalStatus] = useState(proposal.status);
+  const localStatus = proposal.status === "partial" ? "partial" : proposal.canonicalStatus;
+  const actions = useProposalActions();
   const navigateToModule = useNavigationStore((s) => s.navigateToModule);
   const designId = proposal.designId || null;
-  const isCloud = proposal.origin === "cloud";
-  const { session } = useAuth();
-  // S6: cloud-origin proposals forward per-request creds so the backend can
-  // loop the outcome back to the copilot run (skipped gracefully when absent).
-  function cloudHeaders(): Record<string, string> {
-    if (!isCloud || !session) return {};
-    const cfg = readCloudConfig();
-    return {
-      "x-cloud-bearer": session.access_token,
-      "x-cloud-api-url": cfg.apiUrl,
-      "x-cloud-copilot-url": cfg.copilotUrl,
-    };
-  }
-  useEffect(() => {
-    setLocalStatus(proposal.status);
-  }, [proposal.status]);
   const operations = proposal.operations?.length
     ? proposal.operations
     : (proposal.envelope?.operations ?? []);
@@ -96,7 +81,7 @@ export function GenericProposalCard({
   const risk = proposal.riskLevel ?? proposal.envelope?.riskLevel ?? "medium";
   const toolName =
     proposal.toolName ?? proposal.envelope?.toolName ?? proposal.kind;
-  const isActionable = localStatus === "pending" && Boolean(assistantBaseUrl);
+  const isActionable = ["pending", "approved", "applying"].includes(localStatus) && Boolean(actions);
   const operationGroups = groupOperations(operations);
   const operationLimit = compact ? 5 : 8;
   const hiddenOperationCount = operationGroups.reduce(
@@ -104,127 +89,24 @@ export function GenericProposalCard({
     0,
   );
 
+  async function perform(action: () => Promise<void>): Promise<void> {
+    setBusy(true); setActionMessage(null);
+    try { await action(); }
+    catch (cause) { setActionMessage(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(false); }
+  }
   async function applyProposal(): Promise<void> {
-    if (!assistantBaseUrl) return;
-    setBusy(true);
-    setActionMessage(null);
-    try {
-      const response = await fetch(
-        `${assistantBaseUrl}/chats/${proposal.chatId}/write-proposals/${proposal.id}/apply`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json", ...cloudHeaders() },
-          body: JSON.stringify({ allowPartial: confirmPartial }),
-        },
-      );
-      if (!response.ok) {
-        const problem = (await response.json().catch(() => ({}))) as {
-          detail?: string;
-          title?: string;
-        };
-        const message = problem.detail ?? problem.title ?? "Apply failed";
-        if (/confirm partial/i.test(message)) setConfirmPartial(true);
-        throw new Error(message);
-      }
-      const result = (await response.json()) as {
-        designId?: string;
-        applied?: Array<{ revision?: number }>;
-        status?: "applied" | "partial" | "failed";
-        operations?: Array<{ revisionAfter?: number }>;
-        message?: string;
-      };
-      const nextStatus =
-        result.status === "partial" || result.status === "failed"
-          ? result.status
-          : "applied";
-      setLocalStatus(nextStatus);
-      setConfirmPartial(false);
-      setActionMessage(
-        result.message ??
-          (nextStatus === "applied"
-            ? "Proposal applied."
-            : "Proposal partially applied or failed."),
-      );
-      const revisionFromPlacement = result.applied?.reduce<number | undefined>(
-        (max, item) =>
-          item.revision === undefined
-            ? max
-            : max === undefined
-              ? item.revision
-              : Math.max(max, item.revision),
-        undefined,
-      );
-      const revisionFromOperations = result.operations?.reduce<
-        number | undefined
-      >(
-        (max, item) =>
-          item.revisionAfter === undefined
-            ? max
-            : max === undefined
-              ? item.revisionAfter
-              : Math.max(max, item.revisionAfter),
-        undefined,
-      );
-      if (nextStatus === "applied" || revisionFromOperations !== undefined) {
-        onProposalChanged?.({
-          kind: "applied",
-          designId: result.designId ?? proposal.designId,
-          revision: revisionFromPlacement ?? revisionFromOperations,
-        });
-      }
-    } catch (err) {
-      setActionMessage(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
+    if (actions) await perform(() => actions.apply(proposal.id));
   }
-
   async function rejectProposal(): Promise<void> {
-    if (!assistantBaseUrl) return;
-    setBusy(true);
-    setActionMessage(null);
-    try {
-      const response = await fetch(
-        `${assistantBaseUrl}/chats/${proposal.chatId}/write-proposals/${proposal.id}/reject`,
-        { method: "POST", headers: cloudHeaders() },
-      );
-      if (!response.ok) throw new Error("Reject failed");
-      setLocalStatus("rejected");
-      setActionMessage("Proposal rejected.");
-      onProposalChanged?.({ kind: "rejected", designId: proposal.designId });
-    } catch (err) {
-      setActionMessage(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
+    if (actions) await perform(() => actions.reject(proposal.id));
   }
-
   async function allowToolForSession(): Promise<void> {
-    if (!assistantBaseUrl) return;
-    setBusy(true);
-    setActionMessage(null);
-    try {
-      const response = await fetch(
-        `${assistantBaseUrl}/chats/${proposal.chatId}/write-policy/session-allow`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            toolName,
-            proposalKind: proposal.kind,
-            riskLevel: risk,
-          }),
-        },
-      );
-      if (!response.ok) throw new Error("Session allow failed");
-      setActionMessage(
-        "Future proposals from this tool will auto-apply this session.",
-      );
-    } catch (err) {
-      setActionMessage(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
+    if (actions) await perform(async () => {
+      if (actions.isAllowed(proposal.id)) await actions.revoke(proposal.id);
+      else await actions.allow(proposal.id);
+      setActionMessage(null);
+    });
   }
 
   return (
@@ -237,15 +119,6 @@ export function GenericProposalCard({
           {localStatus}
         </span>
         <span className={riskClass(risk)}>{risk}</span>
-        {isCloud ? (
-          <span
-            className="inline-flex items-center gap-1 rounded-full bg-sky-900/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-sky-700 dark:bg-sky-400/10 dark:text-sky-300"
-            title="Proposed by Cloud Copilot"
-          >
-            <Cloud className="h-3 w-3" />
-            cloud
-          </span>
-        ) : null}
         {designId ? (
           <button
             type="button"
@@ -323,29 +196,32 @@ export function GenericProposalCard({
       >
         <button
           type="button"
-          disabled={busy || !isActionable}
+          disabled={busy || actions?.busy || !isActionable}
           onClick={() => void applyProposal()}
           className="rounded bg-sky-600 px-2 py-1 text-[11px] text-white hover:bg-sky-500 disabled:opacity-50"
         >
-          {confirmPartial ? "Apply anyway" : "Apply"}
+          Apply
         </button>
         <button
           type="button"
-          disabled={busy || !isActionable}
+          disabled={busy || actions?.busy || !isActionable}
           onClick={() => void rejectProposal()}
           className="rounded bg-slate-200 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-300 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
         >
           Reject
         </button>
+        {proposal.riskLevel === "destructive" ? (
         <button
           type="button"
-          disabled={busy || !isActionable}
+          disabled={busy || actions?.busy || (!isActionable && !actions?.isAllowed(proposal.id))}
           onClick={() => void allowToolForSession()}
           className="rounded border border-sky-500/50 px-2 py-1 text-[11px] text-sky-800 hover:bg-sky-100 disabled:opacity-50 dark:text-sky-200 dark:hover:bg-sky-950/50"
         >
-          Allow this tool this session
+          {actions?.isAllowed(proposal.id) ? "Revoke session allowance" : "Allow this tool this session"}
         </button>
+        ) : null}
       </div>
+      <ProposalOutcome outcome={proposal.applyResult} />
       {actionMessage ? (
         <div className="text-[11px] text-slate-500 dark:text-slate-400">
           {actionMessage}
@@ -379,8 +255,8 @@ function groupOperations(operations: GenericOperation[]): Array<{
       : kind.includes("wire") || kind.includes("junction")
         ? "Wires"
         : kind.includes("label") ||
-            kind.includes("primitive") ||
-            kind.includes("port")
+          kind.includes("primitive") ||
+          kind.includes("port")
           ? "Labels & ports"
           : kind.includes("part") || kind.includes("place")
             ? "Parts"

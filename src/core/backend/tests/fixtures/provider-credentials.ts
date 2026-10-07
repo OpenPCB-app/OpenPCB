@@ -2,13 +2,6 @@ import { Database } from "bun:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { ProviderStore } from "../../../../modules/assistant/backend/provider-store";
-import { AssistantService } from "../../../../modules/assistant/backend/assistant-service";
-import type { SubmitPayload } from "../../../../modules/assistant/backend/run-service";
-import {
-  MODULE_SDK_TOKENS,
-  type TaskExecutionContext,
-  type TaskExecutor,
-} from "../../../../sdks";
 import {
   CredentialError,
   type SecretStore,
@@ -155,33 +148,5 @@ export function credentialRow(database: Database, providerId: string) {
     .get(providerId) as {
     api_key: string | null;
     secret_ref: string | null;
-  };
-}
-
-export function queuedAssistant(ctx: CoreBackendModuleContext) {
-  let executor: TaskExecutor | undefined;
-  let payload: SubmitPayload | undefined;
-  ctx.sdk.registerValue(MODULE_SDK_TOKENS.TASKS, {
-    registerExecutor: (type: string, value: TaskExecutor) => {
-      if (type === "assistant.chat") executor = value;
-    },
-    createTask: async (input: { payload: SubmitPayload }) => {
-      payload = input.payload;
-      return { task: { id: "queued-task", payload } };
-    },
-  });
-  const service = new AssistantService(ctx);
-  return {
-    service,
-    payload: () => payload!,
-    execute: async () =>
-      executor!.execute({
-        task: { id: "queued-task", payload },
-        signal: new AbortController().signal,
-        emitChunk: async () => {},
-        emitProgress: async () => {},
-        emitEvent: async () => {},
-        logger: { info: () => {}, error: () => {} },
-      } as unknown as TaskExecutionContext),
   };
 }

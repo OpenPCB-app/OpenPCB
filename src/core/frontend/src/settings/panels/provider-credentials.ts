@@ -1,3 +1,4 @@
+import { localApiFetch } from "../../../../../shared/frontend/http/local-api";
 import type { RendererCredentials } from "../../../../contracts/credentials/renderer";
 import type { AiProviderKind, AssistantProviderConfig } from "../../../../../sdks/assistant";
 
@@ -21,7 +22,7 @@ export function providerMetadata(draft: ProviderDraft): Omit<ProviderDraft, "api
 }
 
 export async function readAssistantJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+  const response = await localApiFetch(url, init);
   if (!response.ok) {
     const body = await response.json().catch(() => ({ detail: response.statusText })) as {
       detail?: string;

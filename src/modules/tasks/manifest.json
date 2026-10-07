@@ -10,12 +10,12 @@
     "icon": "ListChecks",
     "order": 90,
     "group": "system",
-    "hidden": true
+    "hidden": false
   },
   "runtime": {
     "backendEntry": "module.backend.ts",
     "frontendEntry": "module.frontend.ts"
   },
-  "dependsOn": [],
+  "dependsOn": [{ "id": "assistant", "minVersion": "0.2.0", "optional": false }],
   "defaultPinned": false
 }

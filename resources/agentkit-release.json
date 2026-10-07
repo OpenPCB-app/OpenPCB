@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "productionRelease": null,
+  "developmentCandidates": [
+    {
+      "name": "agentkit",
+      "version": "0.6.0",
+      "archive": "vendor/agentkit/agentkit-0.6.0-foundation-pending-publication.tgz",
+      "sha256": "a37680d7d7d5b73735ddf4a710d576744e7a2ed9ba8ecee59e5e84c60f8a58c6",
+      "distributionApproved": false
+    },
+    {
+      "name": "@openpcb/contracts",
+      "version": "1.0.0-candidate.0",
+      "archive": "vendor/contracts/openpcb-contracts-1.0.0-candidate.0-pending-publication.tgz",
+      "sha256": "22a03f6b47b5b3244244102984972d79027e28ffbd8dc39364f9b91ada0d8312",
+      "distributionApproved": false
+    }
+  ]
+}

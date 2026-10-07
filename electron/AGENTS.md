@@ -47,9 +47,16 @@ electron/
 - Backend binds `127.0.0.1` on an **ephemeral port** (`PORT=0`). The real port
   reaches the renderer over the `backend-ready` IPC, and external MCP clients
   through `mcp.json`. Never assume 3000 — that is the standalone dev backend.
-- `OPENPCB_ALLOW_UNAUTHENTICATED_API=true` is set unconditionally; loopback is
-  the security boundary for everything except `/api/modules/assistant/mcp`,
-  which additionally requires the `OPENPCB_MCP_TOKEN` bearer.
+- Assistant/Tasks REST and SSE require a per-launch in-memory `X-OpenPCB-Token`.
+  `local-api:bootstrap` exposes it only to the exact current trusted main window
+  and main frame. Backend-ready notifications and `get-backend-url` remain
+  public URL metadata and never include the token. Never use a generic
+  authenticated-fetch IPC bridge, query token, environment variable or token log.
+- Privileged HTTP checks the actual loopback Host/port and exact renderer Origin.
+  Packaged runs use the embedded backend origin; development uses only
+  `http://127.0.0.1:1420`. Missing configuration fails closed. The obsolete
+  `OPENPCB_ALLOW_UNAUTHENTICATED_API` flag grants no access. Inbound
+  `/api/modules/assistant/mcp` uses only its separate `OPENPCB_MCP_TOKEN` bearer.
 - Only true natives stay external to the bundle (`electron`, `better-sqlite3`,
   `electron-updater`); everything else is inlined.
 - The DRC worker (`dist/main/drc-worker.js`, S10) is a `node:worker_threads` entry bundled

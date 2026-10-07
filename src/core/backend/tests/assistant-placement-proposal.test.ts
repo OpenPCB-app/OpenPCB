@@ -19,8 +19,8 @@ import {
   makeDesignerProposeSchematicWiresTool,
 } from "../../../modules/assistant/backend/tools/designer-tools";
 import { applyAssistantWriteProposal } from "../../../modules/assistant/backend/proposals/proposal-apply-service";
-import type { ConversationStore } from "../../../modules/assistant/backend/conversation-store";
-import { AssistantWriteSessionPolicy } from "../../../modules/assistant/backend/write-session-policy";
+import type { ProposalConversationPort } from "../../../modules/assistant/backend/tools/designer-tools";
+import { SessionWritePolicy } from "agentkit/host";
 
 function proposal(
   overrides: Partial<AssistantPlacementProposal> = {},
@@ -429,7 +429,7 @@ describe("assistant placement proposal tool", () => {
         storedEnvelope = input.envelope;
         return { id: "stored-proposal" };
       },
-    } as unknown as ConversationStore;
+    } as unknown as ProposalConversationPort;
     const tool = makeDesignerPlaceComponentsTool(
       mockToolContext(designer),
       contextResolver,
@@ -558,7 +558,7 @@ describe("assistant placement proposal tool", () => {
         statuses.push({ status, applyResult });
         return { id: "stored-proposal" };
       },
-    } as unknown as ConversationStore;
+    } as unknown as ProposalConversationPort;
     const tool = makeDesignerPlaceComponentsTool(
       mockToolContext(designer),
       contextResolver,
@@ -631,7 +631,7 @@ describe("assistant placement proposal tool", () => {
         proposalCount += 1;
         throw new Error("should not create proposal");
       },
-    } as unknown as ConversationStore;
+    } as unknown as ProposalConversationPort;
     const tool = makeDesignerPlaceComponentsTool(
       mockToolContext(designer),
       contextResolver,
@@ -709,7 +709,7 @@ describe("assistant schematic edit proposal tool", () => {
         storedEnvelope = input.envelope;
         return { id: "stored-proposal" };
       },
-    } as unknown as ConversationStore;
+    } as unknown as ProposalConversationPort;
     const tool = makeDesignerProposeSchematicEditsTool(
       mockToolContext(designer),
       contextResolver,
@@ -796,7 +796,7 @@ describe("assistant schematic edit proposal tool", () => {
     } as unknown as ContextResolver;
     const conversation = {
       createWriteProposal() {},
-    } as unknown as ConversationStore;
+    } as unknown as ProposalConversationPort;
     const tool = makeDesignerProposeSchematicEditsTool(
       mockToolContext(designer),
       contextResolver,
@@ -894,7 +894,7 @@ describe("assistant schematic edit proposal tool", () => {
         statuses.push({ status, applyResult });
         return { id: "stored-proposal" };
       },
-    } as unknown as ConversationStore;
+    } as unknown as ProposalConversationPort;
     const tool = makeDesignerProposeSchematicEditsTool(
       mockToolContext(designer),
       contextResolver,
@@ -1504,7 +1504,7 @@ describe("assistant schematic connectivity and wiring tools", () => {
         storedEnvelope = input.envelope;
         return { id: "proposal-1" };
       },
-    } as unknown as ConversationStore;
+    } as unknown as ProposalConversationPort;
     const tool = makeDesignerProposeSchematicWiresTool(
       mockToolContext(designer),
       boundResolver(),
@@ -1568,7 +1568,7 @@ describe("assistant schematic connectivity and wiring tools", () => {
     const tool = makeDesignerProposeSchematicWiresTool(
       mockToolContext(designer),
       boundResolver(),
-      { createWriteProposal() {} } as unknown as ConversationStore,
+      { createWriteProposal() {} } as unknown as ProposalConversationPort,
     );
 
     const result = await tool.execute(
@@ -1621,7 +1621,7 @@ describe("assistant schematic connectivity and wiring tools", () => {
       createWriteProposal() {
         return { id: "proposal-1" };
       },
-    } as unknown as ConversationStore;
+    } as unknown as ProposalConversationPort;
     const tool = makeDesignerProposeSchematicEditsTool(
       mockToolContext(designer),
       contextResolver,
@@ -1699,7 +1699,7 @@ describe("assistant schematic connectivity and wiring tools", () => {
         storedEnvelope = input.envelope;
         return { id: "proposal-1" };
       },
-    } as unknown as ConversationStore;
+    } as unknown as ProposalConversationPort;
     const tool = makeDesignerProposeSchematicUpdatesTool(
       mockToolContext(designer),
       boundResolver(),
@@ -1772,7 +1772,7 @@ describe("assistant schematic connectivity and wiring tools", () => {
     const tool = makeDesignerProposeSchematicUpdatesTool(
       mockToolContext(designer),
       boundResolver(),
-      { createWriteProposal() {} } as unknown as ConversationStore,
+      { createWriteProposal() {} } as unknown as ProposalConversationPort,
     );
 
     const result = await tool.execute(
@@ -1818,7 +1818,7 @@ describe("assistant schematic connectivity and wiring tools", () => {
         storedEnvelope = input.envelope;
         return { id: "proposal-1" };
       },
-    } as unknown as ConversationStore;
+    } as unknown as ProposalConversationPort;
     const tool = makeDesignerProposeSchematicDeletionsTool(
       mockToolContext(designer),
       boundResolver(),
@@ -1859,28 +1859,28 @@ describe("assistant schematic connectivity and wiring tools", () => {
 
 describe("assistant write session policy", () => {
   test("session allowance only auto-applies up to allowed risk", () => {
-    const policy = new AssistantWriteSessionPolicy();
+    const policy = new SessionWritePolicy();
     policy.allow({
       chatId: "chat-1",
       toolName: "designer_propose_schematic_edits",
       proposalKind: "designer_schematic_edits",
-      riskLevel: "medium",
+      maxRisk: "medium",
     });
 
     expect(
-      policy.isAllowed({
+      policy.isAutoApplyAllowed({
         chatId: "chat-1",
         toolName: "designer_propose_schematic_edits",
         proposalKind: "designer_schematic_edits",
-        riskLevel: "low",
+        risk: "low",
       }),
     ).toBe(true);
     expect(
-      policy.isAllowed({
+      policy.isAutoApplyAllowed({
         chatId: "chat-1",
         toolName: "designer_propose_schematic_edits",
         proposalKind: "designer_schematic_edits",
-        riskLevel: "high",
+        risk: "high",
       }),
     ).toBe(false);
   });

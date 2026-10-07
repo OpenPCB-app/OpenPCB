@@ -1,14 +1,15 @@
-import { useMemo, useState, type ReactElement } from "react";
 import { ExternalLink, type LucideIcon } from "lucide-react";
-import type {
-  AssistantPlacementApplyResult,
-  AssistantPlacementProposal,
-  AssistantToolEventDto,
-  AssistantWriteProposalDto,
-} from "../../../../sdks/assistant";
-import { useNavigationStore } from "../../../../core/frontend/src/stores/navigation-store";
+import { useMemo, useState, type ReactElement } from "react";
 import { useTheme } from "../../../../core/frontend/src/providers/ThemeProvider";
+import { useNavigationStore } from "../../../../core/frontend/src/stores/navigation-store";
+import type {
+  AssistantPlacementProposal,
+  AssistantToolEventDto
+} from "../../../../sdks/assistant";
 import { Pill } from "../../../../shared/frontend/ui/pill";
+import type { PresentedProposal } from "../agentkit-projections";
+import { useProposalActions } from "./ProposalActions";
+import { ProposalOutcome } from "./ProposalOutcome";
 import { classifyComponentType } from "./component-type";
 import { useSymbolThumbnails } from "./useSymbolThumbnails";
 
@@ -41,7 +42,7 @@ export function PlacementProposalCard({
   assistantBaseUrl?: string | null;
   /** Backend root (e.g. http://127.0.0.1:3000) — for library symbol previews. */
   backendURL?: string | null;
-  statusRecord?: AssistantWriteProposalDto | null;
+  statusRecord?: PresentedProposal | null;
   onProposalChanged?: (change: {
     kind: "applied" | "rejected";
     designId: string;
@@ -51,8 +52,7 @@ export function PlacementProposalCard({
 }): ReactElement {
   const [busy, setBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [finished, setFinished] = useState(false);
-  const [sessionAllow, setSessionAllow] = useState(false);
+  const actions = useProposalActions();
   const navigateToModule = useNavigationStore((s) => s.navigateToModule);
   const { mode } = useTheme();
   const symbolIds = useSymbolThumbnails(
@@ -83,100 +83,21 @@ export function PlacementProposalCard({
     }
     return [...map.values()];
   }, [proposal.placements]);
-  const status = statusRecord?.status ?? (finished ? "applied" : "pending");
+  const status = statusRecord?.status === "partial" ? "partial" : statusRecord?.canonicalStatus ?? "pending";
   const isActionable =
-    status === "pending" && !finished && Boolean(assistantBaseUrl);
+    ["pending", "approved", "applying"].includes(status) && Boolean(actions);
 
-  async function applyPlacement(allowPartial: boolean): Promise<void> {
-    if (!assistantBaseUrl) return;
-    setBusy(true);
-    setActionMessage(null);
-    try {
-      const response = await fetch(
-        `${assistantBaseUrl}/chats/${event.chatId}/write-proposals/${proposal.proposalId}/apply`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ allowPartial }),
-        },
-      );
-      if (!response.ok) {
-        const problem = (await response.json().catch(() => ({}))) as {
-          detail?: string;
-          title?: string;
-        };
-        throw new Error(problem.detail ?? problem.title ?? "Apply failed");
-      }
-      const result = (await response.json()) as Omit<
-        AssistantPlacementApplyResult,
-        "status"
-      > & {
-        status?: "applied" | "partial" | "failed";
-        message?: string;
-      };
-      setFinished(true);
-      setActionMessage(
-        result.message ?? `Added ${result.applied.length} component(s).`,
-      );
-      const revision = result.applied.reduce<number | undefined>(
-        (max, item) =>
-          max === undefined ? item.revision : Math.max(max, item.revision),
-        undefined,
-      );
-      if (revision !== undefined || result.status !== "failed") {
-        onProposalChanged?.({
-          kind: "applied",
-          designId: result.designId,
-          revision,
-        });
-      }
-    } catch (err) {
-      setActionMessage(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
+  async function perform(action: () => Promise<void>): Promise<void> {
+    setBusy(true); setActionMessage(null);
+    try { await action(); }
+    catch (cause) { setActionMessage(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(false); }
   }
-
+  async function applyPlacement(_allowPartial: boolean): Promise<void> {
+    if (actions) await perform(() => actions.apply(proposal.proposalId));
+  }
   async function rejectPlacement(): Promise<void> {
-    if (!assistantBaseUrl) return;
-    setBusy(true);
-    setActionMessage(null);
-    try {
-      const response = await fetch(
-        `${assistantBaseUrl}/chats/${event.chatId}/write-proposals/${proposal.proposalId}/reject`,
-        { method: "POST" },
-      );
-      if (!response.ok) throw new Error("Reject failed");
-      setFinished(true);
-      setActionMessage("Proposal rejected.");
-      onProposalChanged?.({ kind: "rejected", designId: proposal.design.id });
-    } catch (err) {
-      setActionMessage(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function allowPlacementToolForSession(next: boolean): Promise<void> {
-    setSessionAllow(next);
-    if (!assistantBaseUrl || !next) return;
-    try {
-      await fetch(
-        `${assistantBaseUrl}/chats/${event.chatId}/write-policy/session-allow`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            toolName: "designer_place_components",
-            proposalKind: "designer_place_components",
-            riskLevel: "medium",
-          }),
-        },
-      );
-    } catch (err) {
-      setActionMessage(err instanceof Error ? err.message : String(err));
-      setSessionAllow(false);
-    }
+    if (actions) await perform(() => actions.reject(proposal.proposalId));
   }
 
   const statusPill =
@@ -187,7 +108,7 @@ export function PlacementProposalCard({
     ) : isActionable ? (
       <Pill tone="success">Ready</Pill>
     ) : (
-      <Pill tone="warning">Pending</Pill>
+      <Pill tone="warning">{status}</Pill>
     );
 
   return (
@@ -271,7 +192,7 @@ export function PlacementProposalCard({
         {proposal.requiresPartialConfirmation ? (
           <button
             type="button"
-            disabled={busy || !isActionable}
+            disabled={busy || actions?.busy || !isActionable}
             onClick={() => void applyPlacement(true)}
             className="text-[11px] text-slate-500 underline-offset-2 hover:underline disabled:opacity-50"
           >
@@ -280,7 +201,7 @@ export function PlacementProposalCard({
         ) : null}
         <button
           type="button"
-          disabled={busy || !isActionable}
+          disabled={busy || actions?.busy || !isActionable}
           onClick={() => void rejectPlacement()}
           className="text-[11px] text-slate-500 underline-offset-2 hover:underline disabled:opacity-50"
         >
@@ -288,26 +209,15 @@ export function PlacementProposalCard({
         </button>
         <button
           type="button"
-          disabled={busy || !isActionable}
+          disabled={busy || actions?.busy || !isActionable}
           onClick={() => void applyPlacement(false)}
           className="rounded-control bg-violet-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-violet-500 disabled:opacity-50"
         >
           Add to schematic
         </button>
       </div>
+      {statusRecord?.applyResult ? <div className="px-3 pb-2"><ProposalOutcome outcome={statusRecord.applyResult} /></div> : null}
       <div className="flex items-center justify-between border-t border-violet-200/40 px-3 py-1.5 dark:border-violet-900/30">
-        <label className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-          <input
-            type="checkbox"
-            checked={sessionAllow}
-            disabled={!isActionable}
-            onChange={(e) =>
-              void allowPlacementToolForSession(e.target.checked)
-            }
-            className="h-3 w-3"
-          />
-          Don&apos;t ask again this session
-        </label>
         {actionMessage ? (
           <span className="truncate text-[11px] text-slate-400">
             {actionMessage}

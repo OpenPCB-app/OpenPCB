@@ -1,8 +1,8 @@
 {
-  "sha256": "a64bdf2045794bd54b250887d6b6af2c4d42e16355e9681b0a41723325aefb01",
+  "sha256": "473f1eaf94f6eaaf0b3fd932b581bc97108edff789c6b1e831fe1453b025a438",
   "data": {
-    "formatVersion": 1,
-    "scope": "Legacy desktop contracts; isolated library/designer/tasks/assistant migrations; no packaged qualification",
+    "formatVersion": 2,
+    "scope": "Canonical AgentKit desktop contracts; pure native domain and separate MCP store; no inference or packaged qualification",
     "providers": [
       {
         "kind": "lmstudio",
@@ -1230,12 +1230,6 @@
                 "type": "boolean"
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1249,12 +1243,6 @@
                 "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1267,12 +1255,6 @@
                 "type": "string"
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1291,12 +1273,6 @@
             "required": [
               "referenceOrPartId"
             ]
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1310,12 +1286,6 @@
                 "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1337,12 +1307,6 @@
                 "type": "boolean"
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1351,12 +1315,6 @@
           "inputSchema": {
             "type": "object",
             "properties": {}
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1375,12 +1333,6 @@
             "required": [
               "query"
             ]
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1394,12 +1346,6 @@
                 "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1413,12 +1359,6 @@
                 "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1435,12 +1375,6 @@
                 "description": "Design id to pin, or null to clear the pin."
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
           }
         },
         {
@@ -1460,12 +1394,6 @@
             "required": [
               "componentId"
             ]
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1538,12 +1466,6 @@
             "required": [
               "items"
             ]
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1595,25 +1517,44 @@
               }
             },
             "required": []
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         }
       ],
+      "resources": [
+        {
+          "uri": "openpcb://design/{designId}/bom",
+          "name": "Catalog design — bom",
+          "description": "Bill of materials",
+          "mimeType": "application/json"
+        },
+        {
+          "uri": "openpcb://design/{designId}/drc",
+          "name": "Catalog design — drc",
+          "description": "Design Rule Check report",
+          "mimeType": "application/json"
+        },
+        {
+          "uri": "openpcb://design/{designId}/erc",
+          "name": "Catalog design — erc",
+          "description": "Electrical Rule Check report",
+          "mimeType": "application/json"
+        },
+        {
+          "uri": "openpcb://design/{designId}/pcb",
+          "name": "Catalog design — pcb",
+          "description": "PCB projection (board, placements, traces, vias, ratsnest)",
+          "mimeType": "application/json"
+        },
+        {
+          "uri": "openpcb://design/{designId}/schematic",
+          "name": "Catalog design — schematic",
+          "description": "Schematic connectivity (parts, pins, nets, wires)",
+          "mimeType": "application/json"
+        }
+      ],
       "resourceTemplates": {
-        "resourceTemplates": [
-          {
-            "name": "openpcb-design",
-            "uriTemplate": "openpcb://design/{designId}/{kind}",
-            "title": "OpenPCB design data",
-            "description": "Read-only JSON views of a design. kind is one of: schematic, pcb, bom, erc, drc. Use designer_list_designs for valid designIds.",
-            "mimeType": "application/json"
-          }
-        ]
+        "supported": false,
+        "reason": "AgentKit 0.6.0 public resource extension exposes concrete resources only."
       },
       "prompts": [
         {
@@ -1667,7 +1608,7 @@
                 "role": "user",
                 "content": {
                   "type": "text",
-                  "text": "Build this circuit in OpenPCB: Parity fixture circuit\n\nFollow these rules:\n- Use tools for OpenPCB project/library facts; prefer compact targeted tools, and say so if a result is truncated. Ask for clarification when a design/part/component is ambiguous.\n- Search by generic component family first; treat colors, values, packages, tolerances, and ratings as requirements, not literal names (search `LED` color=red, not `LED red`). Browse the whole library by calling `library_search_components` with an empty query.\n- Never declare a component missing until broad/local fallback search has been tried. Prefer adequate installed generics, then optionally suggest exact-variant imports.\n- For circuit creation, decompose into a BOM (`library_resolve_bom`) and prefer the simplest topology realizable with installed components (no extra transistors/inverters/ICs). When the user asks you to build/create/wire a specific circuit, EXECUTE the entire build in one run — BOM → create design → place → wire — WITHOUT pausing for confirmation. Only stop to ask when the request is genuinely vague; for mild under-specification assume 5V, ~1Hz blink, 0603 SMD and STATE the assumptions instead of blocking.\n- Reply in plain markdown — never wrap output in <response>…</response>, HTML, or other envelopes. When a tool returns component results, reference them by name in prose; do NOT repeat them as a table (the UI renders structured cards).\n- Draw a diagram only when the user explicitly asks to SEE the design — NEVER as a substitute for actually building it. For diagrams/flows/state machines, prefer fenced Mermaid (```mermaid, `flowchart LR`, simple IDs like `VCC`/`R1`, quoted labels like `R1[\"R1 10k\"]`) over ASCII art. Strict security: no HTML, <br/>, links, click directives, embedded CSS/JS, or comments (`classDef`/`class`/`style`/`linkStyle` ARE allowed). Represent power rails/nets as explicit nodes, keep labels short, and ensure every block is syntactically complete — else use a wiring table.\n- Color Mermaid nodes by meaning using ONLY this palette (`classDef` lines at the end, assign via `class NodeId className`; omit unused):\n  `classDef power fill:#13191F,stroke:#E0573A,color:#F3F4F6;` `classDef ground fill:#13191F,stroke:#5DCAA5,color:#F3F4F6;` `classDef timing fill:#13191F,stroke:#FBBF24,color:#F3F4F6;` `classDef signal fill:#13191F,stroke:#94A3B8,color:#F3F4F6;` `classDef ok fill:#13191F,stroke:#34D399,color:#F3F4F6;` `classDef err fill:#13191F,stroke:#F87171,color:#F3F4F6;`\n- Work on the SCHEMATIC only unless the user explicitly asks for PCB/layout/routing — do not touch the board or place footprints on your own initiative.\n- PREFER `compile_circuit` for standard block-expressible circuits (e.g. indicator LEDs): emit a circuit-spec IR (block instances + port-level nets, connect ports by \"<blockId>.<PORT>\", name vcc/gnd rails in `power`) in ONE call — it resolves INSTALLED parts, computes values, places, wires, adds power rails, and ERC-checks atomically as one undoable batch. If it reports a missing role, offer to import that part — never hand-substitute. Fall back to the manual place+wire flow below only for circuits no block recipe covers.\n- When the user asks you to build/place/wire a circuit, you are EXPECTED to finish it in this one run: actually CALL the write tools — do NOT just describe the plan, draw a diagram, or end your turn with \"would you like me to…\". Canonical flow, all in one run: `library_resolve_bom` → `designer_create_design` (if no design yet) → `designer_propose_schematic_edits` (place) → `designer_get_schematic_connectivity` → ONE `designer_propose_schematic_wires` call (the sheet auto-arranges). Keep calling tools across iterations until the circuit is both PLACED and WIRED — only then write your summary. Non-destructive edits (place/wire/move/update) auto-apply immediately and are undoable, so chain them freely; only deletions need a separate explicit confirmation. Report what the tool/apply results say — do not assume.\n- Place parts: `designer_propose_schematic_edits` (parts, labels, power ports, net portals).\n- Wiring: connect pins by REFERENCE.PIN — e.g. `{ source: \"U1.OUT\", target: \"R1.1\" }`, or `{ source: \"R2.2\", target: { net: \"GND\" } }` to tie a pin to a power/ground/named net (rails like `+5V`/`VCC`/`3V3` and `GND` are placed as power/ground symbols automatically — never as plain portals). Call `designer_get_schematic_connectivity` first to learn references and pin names. DO NOT pass coordinates/pointsNm — routing is automatic and obstacle-aware.\n- Put ALL wires for a circuit in ONE `designer_propose_schematic_wires` call (it accepts up to 40) rather than many small calls. When a pin name is decorated/active-low (e.g. `~{RST}`, shown over-lined), prefer the pin NUMBER (`\"U1.4\"`) — decorated names also resolve, but numbers are unambiguous. The batch applies every valid wire even if one is skipped, and the result lists any skips for you to retry.\n- To wire parts you just placed in this SAME run: placements auto-apply, so re-call `designer_get_schematic_connectivity` to get the new references, then `designer_propose_schematic_wires` — no need to wait for the user.\n- Move/rotate/edit existing parts: `designer_propose_schematic_updates` (address parts by `ref` like \"U1\"); connected wires reflow automatically.\n- Deletions: `designer_propose_schematic_deletions` only after explicit confirmation; destructive (does not auto-apply).\n\nIf no design is open, create one. Finish the build — placed AND wired — before summarising."
+                  "text": "Build this circuit in OpenPCB: Parity fixture circuit\n\nFollow these rules:\n- Use tools for OpenPCB project/library facts; prefer compact targeted tools, and say so if a result is truncated. Ask for clarification when a design/part/component is ambiguous.\n- Search by generic component family first; treat colors, values, packages, tolerances, and ratings as requirements, not literal names (search `LED` color=red, not `LED red`). Browse the whole library by calling `library_search_components` with an empty query.\n- Never declare a component missing until broad/local fallback search has been tried. Prefer adequate installed generics, then optionally suggest exact-variant imports.\n- For circuit creation, decompose into a BOM (`library_resolve_bom`) and prefer the simplest topology realizable with installed components (no extra transistors/inverters/ICs). When the user asks you to build/create/wire a specific circuit, EXECUTE the entire build in one run — BOM → create design → place → wire — WITHOUT pausing for confirmation. Only stop to ask when the request is genuinely vague; for mild under-specification assume 5V, ~1Hz blink, 0603 SMD and STATE the assumptions instead of blocking.\n- Reply in plain markdown — never wrap output in <response>…</response>, HTML, or other envelopes. When a tool returns component results, reference them by name in prose; do NOT repeat them as a table (the UI renders structured cards).\n- Draw a diagram only when the user explicitly asks to SEE the design — NEVER as a substitute for actually building it. For diagrams/flows/state machines, prefer fenced Mermaid (```mermaid, `flowchart LR`, simple IDs like `VCC`/`R1`, quoted labels like `R1[\"R1 10k\"]`) over ASCII art. Strict security: no HTML, <br/>, links, click directives, embedded CSS/JS, or comments (`classDef`/`class`/`style`/`linkStyle` ARE allowed). Represent power rails/nets as explicit nodes, keep labels short, and ensure every block is syntactically complete — else use a wiring table.\n- Color Mermaid nodes by meaning using ONLY this palette (`classDef` lines at the end, assign via `class NodeId className`; omit unused):\n  `classDef power fill:#13191F,stroke:#E0573A,color:#F3F4F6;` `classDef ground fill:#13191F,stroke:#5DCAA5,color:#F3F4F6;` `classDef timing fill:#13191F,stroke:#FBBF24,color:#F3F4F6;` `classDef signal fill:#13191F,stroke:#94A3B8,color:#F3F4F6;` `classDef ok fill:#13191F,stroke:#34D399,color:#F3F4F6;` `classDef err fill:#13191F,stroke:#F87171,color:#F3F4F6;`\n- Work on the SCHEMATIC only unless the user explicitly asks for PCB/layout/routing — do not touch the board or place footprints on your own initiative.\n- PREFER `compile_circuit` for standard block-expressible circuits (e.g. indicator LEDs): emit a circuit-spec IR (block instances + port-level nets, connect ports by \"<blockId>.<PORT>\", name vcc/gnd rails in `power`) in ONE call — it resolves INSTALLED parts, computes values, places, wires, adds power rails, and ERC-checks. Each committed domain command has its own durable receipt and Undo step; report partial outcomes accurately. If it reports a missing role, offer to import that part — never hand-substitute. Fall back to the manual place+wire flow below only for circuits no block recipe covers.\n- When the user asks you to build/place/wire a circuit, you are EXPECTED to finish it in this one run: actually CALL the write tools — do NOT just describe the plan, draw a diagram, or end your turn with \"would you like me to…\". Canonical flow, all in one run: `library_resolve_bom` → `designer_create_design` (if no design yet) → `designer_propose_schematic_edits` (place) → `designer_get_schematic_connectivity` → ONE `designer_propose_schematic_wires` call (the sheet auto-arranges). Keep calling tools across iterations until the circuit is both PLACED and WIRED — only then write your summary. Non-destructive edits (place/wire/move/update) auto-apply immediately and are undoable, so chain them freely; only deletions need a separate explicit confirmation. Report what the tool/apply results say — do not assume.\n- Place parts: `designer_propose_schematic_edits` (parts, labels, power ports, net portals).\n- Wiring: connect pins by REFERENCE.PIN — e.g. `{ source: \"U1.OUT\", target: \"R1.1\" }`, or `{ source: \"R2.2\", target: { net: \"GND\" } }` to tie a pin to a power/ground/named net (rails like `+5V`/`VCC`/`3V3` and `GND` are placed as power/ground symbols automatically — never as plain portals). Call `designer_get_schematic_connectivity` first to learn references and pin names. DO NOT pass coordinates/pointsNm — routing is automatic and obstacle-aware.\n- Put ALL wires for a circuit in ONE `designer_propose_schematic_wires` call (it accepts up to 40) rather than many small calls. When a pin name is decorated/active-low (e.g. `~{RST}`, shown over-lined), prefer the pin NUMBER (`\"U1.4\"`) — decorated names also resolve, but numbers are unambiguous. The batch applies every valid wire even if one is skipped, and the result lists any skips for you to retry.\n- To wire parts you just placed in this SAME run: placements auto-apply, so re-call `designer_get_schematic_connectivity` to get the new references, then `designer_propose_schematic_wires` — no need to wait for the user.\n- Move/rotate/edit existing parts: `designer_propose_schematic_updates` (address parts by `ref` like \"U1\"); connected wires reflow automatically.\n- Deletions: `designer_propose_schematic_deletions` only after explicit confirmation; destructive (does not auto-apply).\n\nIf no design is open, create one. Finish the build — placed AND wired — before summarising."
                 }
               }
             ]
@@ -1794,12 +1735,6 @@
               "nets",
               "power"
             ]
-          },
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
           }
         },
         {
@@ -1816,12 +1751,6 @@
                 "description": "Stable idempotency key you generate: `<verb>_<primaryKey>_<designId>` (e.g. `place_R1_<designId>`, `wire_U1.OUT__R1.1_<designId>`). Re-using the same action_id is a safe no-op."
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
           }
         },
         {
@@ -1836,12 +1765,6 @@
                 "maxLength": 120
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
           }
         },
         {
@@ -1864,12 +1787,6 @@
                 "type": "boolean"
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1883,12 +1800,6 @@
                 "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1901,12 +1812,6 @@
                 "type": "string"
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1925,12 +1830,6 @@
             "required": [
               "referenceOrPartId"
             ]
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1944,12 +1843,6 @@
                 "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1971,12 +1864,6 @@
                 "type": "boolean"
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -1985,12 +1872,6 @@
           "inputSchema": {
             "type": "object",
             "properties": {}
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -2068,12 +1949,6 @@
             "required": [
               "components"
             ]
-          },
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
           }
         },
         {
@@ -2129,12 +2004,6 @@
               "summary",
               "entities"
             ]
-          },
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
           }
         },
         {
@@ -2400,12 +2269,6 @@
               "title",
               "summary"
             ]
-          },
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
           }
         },
         {
@@ -2574,12 +2437,6 @@
               "title",
               "summary"
             ]
-          },
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
           }
         },
         {
@@ -2787,12 +2644,6 @@
               "title",
               "summary"
             ]
-          },
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
           }
         },
         {
@@ -2811,12 +2662,6 @@
             "required": [
               "query"
             ]
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -2830,12 +2675,6 @@
                 "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -2849,12 +2688,6 @@
                 "description": "Target design. Omit to use the design currently focused in the OpenPCB UI."
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -2871,12 +2704,6 @@
                 "description": "Design id to pin, or null to clear the pin."
               }
             }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
           }
         },
         {
@@ -2896,12 +2723,6 @@
             "required": [
               "componentId"
             ]
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -2974,12 +2795,6 @@
             "required": [
               "items"
             ]
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         },
         {
@@ -3031,25 +2846,44 @@
               }
             },
             "required": []
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
           }
         }
       ],
+      "resources": [
+        {
+          "uri": "openpcb://design/{designId}/bom",
+          "name": "Catalog design — bom",
+          "description": "Bill of materials",
+          "mimeType": "application/json"
+        },
+        {
+          "uri": "openpcb://design/{designId}/drc",
+          "name": "Catalog design — drc",
+          "description": "Design Rule Check report",
+          "mimeType": "application/json"
+        },
+        {
+          "uri": "openpcb://design/{designId}/erc",
+          "name": "Catalog design — erc",
+          "description": "Electrical Rule Check report",
+          "mimeType": "application/json"
+        },
+        {
+          "uri": "openpcb://design/{designId}/pcb",
+          "name": "Catalog design — pcb",
+          "description": "PCB projection (board, placements, traces, vias, ratsnest)",
+          "mimeType": "application/json"
+        },
+        {
+          "uri": "openpcb://design/{designId}/schematic",
+          "name": "Catalog design — schematic",
+          "description": "Schematic connectivity (parts, pins, nets, wires)",
+          "mimeType": "application/json"
+        }
+      ],
       "resourceTemplates": {
-        "resourceTemplates": [
-          {
-            "name": "openpcb-design",
-            "uriTemplate": "openpcb://design/{designId}/{kind}",
-            "title": "OpenPCB design data",
-            "description": "Read-only JSON views of a design. kind is one of: schematic, pcb, bom, erc, drc. Use designer_list_designs for valid designIds.",
-            "mimeType": "application/json"
-          }
-        ]
+        "supported": false,
+        "reason": "AgentKit 0.6.0 public resource extension exposes concrete resources only."
       },
       "prompts": [
         {
@@ -3103,7 +2937,7 @@
                 "role": "user",
                 "content": {
                   "type": "text",
-                  "text": "Build this circuit in OpenPCB: Parity fixture circuit\n\nFollow these rules:\n- Use tools for OpenPCB project/library facts; prefer compact targeted tools, and say so if a result is truncated. Ask for clarification when a design/part/component is ambiguous.\n- Search by generic component family first; treat colors, values, packages, tolerances, and ratings as requirements, not literal names (search `LED` color=red, not `LED red`). Browse the whole library by calling `library_search_components` with an empty query.\n- Never declare a component missing until broad/local fallback search has been tried. Prefer adequate installed generics, then optionally suggest exact-variant imports.\n- For circuit creation, decompose into a BOM (`library_resolve_bom`) and prefer the simplest topology realizable with installed components (no extra transistors/inverters/ICs). When the user asks you to build/create/wire a specific circuit, EXECUTE the entire build in one run — BOM → create design → place → wire — WITHOUT pausing for confirmation. Only stop to ask when the request is genuinely vague; for mild under-specification assume 5V, ~1Hz blink, 0603 SMD and STATE the assumptions instead of blocking.\n- Reply in plain markdown — never wrap output in <response>…</response>, HTML, or other envelopes. When a tool returns component results, reference them by name in prose; do NOT repeat them as a table (the UI renders structured cards).\n- Draw a diagram only when the user explicitly asks to SEE the design — NEVER as a substitute for actually building it. For diagrams/flows/state machines, prefer fenced Mermaid (```mermaid, `flowchart LR`, simple IDs like `VCC`/`R1`, quoted labels like `R1[\"R1 10k\"]`) over ASCII art. Strict security: no HTML, <br/>, links, click directives, embedded CSS/JS, or comments (`classDef`/`class`/`style`/`linkStyle` ARE allowed). Represent power rails/nets as explicit nodes, keep labels short, and ensure every block is syntactically complete — else use a wiring table.\n- Color Mermaid nodes by meaning using ONLY this palette (`classDef` lines at the end, assign via `class NodeId className`; omit unused):\n  `classDef power fill:#13191F,stroke:#E0573A,color:#F3F4F6;` `classDef ground fill:#13191F,stroke:#5DCAA5,color:#F3F4F6;` `classDef timing fill:#13191F,stroke:#FBBF24,color:#F3F4F6;` `classDef signal fill:#13191F,stroke:#94A3B8,color:#F3F4F6;` `classDef ok fill:#13191F,stroke:#34D399,color:#F3F4F6;` `classDef err fill:#13191F,stroke:#F87171,color:#F3F4F6;`\n- Work on the SCHEMATIC only unless the user explicitly asks for PCB/layout/routing — do not touch the board or place footprints on your own initiative.\n- PREFER `compile_circuit` for standard block-expressible circuits (e.g. indicator LEDs): emit a circuit-spec IR (block instances + port-level nets, connect ports by \"<blockId>.<PORT>\", name vcc/gnd rails in `power`) in ONE call — it resolves INSTALLED parts, computes values, places, wires, adds power rails, and ERC-checks atomically as one undoable batch. If it reports a missing role, offer to import that part — never hand-substitute. Fall back to the manual place+wire flow below only for circuits no block recipe covers.\n- When the user asks you to build/place/wire a circuit, you are EXPECTED to finish it in this one run: actually CALL the write tools — do NOT just describe the plan, draw a diagram, or end your turn with \"would you like me to…\". Canonical flow, all in one run: `library_resolve_bom` → `designer_create_design` (if no design yet) → `designer_propose_schematic_edits` (place) → `designer_get_schematic_connectivity` → ONE `designer_propose_schematic_wires` call (the sheet auto-arranges). Keep calling tools across iterations until the circuit is both PLACED and WIRED — only then write your summary. Non-destructive edits (place/wire/move/update) auto-apply immediately and are undoable, so chain them freely; only deletions need a separate explicit confirmation. Report what the tool/apply results say — do not assume.\n- Place parts: `designer_propose_schematic_edits` (parts, labels, power ports, net portals).\n- Wiring: connect pins by REFERENCE.PIN — e.g. `{ source: \"U1.OUT\", target: \"R1.1\" }`, or `{ source: \"R2.2\", target: { net: \"GND\" } }` to tie a pin to a power/ground/named net (rails like `+5V`/`VCC`/`3V3` and `GND` are placed as power/ground symbols automatically — never as plain portals). Call `designer_get_schematic_connectivity` first to learn references and pin names. DO NOT pass coordinates/pointsNm — routing is automatic and obstacle-aware.\n- Put ALL wires for a circuit in ONE `designer_propose_schematic_wires` call (it accepts up to 40) rather than many small calls. When a pin name is decorated/active-low (e.g. `~{RST}`, shown over-lined), prefer the pin NUMBER (`\"U1.4\"`) — decorated names also resolve, but numbers are unambiguous. The batch applies every valid wire even if one is skipped, and the result lists any skips for you to retry.\n- To wire parts you just placed in this SAME run: placements auto-apply, so re-call `designer_get_schematic_connectivity` to get the new references, then `designer_propose_schematic_wires` — no need to wait for the user.\n- Move/rotate/edit existing parts: `designer_propose_schematic_updates` (address parts by `ref` like \"U1\"); connected wires reflow automatically.\n- Deletions: `designer_propose_schematic_deletions` only after explicit confirmation; destructive (does not auto-apply).\n\nIf no design is open, create one. Finish the build — placed AND wired — before summarising."
+                  "text": "Build this circuit in OpenPCB: Parity fixture circuit\n\nFollow these rules:\n- Use tools for OpenPCB project/library facts; prefer compact targeted tools, and say so if a result is truncated. Ask for clarification when a design/part/component is ambiguous.\n- Search by generic component family first; treat colors, values, packages, tolerances, and ratings as requirements, not literal names (search `LED` color=red, not `LED red`). Browse the whole library by calling `library_search_components` with an empty query.\n- Never declare a component missing until broad/local fallback search has been tried. Prefer adequate installed generics, then optionally suggest exact-variant imports.\n- For circuit creation, decompose into a BOM (`library_resolve_bom`) and prefer the simplest topology realizable with installed components (no extra transistors/inverters/ICs). When the user asks you to build/create/wire a specific circuit, EXECUTE the entire build in one run — BOM → create design → place → wire — WITHOUT pausing for confirmation. Only stop to ask when the request is genuinely vague; for mild under-specification assume 5V, ~1Hz blink, 0603 SMD and STATE the assumptions instead of blocking.\n- Reply in plain markdown — never wrap output in <response>…</response>, HTML, or other envelopes. When a tool returns component results, reference them by name in prose; do NOT repeat them as a table (the UI renders structured cards).\n- Draw a diagram only when the user explicitly asks to SEE the design — NEVER as a substitute for actually building it. For diagrams/flows/state machines, prefer fenced Mermaid (```mermaid, `flowchart LR`, simple IDs like `VCC`/`R1`, quoted labels like `R1[\"R1 10k\"]`) over ASCII art. Strict security: no HTML, <br/>, links, click directives, embedded CSS/JS, or comments (`classDef`/`class`/`style`/`linkStyle` ARE allowed). Represent power rails/nets as explicit nodes, keep labels short, and ensure every block is syntactically complete — else use a wiring table.\n- Color Mermaid nodes by meaning using ONLY this palette (`classDef` lines at the end, assign via `class NodeId className`; omit unused):\n  `classDef power fill:#13191F,stroke:#E0573A,color:#F3F4F6;` `classDef ground fill:#13191F,stroke:#5DCAA5,color:#F3F4F6;` `classDef timing fill:#13191F,stroke:#FBBF24,color:#F3F4F6;` `classDef signal fill:#13191F,stroke:#94A3B8,color:#F3F4F6;` `classDef ok fill:#13191F,stroke:#34D399,color:#F3F4F6;` `classDef err fill:#13191F,stroke:#F87171,color:#F3F4F6;`\n- Work on the SCHEMATIC only unless the user explicitly asks for PCB/layout/routing — do not touch the board or place footprints on your own initiative.\n- PREFER `compile_circuit` for standard block-expressible circuits (e.g. indicator LEDs): emit a circuit-spec IR (block instances + port-level nets, connect ports by \"<blockId>.<PORT>\", name vcc/gnd rails in `power`) in ONE call — it resolves INSTALLED parts, computes values, places, wires, adds power rails, and ERC-checks. Each committed domain command has its own durable receipt and Undo step; report partial outcomes accurately. If it reports a missing role, offer to import that part — never hand-substitute. Fall back to the manual place+wire flow below only for circuits no block recipe covers.\n- When the user asks you to build/place/wire a circuit, you are EXPECTED to finish it in this one run: actually CALL the write tools — do NOT just describe the plan, draw a diagram, or end your turn with \"would you like me to…\". Canonical flow, all in one run: `library_resolve_bom` → `designer_create_design` (if no design yet) → `designer_propose_schematic_edits` (place) → `designer_get_schematic_connectivity` → ONE `designer_propose_schematic_wires` call (the sheet auto-arranges). Keep calling tools across iterations until the circuit is both PLACED and WIRED — only then write your summary. Non-destructive edits (place/wire/move/update) auto-apply immediately and are undoable, so chain them freely; only deletions need a separate explicit confirmation. Report what the tool/apply results say — do not assume.\n- Place parts: `designer_propose_schematic_edits` (parts, labels, power ports, net portals).\n- Wiring: connect pins by REFERENCE.PIN — e.g. `{ source: \"U1.OUT\", target: \"R1.1\" }`, or `{ source: \"R2.2\", target: { net: \"GND\" } }` to tie a pin to a power/ground/named net (rails like `+5V`/`VCC`/`3V3` and `GND` are placed as power/ground symbols automatically — never as plain portals). Call `designer_get_schematic_connectivity` first to learn references and pin names. DO NOT pass coordinates/pointsNm — routing is automatic and obstacle-aware.\n- Put ALL wires for a circuit in ONE `designer_propose_schematic_wires` call (it accepts up to 40) rather than many small calls. When a pin name is decorated/active-low (e.g. `~{RST}`, shown over-lined), prefer the pin NUMBER (`\"U1.4\"`) — decorated names also resolve, but numbers are unambiguous. The batch applies every valid wire even if one is skipped, and the result lists any skips for you to retry.\n- To wire parts you just placed in this SAME run: placements auto-apply, so re-call `designer_get_schematic_connectivity` to get the new references, then `designer_propose_schematic_wires` — no need to wait for the user.\n- Move/rotate/edit existing parts: `designer_propose_schematic_updates` (address parts by `ref` like \"U1\"); connected wires reflow automatically.\n- Deletions: `designer_propose_schematic_deletions` only after explicit confirmation; destructive (does not auto-apply).\n\nIf no design is open, create one. Finish the build — placed AND wired — before summarising."
                 }
               }
             ]
@@ -3196,6 +3030,12 @@
       },
       {
         "type": "index",
+        "name": "designer_command_log_operation_idx",
+        "tbl_name": "designer_command_log",
+        "sql": "CREATE INDEX designer_command_log_operation_idx ON designer_command_log (actor_scope, operation_id)"
+      },
+      {
+        "type": "index",
         "name": "designer_comment_attachments_message_id_idx",
         "tbl_name": "designer_comment_attachments",
         "sql": "CREATE INDEX designer_comment_attachments_message_id_idx\n  on designer_comment_attachments(message_id)"
@@ -3253,6 +3093,12 @@
         "name": "designer_comment_threads_design_surface_idx",
         "tbl_name": "designer_comment_threads",
         "sql": "CREATE INDEX designer_comment_threads_design_surface_idx\n  on designer_comment_threads(design_id, surface)"
+      },
+      {
+        "type": "index",
+        "name": "designer_design_creation_receipts_operation_idx",
+        "tbl_name": "designer_design_creation_receipts",
+        "sql": "CREATE INDEX designer_design_creation_receipts_operation_idx ON designer_design_creation_receipts (actor_scope, operation_id)"
       },
       {
         "type": "index",
@@ -3391,6 +3237,12 @@
         "name": "idx_assistant_message_chat_index",
         "tbl_name": "assistant_message",
         "sql": "CREATE UNIQUE INDEX idx_assistant_message_chat_index\n  ON assistant_message(chat_id, message_index)"
+      },
+      {
+        "type": "index",
+        "name": "idx_assistant_native_context_chat",
+        "tbl_name": "assistant_native_context_binding",
+        "sql": "CREATE INDEX idx_assistant_native_context_chat\n  ON assistant_native_context_binding(chat_id)"
       },
       {
         "type": "index",
@@ -3580,6 +3432,24 @@
       },
       {
         "type": "table",
+        "name": "assistant_native_action",
+        "tbl_name": "assistant_native_action",
+        "sql": "CREATE TABLE assistant_native_action (\n  actor_scope TEXT NOT NULL,\n  chat_id TEXT NOT NULL,\n  action_id TEXT NOT NULL,\n  design_id TEXT NOT NULL,\n  tool_name TEXT NOT NULL,\n  argument_fingerprint TEXT NOT NULL,\n  proposal_id TEXT NOT NULL,\n  PRIMARY KEY (actor_scope, chat_id, action_id)\n)"
+      },
+      {
+        "type": "table",
+        "name": "assistant_native_build_intent",
+        "tbl_name": "assistant_native_build_intent",
+        "sql": "CREATE TABLE assistant_native_build_intent (\n  chat_id TEXT NOT NULL,\n  run_id TEXT NOT NULL,\n  intent_json TEXT NOT NULL,\n  updated_at TEXT NOT NULL,\n  PRIMARY KEY (chat_id, run_id)\n)"
+      },
+      {
+        "type": "table",
+        "name": "assistant_native_context_binding",
+        "tbl_name": "assistant_native_context_binding",
+        "sql": "CREATE TABLE assistant_native_context_binding (\n  id TEXT PRIMARY KEY,\n  chat_id TEXT NOT NULL,\n  kind TEXT NOT NULL,\n  ref_id TEXT NOT NULL,\n  label TEXT NOT NULL,\n  role TEXT NOT NULL,\n  status TEXT NOT NULL,\n  metadata TEXT,\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL\n)"
+      },
+      {
+        "type": "table",
         "name": "assistant_provider_capability",
         "tbl_name": "assistant_provider_capability",
         "sql": "CREATE TABLE assistant_provider_capability (\n  provider_id TEXT PRIMARY KEY REFERENCES assistant_provider_config(id) ON DELETE CASCADE,\n  streaming INTEGER NOT NULL DEFAULT 1,\n  tool_calling INTEGER NOT NULL DEFAULT 0,\n  model_list INTEGER NOT NULL DEFAULT 0,\n  vision INTEGER,\n  json_mode INTEGER,\n  max_context_tokens INTEGER,\n  checked_at TEXT,\n  warning TEXT,\n  updated_at TEXT NOT NULL\n)"
@@ -3660,7 +3530,7 @@
         "type": "table",
         "name": "designer_command_log",
         "tbl_name": "designer_command_log",
-        "sql": "CREATE TABLE `designer_command_log` (\n\t`command_id` text PRIMARY KEY NOT NULL,\n\t`design_id` text NOT NULL,\n\t`session_id` text NOT NULL,\n\t`command_type` text NOT NULL,\n\t`command_json` text NOT NULL,\n\t`result_json` text NOT NULL,\n\t`issued_at` integer NOT NULL,\n\t`applied_revision` integer NOT NULL,\n\t`created_at` text NOT NULL\n)"
+        "sql": "CREATE TABLE `designer_command_log` (\n\t`command_id` text PRIMARY KEY NOT NULL,\n\t`design_id` text NOT NULL,\n\t`session_id` text NOT NULL,\n\t`command_type` text NOT NULL,\n\t`command_json` text NOT NULL,\n\t`result_json` text NOT NULL,\n\t`issued_at` integer NOT NULL,\n\t`applied_revision` integer NOT NULL,\n\t`created_at` text NOT NULL\n, operation_identity_json TEXT, actor_scope TEXT, operation_id TEXT)"
       },
       {
         "type": "table",
@@ -3691,6 +3561,12 @@
         "name": "designer_comment_threads",
         "tbl_name": "designer_comment_threads",
         "sql": "CREATE TABLE designer_comment_threads (\n  id text primary key,\n  design_id text not null references designer_design_heads(id) on delete cascade,\n  surface text not null check (surface in ('schematic', 'pcb', 'design')),\n  anchor_json text,\n  status text not null default 'open' check (status in ('open', 'resolved', 'archived')),\n  todo_status text not null default 'none' check (todo_status in ('none', 'todo', 'in_progress', 'done')),\n  title text,\n  created_by text,\n  created_at text not null,\n  updated_at text not null,\n  last_message_at text,\n  message_count integer not null default 0,\n  revision integer not null default 0,\n  sync_state text not null default 'local' check (sync_state in ('local', 'pending', 'synced', 'failed', 'conflict')),\n  deleted_at text\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_design_creation_receipts",
+        "tbl_name": "designer_design_creation_receipts",
+        "sql": "CREATE TABLE designer_design_creation_receipts (\n  action_id TEXT NOT NULL,\n  actor_scope TEXT NOT NULL,\n  operation_id TEXT NOT NULL,\n  identity_json TEXT NOT NULL,\n  input_json TEXT NOT NULL,\n  design_json TEXT NOT NULL,\n  created_at TEXT NOT NULL,\n  PRIMARY KEY (actor_scope, action_id)\n)"
       },
       {
         "type": "table",
@@ -3891,6 +3767,10 @@
         "migration_name": "0015_provider_secret_refs.sql"
       },
       {
+        "module_id": "assistant",
+        "migration_name": "0016_native_context.sql"
+      },
+      {
         "module_id": "designer",
         "migration_name": "0000_init.sql"
       },
@@ -3969,6 +3849,10 @@
       {
         "module_id": "designer",
         "migration_name": "0019_bom_override_part_binding.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0020_operation_receipts.sql"
       },
       {
         "module_id": "library",

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "repository": "OpenPCB-app/CoreLibrary",
+  "minComponents": 10,
+  "productionRelease": null,
+  "rejectedReleases": [
+    {
+      "tag": "v0.1.0-beta.1",
+      "artifact": "openpcb-core-library-0.1.0-beta.1.opclib",
+      "sha256": "dd0c1cd4a13128a2db7270722a3f558bdc346ccf4c1f44806b01e2fc7e29f66a",
+      "reason": "Unsigned manifest and released placeholder public key differ from the independently provisioned production key. Historical evidence only; never an eligible production pin."
+    }
+  ]
+}

@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // These pins identify unpublished developer candidates, not production dependencies.
 const ARTIFACTS = {
-  '0.6.0': 'ab724ec617a12d68fc4c6a88656ff9605949c2f3929113b89b293ab6c999e5a5',
+  '0.6.0': 'a37680d7d7d5b73735ddf4a710d576744e7a2ed9ba8ecee59e5e84c60f8a58c6',
   '0.7.0': '8ac9b61fc18a93ae6578c3b346bc79d225247ef0e73e9ed488971004d2b324e9',
 };
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');

@@ -4,9 +4,8 @@ import type {
   DesignerSchematicProjection,
   ErcReport,
 } from "../../../sdks";
-import { runDefinitionOfDone } from "../../../modules/assistant/backend/verification/run-dod";
+import { runDefinitionOfDone, type RunDefinitionOfDoneInput } from "../../../modules/assistant/backend/verification/run-dod";
 import { buildDesignContextSummary } from "../../../modules/assistant/backend/context-summary";
-import type { BuildIntentStore } from "../../../modules/assistant/backend/verification/build-intent-store";
 import type { BuildIntent } from "../../../modules/assistant/backend/verification/types";
 
 // ── lightweight fakes ─────────────────────────────────────────────────────
@@ -98,11 +97,10 @@ function fakeDesigner(opts: {
   } as unknown as DesignerSDK;
 }
 
-function memoryBuildIntents(intent: BuildIntent | null): BuildIntentStore {
+function memoryBuildIntents(intent: BuildIntent | null): RunDefinitionOfDoneInput["buildIntents"] {
   return {
-    save: () => {},
     get: () => intent,
-  } as unknown as BuildIntentStore;
+  };
 }
 
 const noopConversation = {
