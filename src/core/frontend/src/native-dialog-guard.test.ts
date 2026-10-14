@@ -20,10 +20,6 @@ const ALLOWLIST = new Set([
   "src/modules/library/frontend/Space.tsx",
   // remove when migrated
   "src/modules/library/frontend/import-wizard/ImportWizardPage.tsx",
-  // remove when migrated
-  "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx",
-  // remove when migrated
-  "src/modules/knowledge/frontend/components/Sidebar/TreeItem.tsx",
 ]);
 
 function roots(): string[] {

@@ -62,6 +62,7 @@ with current state, as in the IETF Idempotency-Key draft.
 <!-- route-ownership:start -->
 | Method | Path | Owner | Guard |
 | --- | --- | --- | --- |
+| GET | `/api/modules/assistant/availability` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
 | DELETE | `/api/modules/assistant/mcp` | AgentKit MCP server adapter | Host + Origin, own MCP bearer (app token ignored) |
 | GET | `/api/modules/assistant/mcp` | AgentKit MCP server adapter | Host + Origin, own MCP bearer (app token ignored) |
 | POST | `/api/modules/assistant/mcp` | AgentKit MCP server adapter | Host + Origin, own MCP bearer (app token ignored) |

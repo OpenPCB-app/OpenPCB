@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const PACKAGE = "@openpcb/ai-core";
 const SOURCE_ROOTS = ["src", "electron/src", "scripts", "tests"];
 const GENERATED_ROOT = "src/core/frontend/src/generated";
-const SKIP_DIRS = new Set(["node_modules", "dist", "dev-data"]);
+const SKIP_DIRS = new Set(["node_modules", "dist", ".dist", "dev-data"]);
 const SCANNED = /\.(?:[cm]?[jt]sx?|d\.[cm]?ts)$/;
 // Guards and their fixtures name the package on purpose to refuse it.
 const SELF = /^scripts\/check-(?:no-ai-core|agentkit-distribution)(?:\.test)?\.mjs$/;
