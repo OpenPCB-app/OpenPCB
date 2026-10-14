@@ -65,13 +65,17 @@ async function projection() {
 }
 
 async function stageCommands(commands: Array<Record<string, unknown>>, expectedUnits = commands.length) {
+  return stageOperations(commands.map((payload) => ({ payload })), expectedUnits);
+}
+
+async function stageOperations(items: Array<Record<string, unknown>>, expectedUnits = items.length, warnings: string[] = []) {
   const id = crypto.randomUUID();
   const actionId = `test_${id}`;
   const revision = (await projection()).revision;
-  const operations = commands.map((payload, index) => ({ id: `${id}:${index}`, payload }));
-  const warnings: string[] = [];
+  const operations = items.map((item, index) => ({ id: `${id}:${index}`, ...item }));
+  const commands = items.map((item) => item.payload);
   return proposals.stage({ id, chatId, runId: context.runId, scopeKey: nativeScope("desktop", designId, chatId), actionId,
-    toolName: "designer_propose_schematic_edits", kind: "designer_schematic_edits", risk: commandRisk(operations), operations,
+    toolName: "designer_propose_schematic_edits", kind: "designer_schematic_edits", risk: commandRisk(operations), operations, warnings,
     revisionAtCreate: String(revision), envelope: { id, toolName: "designer_propose_schematic_edits", kind: "designer_schematic_edits",
       designId, baseRevision: revision, operations, warnings,
       nativeIdentity: { actorScope: "desktop", argumentFingerprint: argumentFingerprint(commands), expectedUnits } } });
@@ -313,6 +317,53 @@ describe("real native domain through AgentKit proposal pipeline", () => {
     expect(verification?.checks.find((item) => item.id === "native_mutations")?.ok).toBe(false);
     expect(await proposals.apply({ proposalId: second.id, operationId: `native:${second.id}` })).toEqual(outcome);
     expect((await projection()).primitives).toHaveLength(1);
+  });
+
+  test("non-destructive edits skip a failing unit, chain revisions and report partial", async () => {
+    const proposal = await stageCommands([
+      { type: "upsert_label", text: "A", positionNm: { x: 0, y: 0 } },
+      { type: "create_wire", sourcePinId: "missing-source", targetPinId: "missing-target" },
+      { type: "upsert_label", text: "B", positionNm: { x: 2_540_000, y: 0 } },
+    ]);
+    await approve(proposal.id);
+    const outcome = await proposals.apply({ proposalId: proposal.id, operationId: `native:${proposal.id}` });
+    expect(outcome).toMatchObject({ status: "partial", appliedOps: 2, revision: "2" });
+    expect(outcome.failedOps.map((item) => item.opIndex)).toEqual([1]);
+    const receipts = JSON.parse(outcome.resultJson!).receipts as Array<{ identity: { expectedRevision: number }; result: { ok: boolean } }>;
+    expect(receipts.map((receipt) => [receipt.identity.expectedRevision, receipt.result.ok])).toEqual([[0, true], [1, false], [1, true]]);
+    expect((await projection()).labels.map((label) => label.text).sort()).toEqual(["A", "B"]);
+  });
+
+  test("placed part is annotated by its follow-up unit against the created entity", async () => {
+    const proposal = await stageOperations([{ kind: "designer.place_part",
+      payload: { type: "place_part", componentId: domain.componentId, positionNm: { x: 0, y: 0 } },
+      updatePartAfterCreate: { value: "22nF", propertiesJson: { role: "decoupling" } } }], 2);
+    await approve(proposal.id);
+    const outcome = await proposals.apply({ proposalId: proposal.id, operationId: `native:${proposal.id}` });
+    expect(outcome).toMatchObject({ status: "applied", appliedOps: 2, revision: "2" });
+    const [part] = (await projection()).parts;
+    expect(part).toMatchObject({ value: "22nF", propertiesJson: { role: "decoupling" } });
+    expect(JSON.parse(outcome.resultJson!).receipts[0].result.createdEntityId).toBe(part!.id);
+  });
+
+  test("build-time warnings keep a fully committed proposal partial", async () => {
+    const proposal = await stageOperations([{ payload: { type: "upsert_label", text: "A", positionNm: { x: 0, y: 0 } } }], 1,
+      ["Only the first 40 wire operation(s) were included."]);
+    await approve(proposal.id);
+    const outcome = await proposals.apply({ proposalId: proposal.id, operationId: `native:${proposal.id}` });
+    expect(outcome).toMatchObject({ status: "partial", appliedOps: 1 });
+    expect(outcome.failedOps.map((item) => item.error)).toEqual(["Only the first 40 wire operation(s) were included."]);
+  });
+
+  test("retired cloud PCB batch proposals fail closed without dispatching", async () => {
+    const proposal = await stageCommands([{ type: "upsert_label", text: "A", positionNm: { x: 0, y: 0 } }]);
+    const trace = { id: "op-trace", payload: { type: "pcb_add_trace", layer: "F.Cu", pointsNm: [{ x: 0, y: 0 }, { x: 1000, y: 0 }],
+      widthMm: 0.25, netId: "net_a", netClassId: "default", segmentMode: "manhattan-45" } };
+    const batch = { ...proposal, kind: "designer_pcb_route_batch", operations: [trace],
+      envelope: { ...proposal.envelope, kind: "designer_pcb_route_batch", operations: [trace] } };
+    expect(await applier.apply({ proposal: batch, operationId: `native:${proposal.id}` }))
+      .toMatchObject({ status: "failed", appliedOps: 0, failedOps: [{ error: "UNKNOWN_NATIVE_OPERATION" }] });
+    expect((await projection()).revision).toBe(0);
   });
 
   test("cancel after first committed unit prevents all later units; replay remains partial", async () => {

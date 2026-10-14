@@ -15,9 +15,6 @@ export interface CloudConfig {
   // of `enabled` so existing sessions keep working if it's unset; the login
   // flow validates it separately (see AuthProvider.beginCloudLogin).
   webUrl: string;
-  // cloud-copilot service base URL (S6 cloud chat mode). Optional: not part of
-  // `enabled`; the chat dock offers cloud mode only when set + flag on.
-  copilotUrl: string;
 }
 
 export function readCloudConfig(): CloudConfig {
@@ -26,7 +23,6 @@ export function readCloudConfig(): CloudConfig {
     (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ?? "";
   const apiUrl = (import.meta.env.VITE_CLOUD_API_URL as string) ?? "";
   const webUrl = (import.meta.env.VITE_CLOUD_WEB_URL as string) ?? "";
-  const copilotUrl = (import.meta.env.VITE_CLOUD_COPILOT_URL as string) ?? "";
   return {
     enabled:
       isFeatureEnabled("cloud.auth") &&
@@ -35,6 +31,5 @@ export function readCloudConfig(): CloudConfig {
     supabaseAnonKey,
     apiUrl,
     webUrl,
-    copilotUrl,
   };
 }

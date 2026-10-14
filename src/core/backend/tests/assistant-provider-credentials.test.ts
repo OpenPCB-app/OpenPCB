@@ -206,49 +206,41 @@ describe("provider vault boundary", () => {
     ).toBe(true);
   });
 
-  test("disabling managed cloud keeps every API-key/local kind and tool overrides", async () => {
-    const previous = process.env.OPENPCB_FEATURE_CLOUD_ASSISTANT_PROVIDERS;
-    process.env.OPENPCB_FEATURE_CLOUD_ASSISTANT_PROVIDERS = "0";
-    try {
-      const { store } = fixture();
-      expect(store.listProviders().map((provider) => provider.kind)).toEqual(
-        expect.arrayContaining(["openai", "openrouter", "lmstudio", "omlx"]),
+  test("cloud-free desktop keeps every API-key/local kind and tool overrides", async () => {
+    const { store } = fixture();
+    expect(store.listProviders().map((provider) => provider.kind)).toEqual(
+      expect.arrayContaining(["openai", "openrouter", "lmstudio", "omlx"]),
+    );
+    for (const kind of [
+      "openai",
+      "openrouter",
+      "openai-compatible",
+      "lmstudio",
+      "omlx",
+    ] as const) {
+      const provider = await store.createProvider(
+        input({ kind, apiKey: CANARY }),
       );
-      for (const kind of [
-        "openai",
-        "openrouter",
-        "openai-compatible",
-        "lmstudio",
-        "omlx",
-      ] as const) {
-        const provider = await store.createProvider(
-          input({ kind, apiKey: CANARY }),
-        );
-        for (const mode of ["on", "off", "auto"] as const) {
-          store.setToolCallingMode(provider.id, mode);
-          expect(store.getToolCallingMode(provider.id)).toBe(mode);
-          if (mode !== "auto") {
-            expect(
-              (await store.snapshotProvider(provider.id)).capabilities
-                ?.toolCalling,
-            ).toBe(mode === "on");
-          }
+      for (const mode of ["on", "off", "auto"] as const) {
+        store.setToolCallingMode(provider.id, mode);
+        expect(store.getToolCallingMode(provider.id)).toBe(mode);
+        if (mode !== "auto") {
+          expect(
+            (await store.snapshotProvider(provider.id)).capabilities
+              ?.toolCalling,
+          ).toBe(mode === "on");
         }
-        expect(
-          (
-            await buildAiProviderClient(
-              await store.snapshotProvider(provider.id),
-              {
-                resolveApiKey: (value) => store.resolveApiKey(value),
-              },
-            )
-          ).kind,
-        ).toBe(kind);
       }
-    } finally {
-      if (previous === undefined)
-        delete process.env.OPENPCB_FEATURE_CLOUD_ASSISTANT_PROVIDERS;
-      else process.env.OPENPCB_FEATURE_CLOUD_ASSISTANT_PROVIDERS = previous;
+      expect(
+        (
+          await buildAiProviderClient(
+            await store.snapshotProvider(provider.id),
+            {
+              resolveApiKey: (value) => store.resolveApiKey(value),
+            },
+          )
+        ).kind,
+      ).toBe(kind);
     }
   });
 

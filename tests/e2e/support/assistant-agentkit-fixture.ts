@@ -20,7 +20,7 @@ export const test = base.extend<Fixtures>({
       frontend = await createServer({ configFile: path.join(root, "src/core/frontend/vite.config.ts"),
         root: path.join(root, "src/core/frontend"), envFile: false,
         define: Object.fromEntries(["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY", "VITE_CLOUD_API_URL",
-          "VITE_CLOUD_WEB_URL", "VITE_CLOUD_COPILOT_URL"].map((key) => [`import.meta.env.${key}`, JSON.stringify("")])),
+          "VITE_CLOUD_WEB_URL"].map((key) => [`import.meta.env.${key}`, JSON.stringify("")])),
         server: { host: "127.0.0.1", port: 0, strictPort: false, hmr: false, watch: null,
           proxy: { "/api": { target: "http://127.0.0.1:1" }, "/ws": { target: "ws://127.0.0.1:1" } } } });
       await frontend.listen();

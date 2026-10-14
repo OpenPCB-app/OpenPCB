@@ -41,6 +41,21 @@ describe("Tasks monitors canonical AgentKit runs", () => {
     await expect(monitor.listTasks({ chatId: "chat-b", cursor: first.nextCursor! })).rejects.toThrow("cursor is invalid");
   });
 
+  test("runs link the owning chat's bound design, looked up once per chat per page", async () => {
+    store = new SqliteAssistantStore(":memory:");
+    const runner = new SingleProcessTaskRunner({ store, recoveryMode: "manual" });
+    const lookups: string[] = [];
+    const monitor = createRunMonitor(store, runner, (chatId) => { lookups.push(chatId); return chatId === "chat-a" ? "design-a" : null; });
+    await store.tasks.createTask({ taskId: "run-1", kind: "chat.turn", scopeId: "chat-a", payload: { chatId: "chat-a" } });
+    await store.tasks.createTask({ taskId: "run-2", kind: "chat.turn", scopeId: "chat-a", payload: { chatId: "chat-a" } });
+    await store.tasks.createTask({ taskId: "run-3", kind: "chat.turn", scopeId: "chat-b", payload: { chatId: "chat-b" } });
+    await store.tasks.createTask({ taskId: "run-4", kind: "maintenance", scopeId: "none", payload: {} });
+    const designs = Object.fromEntries((await monitor.listTasks()).items.map((item) => [item.taskId, item.designId]));
+    expect(designs).toEqual({ "run-1": "design-a", "run-2": "design-a", "run-3": null, "run-4": null });
+    expect(lookups.sort()).toEqual(["chat-a", "chat-b"]);
+    expect((await monitor.getTask("run-1"))?.designId).toBe("design-a");
+  });
+
   test("chat filter, Stop and Continue use the same canonical durable task state", async () => {
     const { store, runner, monitor } = fixture();
     await store.tasks.createTask({ taskId: "cancelled-run", kind: "chat.turn", scopeId: "chat-a", payload: { chatId: "chat-a" } });

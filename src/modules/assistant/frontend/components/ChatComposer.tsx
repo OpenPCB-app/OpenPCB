@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
   type ReactElement,
 } from "react";
-import { ArrowUp, Coins, Square, Wrench } from "lucide-react";
+import { ArrowUp, Square, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMentions } from "../hooks/useMentions";
 import { MentionAutocomplete } from "./MentionAutocomplete";
@@ -41,19 +41,12 @@ export interface ChatComposerProps {
   workspaceId?: string;
   /** Chat ID for mention search context. */
   chatId?: string;
-  /** Remaining Cloud AI credits (cloud mode only). `null`/omitted hides the
-   * indicator (local BYO mode or unlimited/unmetered wallet). */
-  creditsRemaining?: number | null;
-  /** Balance is at/below the workspace low-balance threshold → amber hint. */
-  lowBalance?: boolean;
 }
 
 /**
  * Rich composer card shared by the standalone Assistant view and the docked
  * panel: `/`-command popover, auto-growing multiline input, send/stop, and a
- * footer with tool count + context budget + keyboard hints. In cloud mode the
- * footer also surfaces the remaining Cloud AI credits (`creditsRemaining`,
- * seeded from the wallet and live-updated from `copilot.usage` frames).
+ * footer with tool count + context budget + keyboard hints.
  */
 export function ChatComposer({
   value,
@@ -70,8 +63,6 @@ export function ChatComposer({
   backendURL,
   workspaceId,
   chatId,
-  creditsRemaining,
-  lowBalance = false,
 }: ChatComposerProps): ReactElement {
   const [slashOpen, setSlashOpen] = useState(false);
   const [mentionOpen, setMentionOpen] = useState(false);
@@ -337,25 +328,6 @@ export function ChatComposer({
               </span>
               {contextBudgetKb}k context
             </span>
-            {typeof creditsRemaining === "number" ? (
-              <>
-                <span className="text-slate-300 dark:text-slate-600">·</span>
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1",
-                    lowBalance && "text-amber-600 dark:text-amber-400",
-                  )}
-                  title={
-                    lowBalance
-                      ? "Low Cloud AI credit balance — top up in the dashboard"
-                      : "Remaining Cloud AI credits"
-                  }
-                >
-                  <Coins className="h-3 w-3" />
-                  {creditsRemaining.toLocaleString()} credits
-                </span>
-              </>
-            ) : null}
           </div>
           {!compact ? (
             <div className="flex shrink-0 items-center gap-2">

@@ -12,7 +12,7 @@ let container: HTMLDivElement;
 let root: Root;
 function run(index: number, status: TaskRunSummary["status"] = "completed"): TaskRunSummary {
   return { taskId: `run-${index}`, kind: "openpcb.local-chat-turn", scopeId: "scope", status,
-    chatId: `chat-${index}`, enqueuedAt: "2026-10-07T12:00:00.000Z", startedAt: null,
+    chatId: `chat-${index}`, designId: null, enqueuedAt: "2026-10-07T12:00:00.000Z", startedAt: null,
     finishedAt: null, attemptCount: 1, error: null };
 }
 async function mount(backendURL: string | null = "http://127.0.0.1:3000") {
@@ -71,4 +71,82 @@ test("Stop and Continue use only canonical lifecycle routes and surface conflict
     { url: "http://127.0.0.1:3000/api/modules/assistant/v1/runs/run-2/resume", method: "POST" },
   ]);
   expect(container.querySelector('[role="alert"]')?.textContent).toBe("Run is no longer interrupted.");
+});
+
+test("a response slower than the poll interval is not aborted and clears loading when it lands", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    let release!: (response: Response) => void;
+    const signals: AbortSignal[] = [];
+    mocks.fetch.mockImplementation((_url: string, init?: RequestInit) => {
+      signals.push(init!.signal!);
+      return new Promise<Response>((resolve) => { release = resolve; });
+    });
+    await mount();
+    await act(async () => { vi.advanceTimersByTime(16_000); });
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    expect(signals[0]!.aborted).toBe(false);
+    expect(container.textContent).toContain("Loading runs…");
+    await act(async () => { release(Response.json({ items: [run(1)], nextCursor: null })); });
+    expect(container.textContent).not.toContain("Loading runs…");
+    expect(container.textContent).toContain("run-1");
+    mocks.fetch.mockImplementation(async () => Response.json({ items: [run(1), run(2)], nextCursor: null }));
+    await act(async () => { vi.advanceTimersByTime(5_000); });
+    expect(mocks.fetch).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("run-2");
+  } finally { vi.useRealTimers(); }
+});
+
+test("malformed bodies and object-valued problem fields show an error with a working retry", async () => {
+  mocks.fetch.mockImplementation(async () => new Response("<html>proxy error</html>", { status: 200 }));
+  await mount();
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe("The run monitor returned a malformed response.");
+  expect(container.textContent).not.toContain("Loading runs…");
+  mocks.fetch.mockImplementation(async () => Response.json({ items: "nope", nextCursor: null }));
+  await click("Retry");
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe("The run monitor returned a malformed response.");
+  mocks.fetch.mockImplementation(async () => Response.json({ detail: { code: "x" }, title: "Run monitor offline" }, { status: 503 }));
+  await click("Retry");
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe("Run monitor offline");
+  mocks.fetch.mockImplementation(async () => Response.json({ detail: { code: "x" } }, { status: 500 }));
+  await click("Retry");
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe("Request failed (500)");
+  mocks.fetch.mockImplementation(async () => Response.json({
+    items: [{ ...run(7, "failed"), error: { code: "PROVIDER", message: "boom" } }], nextCursor: null }));
+  await click("Retry");
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  expect(container.textContent).toContain('{"code":"PROVIDER","message":"boom"}');
+});
+
+test("polling after Load more refreshes only the first page and keeps loaded older runs", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const calls: string[] = [];
+    let head = Array.from({ length: 50 }, (_, index) => run(index + 1));
+    mocks.fetch.mockImplementation(async (url: string) => {
+      calls.push(url);
+      return new URL(url).searchParams.has("cursor")
+        ? Response.json({ items: [run(51), run(52)], nextCursor: null })
+        : Response.json({ items: head, nextCursor: "page-two" });
+    });
+    await mount();
+    await click("Load more runs");
+    expect(calls).toHaveLength(2);
+    head = [run(0, "running"), ...head.slice(0, 49)];
+    await act(async () => { vi.advanceTimersByTime(5_000); });
+    expect(calls).toHaveLength(3);
+    expect(new URL(calls[2]!).searchParams.has("cursor")).toBe(false);
+    const ids = [...container.querySelectorAll(".break-all")].map((item) => item.textContent!.split(" · ")[0]);
+    expect(ids[0]).toBe("run-0");
+    expect(ids).toEqual(expect.arrayContaining(["run-50", "run-52"]));
+    expect(new Set(ids).size).toBe(ids.length);
+  } finally { vi.useRealTimers(); }
+});
+
+test("rows link to the owning design when the run's chat is bound", async () => {
+  mocks.fetch.mockImplementation(async () => Response.json({ items: [{ ...run(1), designId: "design-9" }, run(2)], nextCursor: null }));
+  await mount();
+  expect([...container.querySelectorAll("button")].filter((button) => button.textContent === "Open design")).toHaveLength(1);
+  await click("Open design");
+  expect(mocks.navigate).toHaveBeenCalledWith("designer", "design-9");
 });

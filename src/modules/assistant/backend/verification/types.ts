@@ -33,15 +33,3 @@ export interface BuildIntent {
   goal: string;
   items: BuildIntentItem[];
 }
-
-export interface DesignContextSummary {
-  designId: string;
-  name: string;
-  schematic: {
-    componentCount: number;
-    netCount: number;
-    unplaced: string[];
-    openNets: string[];
-  };
-  pcb: { placed: number; unrouted: number };
-}

@@ -15,7 +15,7 @@ test.beforeEach(async ({ page }) => {
   await page.route(/\/src\/cloud\/config\.ts(?:\?.*)?$/, (route) =>
     route.fulfill({
       contentType: "application/javascript",
-      body: `export function readCloudConfig() { return { enabled: false, supabaseUrl: '', supabaseAnonKey: '', apiUrl: '', webUrl: '', copilotUrl: '' }; }`,
+      body: `export function readCloudConfig() { return { enabled: false, supabaseUrl: '', supabaseAnonKey: '', apiUrl: '', webUrl: '' }; }`,
     }),
   );
 });

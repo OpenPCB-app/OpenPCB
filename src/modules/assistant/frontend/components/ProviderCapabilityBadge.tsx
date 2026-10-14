@@ -12,7 +12,7 @@ export function ProviderCapabilityBadge({
     return <Dot color="bg-slate-500" title={`${provider.label} disabled`} />;
   const caps = provider.capabilities;
   // Single source of truth: the provider preset's `requiresApiKey` (openai /
-  // openrouter). Local kinds + openpcb-cloud (per-run bearer) never need a key.
+  // openrouter). Local kinds never need a key.
   const needsKey =
     (getPresetByKind(provider.kind)?.requiresApiKey ?? false) &&
     !provider.hasApiKey;

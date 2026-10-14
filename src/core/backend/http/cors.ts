@@ -16,7 +16,7 @@ export const BASE_CORS_HEADERS: Record<string, string> = {
   // Mcp-Session-Id / MCP-Protocol-Version / Last-Event-ID carry the MCP
   // Streamable HTTP session and resumption state.
   "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, X-OpenPCB-Token, If-Unmodified-Since, X-Request-Id, X-Cloud-Bearer, X-Cloud-Api-Url, X-Cloud-Copilot-Url, Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID",
+    "Content-Type, Authorization, X-OpenPCB-Token, If-Unmodified-Since, X-Request-Id, X-Cloud-Bearer, X-Cloud-Api-Url, Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID",
   // Without this, the browser hides non-CORS-safelisted response headers from
   // fetch().headers.get(...). Required so the manufacturing-export route's
   // bundle-name and warning-count metadata are readable from packaged

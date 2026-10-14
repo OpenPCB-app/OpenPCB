@@ -92,11 +92,7 @@ export interface SchematicProposalEnvelope {
     | "designer_propose_schematic_wires"
     | "designer_propose_schematic_updates"
     | "designer_propose_schematic_deletions"
-    | "designer_arrange_schematic"
-    // S8: cloud-copilot layout batches mirrored via the cloud proposal path
-    | "cloud_copilot"
-    | "copilot_run_placement"
-    | "copilot_run_routing";
+    | "designer_arrange_schematic";
   /** Idempotency key from the model (Track D); dedup re-runs by design + key. */
   actionId?: string;
   title: string;

@@ -215,7 +215,7 @@ export async function isolatedHttpDomain(
       await rm(directory, { recursive: true, force: true });
   };
   try {
-    for (const id of ["library", "designer", "assistant", "knowledge"]) {
+    for (const id of ["library", "designer", "assistant", "knowledge", "tasks"]) {
       const report = await applyModuleMigrations(
         id,
         path.join(MODULES_ROOT, id, "backend/migrations"),

@@ -13,7 +13,7 @@ import {
 } from "agentkit/host";
 import { SingleProcessTaskRunner } from "agentkit/runner-local";
 import type { TasksSDK } from "../../../sdks/tasks";
-import { createRunMonitor } from "./agentkit/run-monitor";
+import { createRunMonitor, type RunDesignLookup } from "./agentkit/run-monitor";
 import type { ProviderCredentialAccess } from "../../../core/contracts/credentials/renderer";
 import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
 import { ValidationError } from "../../../core/contracts/errors";
@@ -51,6 +51,7 @@ export interface OpenPcbAgentKitHostOptions {
   toolGuards?: ToolGuard[];
   providerFactory?: (config: AiProviderConfig) => AiProviderClient;
   transformProviderMessages?: ProviderMessageTransform;
+  runDesign?: RunDesignLookup;
   prepareSubmissionMetadata?: (
     input: SubmitMessageInput | RegenerateMessageInput,
     services: { store: AssistantStore; providers: ProviderStore; settings: SettingsStore; regenerate: boolean; signal: AbortSignal },
@@ -139,7 +140,7 @@ function composeHost(options: OpenPcbAgentKitHostOptions, store: NodeSqliteAssis
   const settings = new SettingsStore(options.context, providers);
   const credentialAccess = createProviderCredentialAccess(providers);
   return { store, proposals, policy, runner, turns, localTurns, registry, providers, settings, credentialAccess,
-    monitor: createRunMonitor(store, runner),
+    monitor: createRunMonitor(store, runner, options.runDesign),
     toolCatalog: createContributorToolCatalog({ contributors, context: options.contextProvider, guards: options.toolGuards }),
     worker: createDispatchingWorker(registry, { store, clock }),
     conversations: new ConversationService({ store }) };

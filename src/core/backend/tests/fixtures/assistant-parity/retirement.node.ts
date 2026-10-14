@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { rm } from "node:fs/promises";
+import path from "node:path";
 import { afterEach, test } from "node:test";
 import { isolatedHttpDomain, submit, UI_SESSION, waitUntil, type HttpDomain } from "../agentkit-http-domain";
 import { boundChat, proposalRequest } from "../agentkit-http-scenarios";
@@ -12,6 +14,66 @@ function warningCode(event: object): unknown {
 
 let domain: HttpDomain | undefined;
 afterEach(async () => { await domain?.close(); domain = undefined; });
+
+const LEGACY_TABLES = ["assistant_chat", "assistant_message", "tasks_task"] as const;
+
+function seedLegacyHistory(current: HttpDomain): void {
+  const at = "2026-01-01T00:00:00.000Z";
+  const sql = current.ctx.db.rawSql.bind(current.ctx.db);
+  sql("INSERT INTO assistant_chat (id,title,provider,model,metadata,created_at,updated_at,last_message_at) VALUES (?,?,?,?,?,?,?,?)",
+    ["legacy-chat", "Legacy chat", "openai", "gpt-legacy", "{}", at, at, at]);
+  const message = "INSERT INTO assistant_message (id,chat_id,role,content,task_id,metadata,message_index,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)";
+  sql(message, ["legacy-user", "legacy-chat", "user", "Legacy question", "legacy-task", "{}", 0, at, at]);
+  sql(message, ["legacy-reply", "legacy-chat", "assistant", "Legacy answer", "legacy-task", "{}", 1, at, at]);
+  sql("INSERT INTO tasks_task (id,type,status,queue_key,payload,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+    ["legacy-task", "assistant.chat", "running", "chat:legacy-chat", JSON.stringify({ chatId: "legacy-chat" }), at, at]);
+}
+
+function legacySnapshot(current: HttpDomain): Record<string, unknown[]> {
+  return Object.fromEntries(LEGACY_TABLES.map((table) => [table,
+    current.ctx.db.rawSql(`SELECT * FROM ${table} ORDER BY id`)]));
+}
+
+test("populated legacy app database boots inert: legacy rows untouched, domain intact, AgentKit history fresh", async () => {
+  domain = await isolatedHttpDomain([], false, { preserveDirectory: true });
+  const design = await domain.designer.createDesign({ name: "Legacy board" });
+  const placed = await domain.designer.dispatchCommand(design.id, { commandId: crypto.randomUUID(), sessionId: UI_SESSION,
+    aggregateId: design.id, baseRevision: 0, issuedAt: Date.now(),
+    command: { type: "place_part", componentId: domain.componentId, positionNm: { x: 0, y: 0 } } });
+  assert.equal(placed.ok, true);
+  const pageId = crypto.randomUUID();
+  await domain.knowledge.create({ id: pageId, workspace_id: "default", title: "Legacy notes", order_key: "a",
+    created_at: new Date(), updated_at: new Date(),
+    content_json: { engine: "tiptap", version: 1, data: { type: "doc", content: [] } } });
+  seedLegacyHistory(domain);
+  const legacy = legacySnapshot(domain);
+  assert.equal(legacy.assistant_message!.length, 2);
+  const projection = await domain.designer.getSchematicProjection(design.id);
+  const { componentId, directory } = domain;
+  await domain.close();
+  // An upgraded install has the populated app database but no AgentKit store yet.
+  await rm(path.join(directory, "agentkit.sqlite"), { force: true });
+  await rm(path.join(directory, "agentkit.sqlite-wal"), { force: true });
+  await rm(path.join(directory, "agentkit.sqlite-shm"), { force: true });
+
+  domain = await isolatedHttpDomain([{ content: "Fresh answer." }], false, { existingDirectory: directory });
+  assert.deepEqual(legacySnapshot(domain), legacy);
+  assert.deepEqual(await (await domain.request("/v1/chats")).json(), []);
+  assert.deepEqual(await (await domain.request("/v1/runs")).json(), { items: [], nextCursor: null });
+  assert.equal(await domain.service.host.store.conversations.getChat("legacy-chat"), null);
+  assert.equal(await domain.service.host.store.tasks.getTask("legacy-task"), null);
+  assert.equal(domain.componentId, componentId);
+  assert.equal((await domain.knowledge.findById(pageId))?.title, "Legacy notes");
+  assert.deepEqual(await domain.designer.getSchematicProjection(design.id), projection);
+
+  const { chatId, designId } = await boundChat(domain);
+  const run = await submit(domain, chatId, "post-upgrade", "Hello after upgrade.");
+  const runs = await (await domain.request("/v1/runs")).json() as { items: Array<{ taskId: string; chatId: string; designId: string | null }> };
+  assert.deepEqual(runs.items.map((item) => [item.taskId, item.chatId, item.designId]), [[run.runId, chatId, designId]]);
+  assert.deepEqual(legacySnapshot(domain), legacy);
+  assert.equal((await domain.designer.undo(design.id, UI_SESSION)).ok, true);
+  assert.equal((await domain.designer.getSchematicProjection(design.id))?.parts.length, 0);
+});
 
 test("canonical empty completion retries once and persists an honest empty-response warning", async () => {
   domain = await isolatedHttpDomain([{ content: "" }, { content: "" }]);

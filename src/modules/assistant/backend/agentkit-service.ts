@@ -68,6 +68,7 @@ export async function createAgentKitService(
     applicationDatabasePath: options.applicationDatabasePath,
     nativeBinding: options.nativeBinding,
     providerFactory: options.providerFactory,
+    runDesign: (chatId) => native.contextResolver.getPrimaryDesign(chatId)?.refId ?? null,
     ...nativeHostPorts(context, native),
     ...promptHostPorts(native, currentHost),
   });

@@ -3,6 +3,8 @@ import type { TaskRecord, TaskStatus } from "agentkit/host";
 export type TaskRunSummary = Pick<TaskRecord,
   "taskId" | "kind" | "scopeId" | "status" | "enqueuedAt" | "startedAt" | "finishedAt" | "attemptCount" | "error"> & {
   chatId: string | null;
+  /** Active primary design bound to the owning chat, if any. */
+  designId: string | null;
 };
 export type { TaskStatus };
 

@@ -10,10 +10,6 @@ import { readCloudConfig } from "./config";
  *
  * Structurally typed on `access_token` so it accepts a Supabase `Session`
  * without importing the SDK type into core.
- *
- * NOTE: four older call sites in the assistant frontend still build these
- * inline (Space, DesignerChatDock, GenericProposalCard, use-cloud-provider-seed).
- * Converting them is a mechanical follow-up — prefer this helper for new code.
  */
 export function cloudRequestHeaders(
   session: { access_token: string } | null | undefined,
@@ -22,7 +18,6 @@ export function cloudRequestHeaders(
   const cfg = readCloudConfig();
   return {
     "x-cloud-bearer": session.access_token,
-    ...(cfg.copilotUrl ? { "x-cloud-copilot-url": cfg.copilotUrl } : {}),
     ...(cfg.apiUrl ? { "x-cloud-api-url": cfg.apiUrl } : {}),
   };
 }

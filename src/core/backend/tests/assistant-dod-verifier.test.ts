@@ -5,7 +5,6 @@ import type {
   ErcReport,
 } from "../../../sdks";
 import { runDefinitionOfDone, type RunDefinitionOfDoneInput } from "../../../modules/assistant/backend/verification/run-dod";
-import { buildDesignContextSummary } from "../../../modules/assistant/backend/context-summary";
 import type { BuildIntent } from "../../../modules/assistant/backend/verification/types";
 
 // ── lightweight fakes ─────────────────────────────────────────────────────
@@ -74,7 +73,6 @@ function ercClean(): ErcReport {
 function fakeDesigner(opts: {
   schematic: DesignerSchematicProjection | null;
   erc?: ErcReport | null;
-  pcbPlacements?: Array<{ partId: string }>;
   /** When true, getProjectionAndErc throws (read failure). */
   projectionAndErcThrows?: boolean;
 }): DesignerSDK {
@@ -82,10 +80,7 @@ function fakeDesigner(opts: {
     getDesign: async () =>
       ({ head: { id: "d1", name: "Test", revision: 1 } }) as never,
     getSchematicProjection: async () => opts.schematic,
-    getPcbProjection: async () =>
-      opts.pcbPlacements
-        ? ({ placements: opts.pcbPlacements, ratsnest: [] } as never)
-        : null,
+    getPcbProjection: async () => null,
     runErc: async () => opts.erc ?? ercClean(),
     // C2: same-revision snapshot. Returns null when there is no schematic
     // projection; otherwise pairs the projection with the (possibly clean) ERC.
@@ -355,35 +350,5 @@ describe("runDefinitionOfDone", () => {
     expect(report.failing).toContain("nets_wired");
     const nets = report.checks.find((c) => c.id === "nets_wired")!;
     expect(nets.passed).toBe(false);
-  });
-});
-
-// ── buildDesignContextSummary ──────────────────────────────────────────────
-
-describe("buildDesignContextSummary", () => {
-  test("counts components/nets and reports unplaced + open nets", async () => {
-    const designer = fakeDesigner({
-      schematic: schematic({
-        parts: [part("p1", "R1", "comp-R"), part("p2", "R2", "comp-R")],
-        nets: [
-          net("n1", "GND", ["a", "b"], { primitiveIds: ["g1"] }),
-          net("n2", "FLOAT", ["solo"]),
-        ],
-      }),
-      pcbPlacements: [{ partId: "p1" }],
-    });
-    const summary = await buildDesignContextSummary(designer, "d1");
-    expect(summary).not.toBeNull();
-    expect(summary!.schematic.componentCount).toBe(2);
-    expect(summary!.schematic.netCount).toBe(2);
-    expect(summary!.schematic.unplaced).toEqual(["R2"]);
-    expect(summary!.schematic.openNets).toContain("FLOAT");
-    expect(summary!.pcb.placed).toBe(1);
-  });
-
-  test("returns null when there is no schematic projection", async () => {
-    const designer = fakeDesigner({ schematic: null });
-    const summary = await buildDesignContextSummary(designer, "d1");
-    expect(summary).toBeNull();
   });
 });

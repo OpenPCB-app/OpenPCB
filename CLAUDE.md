@@ -438,7 +438,6 @@ any id below.** The exact ids were not confirmed when this file was written.
 | `cloud.autolayout`         | the unified Auto-Layout button/modal **and** both the `/autoroute` and `/autoplace` backend routes (replaced the former separate `cloud.autoroute` + `cloud.autoplace`) |
 | `cloud.library`            | cloud library                                                      |
 | `cloud.componentSearch`    | cloud component search                                             |
-| `cloud.assistantProviders` | cloud assistant providers                                          |
 
 Per-feature flags gate **both** their UI surface and their backend routes — a flag-off cloud route
 returns 404, which is the expected behaviour in release builds, not a bug.
