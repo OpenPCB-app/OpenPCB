@@ -142,6 +142,8 @@ describe("real Docs editor lifecycle", () => {
     await act(async () => root.render(null));
     await settle();
     expect(ready.mock.calls.at(-1)?.[0] === null).toBe(true);
+    // The departing instance lets owners drop it by identity, not by page id.
+    expect(ready.mock.calls.at(-1)?.[1]).toBe(ready.mock.calls[0]?.[0]);
   });
   it("toolbar follows selection and history transactions immediately", async () => {
     await renderPage(page("a", "Alpha"));

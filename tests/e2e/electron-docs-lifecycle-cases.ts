@@ -224,6 +224,30 @@ export function registerNativeDocsLifecycleTests(
     });
   }
 
+  test("native edited time ages while the page stays open", async () => {
+    // Acceptance covers aging before open and refresh on save; this covers the
+    // periodic metadata re-render with no input. It needs real elapsed time.
+    test.setTimeout(150_000);
+    const current = getSession();
+    const document = await seedDocument(
+      current,
+      "Native edited time",
+      "Aging body",
+    );
+    await openDocs(current, document.title);
+    await expect(
+      current.page.getByText("edited just now", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      current.page.getByText("edited 1m ago", { exact: true }),
+    ).toBeVisible({ timeout: 100_000 });
+    expect(current.patches).toEqual([]);
+    expect((await readDocument(current, document.id)).revision).toBe(
+      document.revision,
+    );
+    await nativeScreenshot(current, "edited-time-aged-open");
+  });
+
   test("connection-refused draft survives navigation until explicit retry", async () => {
     const current = getSession();
     const a = await seedDocument(

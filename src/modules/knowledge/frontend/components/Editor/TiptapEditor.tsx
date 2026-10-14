@@ -6,7 +6,8 @@ import type { EditorContent as EditorContentType } from "../../../shared/types";
 interface TiptapEditorProps {
   initialContent?: EditorContentType;
   onChange?: (content: EditorContentType) => void;
-  onReady?: (editor: Editor | null) => void;
+  /** `null` on unmount, with the departing editor so owners can drop it by identity. */
+  onReady?: (editor: Editor | null, departed?: Editor) => void;
   readOnly?: boolean;
 }
 
@@ -74,9 +75,12 @@ export function TiptapEditor({
     }
   }, [editor, readOnly]);
 
+  const editorRef = useRef<Editor | null>(null);
+  editorRef.current = editor;
+
   useEffect(() => {
     return () => {
-      onReadyRef.current?.(null);
+      onReadyRef.current?.(null, editorRef.current ?? undefined);
     };
   }, []);
 

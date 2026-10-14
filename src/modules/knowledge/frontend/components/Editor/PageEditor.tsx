@@ -104,15 +104,25 @@ export function PageEditor({
   }, [coordinator, onRefreshTree]);
 
   const handleReady = useCallback(
-    (ready: Editor | null) => {
-      if (!pageId) return;
+    (ready: Editor | null, departed?: Editor) => {
+      if (ready) {
+        if (pageId) setEditorOwner({ id: pageId, editor: ready });
+        return;
+      }
+      // The departing editor may unmount after pageId already moved on; match by identity.
       setEditorOwner((current) =>
-        ready
-          ? { id: pageId, editor: ready }
+        departed
+          ? current?.editor === departed
+            ? null
+            : current
           : current?.id === pageId
             ? null
             : current,
       );
+      if (departed)
+        setCountOwner((current) =>
+          current?.editor === departed ? null : current,
+        );
     },
     [pageId],
   );
