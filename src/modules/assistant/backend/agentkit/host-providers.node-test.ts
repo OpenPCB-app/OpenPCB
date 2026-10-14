@@ -62,6 +62,77 @@ test("admission refuses unlisted models, disabled and unsupported providers dist
   } finally { await host?.close(); f.cleanup(); }
 });
 
+const READ_TOOL = { namespace: "openpcb", contribute: async () => [{
+  definition: { name: "host_read", version: "1", effect: "read" as const, capability: "host.read", description: "Read synthetic host fixture",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false } },
+  execute: async (context: { limits: never }) => ({ ok: true as const, data: {}, summary: "Synthetic host read", sources: [], warnings: [], truncated: false, limits: context.limits }),
+}] };
+
+async function failureText(host: OpenPcbAgentKitHost, runId: string): Promise<string> {
+  const events = await host.store.tasks.listEvents(runId, { limit: 1000 });
+  return JSON.stringify(events.filter((event) => event.type === "run.failed"));
+}
+
+test("run path names a missing API key and never enqueues or calls a provider", async () => {
+  const f = fixture();
+  let host: OpenPcbAgentKitHost | undefined;
+  let calls = 0;
+  try {
+    host = await createOpenPcbAgentKitHost({ ...f, contributors: [], proposalApplier: applier,
+      providerFactory: () => { calls++; return completed(); } });
+    const chat = await host.store.conversations.createChat({ id: "missing-key-chat" });
+    for (const kind of ["openai", "openrouter"] as const) {
+      const keyless = await f.providers.createProvider({ label: `Keyless ${kind}`, kind,
+        baseUrl: "https://remote.invalid/v1", defaultModel: "remote-model" });
+      host.settings.updateSettings({ defaultProviderId: keyless.id });
+      for (const providerId of [keyless.id, undefined]) {
+        await assert.rejects(host.submitMessage({ chatId: chat.id, providerId, content: "x" }),
+          selectionRefusal("provider_missing_key", new RegExp(`'Keyless ${kind}' needs an API key\\. Add one in Assistant settings`)));
+      }
+      await host.credentialAccess.set(keyless.id, CANARY);
+      const run = await host.submitMessage({ chatId: chat.id, providerId: keyless.id, content: "x" });
+      assert.equal((await waitTerminal(host, run.runId)).status, "completed", kind);
+    }
+    // Local and custom endpoints legitimately run without a key.
+    const local = await f.providers.createProvider({ label: "Studio", kind: "lmstudio",
+      baseUrl: "http://127.0.0.1:43101/v1", defaultModel: "local-model" });
+    const run = await host.submitMessage({ chatId: chat.id, providerId: local.id, content: "x" });
+    assert.equal((await waitTerminal(host, run.runId)).status, "completed");
+    assert.equal((await host.store.tasks.listByScope(chat.id)).length, 3);
+    assert.equal(calls, 3);
+  } finally { await host?.close(); f.cleanup(); }
+});
+
+test("a model that rejects forced tools fails the run with the provider's reason and no fallback", async () => {
+  const f = fixture();
+  let host: OpenPcbAgentKitHost | undefined;
+  const previousFetch = globalThis.fetch;
+  const requests: Array<{ url: string; tools: boolean }> = [];
+  try {
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { tools?: unknown[] };
+      requests.push({ url: String(input instanceof Request ? input.url : input), tools: Array.isArray(body.tools) && body.tools.length > 0 });
+      return Response.json({ error: { message: "This model does not support tools", type: "invalid_request_error" } }, { status: 400 });
+    }) as typeof fetch;
+    const fallback = await f.providers.createProvider({ label: "Fallback", kind: "openai", apiKey: CANARY,
+      baseUrl: "https://fallback.invalid/v1", defaultModel: "fallback-model" });
+    const forced = await f.providers.createProvider({ label: "No tools", kind: "openai-compatible", apiKey: CANARY,
+      baseUrl: "http://127.0.0.1:43101/v1", defaultModel: "text-only" });
+    f.providers.saveCapabilities(forced.id, { streaming: true, toolCalling: false, modelList: false });
+    f.providers.setToolCallingMode(forced.id, "on");
+    host = await createOpenPcbAgentKitHost({ ...f, contributors: [READ_TOOL as never], proposalApplier: applier });
+    host.settings.updateSettings({ defaultProviderId: fallback.id });
+    const chat = await host.store.conversations.createChat({ id: "incompatible-tools-chat" });
+    const run = await host.submitMessage({ chatId: chat.id, providerId: forced.id, content: "read it" });
+    assert.equal((await waitTerminal(host, run.runId)).status, "failed");
+    assert.match(await failureText(host, run.runId), /400: .*This model does not support tools/);
+    // The override is honored (tools sent first); any framework retry stays on the selected endpoint.
+    assert.equal(requests[0]?.tools, true, JSON.stringify(requests));
+    assert.ok(requests.every((request) => request.url.startsWith("http://127.0.0.1:43101/v1/")),
+      JSON.stringify(requests));
+  } finally { globalThis.fetch = previousFetch; await host?.close(); f.cleanup(); }
+});
+
 test("offline local service fails its own run distinctly and never falls back to another provider", async () => {
   const f = fixture();
   let host: OpenPcbAgentKitHost | undefined;

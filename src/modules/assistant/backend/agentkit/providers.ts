@@ -15,6 +15,7 @@ import {
 const SUPPORTED_KINDS = new Set([
   "openai", "openrouter", "openai-compatible", "lmstudio", "omlx",
 ]);
+const KEY_REQUIRED_KINDS = new Set(["openai", "openrouter"]);
 const PREFIX = "openpcb-provider-generation-";
 const RESERVED = new Set([
   "apikey", "apikeysecretref", "secretref", "secret_ref", "api_key",
@@ -50,6 +51,11 @@ export async function pinProviderGeneration(
   if (!snapshot.enabled) {
     throw new ProviderSelectionError("provider_disabled",
       `Provider '${snapshot.label}' is disabled. Enable it in Assistant settings or choose another provider.`);
+  }
+  // Refused before enqueueing: a keyless hosted provider can only fail later with an opaque credential error.
+  if (KEY_REQUIRED_KINDS.has(snapshot.kind) && !snapshot.hasApiKey) {
+    throw new ProviderSelectionError("provider_missing_key",
+      `Provider '${snapshot.label}' needs an API key. Add one in Assistant settings or choose another provider.`);
   }
   const url = new URL(snapshot.baseUrl);
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
@@ -103,7 +109,7 @@ export function buildAgentKitProviderClient(config: AiProviderConfig): AiProvide
   if (reference !== undefined && (!isSecretReference(reference) || !reference.startsWith("provider/"))) {
     throw new ValidationError("Provider credential reference is invalid");
   }
-  if ((reference || config.kind === "openai" || config.kind === "openrouter") && !config.apiKey) {
+  if ((reference || KEY_REQUIRED_KINDS.has(config.kind)) && !config.apiKey) {
     throw new ValidationError("Provider credential is unavailable");
   }
   const client = OpenAiCompatibleClient.fromConfig(config, offlineAwareFetch(config));

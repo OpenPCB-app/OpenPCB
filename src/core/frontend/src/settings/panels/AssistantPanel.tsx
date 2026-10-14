@@ -75,6 +75,24 @@ function maskedKey(provider: AssistantProviderConfig): {
   return { dots: "••••••••••••••••", hint };
 }
 
+interface CanonicalSettings {
+  metadata?: Record<string, unknown>;
+}
+
+interface RetiredProvider {
+  id: string;
+  label: string;
+}
+
+// Legacy databases may still default to the retired managed-cloud row; the backend never auto-switches it.
+function retiredDefaultFrom(settings: CanonicalSettings): RetiredProvider | null {
+  const metadata = settings.metadata ?? {};
+  if (metadata.defaultProviderState !== "retired") return null;
+  const id = typeof metadata.retiredProviderId === "string" ? metadata.retiredProviderId : "";
+  const label = typeof metadata.retiredProviderLabel === "string" ? metadata.retiredProviderLabel : id;
+  return { id, label: label || "Retired provider" };
+}
+
 export function AssistantPanel() {
   const { backendURL } = useRuntime();
   const { refreshPreferences } = useAgentKitAppCache();
@@ -83,6 +101,7 @@ export function AssistantPanel() {
     [backendURL],
   );
   const [settings, setSettings] = useState<AssistantSettings | null>(null);
+  const [retiredDefault, setRetiredDefault] = useState<RetiredProvider | null>(null);
   const [providers, setProviders] = useState<AssistantProviderConfig[]>([]);
   const [models, setModels] = useState<AssistantProviderModel[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -116,12 +135,14 @@ export function AssistantPanel() {
 
   const load = async () => {
     if (!base) return;
-    const [nextSettings, nextProviders] = await Promise.all([
+    const [nextSettings, nextProviders, canonical] = await Promise.all([
       readJson<AssistantSettings>(`${base}/settings`),
       readJson<AssistantProviderConfig[]>(`${base}/providers`),
+      readJson<CanonicalSettings>(`${base}/v1/settings`),
     ]);
     setSettings(nextSettings);
     setProviders(nextProviders);
+    setRetiredDefault(retiredDefaultFrom(canonical));
   };
 
   useEffect(() => {
@@ -195,12 +216,16 @@ export function AssistantPanel() {
   const saveSettings = async (patch: Partial<AssistantSettings>) => {
     if (!base || !settings) return;
     setError(null);
+    const body: Partial<AssistantSettings> = { ...settings, ...patch };
+    // A retired default reads as "": omit it so unrelated edits keep the stored row untouched.
+    if (!body.defaultProviderId) delete body.defaultProviderId;
     const next = await readJson<AssistantSettings>(`${base}/settings`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...settings, ...patch }),
+      body: JSON.stringify(body),
     });
     setSettings(next);
+    if (next.defaultProviderId) setRetiredDefault(null);
     await refreshPreferences();
     setMessage("Assistant defaults saved.");
   };
@@ -327,6 +352,25 @@ export function AssistantPanel() {
         <div className="mb-2.5 text-[10px] font-medium uppercase tracking-wide text-text-caps">
           Default assistant
         </div>
+        {retiredDefault ? (
+          <div
+            role="alert"
+            data-testid="retired-default-provider"
+            className="mb-3 flex items-start gap-2 rounded-xl border border-status-warning-border bg-status-warning-soft p-3 text-sm text-status-warning"
+          >
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <div className="font-semibold">
+                Default provider “{retiredDefault.label}” has been retired
+              </div>
+              <p className="mt-1 text-xs">
+                It is no longer available, and the assistant will not switch
+                providers on its own. Pick another provider under Default
+                provider below to keep using the assistant.
+              </p>
+            </div>
+          </div>
+        ) : null}
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Default provider">
             <Select
@@ -335,6 +379,13 @@ export function AssistantPanel() {
                 void saveSettings({ defaultProviderId: v }).catch(reportError)
               }
             >
+              {!defaultProviderId ? (
+                <option value="" disabled>
+                  {retiredDefault
+                    ? `${retiredDefault.label} (retired) — choose a provider`
+                    : "Choose a provider"}
+                </option>
+              ) : null}
               {providers.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}

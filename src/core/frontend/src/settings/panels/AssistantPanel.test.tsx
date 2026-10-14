@@ -164,3 +164,46 @@ describe("AssistantPanel credential drafts", () => {
     expect(requests.every((request) => request.body === undefined)).toBe(true);
   });
 });
+
+describe("AssistantPanel retired default provider", () => {
+  test("shows the retired provider, keeps it on unrelated edits and clears once another provider is picked", async () => {
+    let defaultProviderId = "";
+    requests = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      requests.push({ url, body: init?.body ? String(init.body) : undefined });
+      if (url.endsWith("/v1/settings")) return Response.json(defaultProviderId
+        ? { defaultProviderId, metadata: {} }
+        : { metadata: { defaultProviderState: "retired", retiredProviderId: "openpcb-cloud", retiredProviderLabel: "OpenPCB Cloud" } });
+      if (url.endsWith("/settings")) {
+        if (init?.method === "PUT") {
+          const body = JSON.parse(String(init.body)) as { defaultProviderId?: string };
+          defaultProviderId = body.defaultProviderId ?? defaultProviderId;
+        }
+        return Response.json({ defaultProviderId, contextSizePreference: "medium" });
+      }
+      if (url.endsWith("/providers")) return Response.json([provider("Provider A"), provider("Provider B")]);
+      return Response.json(provider("Provider A"));
+    }));
+    await act(async () => { root.render(<AssistantPanel key="retired" />); });
+    const banner = container.querySelector('[data-testid="retired-default-provider"]');
+    expect(banner?.textContent).toContain("Default provider “OpenPCB Cloud” has been retired");
+    expect(banner?.textContent).toContain("Pick another provider");
+    const [providerSelect, , contextSelect] = [...container.querySelectorAll<HTMLSelectElement>("select")];
+    expect(providerSelect!.value).toBe("");
+    const placeholder = providerSelect!.querySelector<HTMLOptionElement>('option[value=""]');
+    expect(placeholder?.textContent).toBe("OpenPCB Cloud (retired) — choose a provider");
+    expect(placeholder?.disabled).toBe(true);
+
+    await act(async () => { contextSelect!.value = "large"; contextSelect!.dispatchEvent(new Event("change", { bubbles: true })); });
+    const unrelated = requests.filter((request) => request.body !== undefined).at(-1)!;
+    expect(JSON.parse(unrelated.body!)).not.toHaveProperty("defaultProviderId");
+    expect(container.querySelector('[data-testid="retired-default-provider"]')).not.toBeNull();
+
+    await act(async () => { providerSelect!.value = "Provider B"; providerSelect!.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(JSON.parse(requests.filter((request) => request.body !== undefined).at(-1)!.body!))
+      .toMatchObject({ defaultProviderId: "Provider B" });
+    expect(container.querySelector('[data-testid="retired-default-provider"]')).toBeNull();
+    expect(providerSelect!.value).toBe("Provider B");
+    expect(providerSelect!.querySelector('option[value=""]')).toBeNull();
+  });
+});

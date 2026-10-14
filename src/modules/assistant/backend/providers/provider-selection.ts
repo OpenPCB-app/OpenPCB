@@ -6,6 +6,7 @@ export const RETIRED_PROVIDER_KINDS: ReadonlySet<string> = new Set(["openpcb-clo
 export type ProviderSelectionReason =
   | "provider_unsupported"
   | "provider_disabled"
+  | "provider_missing_key"
   | "provider_retired"
   | "provider_not_selected"
   | "provider_offline"

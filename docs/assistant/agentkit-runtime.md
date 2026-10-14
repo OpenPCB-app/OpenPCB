@@ -27,7 +27,9 @@ Each submitted turn pins its endpoint, selected model, effective tool capability
 opaque vault reference into an immutable provider generation. Rotation, clear, deletion, and default
 changes cannot replace a queued or running turn's generation. Client construction resolves that
 reference only in the trusted process. Local providers without a configured key do not consult the
-vault. Configured but unavailable credentials fail rather than silently falling back.
+vault. Configured but unavailable credentials fail rather than silently falling back. An OpenAI or
+OpenRouter provider with no key is refused at admission (`provider_missing_key`) before any task is
+enqueued; a legacy managed-cloud default reads as retired and is never replaced automatically.
 
 The host hashes original caller intent before resolving defaults. That fingerprint is persisted
 inside the same framework transaction as the turn's messages/task; retries compare it before
