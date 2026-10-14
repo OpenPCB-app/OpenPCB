@@ -78,3 +78,6 @@ src/core/backend/.claude/
 # Local QA run archives (screenshots, DB snapshots, findings) — backed up manually, never committed
 /docs/qa/2026-09-ui-qa/raw-run/
 /docs/qa/2026-09-ui-qa/evidence/
+
+# Runtime footprint model store written by a backend run from src/core/backend (dev/e2e)
+src/core/backend/models/
