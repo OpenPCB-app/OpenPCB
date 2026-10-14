@@ -33,6 +33,8 @@ export const test = base.extend<Fixtures>({
       child = fork(output, [], { cwd: root, stdio: ["ignore", "pipe", "pipe", "ipc"], env: {
         PATH: process.env.PATH, NODE_ENV: "production", OPENPCB_DB_PATH: path.join(directory, "app.sqlite"),
         APP_DATA_DIR: directory, OPENPCB_WORKSPACE_ROOT: path.join(root, "src"),
+        // The fixture seeds a real KiCad footprint; release intake quarantine (H13) is out of scope here.
+        OPENPCB_FEATURE_LIBRARY_FOOTPRINTINTAKEQUARANTINE: "0",
       } });
       const ready = waitForRuntime(child);
       child.send({ origin });
