@@ -395,6 +395,18 @@ cross-repo parity checks instead of standing up a runtime.
   idempotency. Milestone snapshot hashes are **local dedup only** — canonical board identity is
   computed at ingest, never here.
 
+## GRID AND COORDINATES
+
+- Policy lives in `src/shared/domain/editor-grid.ts` (contract: `docs/designer/grid-snapping.md`).
+  Snapping is a renderer gesture concern; the backend never sees the user's snap preference.
+- Explicit command coordinates are persisted at integer-nm precision only (`snapCoordinateMm(v, 0)`
+  for mm fields — `movePcbPlacement`, placement staging, the auto-layout candidate planner). Never
+  reintroduce `toFixed(3)` µm quantization.
+- Load/projection/reopen never quantize (imported off-grid KiCad geometry stays exact).
+- Exception (API normalization): `create_wire` repairs a *malformed* (non-Manhattan) command path
+  via `repairToManhattan`, snapping interior anchors to the 1.27 mm schematic grid regardless of
+  the user's snap setting; endpoints stay exact pins, and a valid orthogonal path is kept verbatim.
+
 ## UNDO HISTORY SESSIONS
 
 - History is keyed `${designId}:${sessionId}` (`historySessionKey`); `undo`/`redo` only see the stack of the session id they are given, else `HISTORY_EMPTY`.

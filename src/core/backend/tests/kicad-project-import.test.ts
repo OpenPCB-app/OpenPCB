@@ -239,6 +239,56 @@ function buildProjectZipWith(projectJson: unknown): Uint8Array {
   );
 }
 
+/** Two resistors, deliberately off every editor grid, one footprint on B.Cu at negative X. */
+function buildOffGridProjectZip(): Uint8Array {
+  const encoder = new TextEncoder();
+  const symbol = (ref: string, x: number, y: number, uuid: string) => `
+      (symbol (lib_id "Device:R") (at ${x} ${y} 0) (unit 1) (uuid "${uuid}")
+        (property "Reference" "${ref}" (at 0 0 0))
+        (property "Value" "10k" (at 0 0 0)))`;
+  const footprint = (
+    ref: string,
+    at: string,
+    layer: "F.Cu" | "B.Cu",
+  ) => `
+      (footprint "Resistor_SMD:R_0805_2012Metric" (layer "${layer}") (at ${at})
+        (property "Reference" "${ref}" (at 0 0 0))
+        (property "Value" "10k" (at 0 0 0))
+        (pad "1" smd rect (at -0.95 0 0) (size 1 1.25) (layers "${layer}") (net 1 "N1"))
+        (pad "2" smd rect (at 0.95 0 0) (size 1 1.25) (layers "${layer}") (net 2 "N2")))`;
+  const schematicContent = `
+    (kicad_sch (version 20231120) (generator eeschema)
+      (lib_symbols
+        (symbol "Device:R"
+          (property "Reference" "R" (at 0 0 0))
+          (property "Value" "R" (at 0 0 0))
+          (pin passive line (at -3.81 0 0) (length 1.27) (name "~") (number "1"))
+          (pin passive line (at 3.81 0 0) (length 1.27) (name "~") (number "2"))))
+      ${symbol("R1", 50.0123, 60.0457, "11111111-1111-1111-1111-111111111111")}
+      ${symbol("R2", -7.3331, 12.7019, "22222222-2222-2222-2222-222222222222")})`.trim();
+  const pcbContent = `
+    (kicad_pcb (version 20231120) (generator pcbnew)
+      (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+      (net 0 "") (net 1 "N1") (net 2 "N2")
+      ${footprint("R1", "25.4031 20.0177 0", "F.Cu")}
+      ${footprint("R2", "-3.0071 12.3459 90", "B.Cu")}
+      (segment (start 24.4531 20.0177) (end 10.0013 20.0177) (width 0.25) (layer "F.Cu") (net 1))
+      (gr_line (start -10 0) (end 60 0) (layer "Edge.Cuts") (width 0.05))
+      (gr_line (start 60 0) (end 60 40) (layer "Edge.Cuts") (width 0.05))
+      (gr_line (start 60 40) (end -10 40) (layer "Edge.Cuts") (width 0.05))
+      (gr_line (start -10 40) (end -10 0) (layer "Edge.Cuts") (width 0.05)))`.trim();
+  return createStoredZip([
+    {
+      name: "offgrid.kicad_pro",
+      bytes: encoder.encode(
+        JSON.stringify({ meta: { filename: "offgrid.kicad_pro", version: 1 } }),
+      ),
+    },
+    { name: "offgrid.kicad_sch", bytes: encoder.encode(schematicContent) },
+    { name: "offgrid.kicad_pcb", bytes: encoder.encode(pcbContent) },
+  ]);
+}
+
 async function bootRuntime(): Promise<DesignerSDK> {
   const repoRoot = path.resolve(import.meta.dir, "../../..");
   const moduleRegistry = new ModuleRouterRegistry();
@@ -432,6 +482,88 @@ describe("KiCad project import (F3)", () => {
     expect(
       report.warnings.find((w) => w.code === "kicad_netclass_unknown")!.message,
     ).toContain("NoSuchClass");
+  });
+
+  test("off-grid import is not quantized; reopen and single-part moves leave others untouched", async () => {
+    isolateTestDb("f3-offgrid");
+    const sdk = await bootRuntime();
+    const result = await sdk.commitKicadProject({
+      archiveFileName: "offgrid.zip",
+      archiveBytes: buildOffGridProjectZip(),
+    });
+    const designId = result.designId;
+    const pcb = (await sdk.getPcbProjection(designId))!;
+    const sch = (await sdk.getSchematicProjection(designId))!;
+    const placement = (ref: string) =>
+      pcb.placements.find((p) => p.reference === ref)!;
+    expect(placement("R1").positionMm).toEqual({ x: 25.4031, y: 20.0177 });
+    expect(placement("R2")).toMatchObject({
+      positionMm: { x: -3.0071, y: 12.3459 },
+      rotationDeg: 90,
+      layer: "B.Cu",
+      mirrored: true,
+    });
+    expect(pcb.traces.map((t) => t.pointsNm)).toEqual([
+      [
+        { x: 24_453_100, y: 20_017_700 },
+        { x: 10_001_300, y: 20_017_700 },
+      ],
+    ]);
+    const part = (ref: string) => sch.parts.find((p) => p.reference === ref)!;
+    expect(part("R1").positionNm).toEqual({ x: 50_012_300, y: 60_045_700 });
+    expect(part("R2").positionNm).toEqual({ x: -7_333_100, y: 12_701_900 });
+
+    // Reopen (fresh runtime, same file): nothing is snapped on load.
+    resetSharedSqliteForTesting();
+    const reopened = await bootRuntime();
+    const pcbReopened = (await reopened.getPcbProjection(designId))!;
+    const schReopened = (await reopened.getSchematicProjection(designId))!;
+    expect(pcbReopened.placements).toEqual(pcb.placements);
+    expect(pcbReopened.traces).toEqual(pcb.traces);
+    expect(schReopened.parts).toEqual(sch.parts);
+
+    let revision = pcbReopened.revision;
+    const dispatch = async (
+      command: Parameters<DesignerSDK["dispatchCommand"]>[1]["command"],
+    ) => {
+      const moved = await reopened.dispatchCommand(designId, {
+        commandId: crypto.randomUUID(),
+        sessionId: "designer-ui-session",
+        aggregateId: designId,
+        baseRevision: revision,
+        issuedAt: Date.now(),
+        command,
+      });
+      expect(moved.ok).toBe(true);
+      if (moved.ok) revision = moved.revision;
+    };
+    await dispatch({
+      type: "pcb_move_placement",
+      placementId: placement("R1").id,
+      positionMm: { x: 31.1111117, y: -22.2222224 },
+    });
+    await dispatch({
+      type: "move_part",
+      partId: part("R1").id,
+      positionNm: { x: 51_000_001, y: -61_000_003 },
+    });
+    const pcbAfter = (await reopened.getPcbProjection(designId))!;
+    const schAfter = (await reopened.getSchematicProjection(designId))!;
+    const placementAfter = (ref: string) =>
+      pcbAfter.placements.find((p) => p.reference === ref)!;
+    expect(placementAfter("R1").positionMm).toEqual({
+      x: 31.111112,
+      y: -22.222222,
+    });
+    expect(placementAfter("R2")).toEqual(placement("R2"));
+    expect(pcbAfter.traces).toEqual(pcb.traces);
+    const partAfter = (ref: string) =>
+      schAfter.parts.find((p) => p.reference === ref)!;
+    expect(partAfter("R1").positionNm).toEqual({
+      x: 51_000_001,
+      y: -61_000_003,
+    });
+    expect(partAfter("R2")).toEqual(part("R2"));
   });
 
   test("commit rejects ZIP missing .kicad_pcb", async () => {

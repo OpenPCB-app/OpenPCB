@@ -11,8 +11,12 @@ nanometres for snapping, then back to millimetres for existing PCB command field
 follow `Math.round` (toward positive infinity), including negative coordinates. Non-finite inputs,
 negative or fractional nanometre pitches, and unsafe integer results are rejected.
 
-Explicit API/command coordinates remain authoritative. Loading, projecting or reopening a design
-does not quantize existing geometry. Disabling snap permits intentional off-grid placement while
+Explicit API/command coordinates remain authoritative. PCB placement moves, staging and auto-layout
+candidates persist millimetre fields rounded to integer nanometres only (no 1 µm quantization).
+Loading, projecting or reopening a design does not quantize existing geometry. One normalization
+exception: `create_wire` repairs a malformed (non-Manhattan) command path by snapping interior
+anchors to the 1.27 mm schematic grid regardless of the renderer snap preference; endpoints stay
+on exact pins and an already-orthogonal path is kept verbatim. Disabling snap permits intentional off-grid placement while
 retaining integer-nanometre precision. Grid preferences are renderer-local view preferences under
 `openpcb.designer.grid.v1`; changing them does not issue a design command or consume a revision.
 Invalid persisted preferences fall back to supported defaults.
@@ -41,8 +45,10 @@ Backend coverage includes negative coordinates, half ties, mm/nm parity, off-gri
 segment movement and layout consumers. Frontend coverage includes preference hydration,
 independent visibility/snapping, shortcut scope, duplication and the archived 22.7 µm corner jog.
 
-Native Electron coverage lives in `tests/e2e/electron-designer-hardening.spec.ts` and
-`tests/e2e/electron-designer-anchors.spec.ts`. It uses fresh disposable profiles, real command
+Native Electron coverage lives in `tests/e2e/electron-designer-hardening.spec.ts`,
+`tests/e2e/electron-designer-anchors.spec.ts` and `tests/e2e/electron-designer-grid-matrix.spec.ts`
+(PCB footprint drag × 0.05/0.25/1.27 mm pitch × two zooms, negative/zero origins, rotated and
+flipped bottom-side, Undo and reopen). It uses fresh disposable profiles, real command
 HTTP/SQLite persistence, actual canvas pointer/keyboard gestures and explicitly identified renderer
 artifacts. The capture bridge projects world coordinates for pointer targeting and seeds fixtures
 through the normal revision-safe dispatcher; it does not change interaction results.

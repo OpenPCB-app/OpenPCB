@@ -92,6 +92,11 @@ export function snapToGrid(
  * into a valid Manhattan polyline with EXACT endpoints. Interior anchors are
  * snapped to the grid; endpoints are forced to the true pin coordinates (which
  * may be off-grid). Always returns an orthogonal, simplified path.
+ *
+ * API normalization policy: callers (create_wire) pass no pitch, so a malformed
+ * command path is repaired on the 1.27 mm schematic grid regardless of the
+ * user's renderer-local snap preference — the backend never sees that
+ * preference, and repair must be deterministic for a given command.
  */
 export function repairToManhattan(
   points: Point[],
