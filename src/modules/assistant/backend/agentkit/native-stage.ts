@@ -2,7 +2,7 @@ import type { AiToolExecutionContext } from "agentkit/core";
 import type { AiToolResult } from "agentkit/contracts";
 import type { AssistantStore, ProposalRecord, ProposalService } from "agentkit/host";
 import type { NativeContextStore } from "./native-context-store";
-import { argumentFingerprint, commandRisk, nativeIdentity, authorizeNativeProposal } from "./native-identity";
+import { argumentFingerprint, commandRisk, dispatchedContent, nativeIdentity, authorizeNativeProposal } from "./native-identity";
 
 export interface NativeStageDeps {
   store: AssistantStore;
@@ -76,7 +76,8 @@ export async function stageNativeProposal(
     warnings: built.warnings, truncated,
     revisionAtCreate: built.baseRevision === null ? undefined : String(built.baseRevision),
     envelope: { ...built.envelope, nativeIdentity: { actorScope: deps.actorScope,
-      argumentFingerprint: fingerprint, expectedUnits: built.expectedUnits } },
+      argumentFingerprint: fingerprint, expectedUnits: built.expectedUnits,
+      envelopeFingerprint: argumentFingerprint(dispatchedContent(built.kind, built.envelope)) } },
   }); } catch (error) {
     const duplicate = await findNativeDuplicate(deps, context, built.toolName, input, scopeKey, actionId);
     if (duplicate) return duplicate;

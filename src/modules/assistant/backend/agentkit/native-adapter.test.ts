@@ -7,7 +7,7 @@ import { ContextResolver } from "../context-resolver";
 import { NativeContextStore } from "./native-context-store";
 import { createNativeToolContributor, nativeUnboundToolNames } from "./native-tools";
 import { createNativeProposalApplier } from "./native-applier";
-import { commandRisk, argumentFingerprint, authorizeNativeProposal } from "./native-identity";
+import { commandRisk, argumentFingerprint, authorizeNativeProposal, dispatchedRisk, nativeIdentity } from "./native-identity";
 import { nativeScope } from "./native-stage";
 import { createNativeVerification } from "./native-verification";
 import { allowNativeSession } from "./native-session-grants";
@@ -78,7 +78,8 @@ async function stageOperations(items: Array<Record<string, unknown>>, expectedUn
     toolName: "designer_propose_schematic_edits", kind: "designer_schematic_edits", risk: commandRisk(operations), operations, warnings,
     revisionAtCreate: String(revision), envelope: { id, toolName: "designer_propose_schematic_edits", kind: "designer_schematic_edits",
       designId, baseRevision: revision, operations, warnings,
-      nativeIdentity: { actorScope: "desktop", argumentFingerprint: argumentFingerprint(commands), expectedUnits } } });
+      nativeIdentity: { actorScope: "desktop", argumentFingerprint: argumentFingerprint(commands), expectedUnits,
+        envelopeFingerprint: argumentFingerprint(operations) } } });
 }
 
 async function approve(proposalId: string) {
@@ -301,7 +302,8 @@ describe("real native domain through AgentKit proposal pipeline", () => {
     operation.linkWireToCreatedPrimitive = { sourcePinId: "nonexistent-pin" };
     // Stage immutable payload with the follow-up present.
     await proposals.reject({ proposalId: proposal.id, decidedBy: "desktop" });
-    const second = await proposals.stage({ ...proposal, id: crypto.randomUUID(), envelope: { ...proposal.envelope, operations: [operation] } });
+    const second = await proposals.stage({ ...proposal, id: crypto.randomUUID(), envelope: { ...proposal.envelope, operations: [operation],
+      nativeIdentity: { ...nativeIdentity(proposal), envelopeFingerprint: argumentFingerprint([operation]) } } });
     await approve(second.id);
     const outcome = await proposals.apply({ proposalId: second.id, operationId: `native:${second.id}` });
     expect(outcome.status).toBe("partial");
@@ -353,6 +355,38 @@ describe("real native domain through AgentKit proposal pipeline", () => {
     const outcome = await proposals.apply({ proposalId: proposal.id, operationId: `native:${proposal.id}` });
     expect(outcome).toMatchObject({ status: "partial", appliedOps: 1 });
     expect(outcome.failedOps.map((item) => item.error)).toEqual(["Only the first 40 wire operation(s) were included."]);
+  });
+
+  test("tampered stored envelopes are classified and fingerprinted from what would dispatch", async () => {
+    await tool("designer_place_components").execute(context, placeInput(1));
+    const before = await projection();
+    const proposal = await stageCommands([{ type: "upsert_label", text: "A", positionNm: { x: 0, y: 0 } }]);
+    await approve(proposal.id);
+    const operations = proposal.envelope.operations as Array<Record<string, unknown>>;
+    const operationId = `native:${proposal.id}`;
+    // Display operations and risk still say "safe label"; the envelope the domain applies deletes C1.
+    const destructive = { ...proposal, envelope: { ...proposal.envelope,
+      operations: [{ id: "op-delete", payload: { type: "delete_entity", entityId: "C1", entityKind: "part" } }] } };
+    expect(await applier.apply({ proposal: destructive, operationId }))
+      .toMatchObject({ status: "failed", appliedOps: 0, failedOps: [{ error: "PROPOSAL_RISK_CONFLICT" }] });
+    const swapped = { ...proposal, envelope: { ...proposal.envelope,
+      operations: [{ ...operations[0], payload: { type: "upsert_label", text: "INJECTED", positionNm: { x: 0, y: 0 } } }] } };
+    expect(await applier.apply({ proposal: swapped, operationId }))
+      .toMatchObject({ status: "failed", appliedOps: 0, failedOps: [{ error: "PROPOSAL_ENVELOPE_CONFLICT" }] });
+    const unsigned = { ...proposal, envelope: { ...proposal.envelope,
+      nativeIdentity: { ...(proposal.envelope.nativeIdentity as Record<string, unknown>), envelopeFingerprint: undefined } } };
+    expect(await applier.apply({ proposal: unsigned, operationId }))
+      .toMatchObject({ status: "failed", failedOps: [{ error: "PROPOSAL_ENVELOPE_CONFLICT" }] });
+    expect(await projection()).toEqual(before);
+    expect(await proposals.apply({ proposalId: proposal.id, operationId })).toMatchObject({ status: "applied", appliedOps: 1 });
+    expect((await projection()).labels.map((label) => label.text)).toEqual(["A"]);
+  });
+
+  test("tool-staged proposals carry the dispatched-envelope fingerprint", async () => {
+    await tool("designer_place_components").execute(context, placeInput(1));
+    const staged = (await store.proposals.listByChat(chatId))[0]!;
+    expect(nativeIdentity(staged).envelopeFingerprint).toBe(argumentFingerprint(staged.envelope.payload));
+    expect(staged.risk).toBe(dispatchedRisk(staged.kind, staged.envelope));
   });
 
   test("retired cloud PCB batch proposals fail closed without dispatching", async () => {

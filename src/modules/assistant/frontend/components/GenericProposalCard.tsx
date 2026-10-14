@@ -3,7 +3,7 @@ import { useState, type ReactElement } from "react";
 import { useNavigationStore } from "../../../../core/frontend/src/stores/navigation-store";
 import type { PresentedProposal } from "../agentkit-projections";
 import { useProposalActions } from "./ProposalActions";
-import { ProposalOutcome } from "./ProposalOutcome";
+import { ProposalOutcome, RecoveringOutcome } from "./ProposalOutcome";
 
 
 type GenericRiskLevel = "low" | "medium" | "high" | "destructive" | string;
@@ -60,7 +60,7 @@ export function GenericProposalCard({
 }): ReactElement {
   const [busy, setBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const localStatus = proposal.status === "partial" ? "partial" : proposal.canonicalStatus;
+  const localStatus = proposal.status === "partial" || proposal.status === "recovering" ? proposal.status : proposal.canonicalStatus;
   const actions = useProposalActions();
   const navigateToModule = useNavigationStore((s) => s.navigateToModule);
   const designId = proposal.designId || null;
@@ -221,7 +221,7 @@ export function GenericProposalCard({
         </button>
         ) : null}
       </div>
-      <ProposalOutcome outcome={proposal.applyResult} />
+      {localStatus === "recovering" ? <RecoveringOutcome /> : <ProposalOutcome outcome={proposal.applyResult} />}
       {actionMessage ? (
         <div className="text-[11px] text-slate-500 dark:text-slate-400">
           {actionMessage}

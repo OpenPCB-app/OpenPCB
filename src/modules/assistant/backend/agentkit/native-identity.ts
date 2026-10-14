@@ -5,6 +5,8 @@ export interface NativeIdentity {
   actorScope: string;
   argumentFingerprint: string;
   expectedUnits: number;
+  /** Fingerprint of `dispatchedContent` at staging; apply refuses an envelope that no longer matches. */
+  envelopeFingerprint?: string;
 }
 
 function canonical(value: unknown): unknown {
@@ -68,6 +70,31 @@ function operationRisk(operation: unknown): RiskLevel {
 export function commandRisk(operations: unknown[]): RiskLevel {
   const risks = operations.map(operationRisk);
   return risks.includes("destructive") ? "destructive" : "medium";
+}
+
+/** The part of a stored envelope the native applier hands to the domain, per proposal kind. */
+export function dispatchedContent(kind: string, envelope: Record<string, unknown>): unknown {
+  if (kind === "designer_create_design") return { name: envelope.name };
+  if (kind === "designer_compile_circuit") return envelope.plan;
+  if (kind === "designer_place_components") return envelope.payload;
+  return envelope.operations;
+}
+
+/** Risk of what the domain will actually execute, not of the proposal's display operations. */
+export function dispatchedRisk(kind: string, envelope: Record<string, unknown>): RiskLevel {
+  const content = dispatchedContent(kind, envelope);
+  if (kind === "designer_create_design") return commandRisk([{ type: "create_design" }]);
+  const list = (value: unknown, key: string): unknown[] => {
+    const items = value && typeof value === "object" ? (value as Record<string, unknown>)[key] : undefined;
+    if (!Array.isArray(items)) throw new Error("UNKNOWN_NATIVE_OPERATION");
+    return items;
+  };
+  if (kind === "designer_compile_circuit") {
+    return commandRisk(list(content, "placements").map((item) => ({ type: "place_part", ...(item as object) })));
+  }
+  if (kind === "designer_place_components") return commandRisk(list(content, "placements").map(() => ({ type: "place_part" })));
+  if (!Array.isArray(content)) throw new Error("UNKNOWN_NATIVE_OPERATION");
+  return commandRisk(content);
 }
 
 export function authorizeNativeProposal(proposal: ProposalRecord, actorScope: string, readOnly = false): boolean {

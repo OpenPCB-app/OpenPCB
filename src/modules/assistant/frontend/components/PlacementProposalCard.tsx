@@ -9,7 +9,7 @@ import type {
 import { Pill } from "../../../../shared/frontend/ui/pill";
 import type { PresentedProposal } from "../agentkit-projections";
 import { useProposalActions } from "./ProposalActions";
-import { ProposalOutcome } from "./ProposalOutcome";
+import { ProposalOutcome, RecoveringOutcome } from "./ProposalOutcome";
 import { classifyComponentType } from "./component-type";
 import { useSymbolThumbnails } from "./useSymbolThumbnails";
 
@@ -83,7 +83,8 @@ export function PlacementProposalCard({
     }
     return [...map.values()];
   }, [proposal.placements]);
-  const status = statusRecord?.status === "partial" ? "partial" : statusRecord?.canonicalStatus ?? "pending";
+  const status = statusRecord?.status === "partial" || statusRecord?.status === "recovering"
+    ? statusRecord.status : statusRecord?.canonicalStatus ?? "pending";
   const isActionable =
     ["pending", "approved", "applying"].includes(status) && Boolean(actions);
 
@@ -107,6 +108,8 @@ export function PlacementProposalCard({
       <Pill tone="neutral">Rejected</Pill>
     ) : isActionable ? (
       <Pill tone="success">Ready</Pill>
+    ) : status === "recovering" ? (
+      <Pill tone="warning">Outcome unknown</Pill>
     ) : (
       <Pill tone="warning">{status}</Pill>
     );
@@ -216,7 +219,8 @@ export function PlacementProposalCard({
           Add to schematic
         </button>
       </div>
-      {statusRecord?.applyResult ? <div className="px-3 pb-2"><ProposalOutcome outcome={statusRecord.applyResult} /></div> : null}
+      {status === "recovering" ? <div className="px-3 pb-2"><RecoveringOutcome /></div>
+        : statusRecord?.applyResult ? <div className="px-3 pb-2"><ProposalOutcome outcome={statusRecord.applyResult} /></div> : null}
       <div className="flex items-center justify-between border-t border-violet-200/40 px-3 py-1.5 dark:border-violet-900/30">
         {actionMessage ? (
           <span className="truncate text-[11px] text-slate-400">

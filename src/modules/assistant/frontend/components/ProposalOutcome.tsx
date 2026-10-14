@@ -1,4 +1,9 @@
 import { record } from "../agentkit-projections";
+export function RecoveringOutcome() {
+  return <div role="status" className="rounded border border-status-warning/40 p-2 text-status-warning">
+    Outcome unknown — recovering. This apply was started but its result is not recorded yet; it is reconciled from committed design receipts, never re-run. Apply and Reject stay disabled until then.
+  </div>;
+}
 export function ProposalOutcome({ outcome }: { outcome: unknown }) {
   const value = record(outcome);
   if (typeof value.status !== "string") return null;

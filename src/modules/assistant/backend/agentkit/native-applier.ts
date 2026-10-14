@@ -7,7 +7,7 @@ import { applyDesignerPlaceComponentsProposal, applySchematicProposalOperations,
   type SchematicProposalEnvelope } from "../tools/designer-tools";
 import { applyCompiledPlan } from "../compiler/apply";
 import type { CompiledPlan } from "../compiler/lowering";
-import { authorizeNativeProposal, commandRisk, nativeIdentity } from "./native-identity";
+import { argumentFingerprint, authorizeNativeProposal, dispatchedContent, dispatchedRisk, nativeIdentity } from "./native-identity";
 import { nativeScope } from "./native-stage";
 
 export interface NativeProposalApplierOptions {
@@ -43,8 +43,11 @@ class NativeProposalApplier implements ProposalApplier {
     if (this.options.authorize?.(proposal) === false || !authorizeNativeProposal(proposal, this.options.actorScope, this.options.readOnly)) return failure("ACTOR_SCOPE_DENIED");
     if (operationId !== `native:${proposal.id}` || proposal.scopeKey !==
         nativeScope(this.options.actorScope, String(proposal.envelope.designId), proposal.chatId)) return failure("OPERATION_IDENTITY_CONFLICT");
-    try { if (proposal.risk !== commandRisk(proposal.operations)) return failure("PROPOSAL_RISK_CONFLICT"); }
+    // Classify and fingerprint the envelope content the domain dispatches; proposal.operations is display-only.
+    try { if (proposal.risk !== dispatchedRisk(proposal.kind, proposal.envelope)) return failure("PROPOSAL_RISK_CONFLICT"); }
     catch { return failure("UNKNOWN_NATIVE_OPERATION"); }
+    if (nativeIdentity(proposal).envelopeFingerprint !==
+        argumentFingerprint(dispatchedContent(proposal.kind, proposal.envelope))) return failure("PROPOSAL_ENVELOPE_CONFLICT");
     const identity = this.identityOf(proposal, operationId);
     const previousReceipts = (await this.designer.listOperationReceipts(this.options.actorScope, operationId)).sort((a, b) => unitOf(a.commandId) - unitOf(b.commandId));
     const previousCreations = await this.designer.listDesignCreationReceipts(this.options.actorScope, operationId);

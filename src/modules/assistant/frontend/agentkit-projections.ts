@@ -1,7 +1,11 @@
 import type { ChatDto, MessageDto, ProposalDto, ToolEventDto } from "agentkit/contracts";
-import type { AiSourceRef, AssistantChat, AssistantMessage, AssistantPromptPresetId, AssistantToolEventDto, AssistantWriteProposalDto, AssistantWriteProposalEnvelope } from "../../../sdks/assistant";
+import type { AiSourceRef, AssistantChat, AssistantMessage, AssistantPromptPresetId, AssistantToolEventDto, AssistantWriteProposalDto, AssistantWriteProposalEnvelope, AssistantWriteProposalStatus } from "../../../sdks/assistant";
 
-export type PresentedProposal = AssistantWriteProposalDto & { runId: string | null; canonicalStatus: ProposalDto["status"] };
+/** "recovering": an apply was claimed but no outcome is known yet; never actionable. */
+export type PresentedProposalStatus = AssistantWriteProposalStatus | "recovering";
+export type PresentedProposal = Omit<AssistantWriteProposalDto, "status"> & {
+  status: PresentedProposalStatus; runId: string | null; canonicalStatus: ProposalDto["status"];
+};
 
 export interface ProposalPresentation {
   proposalId: string;
@@ -62,7 +66,10 @@ export function projectProposal(proposal: ProposalDto, presentation?: ProposalPr
   const envelope = presentation?.envelope;
   const outcome = presentation?.outcome;
   const event = events.find(item => { try { const value = record(JSON.parse(item.resultJson ?? "null")); return value.proposalId === proposal.id || value.id === proposal.id; } catch { return false; } });
-  const status = outcome?.status ?? (proposal.status === "approved" || proposal.status === "applying" ? "pending" : proposal.status === "invalidated" ? "failed" : proposal.status);
+  // A claimed apply may already have committed units, so it must not look pending until receipts settle it.
+  const recovering = proposal.status === "applying" && !proposal.outcome;
+  const status: PresentedProposalStatus = outcome?.status ?? (recovering ? "recovering"
+    : proposal.status === "approved" || proposal.status === "applying" ? "pending" : proposal.status === "invalidated" ? "failed" : proposal.status);
   return {
     runId: proposal.runId ?? null, canonicalStatus: proposal.status, id: proposal.id, chatId: proposal.chatId, toolEventId: event?.id ?? null, kind: proposal.kind,
     status, designId: envelope?.designId ?? "", baseRevision: envelope?.baseRevision ?? null,
