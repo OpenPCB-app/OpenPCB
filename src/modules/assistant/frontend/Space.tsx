@@ -21,6 +21,8 @@ import { AssistantSidebar } from "./components/AssistantSidebar";
 import { ProposalActionsProvider } from "./components/ProposalActions";
 import { RunVerification } from "./components/RunVerification";
 import { useAssistantSpace } from "./hooks/useAssistantSpace";
+import { useAssistantAvailability } from "./hooks/useAssistantAvailability";
+import { AssistantUnavailable } from "./components/AssistantUnavailable";
 
 function navigateFromMention(
   mention: MentionReference,
@@ -52,6 +54,18 @@ const QUICK_ACTIONS = [
 
 
 export function AssistantSpace(props: ModuleSpaceProps): ReactElement {
+  const availability = useAssistantAvailability();
+  if (availability && !availability.available) {
+    return (
+      <div className="flex h-full min-h-0 bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+        <AssistantUnavailable availability={availability} />
+      </div>
+    );
+  }
+  return <AvailableAssistantSpace {...props} />;
+}
+
+function AvailableAssistantSpace(props: ModuleSpaceProps): ReactElement {
   const state = useAssistantSpace(props);
   const { backendURL, base, selectedChatId, filter, contextMenu, navigateToModule, renameChat, deleteChat, submit, selectedProvider, chatOnly, toolFixBusy, reprobeTools, enableToolsAnyway, toolCount, input, setInput, loading, canSend, error, setError, scroll, showNewMessagesPill, setShowNewMessagesPill, messages, toolEventsByMessage, writeProposals, selectedRun, stopRun, continueRun, refreshMessages, verification, chat, settings } = state;
   return (

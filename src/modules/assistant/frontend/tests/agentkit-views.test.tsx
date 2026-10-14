@@ -91,3 +91,18 @@ test("delayed dock creation and binding preserve newer draft text", async () => 
   expect(fixture.submissions.size).toBe(0);
   expect(fixture.chats.get(view.selectedChatId!)!.metadata.designId).toBe("design-late");
 });
+
+test("unavailable assistant renders its reason in Space and dock without a composer", async () => {
+  fixture.availability = { available: false, code: "ASSISTANT_DATABASE_CORRUPT", databasePath: "/data/agentkit.sqlite",
+    message: "The assistant database at /data/agentkit.sqlite is damaged. Designs and libraries are unaffected." };
+  await mount();
+  await until(() => container.querySelectorAll('[data-testid="assistant-unavailable"]').length === 2);
+  for (const name of ["space", "dock"] as const) {
+    expect(area(name).textContent).toContain("Assistant unavailable");
+    expect(area(name).textContent).toContain("Designs and libraries are unaffected");
+    expect(area(name).textContent).toContain("/data/agentkit.sqlite");
+    expect(area(name).textContent).toContain("ASSISTANT_DATABASE_CORRUPT");
+    expect(area(name).querySelector("textarea")).toBeNull();
+  }
+  expect(fixture.submissions.size).toBe(0);
+});

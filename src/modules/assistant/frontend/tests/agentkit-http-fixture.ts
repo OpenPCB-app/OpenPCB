@@ -33,6 +33,7 @@ export class AgentKitHttpFixture {
   delaySettings: Promise<void> | null = null;
   delayMessages = new Map<string, Promise<void>>();
   closed = false;
+  availability: Record<string, unknown> = { available: true };
   constructor() { this.addChat("chat-a"); this.addChat("chat-b"); }
   addChat(id: string, metadata: Record<string, unknown> = {}) {
     this.chats.set(id, { id, title: id, archived: false, metadata, createdAt: time, updatedAt: time, activeRunId: null });
@@ -63,6 +64,7 @@ export class AgentKitHttpFixture {
     const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : {};
     this.requests.push({ url, method, headers, body });
     const path = url.pathname.replace("/api/modules/assistant", "");
+    if (path === "/availability") return Response.json(this.availability);
     if (path === "/v1/settings") { const snapshot = { ...this.preferenceSettings }; await this.delaySettings; return Response.json(snapshot); }
     if (path === "/settings") { const snapshot = { ...this.preferenceAppSettings }; await this.delayAppSettings; return Response.json(snapshot); }
     if (path === "/prompt-presets") return Response.json([{ id: "minimal-concise", label: "Concise", description: "Concise" }]);

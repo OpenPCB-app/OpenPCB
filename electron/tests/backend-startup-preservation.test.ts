@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { StartedBackendRuntime } from "../../src/core/backend/runtime";
 import type { ModuleRegistryResponse } from "../../src/core/contracts/modules/registry";
 
-const requiredModules = ["library", "designer", "assistant"];
+const requiredModules = ["library", "designer"];
 const savedEnvironment = { ...process.env };
 let userData = "";
 let snapshot: ModuleRegistryResponse;
@@ -145,6 +145,23 @@ describe("desktop startup preserves existing database files", () => {
     });
   }
 
+  test("failed assistant activation degrades without closing runtime or touching data", async () => {
+    const files = seedDatabaseFiles();
+    snapshot.loadedModules = [...requiredModules];
+    snapshot.modules = [{
+      id: "assistant", label: "assistant", namespace: "openpcb.assistant", version: "0.2.0",
+      kind: "space", sidebar: { label: "assistant", icon: "Bot", order: 0 },
+      defaultPinned: false, status: "failed", reason: "SQLITE_NOTADB: file is not a database",
+      dependencies: [],
+    }];
+    const payload = await startBackendServer();
+    expect(payload.url).toBe("http://127.0.0.1:43123");
+    expectDatabasePreserved(files);
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(close).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith("backend-ready", payload);
+  });
+
   test("publication failure clears runtime and payload, preserves original error", async () => {
     const files = seedDatabaseFiles();
     publicationFailure = new Error("portfile write denied");
@@ -180,7 +197,7 @@ describe("desktop startup preserves existing database files", () => {
     snapshot.loadedModules = [];
     cleanupFailure = new Error("cleanup failed");
     await expect(startBackendServer()).rejects.toThrow(
-      "Desktop backend started, but required module(s) failed to load: library, designer, assistant\n\nModule registry:\nNo module manifests were discovered.",
+      "Desktop backend started, but required module(s) failed to load: library, designer\n\nModule registry:\nNo module manifests were discovered.",
     );
     expectDatabasePreserved(files);
     expect(start).toHaveBeenCalledTimes(1);

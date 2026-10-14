@@ -1,7 +1,9 @@
 import type { StartedBackendRuntime } from "../../../src/core/backend/runtime";
 import type { ModuleRegistryResponse } from "../../../src/core/contracts/modules/registry";
 
-const REQUIRED_DESKTOP_MODULES = ["library", "designer", "assistant"] as const;
+// The assistant is deliberately optional: its failure degrades to "assistant unavailable"
+// (user decision, OPENPCB-116) so a damaged agentkit.sqlite never blocks design work.
+const REQUIRED_DESKTOP_MODULES = ["library", "designer"] as const;
 
 export function summarizeModuleSnapshot(
   snapshot: ModuleRegistryResponse,

@@ -12,6 +12,7 @@ try {
   const files = [
     'src/modules/assistant/backend/agentkit/host.node-test',
     'src/modules/assistant/backend/agentkit/host-providers.node-test',
+    'src/modules/assistant/backend/agentkit/host-lifecycle.node-test',
     'src/modules/assistant/backend/agentkit/redaction.node-test',
     'src/modules/designer/backend/comments/attachment-response.node-test',
   ];

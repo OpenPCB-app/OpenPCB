@@ -20,6 +20,8 @@ import { MessageCard } from "./components/MessageCard";
 import { ProposalActionsProvider } from "./components/ProposalActions";
 import { RunVerification } from "./components/RunVerification";
 import { useDesignerConversation, type DesignerConversationProps } from "./hooks/useDesignerConversation";
+import { useAssistantAvailability } from "./hooks/useAssistantAvailability";
+import { AssistantUnavailable } from "./components/AssistantUnavailable";
 
 const QUICK_ACTIONS = [
   "Wire the schematic",
@@ -50,6 +52,18 @@ function navigateFromMention(
 
 
 export function DesignerChatDock(props: DesignerConversationProps): ReactElement {
+  const availability = useAssistantAvailability();
+  if (availability && !availability.available) {
+    return (
+      <EmptyDock onClose={props.onClose}>
+        <AssistantUnavailable availability={availability} compact />
+      </EmptyDock>
+    );
+  }
+  return <AvailableDesignerChatDock {...props} />;
+}
+
+function AvailableDesignerChatDock(props: DesignerConversationProps): ReactElement {
   const state = useDesignerConversation(props);
   const { backendURL, designId, onClose, onOpenFull, onDesignChanged, selectedChatId, setSelectedChatId, selectedChat, chats, menuOpen, setMenuOpen, navigateToModule, createDesignChat, submit, renameChat, deleteChat, assistantBase, providers, providerId, setProviderId, model, setModel, models, refreshChatModels, presets, promptPresetId, setPromptPresetId, selectedProvider, toolCount, input, setInput, loading, canSend, error, setError, scroll, messages, toolEventsByMessage, writeProposals, selectedRun, stopRun, refreshMessages, settings, verification, chat } = state;
   if (!designId) {
@@ -278,9 +292,11 @@ export function DesignerChatDock(props: DesignerConversationProps): ReactElement
 function EmptyDock({
   onClose,
   message,
+  children,
 }: {
   onClose(): void;
-  message: string;
+  message?: string;
+  children?: ReactElement;
 }): ReactElement {
   return (
     <aside className="flex h-full w-full min-w-0 flex-col overflow-hidden border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
@@ -294,9 +310,11 @@ function EmptyDock({
           <X className="h-4 w-4" />
         </button>
       </div>
-      <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-slate-500">
-        {message}
-      </div>
+      {children ?? (
+        <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-slate-500">
+          {message}
+        </div>
+      )}
     </aside>
   );
 }
