@@ -33,7 +33,10 @@ export function createNativeToolContributor(options: NativeToolContributorOption
   return {
     namespace: "openpcb",
     unboundToolNames: () => [...unbound],
-    async contribute(): Promise<AiTool[]> {
+    async contribute(contribution): Promise<AiTool[]> {
+      // Same test AgentKit prunes by; verification must not demand edits this run was never given.
+      if (contribution.runId && !contribution.bindings.some((binding) => binding.role === "primary" && binding.status === "active"))
+        options.contextStore!.markUnboundRun(contribution.runId);
       return catalog.list().map((tool) => ({ definition: tool.definition,
         execute: (context, input) => executeNativeTool(options, tool, context, input) }));
     },

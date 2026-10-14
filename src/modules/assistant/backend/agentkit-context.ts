@@ -21,7 +21,7 @@ import type {
 import type { PromptService } from "./prompt-service";
 import type { ProviderMessageContext } from "./agentkit/provider-messages";
 import type { SettingsStore } from "./settings-store";
-import { ALLOWED_IMAGE_MIME_TYPES } from "./tiptap-to-markdown";
+import { parseImageDataUri } from "./tiptap-to-markdown";
 
 const PROMPT_KEY = "__openpcbPromptPreset";
 const PRESETS = [
@@ -81,7 +81,7 @@ export async function providerContextMessages(input: {
   const resolved = await boundedMentions(messages, request.signal);
   request.signal?.throwIfAborted();
   const context = addMentionContext(messages, resolved);
-  if (!context.notice) return { messages: context.messages, warnings: [] };
+  if (!context.userNotice) return { messages: context.messages, warnings: [] };
   // Every provider call in a run re-resolves mentions; the user needs the notice once.
   const warned = (await store.tasks.listEvents(request.runId)).some(
     (event) => event.type === "run.warning" &&
@@ -89,7 +89,7 @@ export async function providerContextMessages(input: {
   );
   return {
     messages: context.messages,
-    warnings: warned ? [] : [{ code: MENTION_IMAGES_OMITTED_WARNING, message: context.notice }],
+    warnings: warned ? [] : [{ code: MENTION_IMAGES_OMITTED_WARNING, message: context.userNotice }],
   };
 }
 
@@ -146,10 +146,11 @@ async function runPreset(
   throw new Error("Prompt run snapshot is missing");
 }
 
+/** One group per recent user message, oldest first. */
 async function boundedMentions(
   messages: AiChatMessage[],
   signal?: AbortSignal,
-): Promise<ResolvedMentionContent[]> {
+): Promise<ResolvedMentionContent[][]> {
   const resolver = new MentionContentResolver();
   const users = messages
     .filter((message) => message.role === "user")
@@ -161,10 +162,10 @@ async function boundedMentions(
       reject(signal?.reason ?? new Error("Mention resolution cancelled"));
     signal?.addEventListener("abort", aborted, { once: true });
   });
-  const timeout = new Promise<ResolvedMentionContent[]>((resolve) => {
+  const timeout = new Promise<ResolvedMentionContent[][]>((resolve) => {
     timer = setTimeout(
       () =>
-        resolve([
+        resolve([[
           {
             entityType: "context",
             entityId: "mention-timeout",
@@ -174,7 +175,7 @@ async function boundedMentions(
             images: [],
             exists: false,
           },
-        ]),
+        ]]),
       MENTION_LIMITS.RESOLUTION_TIMEOUT_MS,
     );
   });
@@ -189,7 +190,7 @@ async function boundedMentions(
       ),
     );
     return await Promise.race([
-      resolved.then((groups) => groups.flat()),
+      resolved,
       timeout,
       cancelled,
     ]);
@@ -201,37 +202,41 @@ async function boundedMentions(
 
 /**
  * Referenced documents ride on the latest user turn as untrusted data, never as
- * system authority. Images that cannot be sent are named in an app notice.
+ * system authority. Images that cannot be sent are named in a model notice; the
+ * user is told only about mentions in the message they just sent.
  */
 function addMentionContext(
   messages: AiChatMessage[],
-  resolved: ResolvedMentionContent[],
-): { messages: AiChatMessage[]; notice: string | null } {
+  groups: ResolvedMentionContent[][],
+): { messages: AiChatMessage[]; userNotice: string | null } {
+  const key = (mention: ResolvedMentionContent) => `${mention.entityType}:${mention.entityId}`;
+  const latest = new Set((groups.at(-1) ?? []).map(key));
   const unique = [
-    ...new Map(
-      resolved.map((mention) => [
-        `${mention.entityType}:${mention.entityId}`,
-        mention,
-      ]),
-    ).values(),
+    ...new Map(groups.flat().map((mention) => [key(mention), mention])).values(),
   ].slice(0, 10);
   const text = new MentionContentResolver().formatAsContextSection(unique);
-  const omitted = unique.flatMap((mention) => mention.omittedImages ?? []);
+  const omitted = unique.flatMap((mention) =>
+    (mention.omittedImages ?? []).map((reason) => ({ key: key(mention), reason })));
   const images = boundedImages(
-    unique.flatMap((mention) => mention.images),
+    unique.flatMap((mention) => mention.images.map((image) => ({ key: key(mention), image }))),
     omitted,
   );
-  const notice = imageOmissionNotice(omitted);
+  const detail = omissionDetail(omitted.map((item) => item.reason));
+  const notice = detail &&
+    `Image notice: ${detail} Do not describe or infer their contents.`;
+  const userNotice = omissionDetail(
+    omitted.filter((item) => latest.has(item.key)).map((item) => item.reason),
+  );
   const extra = [text, notice].filter((item): item is string => !!item);
   const lastUser = messages.map((message) => message.role).lastIndexOf("user");
   if (lastUser < 0 || (!extra.length && !images.length))
-    return { messages, notice };
+    return { messages, userNotice };
   const result = messages.map((message, index) =>
     index !== lastUser
       ? message
       : { ...message, content: withMentionContent(message.content, extra, images) },
   );
-  return { messages: result, notice };
+  return { messages: result, userNotice };
 }
 
 function withMentionContent(
@@ -251,17 +256,17 @@ function withMentionContent(
 }
 
 function boundedImages(
-  images: MentionImage[],
-  omitted: MentionImageOmission[],
+  images: Array<{ key: string; image: MentionImage }>,
+  omitted: Array<{ key: string; reason: MentionImageOmission }>,
 ): Array<{ source: AiImageSource }> {
   let remaining = 20 * 1024 * 1024;
   const sent: Array<{ source: AiImageSource }> = [];
-  for (const image of images) {
+  for (const { key, image } of images) {
     const source = imageSource(image);
-    if (!source) omitted.push("unsupported");
-    else if (image.byteSize > MENTION_LIMITS.MAX_IMAGE_BYTE_SIZE) omitted.push("too_large");
+    if (!source) omitted.push({ key, reason: "unsupported" });
+    else if (image.byteSize > MENTION_LIMITS.MAX_IMAGE_BYTE_SIZE) omitted.push({ key, reason: "too_large" });
     else if (image.byteSize > remaining || sent.length >= MENTION_LIMITS.MAX_TOTAL_IMAGES)
-      omitted.push("over_limit");
+      omitted.push({ key, reason: "over_limit" });
     else {
       remaining -= image.byteSize;
       sent.push({ source });
@@ -272,13 +277,11 @@ function boundedImages(
 
 /** Fail closed: only allow-listed inline data images, never a URL the provider would fetch. */
 function imageSource(image: MentionImage): AiImageSource | null {
-  const match = /^data:([^;,]+);base64,(.*)$/s.exec(image.src);
-  const mediaType = match?.[1]?.toLowerCase();
-  if (!match || !mediaType || !ALLOWED_IMAGE_MIME_TYPES.includes(mediaType)) return null;
-  return { kind: "data", mediaType, base64: match[2]! };
+  const parsed = parseImageDataUri(image.src);
+  return parsed ? { kind: "data", mediaType: parsed.mimeType, base64: parsed.base64 } : null;
 }
 
-function imageOmissionNotice(omitted: MentionImageOmission[]): string | null {
+function omissionDetail(omitted: MentionImageOmission[]): string | null {
   if (!omitted.length) return null;
   const count = (reason: MentionImageOmission) =>
     omitted.filter((item) => item === reason).length;
@@ -291,5 +294,5 @@ function imageOmissionNotice(omitted: MentionImageOmission[]): string | null {
     .filter(([n]) => n > 0)
     .map(([n, reason]) => `${n} ${reason}`)
     .join("; ");
-  return `Image notice: ${omitted.length} referenced image(s) were not sent to the model (${detail}). Do not describe or infer their contents.`;
+  return `${omitted.length} referenced image(s) were not sent to the model (${detail}).`;
 }

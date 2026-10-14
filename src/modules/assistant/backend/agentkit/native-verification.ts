@@ -1,10 +1,13 @@
-import type { AssistantStore, ContextProvider, ProposalRecord, VerificationCheck, VerificationHook } from "agentkit/host";
+import type {
+  AssistantStore, ContextProvider, DeficiencyReport, ProposalRecord, VerificationCheck, VerificationHook,
+} from "agentkit/host";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import { MODULE_SDK_TOKENS, type DesignerSDK } from "../../../../sdks";
 import type { ContextResolver } from "../context-resolver";
 import type { NativeContextStore } from "./native-context-store";
 import { createNativeProposalApplier } from "./native-applier";
 import { runDefinitionOfDone } from "../verification/run-dod";
+import type { BuildIntent } from "../verification/types";
 
 export function createNativeContextProvider(
   contextResolver: ContextResolver, systemPrompt?: (chatId: string) => Promise<string | null>,
@@ -35,15 +38,18 @@ export function createNativeVerification(options: {
         return createNativeProposalApplier({ context: options.context, store: options.store, actorScope: options.actorScope ?? "desktop" })
           .getOutcome(proposal.operationId);
       }));
+      const mutationFailures = records.flatMap((proposal, index) => mutationDeficiencies(proposal, outcomes[index] ?? null));
+      if (options.contextStore.isUnboundRun(input.runId)) {
+        return deferredBuildReport(options.contextStore, input.chatId, input.runId, records.length > 0, mutationFailures);
+      }
       const report = await runDefinitionOfDone({
         designer, chatId: input.chatId, taskId: input.runId, designId,
         requireSnapshot: records.length > 0,
         conversation: { listWriteProposals: () => records.map((proposal, index) => ({
           status: outcomes[index]?.status === "partial" ? "partial" : proposal.status,
         })) },
-        buildIntents: { get: (chatId, runId) => options.contextStore.getBuildIntent(chatId, runId) },
+        buildIntents: { get: (chatId, runId) => adoptBuildIntent(options.contextStore, chatId, runId) },
       });
-      const mutationFailures = records.flatMap((proposal, index) => mutationDeficiencies(proposal, outcomes[index] ?? null));
       const checks: VerificationCheck[] = report.checks.map((check) => ({ id: check.id, ok: check.passed, message: check.message }));
       if (records.length) checks.push({ id: "native_mutations", ok: mutationFailures.length === 0,
         message: mutationFailures.length ? mutationFailures.join("; ") : "Every native mutation has a successful domain receipt." });
@@ -51,6 +57,32 @@ export function createNativeVerification(options: {
         deficiencies: [...report.checks.filter((check) => !check.passed).map((check) => check.message), ...mutationFailures] };
     },
   };
+}
+
+/**
+ * An unbound run was staged without placement or wiring tools, so a correction pass could not
+ * act on placement gaps. Its build intent moves to the chat's next bound run instead.
+ */
+function deferredBuildReport(
+  store: NativeContextStore, chatId: string, runId: string, attempted: boolean, mutationFailures: string[],
+): DeficiencyReport {
+  const intent = store.getBuildIntent(chatId, runId);
+  if (intent?.items.length) store.deferBuildIntent(intent);
+  const checks: VerificationCheck[] = [{ id: "build_deferred", ok: true,
+    message: "No design was bound when this run started, so placement and wiring were not available; the next bound run verifies the build." }];
+  if (attempted) checks.push({ id: "native_mutations", ok: mutationFailures.length === 0,
+    message: mutationFailures.length ? mutationFailures.join("; ") : "Every native mutation has a successful domain receipt." });
+  return { status: mutationFailures.length ? "partial" : "pass", checks, deficiencies: mutationFailures };
+}
+
+/** A bound run's own intent wins; otherwise it adopts the intent its unbound predecessor deferred. */
+function adoptBuildIntent(store: NativeContextStore, chatId: string, runId: string): BuildIntent | null {
+  const own = store.getBuildIntent(chatId, runId);
+  const deferred = store.takeDeferredBuildIntent(chatId);
+  if (own || !deferred) return own;
+  const adopted = { ...deferred, taskId: runId };
+  store.saveBuildIntent(adopted);
+  return adopted;
 }
 
 function mutationDeficiencies(proposal: ProposalRecord, outcome: { status: string; failedOps: Array<{ opIndex: number; error: string }> } | null): string[] {

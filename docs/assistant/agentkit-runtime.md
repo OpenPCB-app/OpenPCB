@@ -40,14 +40,24 @@ Referenced documents (knowledge mentions) reach the model on the latest user tur
 inside document text. Only inline PNG/JPEG/GIF/WebP data images are sent — no URL or path is ever
 fetched. Images that are unsupported, over 5 MiB, or over the per-page/per-message budget are dropped,
 the turn continues, and an "Image notice" goes both to the model (in that user turn) and to the user
-(one `run.warning` with code `mention_images_omitted` per run, shown under the run status).
+(one `run.warning` with code `mention_images_omitted` per run, shown under the run status, only for
+mentions in the message just sent, and emitted after the provider's first response event so it does not
+shorten the first-byte budget).
 
 The native contributor declares `unboundToolNames`: until a chat has an active primary design binding,
 only read tools and `designer_create_design` are staged, so an explicit `designId` cannot reach an
 unrelated design. AgentKit stages tools once per run, so placing and wiring into a design created in
 the same run follows on the user's next message; the system prompt states this for unbound turns. A
-binding whose design was deleted is marked `missing` at turn start and never falls back to another or
-the UI-active design.
+run staged unbound is not checked against Definition of Done (its correction passes could not place
+anything): its BOM build intent is deferred and adopted by the chat's next bound run that calls tools,
+unless that run records its own. A binding whose design was deleted is marked `missing` at turn start
+and never falls back to another or the UI-active design.
+
+Residual risk (pre-existing, not changed here): a read tool called with an explicit `designId` in an
+unbound chat auto-binds the chat to that design, and mentions from the last ten user messages are
+re-attached on later turns. An instruction inside a mentioned page could therefore steer a read onto
+another local design in one turn and leave the next turn's auto-applied, undoable non-destructive edits
+targeting it. Deletions still stay pending for approval.
 
 Boot uses manual recovery. Queued work becomes interrupted; crashed running work waits for its
 lease to expire. A serialized 10-second app lifecycle sweep calls the framework's manual recovery

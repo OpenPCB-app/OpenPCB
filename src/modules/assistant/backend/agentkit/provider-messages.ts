@@ -28,10 +28,20 @@ export function providerFactoryWithMessages(
           "Provider message preparation timed out");
         request.signal?.throwIfAborted();
         const stamp = createEventStamper();
-        for (const warning of context.warnings) {
-          yield stamp({ type: "run.warning", runId: request.runId, timestamp: new Date().toISOString(), data: warning });
+        let pending = context.warnings;
+        const flush = () => {
+          const events = pending.map((warning) =>
+            stamp({ type: "run.warning", runId: request.runId, timestamp: new Date().toISOString(), data: warning }));
+          pending = [];
+          return events;
+        };
+        for await (const event of client.streamChat({ ...request, messages: context.messages })) {
+          yield event;
+          // Any non-start event counts as provider activity and swaps the first-byte budget for the
+          // shorter idle budget, so app warnings wait until the provider has actually answered.
+          if (event.type !== "run.started") yield* flush();
         }
-        yield* client.streamChat({ ...request, messages: context.messages });
+        yield* flush();
       },
     };
   };

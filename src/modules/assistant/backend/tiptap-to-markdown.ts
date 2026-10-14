@@ -279,25 +279,22 @@ export interface ExtractedImage {
 /** Raster formats every supported provider accepts; anything else (SVG, PDF, …) is refused. */
 export const ALLOWED_IMAGE_MIME_TYPES: readonly string[] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
-function parseDataUri(src: string): { mimeType: string; byteSize: number } | null {
-  const match = /^data:([^;,]+);base64,(.*)$/s.exec(src);
+/** Strict: allow-listed type and canonical padded base64, so a malformed payload is never sent to a provider. */
+export function parseImageDataUri(src: string): { mimeType: string; base64: string; byteSize: number } | null {
+  const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/.exec(src);
   if (!match) return null;
   const mimeType = (match[1] ?? "").toLowerCase();
-  if (!ALLOWED_IMAGE_MIME_TYPES.includes(mimeType)) return null;
   const base64 = match[2] ?? "";
-  try {
-    const byteSize = Math.floor((base64.length * 3) / 4) - (base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0);
-    return { mimeType, byteSize };
-  } catch {
-    return null;
-  }
+  if (!ALLOWED_IMAGE_MIME_TYPES.includes(mimeType) || base64.length % 4 !== 0) return null;
+  const byteSize = (base64.length * 3) / 4 - (base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0);
+  return { mimeType, base64, byteSize };
 }
 
 function collectImagesFromNode(node: TiptapNode, out: ExtractedImage[], onUnsupported?: () => void): void {
   if (node.type === "image") {
     const src = typeof node.attrs?.src === "string" ? node.attrs.src : "";
     // Only inline data images are sent: a URL or path would need a fetch or file read.
-    const parsed = src.startsWith("data:") ? parseDataUri(src) : null;
+    const parsed = parseImageDataUri(src);
     if (parsed) {
       out.push({
         src,

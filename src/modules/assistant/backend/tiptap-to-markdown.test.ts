@@ -156,7 +156,7 @@ describe("extractImagesFromTiptap", () => {
     expect(extractImagesFromTiptap(doc)).toEqual([]);
   });
 
-  it("refuses data images outside the PNG/JPEG/GIF/WebP allow-list and reports them", () => {
+  it("refuses data images outside the PNG/JPEG/GIF/WebP allow-list or with malformed base64 and reports them", () => {
     const image = (src: string) => ({ type: "image", attrs: { src, alt: "x" } });
     const doc = {
       type: "doc",
@@ -165,12 +165,15 @@ describe("extractImagesFromTiptap", () => {
         image("data:text/html;base64,PGI+"),
         image("https://example.com/img.png"),
         image("data:image/webp;base64,UklGRg=="),
+        image("data:image/png;base64,aGVs\nbG8="),
+        image("data:image/png;base64,aGVs*G8="),
+        image("data:image/png;base64,aGVsbG8"),
       ],
     };
     let unsupported = 0;
     const images = extractImagesFromTiptap(doc, () => unsupported++);
     expect(images.map((item) => item.mimeType)).toEqual(["image/webp"]);
-    expect(unsupported).toBe(3);
+    expect(unsupported).toBe(6);
   });
 
   it("extracts images from nested content", () => {

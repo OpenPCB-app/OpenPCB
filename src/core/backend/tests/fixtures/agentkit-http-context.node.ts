@@ -139,6 +139,7 @@ test("omitted mention images are reported once to the model and the run log", as
       ],
     },
     { content: "Read with notice" },
+    { newRun: true, content: "Later turn" },
   ]);
   const image = (src: string) => ({ type: "image", attrs: { src, alt: "img" } });
   const small = "data:image/png;base64,aGVsbG8=";
@@ -171,8 +172,9 @@ test("omitted mention images are reported once to the model and the run log", as
     "images",
     `Read @[knowledge-page:${pageId}|Images]`,
   );
-  assert.ok(domain.provider.requests.length >= 2);
-  for (const request of domain.provider.requests) {
+  const firstRun = domain.provider.requests.filter((request) => request.runId === result.runId);
+  assert.ok(firstRun.length >= 2);
+  for (const request of firstRun) {
     const user = [...request.messages].reverse().find((message) => message.role === "user")!;
     assert.ok(Array.isArray(user.content));
     const parts = user.content;
@@ -198,6 +200,18 @@ test("omitted mention images are reported once to the model and the run log", as
   assert.ok(message.includes("2 unsupported type or source"));
   assert.ok(message.includes("1 larger than the 5 MiB per-image limit"));
   assert.ok(message.includes("2 over the per-message image budget"));
+  assert.equal(message.includes("Do not describe"), false);
+
+  // The earlier mention still reaches the model, but the user is not re-warned for it.
+  const later = await submit(domain, chatId, "later", "Thanks");
+  const laterRequest = domain.provider.requests.find((request) => request.runId === later.runId)!;
+  assert.ok(JSON.stringify(laterRequest.messages).includes("Image notice: 5 referenced image(s)"));
+  assert.equal(
+    (await domain.service.host.store.tasks.listEvents(later.runId)).some(
+      (event) => event.type === "run.warning" && JSON.stringify(event).includes("mention_images_omitted"),
+    ),
+    false,
+  );
 });
 
 test("read-only HTTP run cannot place native components", async () => {
@@ -402,4 +416,46 @@ test("unbound chat stages only reads and creation; edits follow on the bound run
     .filter((event) => event.type === "run.verification")
     .at(-1);
   assert.ok(JSON.stringify(verification).includes('"status":"pass"'));
+});
+
+test("unbound build run defers its BOM to the next bound run instead of correcting placements", async () => {
+  domain = await isolatedHttpDomain([
+    {
+      calls: [
+        {
+          id: "bom",
+          name: "library_resolve_bom",
+          arguments: { goal: "Decoupling", items: [{ role: "capacitor", query: "capacitor", quantity: 1 }] },
+        },
+        { id: "create", name: "designer_create_design", arguments: { name: "Deferred build" } },
+      ],
+    },
+    { content: "Design ready" },
+    {
+      newRun: true,
+      calls: [{ id: "inspect", name: "designer_get_schematic_connectivity", arguments: {} }],
+    },
+    { content: "Inspected" },
+  ]);
+  const chat = (await (
+    await domain.request("/v1/chats", { method: "POST", body: JSON.stringify({ title: "Deferred" }) })
+  ).json()) as { id: string };
+  const created = await submit(domain, chat.id, "build", "Build a decoupling capacitor circuit");
+  const runEvents = (runId: string) => domain!.service.host.store.tasks.listEvents(runId);
+  const createdEvents = await runEvents(created.runId);
+  assert.equal(
+    createdEvents.some((event) => event.type === "run.warning" && JSON.stringify(event).includes("retry_pass")),
+    false,
+  );
+  assert.equal(domain.provider.requests.filter((request) => request.runId === created.runId).length, 2);
+  const createdVerification = createdEvents.filter((event) => event.type === "run.verification");
+  assert.equal(createdVerification.length, 1);
+  assert.ok(JSON.stringify(createdVerification[0]).includes('"status":"pass"'));
+  assert.ok(domain.service.contextResolver.getPrimaryDesign(chat.id));
+
+  const followUp = await submit(domain, chat.id, "follow-up", "Continue");
+  const first = (await runEvents(followUp.runId)).find((event) => event.type === "run.verification");
+  const text = JSON.stringify(first);
+  assert.ok(text.includes('"status":"partial"'), text);
+  assert.ok(text.includes("Missing placements"), text);
 });

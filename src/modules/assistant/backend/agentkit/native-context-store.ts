@@ -9,8 +9,26 @@ export interface NativeActionReservation {
   argumentFingerprint: string; proposalId: string;
 }
 
+/** Build intent from an unbound run, held for the next bound run that can place it. */
+const DEFERRED_INTENT_RUN = "__deferred__";
+const MAX_UNBOUND_RUNS = 512;
+
 export class NativeContextStore implements ContextBindingStore {
+  // Staging state lives only as long as the runs it describes; a restarted run is re-staged.
+  private readonly unboundRuns = new Set<string>();
+
   constructor(private readonly context: CoreBackendModuleContext) {}
+
+  markUnboundRun(runId: string): void {
+    this.unboundRuns.delete(runId);
+    this.unboundRuns.add(runId);
+    if (this.unboundRuns.size > MAX_UNBOUND_RUNS)
+      this.unboundRuns.delete(this.unboundRuns.values().next().value!);
+  }
+
+  isUnboundRun(runId: string): boolean {
+    return this.unboundRuns.has(runId);
+  }
 
   listBindings(chatId: string): AssistantContextBindingDto[] {
     return this.context.db.rawSql<Record<string, unknown>>(
@@ -81,5 +99,18 @@ export class NativeContextStore implements ContextBindingStore {
       "SELECT intent_json FROM assistant_native_build_intent WHERE chat_id=? AND run_id=?", [chatId, runId],
     )[0];
     return row ? JSON.parse(row.intent_json) as BuildIntent : null;
+  }
+
+  deferBuildIntent(intent: BuildIntent): void {
+    this.saveBuildIntent({ ...intent, taskId: DEFERRED_INTENT_RUN });
+  }
+
+  /** Removes the deferred intent; the caller decides whether a bound run adopts it. */
+  takeDeferredBuildIntent(chatId: string): BuildIntent | null {
+    const intent = this.getBuildIntent(chatId, DEFERRED_INTENT_RUN);
+    if (intent) this.context.db.rawSql(
+      "DELETE FROM assistant_native_build_intent WHERE chat_id=? AND run_id=?", [chatId, DEFERRED_INTENT_RUN],
+    );
+    return intent;
   }
 }
