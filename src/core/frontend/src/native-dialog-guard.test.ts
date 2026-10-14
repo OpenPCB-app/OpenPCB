@@ -16,8 +16,6 @@ const ALLOWLIST = new Set([
   "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
   // remove when migrated
   "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx",
-  // remove when migrated
-  "src/modules/library/frontend/Space.tsx",
 ]);
 
 function roots(): string[] {

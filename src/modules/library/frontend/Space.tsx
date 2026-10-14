@@ -15,6 +15,7 @@ import {
   SegmentedControl,
   TooltipProvider,
 } from "@shared/frontend/ui";
+import { confirmDialog } from "@shared/frontend/ui/dialog-host-store";
 import type { LibraryComponent } from "../../../sdks/library";
 import { useNavigationStore } from "../../../core/frontend/src/stores/navigation-store";
 import { ComponentDetailPage } from "./ComponentDetailPage";
@@ -263,9 +264,13 @@ export function LibrarySpace({
     async (ids: readonly string[]) => {
       if (ids.length === 0 || !backendURL) return;
 
-      const confirmed = window.confirm(
-        `Delete ${ids.length} component${ids.length > 1 ? "s" : ""}? This will also remove orphaned symbols and footprints.`,
-      );
+      const confirmed = await confirmDialog({
+        title: `Delete ${ids.length} component${ids.length > 1 ? "s" : ""}?`,
+        description:
+          "This will also remove orphaned symbols and footprints. This cannot be undone.",
+        confirmLabel: "Delete",
+        tone: "danger",
+      });
       if (!confirmed) return;
 
       setDeleting(true);
