@@ -343,6 +343,15 @@ describe("canonical AgentKit MCP embedded over real OpenPCB domain", () => {
     expect(gone.data).toMatchObject({ errorCode: "DESIGN_TARGET_STALE", candidates: [{ designId: otherId, source: "explicit" }] });
     await call(session, "designer_use_design", { designId: null });
     expect((await call(session, "designer_get_design_summary")).isError).not.toBe(true);
+    const unknown = await call(session, "designer_use_design", { designId: "no-such-design" });
+    expect(unknown.isError).toBe(true);
+    expect(unknown.data).toMatchObject({ errorCode: "DESIGN_NOT_FOUND",
+      candidates: [{ designId, name: "MCP real domain", source: "available" }] });
+    expect(String(unknown.data.errorMessage)).toBe("DESIGN_NOT_FOUND: Design 'no-such-design' does not exist, so nothing was pinned. " +
+      `Candidates: "MCP real domain" ('${designId}'). Pass designId, or call designer_use_design to pin this session ` +
+      "(designer_list_designs lists ids).");
+    const summary = await call(session, "designer_get_design_summary");
+    expect(summary.isError).not.toBe(true);
     expect((await snapshot()).parts).toHaveLength(0);
   });
 

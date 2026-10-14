@@ -48,7 +48,9 @@ async function executeSessionTool(
 }
 
 interface TargetCandidate { designId: string; name: string | null; source: "explicit" | "pinned" | "session" | "ui-active" | "available" }
-interface TargetRefusal { errorCode: "DESIGN_TARGET_AMBIGUOUS" | "DESIGN_TARGET_STALE"; message: string; candidates: TargetCandidate[] }
+interface TargetRefusal {
+  errorCode: "DESIGN_TARGET_AMBIGUOUS" | "DESIGN_TARGET_STALE" | "DESIGN_NOT_FOUND"; message: string; candidates: TargetCandidate[];
+}
 const TARGET_HINT = "Pass designId, or call designer_use_design to pin this session (designer_list_designs lists ids).";
 const MAX_LISTED_CANDIDATES = 10;
 
@@ -87,6 +89,15 @@ async function resolveSessionDesign(
       `Candidates: ${candidates.length ? candidates.map(describeTarget).join(", ") : "none"}. ${TARGET_HINT}` };
 }
 
+async function unknownDesignRefusal(options: McpOptions, requested: string): Promise<TargetRefusal> {
+  const designer = options.context.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+  const candidates: TargetCandidate[] = ((await designer?.listDesigns()) ?? []).slice(0, MAX_LISTED_CANDIDATES)
+    .map((design) => ({ designId: design.id, name: design.name, source: "available" }));
+  return { errorCode: "DESIGN_NOT_FOUND", candidates,
+    message: `Design '${requested}' does not exist, so nothing was pinned. ` +
+      `Candidates: ${candidates.length ? candidates.map(describeTarget).join(", ") : "none"}. ${TARGET_HINT}` };
+}
+
 function describeTarget(candidate: TargetCandidate): string {
   return candidate.name === null ? `'${candidate.designId}'` : `"${candidate.name}" ('${candidate.designId}')`;
 }
@@ -110,7 +121,10 @@ async function bindSession(options: McpOptions, chatId: string, designId: string
 function pinTool(options: McpOptions, actorScope: string): AiTool {
   return {
     definition: { name: "designer_use_design", version: "1", effect: "read", capability: "designer.read",
-      description: "Pin this MCP session to a design so later calls do not need designId. The pin beats the design the user has focused in the OpenPCB UI; pass null to drop it and follow the UI again. Call designer_list_designs first to get an id.",
+      description: "Pin this MCP session to a design so later calls do not need designId; an unknown id is refused and nothing is pinned. " +
+        "Without a pin, calls follow the design focused in the OpenPCB UI only while it is this session's design: if no design is focused, " +
+        "or the UI shows a different one, calls are refused with the candidate ids instead of guessing. " +
+        "Pass null to drop the pin and bind the session to the design currently focused in the UI. Call designer_list_designs first to get an id.",
       inputSchema: { type: "object", properties: { designId: { type: ["string", "null"],
         description: "Design id to pin, or null to clear the pin." } } } },
     async execute(context, input) {
@@ -118,6 +132,9 @@ function pinTool(options: McpOptions, actorScope: string): AiTool {
       const args = input as { designId?: string | null };
       const requested = args.designId ?? null;
       if (!context.chatId || !options.actors.has(actorScope, context.chatId)) throw new Error("MCP_ACTOR_DENIED");
+      if (requested && !(await options.context.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER)?.getDesign(requested))) {
+        return targetRefusal(context, await unknownDesignRefusal(options, requested));
+      }
       if (requested) await bindSession(options, context.chatId, requested);
       else {
         const designer = options.context.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);

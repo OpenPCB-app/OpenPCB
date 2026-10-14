@@ -355,8 +355,11 @@ which owns the registry, `ContextResolver`, proposals and the write policy.
   `export_manufacturing`) and the session-scoped `designer_use_design`. **Do not add the extended
   reads to the in-app registry** — its prompt and DoD harness are tuned against the current 15.
 - **Design targeting:** explicit `designId` → session pin (`designer_use_design`) → UI-active
-  design. The frontend pushes the focused tab to `PUT /api/modules/designer/active-design`
-  (in-memory).
+  design **only when unambiguous**: an unpinned session follows the UI only while the focused design
+  is the session's bound design. No focused design, or one different from the session binding, is
+  refused (`DESIGN_TARGET_AMBIGUOUS`, with candidate ids); a deleted explicit/pinned id is
+  `DESIGN_TARGET_STALE`; pinning an unknown id is `DESIGN_NOT_FOUND`. Never guessed. The frontend
+  pushes the focused tab to `PUT /api/modules/designer/active-design` (in-memory).
 - **Two settings, both default off** (`assistant_settings.mcp_enabled` / `mcp_allow_writes`). Writes
   are forced off whenever the server is off; when writes are off, write tools are **not registered
   at all**. Otherwise the in-app policy applies — non-destructive edits auto-apply, deletions pend

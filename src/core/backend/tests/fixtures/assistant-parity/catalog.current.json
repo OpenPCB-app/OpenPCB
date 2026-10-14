@@ -1,5 +1,5 @@
 {
-  "sha256": "25d939b6472638ee6b4f0bdfa0bdb4d413d7fde7ff472672782590a813bf5c40",
+  "sha256": "1a7bc96f6d6a96893d6f3b0014f93acf5630e995a2988eeada306e77dccf1aa2",
   "data": {
     "formatVersion": 2,
     "scope": "Canonical AgentKit desktop contracts; pure native domain and separate MCP store; no inference or packaged qualification",
@@ -1363,7 +1363,7 @@
         },
         {
           "name": "designer_use_design",
-          "description": "Pin this MCP session to a design so later calls do not need designId. The pin beats the design the user has focused in the OpenPCB UI; pass null to drop it and follow the UI again. Call designer_list_designs first to get an id.",
+          "description": "Pin this MCP session to a design so later calls do not need designId; an unknown id is refused and nothing is pinned. Without a pin, calls follow the design focused in the OpenPCB UI only while it is this session's design: if no design is focused, or the UI shows a different one, calls are refused with the candidate ids instead of guessing. Pass null to drop the pin and bind the session to the design currently focused in the UI. Call designer_list_designs first to get an id.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -2692,7 +2692,7 @@
         },
         {
           "name": "designer_use_design",
-          "description": "Pin this MCP session to a design so later calls do not need designId. The pin beats the design the user has focused in the OpenPCB UI; pass null to drop it and follow the UI again. Call designer_list_designs first to get an id.",
+          "description": "Pin this MCP session to a design so later calls do not need designId; an unknown id is refused and nothing is pinned. Without a pin, calls follow the design focused in the OpenPCB UI only while it is this session's design: if no design is focused, or the UI shows a different one, calls are refused with the candidate ids instead of guessing. Pass null to drop the pin and bind the session to the design currently focused in the UI. Call designer_list_designs first to get an id.",
           "inputSchema": {
             "type": "object",
             "properties": {
