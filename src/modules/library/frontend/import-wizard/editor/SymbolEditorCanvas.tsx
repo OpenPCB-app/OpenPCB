@@ -7,6 +7,7 @@ import { EdaCanvas } from "../../../../../shared/frontend/canvas/interaction";
 import { GridShader } from "../../../../../shared/frontend/canvas/primitives";
 import { SymbolRenderLayer } from "../../../../../shared/frontend/canvas/scene";
 import { SelectionRectOverlay } from "../../../../../shared/frontend/canvas/selection";
+import { useCanvasThemeMode } from "../../../../../shared/frontend/canvas/use-canvas-theme-mode";
 import { eventToMmRaw } from "../../../../../shared/frontend/canvas/tools/tool-utils";
 import type { InteractionHandler } from "../../../../../shared/frontend/canvas/interaction/types";
 import { useSymbolEditorStore } from "./useSymbolEditorStore";
@@ -73,6 +74,10 @@ function EditorCanvasContent({
   const selectionRect = useSymbolEditorStore((s) => s.selectionRect);
   const hoveredId = useSymbolEditorStore((s) => s.hoveredId);
   const referencePrefix = useSymbolEditorStore((s) => s.referencePrefix);
+  // Same recipe as the schematic canvas: light mode tracks the app surface,
+  // dark mode keeps the canvas default.
+  const themeMode = useCanvasThemeMode();
+  const canvasBackground = themeMode === "light" ? "#f0f4fb" : undefined;
 
   const hoverSet = useMemo(
     () =>
@@ -98,9 +103,9 @@ function EditorCanvasContent({
       readOnly={false}
       interactionHandler={handler}
       className="h-full w-full"
-      backgroundColor="#131313"
+      backgroundColor={canvasBackground}
       initialZoom={DEFAULT_SCHEMATIC_ZOOM}
-      themeMode="dark"
+      themeMode={themeMode}
     >
       <InvalidateOnChange />
       <ZoomTracker />

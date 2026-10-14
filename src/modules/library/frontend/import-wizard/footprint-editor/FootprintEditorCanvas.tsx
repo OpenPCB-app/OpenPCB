@@ -7,6 +7,7 @@ import { EdaCanvas } from "../../../../../shared/frontend/canvas/interaction";
 import { GridShader } from "../../../../../shared/frontend/canvas/primitives";
 import { FootprintRenderLayer } from "../../../../../shared/frontend/canvas/scene";
 import { SelectionRectOverlay } from "../../../../../shared/frontend/canvas/selection";
+import { useCanvasThemeMode } from "../../../../../shared/frontend/canvas/use-canvas-theme-mode";
 import { eventToMmRaw } from "../../../../../shared/frontend/canvas/tools/tool-utils";
 import type { InteractionHandler } from "../../../../../shared/frontend/canvas/interaction/types";
 import { useFootprintEditorStore } from "./useFootprintEditorStore";
@@ -80,6 +81,9 @@ function EditorCanvasContent({
   const layerVisibility = useFootprintEditorStore((s) => s.layerVisibility);
   const activeLayer = useFootprintEditorStore((s) => s.activeLayer);
   const footprintName = useFootprintEditorStore((s) => s.footprintName);
+  // Same recipe as the PCB canvas: the board background stays dark in both
+  // themes; the canvas palette follows the app theme.
+  const themeMode = useCanvasThemeMode();
 
   const visibleLayers = useMemo(() => [...layerVisibility], [layerVisibility]);
 
@@ -125,9 +129,9 @@ function EditorCanvasContent({
       readOnly={false}
       interactionHandler={handler}
       className="h-full w-full"
-      backgroundColor="#131313"
+      backgroundColor="#0e1116"
       initialZoom={DEFAULT_PCB_ZOOM}
-      themeMode="dark"
+      themeMode={themeMode}
     >
       <InvalidateOnChange />
       <ZoomTracker />
