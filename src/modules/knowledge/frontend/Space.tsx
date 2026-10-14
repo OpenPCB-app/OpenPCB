@@ -44,9 +44,12 @@ function KnowledgeSpaceInner({
 
   const handleReconnectAfterOutage = useCallback(() => {
     if (!selectedPageId) return;
-    const dirty = coordinator.isDirty(selectedPageId);
+    if (coordinator.isDirty(selectedPageId)) {
+      void coordinator.verifyAfterReconnect(selectedPageId);
+      return;
+    }
     coordinator.remoteChanged(selectedPageId);
-    if (!dirty) void refreshPage();
+    void refreshPage();
   }, [coordinator, refreshPage, selectedPageId]);
 
   useKnowledgePageUpdates(

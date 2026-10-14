@@ -200,6 +200,17 @@ describe("page-scoped title/body save coordination", () => {
     await coordinator.reload("a", false);
     expect(coordinator.snapshot("a")?.content).toEqual(content("remote"));
   });
+  it("reconnect after an outage flags a dirty page only if the server advanced", async () => {
+    respond(async () => Response.json({ page: page("a", "old", 1) }));
+    coordinator.setContent("a", content("local"));
+    await coordinator.verifyAfterReconnect("a");
+    expect(coordinator.snapshot("a")).toMatchObject({ conflict: false });
+    expect(coordinator.snapshot("a")?.error).toBeNull();
+    respond(async () => Response.json({ page: page("a", "remote", 2) }));
+    await coordinator.verifyAfterReconnect("a");
+    expect(coordinator.snapshot("a")).toMatchObject({ conflict: true });
+    expect(coordinator.snapshot("a")?.content).toEqual(content("local"));
+  });
   it("remote change to a clean page invalidates fetches without a conflict", async () => {
     respond(async () => Response.json({ page: page("a", "remote", 2) }));
     const beforeEvent = coordinator.version("a");

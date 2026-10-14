@@ -48,6 +48,7 @@ export function PageEditor({
   page,
   isLoading,
   error,
+  refreshPage,
   onPageDeleted,
   designId,
   onSelectPage,
@@ -352,6 +353,19 @@ export function PageEditor({
         </div>
       )}
 
+      {error && effectivePage && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-2 border-b border-border bg-status-danger-soft px-4 py-2 text-xs text-status-danger"
+        >
+          <AlertCircle className="h-4 w-4" />
+          <span>Could not refresh this page: {error}</span>
+          <Button size="sm" variant="ghost" onClick={() => void refreshPage()}>
+            Retry
+          </Button>
+        </div>
+      )}
+
       {draft?.durability === "error" && (
         <div role="alert" className="px-4 py-2 text-xs text-status-danger">
           Draft not durably retained on this Mac. {draft.durabilityError}
@@ -383,7 +397,7 @@ export function PageEditor({
             <div className="p-4 text-sm text-text-tertiary">
               Loading page...
             </div>
-          ) : error ? (
+          ) : error && !effectivePage ? (
             <div className="flex items-center gap-2 p-4 text-sm text-status-danger">
               <AlertCircle className="h-4 w-4" />
               {error}

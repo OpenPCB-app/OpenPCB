@@ -196,7 +196,10 @@ export class PageSaveCoordinator {
     )
       return false;
     if (this.isDirty(page.id)) {
-      if (token(page) !== token(entry.snapshot.page))
+      if (
+        token(page) !== token(entry.snapshot.page) ||
+        page.revision > entry.snapshot.page.revision
+      )
         this.remoteChanged(page.id);
       return false;
     }
@@ -213,6 +216,18 @@ export class PageSaveCoordinator {
       documentGeneration: entry.snapshot.documentGeneration + Number(changed),
     });
     return true;
+  }
+
+  // After an SSE outage events may have been missed; flag a conflict only if the server really advanced past our base.
+  async verifyAfterReconnect(id: string): Promise<void> {
+    const entry = this.entries.get(id);
+    if (!entry || !this.isDirty(id)) return;
+    try {
+      const page = await this.api.getPage(id);
+      if (page) this.acceptRemote(page);
+    } catch {
+      // Still unreachable: the next reconnect or save attempt reports it.
+    }
   }
 
   remoteChanged(id: string): void {

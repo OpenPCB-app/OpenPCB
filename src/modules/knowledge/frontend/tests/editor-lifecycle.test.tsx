@@ -390,6 +390,35 @@ describe("real Docs editor lifecycle", () => {
     );
   });
 
+  it("failed silent refresh keeps the editor mounted with an inline retry", async () => {
+    let failing = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        failing
+          ? Response.json({ error: "down" }, { status: 500 })
+          : Response.json({ page: page("a", "Alpha") }),
+      ),
+    );
+    await act(async () => root.render(<PageLoader id="a" />));
+    await settle();
+    failing = true;
+    await act(async () => {
+      await refreshLoader();
+    });
+    await settle();
+    expect(currentEditor().getText()).toBe("Alpha");
+    expect(host.textContent).toContain("Could not refresh this page");
+    expect(host.textContent).toContain("Retry");
+    failing = false;
+    const retry = Array.from(host.querySelectorAll("button")).find(
+      (b) => b.textContent === "Retry",
+    )!;
+    await act(async () => retry.click());
+    await settle();
+    expect(host.textContent).not.toContain("Could not refresh this page");
+  });
+
   it("keeping a title draft displays remote body before subsequent typing", async () => {
     const initial = page("a", "old body");
     let server = {
