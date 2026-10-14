@@ -1,6 +1,14 @@
 import { useEffect, useRef, type ReactElement } from "react";
+import {
+  isEditableTarget,
+  isInsideOverlay,
+  isKeyEventConsumed,
+  isModalOpen,
+} from "@shared/frontend/keyboard/shortcut-guard";
 import { useEscapeLayer } from "@shared/frontend/keyboard/use-escape-layer";
 import type { PcbHitCandidate } from "./pcb-hit";
+
+const POPUP_KEYS = new Set(["ArrowUp", "ArrowDown", "Enter"]);
 
 /**
  * Floating disambiguation chooser shown after Alt+click on a stack of
@@ -39,6 +47,17 @@ export function PcbDisambiguationPopup({
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent): void => {
+      if (!POPUP_KEYS.has(event.key)) return;
+      // Holding an arrow may cycle; a held Enter must not pick repeatedly.
+      if (isKeyEventConsumed(event, { allowRepeat: event.key !== "Enter" }))
+        return;
+      if (isEditableTarget(event.target)) return;
+      const insidePopup =
+        event.target instanceof Node &&
+        (ref.current?.contains(event.target) ?? false);
+      // Keys typed into another dialog/menu (or with a modal open) are theirs.
+      if (!insidePopup && (isInsideOverlay(event.target) || isModalOpen()))
+        return;
       if (event.key === "ArrowDown") {
         event.preventDefault();
         onCycle(1);
