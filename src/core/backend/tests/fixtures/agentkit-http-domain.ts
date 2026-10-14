@@ -8,6 +8,7 @@ import type { AiProviderClient, AiChatRequest } from "agentkit/core";
 import type {
   AiRunEvent,
   AiProviderCapabilities,
+  AiProviderConfig,
   AiProviderModel,
 } from "agentkit/contracts";
 import type { CoreBackendModuleContext } from "../../../contracts/modules/backend-module";
@@ -234,10 +235,14 @@ export async function isolatedHttpDomain(
     );
     MentionRegistry.get().register(new KnowledgePageMentionProvider(knowledge));
     const provider = new HttpFixtureProvider(turns);
+    const providerConfigs: AiProviderConfig[] = [];
     const serviceOptions = {
       databasePath: path.join(directory, "agentkit.sqlite"),
       applicationDatabasePath: databasePath,
-      providerFactory: () => provider,
+      providerFactory: (config: AiProviderConfig) => {
+        providerConfigs.push(config);
+        return provider;
+      },
       readOnly,
     };
     service = await createAgentKitService(ctx, serviceOptions);
@@ -260,6 +265,7 @@ export async function isolatedHttpDomain(
       knowledge,
       service,
       provider,
+      providerConfigs,
       server,
       directory,
       options: serviceOptions,

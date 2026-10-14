@@ -8,6 +8,11 @@ import { createNativeMcpProposalApplier } from "./native-mcp-applier";
 import { NativeMcpActors, type NativeMcpSettings } from "./native-mcp-actors";
 import { nativeIdentity } from "./native-identity";
 import { allowNativeSession } from "./native-session-grants";
+import * as ProviderClients from "./providers";
+import { committedChange, type ProposalPresentation } from "../../frontend/agentkit-projections";
+import { setActiveDesignId } from "../../../designer/backend/active-design";
+import { createDesignerStore } from "../../../designer/backend/store";
+import { createModuleDb } from "../../../../core/backend/db/module-db-factory";
 
 const TOKEN = "native-mcp-test-token";
 let domain: ParityDomain;
@@ -22,6 +27,7 @@ let url: string;
 let settings: NativeMcpSettings;
 let designId: string;
 let sequence = 0;
+let restoreInference: (() => void) | undefined;
 
 beforeEach(async () => {
   domain = await isolatedDomain();
@@ -37,7 +43,11 @@ beforeEach(async () => {
   url = `http://127.0.0.1:${server.port}/mcp`;
   designId = (await domain.designer.createDesign({ name: "MCP real domain" })).id;
 });
-afterEach(async () => { await endpoint?.close(); server?.stop(true); store?.close(); await domain?.close(); });
+afterEach(async () => {
+  restoreInference?.();
+  restoreInference = undefined;
+  setActiveDesignId(null);
+  await endpoint?.close(); server?.stop(true); store?.close(); await domain?.close(); });
 
 async function rpc(method: string, params?: unknown, sessionId?: string, headers: Record<string, string> = {}) {
   const response = await fetch(url, { method: "POST", headers: { authorization: `Bearer ${TOKEN}`,
@@ -84,9 +94,37 @@ async function disconnect(sessionId: string) {
     "mcp-protocol-version": "2025-06-18" } });
 }
 
+/** Selects a ChatGPT-like remote provider app-wide, then records any provider construction or off-host request. */
+async function watchInference() {
+  await domain.providers.updateProvider("openai", { enabled: true, apiKey: "sk-chatgpt-canary-0123456789abcdef", defaultModel: "gpt-5" });
+  domain.settings.updateSettings({ defaultProviderId: "openai" });
+  expect(domain.settings.getSettings().defaultProviderId).toBe("openai");
+  const providerReads = spyOn(domain.providers, "getProvider");
+  const clients = spyOn(ProviderClients, "buildAgentKitProviderClient");
+  const original = globalThis.fetch;
+  const outbound: string[] = [];
+  const network = spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const target = input instanceof Request ? input.url : String(input);
+    if (!target.startsWith(`http://127.0.0.1:${server.port}/`)) outbound.push(target);
+    return original(input, init);
+  });
+  restoreInference = () => { providerReads.mockRestore(); clients.mockRestore(); network.mockRestore(); };
+  return {
+    assertNone() {
+      expect(providerReads).toHaveBeenCalledTimes(0);
+      expect(clients).toHaveBeenCalledTimes(0);
+      expect(outbound).toEqual([]);
+    },
+  };
+}
+
+async function deleteDesign(target: string) {
+  await createDesignerStore({ ...domain.ctx, moduleId: "designer", db: createModuleDb("designer") }).deleteDesign(target);
+}
+
 describe("canonical AgentKit MCP embedded over real OpenPCB domain", () => {
   test("22 exact tools, original resources and prompts; no provider, task or inference surface", async () => {
-    const providerReads = spyOn(domain.providers, "getProvider");
+    const inference = await watchInference();
     const session = await initialize();
     const catalog = await rpc("tools/list", undefined, session);
     const entries = (catalog.value.result as { tools: Array<{ name: string; inputSchema: unknown }> }).tools;
@@ -106,13 +144,12 @@ describe("canonical AgentKit MCP embedded over real OpenPCB domain", () => {
     expect((promptCatalog.value.result as { prompts: unknown[] }).prompts).toHaveLength(4);
     const prompt = await rpc("prompts/get", { name: "openpcb-build-circuit", arguments: { spec: "5V capacitor" } }, session);
     expect(JSON.stringify(prompt.value.result)).toContain("Build this circuit in OpenPCB: 5V capacitor");
-    expect(providerReads).toHaveBeenCalledTimes(0);
+    inference.assertNone();
     for (const chat of await store.conversations.listChats()) expect(await store.tasks.listByScope(chat.id)).toHaveLength(0);
-    providerReads.mockRestore();
   });
 
   test("pin, real two-part edit, IDs, receipt replay, undo and explicitly approved delete exactly once", async () => {
-    const providerReads = spyOn(domain.providers, "getProvider");
+    const inference = await watchInference();
     const session = await initialize();
     expect((await call(session, "designer_use_design", { designId })).data).toEqual({ pinnedDesignId: designId });
     const placed = await call(session, "designer_place_components", placement("mcp_place"));
@@ -145,8 +182,7 @@ describe("canonical AgentKit MCP embedded over real OpenPCB domain", () => {
     expect((await snapshot()).parts).toHaveLength(2);
     expect((await disconnect(session)).status).toBe(200);
     expect(await applier.getOutcome(`native:${proposalId}`)).toEqual(outcome);
-    expect(providerReads).toHaveBeenCalledTimes(0);
-    providerReads.mockRestore();
+    inference.assertNone();
   });
 
   test("revoking live MCP writes after first receipt prevents every later command unit", async () => {
@@ -271,6 +307,112 @@ describe("canonical AgentKit MCP embedded over real OpenPCB domain", () => {
     expect((await rpc("tools/list", undefined, session)).response.status).toBe(503);
     settings.mcpEnabled = true;
     expect((await rpc("tools/list", undefined, session)).response.status).toBe(404);
+  });
+
+  test("absent, changed and deleted design targets are refused with candidates; explicit id and pin still work", async () => {
+    const otherId = (await domain.designer.createDesign({ name: "Other target" })).id;
+    const session = await initialize();
+    const none = await call(session, "designer_get_design_summary");
+    expect(none.isError).toBe(true);
+    expect(none.data.errorCode).toBe("DESIGN_TARGET_AMBIGUOUS");
+    expect(String(none.data.errorMessage)).toContain("designer_use_design");
+    expect((none.data.candidates as Array<{ designId: string }>).map((item) => item.designId).sort()).toEqual([designId, otherId].sort());
+    setActiveDesignId(designId);
+    expect((await call(session, "designer_get_design_summary")).isError).not.toBe(true);
+    setActiveDesignId(otherId);
+    const changed = await call(session, "designer_place_components", placement("ui_switched", 1));
+    expect(changed.isError).toBe(true);
+    expect(changed.data).toMatchObject({ errorCode: "DESIGN_TARGET_AMBIGUOUS", candidates: [
+      { designId, name: "MCP real domain", source: "session" }, { designId: otherId, name: "Other target", source: "ui-active" }] });
+    setActiveDesignId(null);
+    const closed = await call(session, "designer_place_components", placement("ui_closed", 1));
+    expect(closed.data).toMatchObject({ errorCode: "DESIGN_TARGET_AMBIGUOUS",
+      candidates: [{ designId, source: "session" }, { designId: otherId, source: "available" }] });
+    expect((await snapshot()).parts).toHaveLength(0);
+    expect((await snapshot(otherId)).parts).toHaveLength(0);
+    const explicit = await call(session, "designer_place_components", { ...placement("explicit", 1), designId: otherId });
+    expect(explicit.data).toMatchObject({ status: "ok", appliedCount: 1, designId: otherId });
+    setActiveDesignId(designId);
+    expect((await call(session, "designer_use_design", { designId: otherId })).data).toEqual({ pinnedDesignId: otherId });
+    expect((await call(session, "designer_get_design_summary")).isError).not.toBe(true);
+    await deleteDesign(otherId);
+    const stale = await call(session, "designer_get_design_summary");
+    expect(stale.isError).toBe(true);
+    expect(stale.data).toMatchObject({ errorCode: "DESIGN_TARGET_STALE", candidates: [{ designId: otherId, source: "pinned" }] });
+    const gone = await call(session, "designer_get_design_summary", { designId: otherId });
+    expect(gone.data).toMatchObject({ errorCode: "DESIGN_TARGET_STALE", candidates: [{ designId: otherId, source: "explicit" }] });
+    await call(session, "designer_use_design", { designId: null });
+    expect((await call(session, "designer_get_design_summary")).isError).not.toBe(true);
+    expect((await snapshot()).parts).toHaveLength(0);
+  });
+
+  test("malformed JSON-RPC fails at the protocol layer without mutation and the session survives", async () => {
+    const session = await initialize();
+    const headers = { authorization: `Bearer ${TOKEN}`, "content-type": "application/json", accept: "application/json, text/event-stream",
+      "mcp-session-id": session, "mcp-protocol-version": "2025-06-18" };
+    const badJson = await fetch(url, { method: "POST", headers, body: "{not json" });
+    expect(badJson.status).toBe(400);
+    expect(await badJson.json()).toMatchObject({ error: { code: -32700 } });
+    const notRpc = await fetch(url, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1 }) });
+    expect(notRpc.status).toBe(400);
+    expect(await notRpc.json()).toMatchObject({ error: { code: -32700 } });
+    expect((await rpc("openpcb/does-not-exist", {}, session)).value).toMatchObject({ error: { code: -32601 } });
+    expect((await rpc("tools/call", { name: "no_such_tool", arguments: {} }, session)).value).toMatchObject({ error: { code: -32602 } });
+    const invalid = await call(session, "designer_place_components", { action_id: `place_invalid_${designId}`, components: "C1", designId });
+    expect(invalid.isError).toBe(true);
+    expect(invalid.data).toMatchObject({ errorCode: "schema_invalid", phase: "validation" });
+    const oversized = await fetch(url, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call",
+      params: { name: "designer_place_components", arguments: { designId, components: [], pad: "x".repeat(1_100_000) } } }) });
+    expect(oversized.status).toBe(413);
+    expect((await snapshot()).revision).toBe(0);
+    expect(await store.proposals.listByChat((await store.conversations.listChats())[0]!.id)).toHaveLength(0);
+    expect((await rpc("tools/list", undefined, session)).response.status).toBe(200);
+    expect((await call(session, "designer_get_design_summary", { designId })).isError).not.toBe(true);
+  });
+
+  test("truly concurrent sessions stay isolated; concurrent writes and replays on one design are deterministic", async () => {
+    const otherId = (await domain.designer.createDesign({ name: "Concurrent second" })).id;
+    const [first, second, third] = await Promise.all([initialize(), initialize(), initialize()]);
+    await Promise.all([call(first!, "designer_use_design", { designId }), call(second!, "designer_use_design", { designId: otherId }),
+      call(third!, "designer_use_design", { designId })]);
+    const isolated = await Promise.all([call(first!, "designer_place_components", placement("parallel_a", 2)),
+      call(second!, "designer_place_components", placement("parallel_b", 1))]);
+    expect(isolated.map((item) => item.data)).toMatchObject([{ status: "ok", appliedCount: 2, designId },
+      { status: "ok", appliedCount: 1, designId: otherId }]);
+    expect((await snapshot()).revision).toBe(2);
+    expect((await snapshot(otherId)).revision).toBe(1);
+    const shared = await Promise.all([call(first!, "designer_place_components", placement("shared", 1)),
+      call(third!, "designer_place_components", placement("shared", 1)), call(first!, "designer_place_components", placement("shared", 1))]);
+    const statuses = shared.map((item) => String(item.data.status));
+    expect(statuses.filter((status) => status === "ok")).toHaveLength(2);
+    expect(statuses.filter((status) => status === "already_applied")).toHaveLength(1);
+    const revisions = shared.filter((item) => item.data.status === "ok")
+      .flatMap((item) => (item.data.results as Array<{ revision: number }>).map((result) => result.revision)).sort();
+    expect(revisions).toEqual([3, 4]);
+    const final = await snapshot();
+    expect(final.revision).toBe(4);
+    expect(final.parts).toHaveLength(4);
+    expect((await snapshot(otherId)).parts).toHaveLength(1);
+    const chats = await store.conversations.listChats();
+    const proposalsPerChat = await Promise.all(chats.map(async (chat) => (await store.proposals.listByChat(chat.id)).length));
+    expect(proposalsPerChat.sort()).toEqual([1, 1, 2]);
+  });
+
+  test("an MCP write reaches the renderer through the canonical proposal presentation and designer history", async () => {
+    const session = await initialize();
+    await call(session, "designer_use_design", { designId });
+    const placed = await call(session, "designer_place_components", placement("render", 2));
+    const proposalId = String(placed.data.proposalId);
+    const proposal = (await store.proposals.get(proposalId))!;
+    expect(proposal.envelope.designId).toBe(designId);
+    const outcome = await applier.getOutcome(`native:${proposalId}`);
+    const presentation = { proposalId, envelope: proposal.envelope as unknown as ProposalPresentation["envelope"],
+      outcome: outcome as ProposalPresentation["outcome"] };
+    const projected = await snapshot();
+    expect(committedChange(presentation)).toEqual({ designId, revision: projected.revision });
+    expect(await domain.designer.getHistory(designId, UI_SESSION)).toMatchObject({ canUndo: true, undoDepth: 2 });
+    expect(await domain.designer.undo(designId, UI_SESSION, projected.revision)).toMatchObject({ ok: true, revision: projected.revision + 1 });
+    expect((await snapshot()).parts).toHaveLength(1);
   });
 
   test("dispose failure stays visible, revokes grants and permits one clean handler retry", async () => {

@@ -35,18 +35,66 @@ async function executeSessionTool(
   const acceptsDesign = Boolean(tool.definition.inputSchema.properties?.designId);
   const args = input && typeof input === "object" ? { ...input as Record<string, unknown> } : {};
   if (acceptsDesign) {
-    const designer = options.context.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
-    const designId = typeof args.designId === "string" ? args.designId : options.actors.pinnedDesign(actorScope) ?? designer?.getActiveDesignId();
-    if (designId) {
-      await bindSession(options, context.chatId, designId);
-      args.designId = designId;
-    }
+    const target = await resolveSessionDesign(options, actorScope, context.chatId, args.designId);
+    if ("errorCode" in target) return targetRefusal(context, target);
+    await bindSession(options, context.chatId, target.designId);
+    args.designId = target.designId;
   }
   const result = await tool.execute(context, acceptsDesign ? args : input);
   if (!result.data || typeof result.data !== "object" || !("proposalId" in result.data)) return result;
   const data = result.data as Record<string, unknown>;
   return { ...result, modelData: { ...(result.modelData && typeof result.modelData === "object" ? result.modelData : {}),
     proposalId: data.proposalId, proposalStatus: data.status, envelope: data.envelope, outcome: data.outcome } };
+}
+
+interface TargetCandidate { designId: string; name: string | null; source: "explicit" | "pinned" | "session" | "ui-active" | "available" }
+interface TargetRefusal { errorCode: "DESIGN_TARGET_AMBIGUOUS" | "DESIGN_TARGET_STALE"; message: string; candidates: TargetCandidate[] }
+const TARGET_HINT = "Pass designId, or call designer_use_design to pin this session (designer_list_designs lists ids).";
+const MAX_LISTED_CANDIDATES = 10;
+
+/**
+ * Explicit id, then session pin, then the UI-active design only while it agrees with the session's
+ * prior binding. A target that changed under the client, or none at all, is refused, never guessed.
+ */
+async function resolveSessionDesign(
+  options: McpOptions, actorScope: string, chatId: string, requested: unknown,
+): Promise<{ designId: string } | TargetRefusal> {
+  const designer = options.context.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+  const nameOf = async (designId: string) => (await designer?.getDesign(designId))?.head.name ?? null;
+  const explicit = typeof requested === "string" ? requested : null;
+  const chosen = explicit ?? options.actors.pinnedDesign(actorScope);
+  if (chosen) {
+    if (await nameOf(chosen) !== null) return { designId: chosen };
+    return { errorCode: "DESIGN_TARGET_STALE", candidates: [{ designId: chosen, name: null, source: explicit ? "explicit" : "pinned" }],
+      message: `The ${explicit ? "requested" : "pinned"} design '${chosen}' no longer exists. ${TARGET_HINT}` };
+  }
+  const active = designer?.getActiveDesignId() ?? null;
+  const bound = options.contextResolver.getPrimaryDesign(chatId);
+  if (active && (!bound || bound.refId === active)) return { designId: active };
+  const candidates: TargetCandidate[] = bound?.refId ? [{ designId: bound.refId, name: bound.label, source: "session" }] : [];
+  if (active) {
+    const shown: TargetCandidate = { designId: active, name: await nameOf(active), source: "ui-active" };
+    return { errorCode: "DESIGN_TARGET_AMBIGUOUS", candidates: [...candidates, shown],
+      message: `This MCP session is bound to ${describeTarget(candidates[0]!)} but the OpenPCB UI now shows ` +
+        `${describeTarget(shown)}; refusing to guess. ${TARGET_HINT}` };
+  }
+  for (const design of (await designer?.listDesigns()) ?? []) {
+    if (candidates.length >= MAX_LISTED_CANDIDATES) break;
+    if (design.id !== bound?.refId) candidates.push({ designId: design.id, name: design.name, source: "available" });
+  }
+  return { errorCode: "DESIGN_TARGET_AMBIGUOUS", candidates,
+    message: "No design is open in the OpenPCB UI and this MCP session has no pinned design. " +
+      `Candidates: ${candidates.length ? candidates.map(describeTarget).join(", ") : "none"}. ${TARGET_HINT}` };
+}
+
+function describeTarget(candidate: TargetCandidate): string {
+  return candidate.name === null ? `'${candidate.designId}'` : `"${candidate.name}" ('${candidate.designId}')`;
+}
+
+function targetRefusal(context: AiToolExecutionContext, refusal: TargetRefusal): AiToolResult {
+  const errorMessage = `${refusal.errorCode}: ${refusal.message}`;
+  return { ok: false, data: { errorCode: refusal.errorCode, errorMessage, candidates: refusal.candidates },
+    summary: errorMessage, warnings: [errorMessage], sources: [], truncated: false, limits: context.limits };
 }
 
 async function bindSession(options: McpOptions, chatId: string, designId: string): Promise<void> {
