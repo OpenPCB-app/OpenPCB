@@ -613,6 +613,77 @@ describe("designer PCB placements", () => {
     expect(afterRotate?.placements[0]!.rotationDeg).toBe(90);
   });
 
+  test("move persists sub-um and negative coordinates at integer nm", async () => {
+    isolateTestDb("designer-pcb-placement-nm");
+    const { moduleRuntime, server } = await createRuntime();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const componentId = await importFixtureComponent(server);
+    const design = await designerSdk.createDesign({ name: "Place nm" });
+    const placeResult = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-place-nm",
+      sessionId: "designer-ui-session",
+      aggregateId: design.id,
+      baseRevision: 0,
+      issuedAt: Date.now(),
+      command: { type: "place_part", componentId, positionNm: { x: 0, y: 0 } },
+    });
+    expect(placeResult.ok).toBe(true);
+    const initial = await designerSdk.getPcbProjection(design.id);
+    const placement = initial!.placements[0]!;
+    const originalPos = { ...placement.positionMm };
+
+    let revision = initial!.revision;
+    const move = async (positionMm: { x: number; y: number }, n: number) => {
+      const result = await designerSdk.dispatchCommand(design.id, {
+        commandId: `cmd-move-nm-${n}`,
+        sessionId: "designer-pcb-session",
+        aggregateId: design.id,
+        baseRevision: revision,
+        issuedAt: Date.now(),
+        command: {
+          type: "pcb_move_placement",
+          placementId: placement.id,
+          positionMm,
+        },
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) revision = result.revision;
+      const projection = await designerSdk.getPcbProjection(design.id);
+      return projection!.placements[0]!.positionMm;
+    };
+
+    // Sub-um values survive (1 um rounding would yield { x: -0, y: 10 }).
+    expect(await move({ x: -0.0004567, y: 10.0000012 }, 1)).toEqual({
+      x: -0.000457,
+      y: 10.000001,
+    });
+    // Exact negative nm coordinates are not altered.
+    expect(await move({ x: -3.141592, y: -0.000001 }, 2)).toEqual({
+      x: -3.141592,
+      y: -0.000001,
+    });
+
+    // Reopen (fresh runtime on the same DB) preserves the exact value.
+    resetSharedSqliteForTesting();
+    const reopened = (await createRuntime()).moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    const afterReopen = await reopened.getPcbProjection(design.id);
+    expect(afterReopen!.placements[0]!.positionMm).toEqual({
+      x: -3.141592,
+      y: -0.000001,
+    });
+
+    await reopened.undo(design.id, "designer-pcb-session");
+    const afterUndo = await reopened.undo(design.id, "designer-pcb-session");
+    expect(afterUndo.ok).toBe(true);
+    const restored = await reopened.getPcbProjection(design.id);
+    expect(restored!.placements[0]!.positionMm).toEqual(originalPos);
+  });
+
   test("rejects move on unknown placement", async () => {
     isolateTestDb("designer-pcb-placement-missing");
     const { moduleRuntime } = await createRuntime();

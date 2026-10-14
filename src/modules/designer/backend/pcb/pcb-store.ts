@@ -42,6 +42,7 @@ import {
 } from "../../../../sdks/designer";
 import { findGroundNetId } from "../../../../sdks/designer/ground-net";
 import { compileRuleSet } from "../../../../shared/drc/rule-compile";
+import { snapCoordinateMm } from "../../../../shared/domain/editor-grid";
 import { boardZoneId } from "../../../../shared/pcb-areas/copper-zones";
 import {
   parsePcbKeepoutRecord,
@@ -1989,11 +1990,13 @@ export function movePcbPlacement(params: {
     params.placementId,
   );
   if (!placement) return null;
+  // Integer-nanometre policy (coordinate contract): no coarser quantization of
+  // explicit command coordinates.
   const next: PcbPlacedPart = {
     ...placement,
     positionMm: {
-      x: Number(params.positionMm.x.toFixed(3)),
-      y: Number(params.positionMm.y.toFixed(3)),
+      x: snapCoordinateMm(params.positionMm.x, 0),
+      y: snapCoordinateMm(params.positionMm.y, 0),
     },
   };
   upsertPcbPlacement(params.db, params.designId, next, params.timestamp);

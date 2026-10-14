@@ -108,4 +108,15 @@ describe("stageNewPlacements", () => {
     );
     expect(out.get("a")).toEqual({ xMm: 17, yMm: 18 });
   });
+
+  test("off-grid frame rounds to integer nm, not 1 um", () => {
+    const out = stageNewPlacements(
+      [{ id: "a", bounds: box(4, 4) }],
+      frame({
+        outlineBbox: null,
+        boardCenterMm: { x: 10.0001234, y: 20.0000006 },
+      }),
+    );
+    expect(out.get("a")).toEqual({ xMm: 17.000123, yMm: 18.000001 });
+  });
 });

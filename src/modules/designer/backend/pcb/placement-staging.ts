@@ -3,6 +3,8 @@
  * in a strip to the right of the board outline. Pure, mm, no hashing.
  */
 
+import { snapCoordinateMm } from "../../../../shared/domain/editor-grid";
+
 export interface StagingBounds {
   readonly minX: number;
   readonly minY: number;
@@ -86,7 +88,7 @@ function rightEdge(e: StagingExisting): number {
   return e.xMm + reach;
 }
 
-const round3 = (v: number): number => Number(v.toFixed(3));
+const roundNm = (v: number): number => snapCoordinateMm(v, 0);
 
 /**
  * Column-major shelf layout, top-to-bottom (PCB Y is up, so y decreases down
@@ -124,8 +126,8 @@ export function stageNewPlacements(
     const cellCx = colX + s.w / 2;
     const cellCy = top - used - s.h / 2;
     out.set(item.id, {
-      xMm: round3(cellCx - s.cx),
-      yMm: round3(cellCy - s.cy),
+      xMm: roundNm(cellCx - s.cx),
+      yMm: roundNm(cellCy - s.cy),
     });
     colW = Math.max(colW, s.w);
     used += s.h + GAP_MM;

@@ -16,6 +16,7 @@ import type {
   DesignerPcbCandidatePlacementOperation,
   PcbPlacedPart,
 } from "../../../../sdks/designer";
+import { snapCoordinateMm } from "../../../../shared/domain/editor-grid";
 
 export type PlacementOpKind =
   | "pcb_move_placement"
@@ -42,9 +43,9 @@ export type PlacementPlanResult =
 
 const CARDINAL_ROTATIONS = new Set([0, 90, 180, 270]);
 
-/** Same 3-decimal quantization `movePcbPlacement` applies, so plan == direct-dispatch. */
+/** Same integer-nm rounding `movePcbPlacement` applies, so plan == direct-dispatch. */
 function roundMm(value: number): number {
-  return Number(value.toFixed(3));
+  return snapCoordinateMm(value, 0);
 }
 
 function hasPlacementId(op: unknown): op is { placementId: string } {
