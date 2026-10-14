@@ -10,7 +10,7 @@ export function BootstrapFailure({
 }) {
   return (
     <Recovery
-      error={new Error(message)}
+      error={message}
       reset={onRetry}
       title="OpenPCB could not start"
       navigationAvailable={false}

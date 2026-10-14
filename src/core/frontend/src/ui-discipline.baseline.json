@@ -6,6 +6,9 @@
       "palette": 32,
       "whiteBlack": 4
     },
+    "src/core/frontend/src/components/AppContextMenu.tsx": {
+      "heavyShadow": 1
+    },
     "src/core/frontend/src/screens/HomeScreen.tsx": {
       "whiteBlack": 1,
       "heavyShadow": 1
@@ -39,13 +42,17 @@
       "palette": 4
     },
     "src/modules/assistant/frontend/DesignerChatDock.tsx": {
-      "palette": 65,
+      "nativeDialog": 2,
+      "palette": 77,
       "whiteBlack": 3,
       "heavyShadow": 1
     },
     "src/modules/assistant/frontend/Space.tsx": {
-      "palette": 76,
-      "whiteBlack": 2,
+      "nativeSelect": 1,
+      "nativeDialog": 3,
+      "palette": 214,
+      "whiteBlack": 11,
+      "tinyText": 1,
       "heavyShadow": 3
     },
     "src/modules/assistant/frontend/components/AssistantRunStatusCard.tsx": {
@@ -67,8 +74,12 @@
       "whiteBlack": 2,
       "tinyText": 1
     },
-    "src/modules/assistant/frontend/components/GenericProposalCard.tsx": {
+    "src/modules/assistant/frontend/components/CopilotPlanCard.tsx": {
       "palette": 63,
+      "whiteBlack": 4
+    },
+    "src/modules/assistant/frontend/components/GenericProposalCard.tsx": {
+      "palette": 67,
       "whiteBlack": 3
     },
     "src/modules/assistant/frontend/components/MentionAutocomplete.tsx": {
@@ -90,7 +101,7 @@
       "nativeSelect": 3
     },
     "src/modules/assistant/frontend/components/PlacementProposalCard.tsx": {
-      "palette": 46,
+      "palette": 48,
       "whiteBlack": 2
     },
     "src/modules/assistant/frontend/components/PromptPresetPicker.tsx": {
@@ -160,6 +171,11 @@
     },
     "src/modules/designer/frontend/components/comments/comment-markdown.tsx": {
       "palette": 7
+    },
+    "src/modules/designer/frontend/hooks/use-toast.tsx": {
+      "backdropBlur": 1,
+      "palette": 27,
+      "whiteBlack": 1
     },
     "src/modules/designer/frontend/pcb/AreaToolOptionsBar.tsx": {
       "backdropBlur": 1,
@@ -283,6 +299,10 @@
     "src/modules/library/frontend/import-wizard/WizardProgressBar.tsx": {
       "palette": 8
     },
+    "src/modules/library/frontend/import-wizard/components/FootprintPresetPicker.tsx": {
+      "palette": 58,
+      "whiteBlack": 6
+    },
     "src/modules/library/frontend/import-wizard/components/WarningsPanel.tsx": {
       "palette": 12
     },
@@ -348,6 +368,10 @@
     },
     "src/modules/library/frontend/three-d/ThreeDComponentPreview.tsx": {
       "palette": 5,
+      "whiteBlack": 1
+    },
+    "src/modules/tasks/frontend/Space.tsx": {
+      "palette": 15,
       "whiteBlack": 1
     },
     "src/shared/frontend/markdown/MarkdownContent.tsx": {
