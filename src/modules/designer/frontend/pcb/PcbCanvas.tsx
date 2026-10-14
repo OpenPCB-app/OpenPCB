@@ -17,6 +17,7 @@ import type {
   DesignerCommentTodoStatus,
   DesignerDispatchResult,
   DrcViolation,
+  DesignerUnresolvedFootprint,
   PcbBoardContour,
   PcbBoardOutline,
   PcbCopperLayerId,
@@ -239,6 +240,7 @@ import {
   PCB_TRACE_COLORS,
 } from "../../../../shared/frontend/canvas/layers";
 import { RouteHudRows, RouteHudStatus } from "./RouteHud";
+import { UnresolvedFootprintBanner } from "./UnresolvedFootprintBanner";
 import { buildRouteHudModel, routeLengthMm } from "./tools/route-hud-model";
 import { buildPcbSpatialIndex, pointQueryBox } from "./spatial-index";
 import { nextRouteLayer } from "./tools/route-layer";
@@ -274,6 +276,7 @@ import {
 } from "../../../../shared/pcb-geometry/pad-geometry";
 import { generateMeander } from "../../../../shared/pcb-routing/meander";
 import { routeAutoFinish } from "../../../../shared/pcb-routing/auto-finish";
+import { routePreviewStyle } from "./route-preview-style";
 import { walkaroundHead } from "../../../../shared/pcb-routing/walkaround";
 import { buildRouteObstacles } from "../../../../shared/pcb-routing/route-obstacles";
 import { defaultNetClassId } from "../../../../shared/pcb-areas/net-class-resolver";
@@ -443,6 +446,14 @@ interface PcbCanvasProps {
    * `null` when idle (so the status bar can fall back to the batch count).
    */
   onDrcCountChange?: (count: number | null) => void;
+  /** Reports parts with no usable footprint (status-bar chip). */
+  onUnresolvedFootprintsChange?: (
+    items: readonly DesignerUnresolvedFootprint[],
+  ) => void;
+  /** "Fix…" action on the unresolved-footprint banner; hidden when absent. */
+  onFixFootprint?: (partId: string) => void;
+  /** Bump to re-fetch the PCB projection after an out-of-canvas command. */
+  refreshToken?: number;
   /** Reports the number of selected primitives (for the status bar). */
   onSelectionCountChange?: (count: number) => void;
   commentThreads?: readonly DesignerCommentThread[];
@@ -509,6 +520,8 @@ interface PcbCanvasProps {
     placementIds: readonly string[];
     /** Cross-probe by refdes (resolved against loaded placements). */
     references?: readonly string[];
+    /** Also center the camera on the first matched placement. */
+    frame?: boolean;
     nonce: number;
   } | null;
   initialViewport?: ViewportState | null;
@@ -517,6 +530,7 @@ interface PcbCanvasProps {
 
 /** Stable identity for the optional `partValues` prop. */
 const EMPTY_PART_VALUES: ReadonlyMap<string, string> = new Map();
+const EMPTY_UNRESOLVED: readonly DesignerUnresolvedFootprint[] = [];
 // Stable empty fallbacks: the area hooks memoise on these, so a fresh literal
 // per render would re-run every dependent memo while no projection is loaded.
 const EMPTY_ZONES: ReadonlyArray<PcbZone> = [];
@@ -567,6 +581,14 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     dispatchCommand: props.dispatchCommand,
     notifyExternalRevisionBump: props.notifyExternalRevisionBump,
   });
+  const { refresh: refreshPcbProjection } = workspace;
+  const lastRefreshToken = useRef(props.refreshToken ?? 0);
+  useEffect(() => {
+    const token = props.refreshToken ?? 0;
+    if (token === lastRefreshToken.current) return;
+    lastRefreshToken.current = token;
+    void refreshPcbProjection();
+  }, [props.refreshToken, refreshPcbProjection]);
   // THE effective keepouts for this projection (zone/keepout contract §4),
   // derived once in the workspace hook. Feeds the scene, the route obstacles
   // (conservative AABB superset), the live DRC (exact predicate) and the
@@ -1088,7 +1110,44 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       pendingRefSelectRef.current = null;
     }
     setSelection({ ...emptyPcbSelection(), placementIds: ids });
+    if (request.frame) {
+      const target = (workspace.projection?.placements ?? []).find((p) =>
+        ids.has(p.id),
+      );
+      if (target) {
+        const scaleX = workspace.viewSide === "bottom" ? -1 : 1;
+        cameraControlsRef.current?.centerOnMm({
+          x: scaleX * target.positionMm.x,
+          y: target.positionMm.y,
+        });
+      }
+    }
   }, [props.selectionRequest]);
+
+  // Parts with no usable footprint: status-bar chip feed + banner click.
+  const unresolvedFootprints =
+    workspace.projection?.unresolvedFootprints ?? EMPTY_UNRESOLVED;
+  const onUnresolvedFootprintsChange = props.onUnresolvedFootprintsChange;
+  useEffect(() => {
+    onUnresolvedFootprintsChange?.(unresolvedFootprints);
+    return () => onUnresolvedFootprintsChange?.(EMPTY_UNRESOLVED);
+  }, [unresolvedFootprints, onUnresolvedFootprintsChange]);
+  const focusUnresolvedPlacement = useCallback(
+    (item: DesignerUnresolvedFootprint) => {
+      const placement = (workspace.projection?.placements ?? []).find(
+        (p) => p.id === item.placementId,
+      );
+      if (!placement) return;
+      setToolMode("select");
+      setSelection({ ...emptyPcbSelection(), placementIds: new Set([placement.id]) });
+      const scaleX = workspace.viewSide === "bottom" ? -1 : 1;
+      cameraControlsRef.current?.centerOnMm({
+        x: scaleX * placement.positionMm.x,
+        y: placement.positionMm.y,
+      });
+    },
+    [workspace.projection?.placements, workspace.viewSide],
+  );
 
   // Resolve a parked refdes cross-probe once the PCB projection loads.
   useEffect(() => {
@@ -5157,6 +5216,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     let detourAnchorsNm: PointNm[] | null = null;
     let walkChoice: { clusterSignature: string; side: "cw" | "ccw" } | null =
       null;
+    let walkBlocked = false;
     if (walkaroundEnabled && workspace.projection && legalityContext) {
       const headStartNm = committedAnchors[committedAnchors.length - 1]!;
       // Corridor padding only: the board-wide upper bound, so the query window
@@ -5220,8 +5280,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           side: walk.side,
         };
       }
-      // "blocked" and "clear" both fall through to the direct ghost —
-      // blocked keeps today's collision highlight as the fallback.
+      // "blocked" and "clear" both fall through to the direct ghost; blocked
+      // is surfaced as `walkBlocked` so the ghost renders in the illegal style.
+      walkBlocked = walk.status === "blocked";
     }
     const anchors = [
       ...committedAnchors,
@@ -5239,6 +5300,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       layer: session.layer,
       detourAnchorsNm,
       walkChoice,
+      walkBlocked,
     };
   }, [
     cursorMm,
@@ -5741,15 +5803,42 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
 
   const sceneRoutePreview = useMemo(() => {
     if (!routePreview) return null;
+    const style = routePreviewStyle({
+      blocked: routePreview.walkBlocked,
+      blockingCount: drcBlocking.length,
+      layerColor: copperLayerColor(routePreview.layer),
+    });
     return {
       pointsNm: routePreview.pointsNm,
       layer: routePreview.layer,
+      ...(style.illegal
+        ? { colorOverride: style.color, opacity: style.opacity }
+        : {}),
       widthMm:
         routeState.kind === "routing"
           ? routeState.session.widthMm
           : (defaultNetClass?.traceWidthMm ?? 0.25),
     };
-  }, [defaultNetClass?.traceWidthMm, routePreview, routeState]);
+  }, [defaultNetClass?.traceWidthMm, drcBlocking.length, routePreview, routeState]);
+
+  // Live route-session violations only (cleared when the session ends because
+  // drcViolations is EMPTY outside "routing"); batch markers stay separate.
+  const liveRouteViolationMarkers = useMemo(
+    () =>
+      drcViolations.flatMap((v) =>
+        v.locationMm
+          ? [
+              {
+                id: v.id,
+                x: v.locationMm.x,
+                y: v.locationMm.y,
+                severity: v.severity,
+              },
+            ]
+          : [],
+      ),
+    [drcViolations],
+  );
 
   // Dimmed auto-finish proposal ghost (explicit-accept preview).
   const sceneAutoFinishPreview = useMemo(() => {
@@ -5914,6 +6003,17 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       className="relative h-full w-full bg-surface-canvas-well"
       style={canvasCursor ? { cursor: canvasCursor } : undefined}
     >
+      {unresolvedFootprints.length > 0 ? (
+        <div className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-center px-3">
+          <div className="pointer-events-auto w-full max-w-[640px]">
+            <UnresolvedFootprintBanner
+              items={unresolvedFootprints}
+              onSelect={focusUnresolvedPlacement}
+              onFixFootprint={props.onFixFootprint}
+            />
+          </div>
+        </div>
+      ) : null}
       {workspace.projection ? (
         <EdaCanvas
           key={props.designId}
@@ -5955,6 +6055,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             routeGuide={sceneRouteGuide}
             routeGuides={sceneRouteGuides}
             routePreview={sceneRoutePreview}
+            liveRouteViolations={liveRouteViolationMarkers}
             autoroutePreview={autoroutePreview}
             routePendingPreview={sceneRoutePendingPreview}
             routePendingVias={pendingRouteGeometry.vias}

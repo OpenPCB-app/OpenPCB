@@ -75,7 +75,7 @@ export function correlateNetPads(
         if (!reportedEmptyPlacement.has(placement.id)) {
           reportedEmptyPlacement.add(placement.id);
           warnings.push(
-            `WARN: placement ${placement.id} (component ${placement.componentId}) has no pads in footprint.preview.pads — every net referencing this part will fail to correlate`,
+            `WARN: ${placement.reference} has no footprint pads — nets on it cannot be routed until a footprint is assigned`,
           );
         }
         continue;

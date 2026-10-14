@@ -584,7 +584,8 @@ function attachLabels(
     union: (a: string, b: string) => void;
     wireNode: (wireId: string) => string;
   },
-): void {
+): Set<string> {
+  const attached = new Set<string>();
   for (const [labelNode, point] of labelCoords) {
     for (const wire of wires) {
       const pts = wire.pointsNm;
@@ -594,18 +595,29 @@ function attachLabels(
           : pts.some(
               (b, i) => i > 0 && withinLabelTolerance(point, pts[i - 1]!, b),
             );
-      if (touches) graph.union(labelNode, graph.wireNode(wire.id));
+      if (touches) {
+        graph.union(labelNode, graph.wireNode(wire.id));
+        attached.add(labelNode);
+      }
     }
     for (const [pinNode, pin] of pinCoords) {
-      if (withinLabelTolerance(point, pin, pin)) graph.union(labelNode, pinNode);
+      if (withinLabelTolerance(point, pin, pin)) {
+        graph.union(labelNode, pinNode);
+        attached.add(labelNode);
+      }
     }
   }
+  return attached;
 }
 
 export interface NetDerivationResult {
   nets: DesignerDerivedNet[];
   junctions: DesignerJunction[];
   warnings: NetDerivationWarning[];
+  /** Labels whose anchor touches a wire or pin (name-only joins excluded). */
+  attachedLabelIds: Set<string>;
+  /** gnd/pwr/net_portal whose connection point lands on a pin or wire. */
+  attachedPrimitiveIds: Set<string>;
 }
 
 /**
@@ -777,10 +789,31 @@ export function deriveNetsAndJunctions(
       unionFind.union(pt, wNode(hit.wireId, hit.segStartIdx));
     }
   }
-  attachLabels(labelCoords, wires, pinCoords, {
+  const attachedLabelNodes = attachLabels(labelCoords, wires, pinCoords, {
     union: (a, b) => unionFind.union(a, b),
     wireNode: (wireId) => wNode(wireId, 0),
   });
+  const attachedLabelIds = new Set<string>();
+  for (const label of labels) {
+    if (attachedLabelNodes.has(ptNode(label.positionNm)))
+      attachedLabelIds.add(label.id);
+  }
+  // A primitive is attached when its connection point coincides with a part
+  // pin, a wire vertex or lies strictly inside a wire segment — the exact
+  // predicates of the pin-like T-touch unions above.
+  const partPinNodes = new Set<string>();
+  for (const part of parts)
+    for (const pin of part.pins) partPinNodes.add(ptNode(pin.worldPositionNm));
+  const attachedPrimitiveIds = new Set<string>();
+  for (const prim of primitives) {
+    const coord = pointKey(prim.positionNm);
+    if (
+      partPinNodes.has(`pt:${coord}`) ||
+      (vertexByCoord.get(coord)?.length ?? 0) > 0 ||
+      passThroughSegments(prim.positionNm).length > 0
+    )
+      attachedPrimitiveIds.add(prim.id);
+  }
 
   // Global named-net union: every primitive or net label that names a net
   // merges with all others sharing that name, even without a physical wire —
@@ -964,7 +997,7 @@ export function deriveNetsAndJunctions(
     .map((point) => ({ xNm: point.x, yNm: point.y }))
     .sort((a, b) => (a.xNm === b.xNm ? a.yNm - b.yNm : a.xNm - b.xNm));
 
-  return { nets, junctions, warnings };
+  return { nets, junctions, warnings, attachedLabelIds, attachedPrimitiveIds };
 }
 
 export function projectionFromWorld(
@@ -1002,8 +1035,14 @@ export function projectionFromWorld(
     revision,
     parts,
     wires,
-    labels,
-    primitives,
+    labels: labels.map((l) => ({
+      ...l,
+      attached: derived.attachedLabelIds.has(l.id),
+    })),
+    primitives: primitives.map((p) => ({
+      ...p,
+      attached: derived.attachedPrimitiveIds.has(p.id),
+    })),
     nets: derived.nets,
     junctions: derived.junctions,
   };

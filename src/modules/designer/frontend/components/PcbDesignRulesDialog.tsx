@@ -115,11 +115,13 @@ function NumberField({
   value,
   onChange,
   title,
+  min = 0,
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
   title?: string;
+  min?: number;
 }): ReactElement {
   return (
     <label
@@ -131,9 +133,13 @@ function NumberField({
         <input
           type="number"
           step={0.01}
-          min={0}
+          min={min}
           value={value}
-          onChange={(e) => onChange(Number.parseFloat(e.target.value) || 0)}
+          onChange={(e) => {
+            const parsed = Number.parseFloat(e.target.value) || 0;
+            if (min !== undefined && parsed < min) return;
+            onChange(parsed);
+          }}
           className="w-20 rounded-control border border-border-control bg-surface-input px-1.5 py-0.5 text-right font-mono text-xs"
         />
         <span className="text-[10px] text-text-tertiary">mm</span>
@@ -206,11 +212,13 @@ export function PcbDesignRulesDialog({
     board.lengthMatchGroups ?? [],
   );
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const lengthTuningEnabled = useFeatureFlag("pcb.lengthTuning");
 
   // Re-seed the form whenever it opens against the live board.
   useEffect(() => {
     if (!open) return;
+    setError(null);
     setClearance(seedClearance(board.designRules));
     setMinimums(board.designRules.minimums);
     setThickness(board.boardThicknessMm ?? 1.6);
@@ -218,6 +226,11 @@ export function PcbDesignRulesDialog({
     setAssignments(board.perNetClassAssignments ?? {});
     setLengthGroups(board.lengthMatchGroups ?? []);
   }, [open, board]);
+
+  // An edit supersedes the last save error.
+  useEffect(() => {
+    setError(null);
+  }, [clearance, minimums, thickness, netClasses, assignments, lengthGroups]);
 
   if (!open) return null;
 
@@ -235,6 +248,7 @@ export function PcbDesignRulesDialog({
 
   const save = async (): Promise<void> => {
     setSaving(true);
+    setError(null);
     try {
       await onSave({
         designRules: designRulesForSave(
@@ -250,6 +264,8 @@ export function PcbDesignRulesDialog({
         ),
       });
       onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Saving design rules failed");
     } finally {
       setSaving(false);
     }
@@ -541,7 +557,12 @@ export function PcbDesignRulesDialog({
           ) : null}
         </div>
 
-        <footer className="flex justify-end gap-2 border-t border-border px-4 py-3">
+        <footer className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
+          {error ? (
+            <p role="alert" className="mr-auto text-xs text-status-danger">
+              {error}
+            </p>
+          ) : null}
           <button
             type="button"
             onClick={onClose}

@@ -93,6 +93,7 @@ function projection(parts: Partial<DesignerPcbProjection> = {}): DesignerPcbProj
     ratsnest: parts.ratsnest ?? [],
     netNames: parts.netNames ?? {},
     padNets: parts.padNets,
+    unresolvedFootprints: [],
     warnings: [],
   };
 }

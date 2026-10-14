@@ -1029,4 +1029,67 @@ describe("designer PCB placements", () => {
     });
     expect(result.ok).toBe(false);
   });
+  test("staged placements: stable on resync, repair relocates absurd", async () => {
+    isolateTestDb("designer-pcb-staging");
+    const { moduleRuntime, server } = await createRuntime();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    const componentId = await importFixtureComponent(server);
+    const design = await designerSdk.createDesign({ name: "Staging" });
+
+    let rev = 0;
+    const place = async (n: number): Promise<void> => {
+      const r = await designerSdk.dispatchCommand(design.id, {
+        commandId: `cmd-stage-${n}`,
+        sessionId: "designer-ui-session",
+        aggregateId: design.id,
+        baseRevision: rev,
+        issuedAt: Date.now(),
+        command: {
+          type: "place_part",
+          componentId,
+          positionNm: { x: n * 10_000_000, y: 0 },
+        },
+      });
+      expect(r.ok).toBe(true);
+      if (r.ok) rev = r.revision;
+    };
+
+    await place(1);
+    await place(2);
+    const first = await designerSdk.getPcbProjection(design.id);
+    expect(first?.placements).toHaveLength(2);
+    const outlineMaxX =
+      first!.board.outline.centerMm.x + first!.board.outline.widthMm / 2;
+    for (const p of first!.placements) {
+      expect(p.positionMm.x).toBeGreaterThan(outlineMaxX);
+    }
+    const before = new Map(first!.placements.map((p) => [p.id, p.positionMm]));
+
+    await place(3);
+    const second = await designerSdk.getPcbProjection(design.id);
+    expect(second?.placements).toHaveLength(3);
+    for (const [id, pos] of before) {
+      expect(second!.placements.find((p) => p.id === id)!.positionMm).toEqual(
+        pos,
+      );
+    }
+    const keys = new Set(
+      second!.placements.map((p) => `${p.positionMm.x},${p.positionMm.y}`),
+    );
+    expect(keys.size).toBe(3);
+
+    // Absurd position is repaired into the staging strip.
+    const victim = first!.placements[0]!;
+    getSharedSqlite()
+      .query(
+        "update designer_pcb_entities set payload_json = json_set(payload_json, '$.positionMm.x', 1e12) where id = ?",
+      )
+      .run(victim.id);
+    const healed = await designerSdk.getPcbProjection(design.id);
+    const fixed = healed!.placements.find((p) => p.id === victim.id)!;
+    expect(Math.abs(fixed.positionMm.x)).toBeLessThan(10_000);
+    expect(fixed.positionMm.x).toBeGreaterThan(outlineMaxX);
+  });
 });

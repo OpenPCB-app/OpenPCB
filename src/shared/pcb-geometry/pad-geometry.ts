@@ -10,6 +10,35 @@ import { placementMirrorX as sdkPlacementMirrorX } from "../../sdks/designer/pcb
 import type { PadCopperShape } from "./pad-annular";
 import { normalizeRotationDeg } from "./rotation";
 
+export type UnresolvedFootprintReason = "no-footprint" | "no-pads";
+
+/**
+ * Single answer to "does this placement/part footprint lack real copper?".
+ * Null input, virtual mount, the shared `placeholder:` sourceHash or a null
+ * preview are all the library's no-footprint placeholder.
+ */
+export function unresolvedFootprintReason(
+  fp:
+    | {
+        mountType?: string | null;
+        preview?: { pads?: readonly unknown[] } | null;
+        sourceHash?: string | null;
+      }
+    | null
+    | undefined,
+): UnresolvedFootprintReason | null {
+  if (
+    !fp ||
+    fp.mountType === "virtual" ||
+    (typeof fp.sourceHash === "string" && fp.sourceHash.startsWith("placeholder:")) ||
+    !fp.preview
+  ) {
+    return "no-footprint";
+  }
+  if (!fp.preview.pads || fp.preview.pads.length === 0) return "no-pads";
+  return null;
+}
+
 export function transformPadCenterMm(
   localMm: PcbPointMm,
   partRotationDeg: number,

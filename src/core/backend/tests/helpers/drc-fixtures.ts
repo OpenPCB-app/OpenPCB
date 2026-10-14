@@ -102,6 +102,7 @@ export function projection(
     ratsnest: parts.ratsnest ?? [],
     netNames: parts.netNames ?? {},
     padNets: parts.padNets,
+    unresolvedFootprints: [],
     warnings: [],
   };
 }

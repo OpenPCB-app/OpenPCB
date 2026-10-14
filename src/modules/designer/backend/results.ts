@@ -70,6 +70,16 @@ export function parseDispatchResultJson(
       : null;
   }
 
+  if (code === "FOOTPRINT_PIN_MISMATCH") {
+    const partId = asString(parsed.partId);
+    const missing = parsed.missingPinNumbers;
+    return partId &&
+      Array.isArray(missing) &&
+      missing.every((n) => typeof n === "string")
+      ? { ok: false, code, partId, missingPinNumbers: missing as string[] }
+      : null;
+  }
+
   if (code === "PIN_NOT_FOUND") {
     const pinId = asString(parsed.pinId);
     return pinId ? { ok: false, code, pinId } : null;
@@ -218,6 +228,13 @@ export function conflict(
 
 export function componentNotFound(componentId: string): DesignerDispatchResult {
   return { ok: false, code: "COMPONENT_NOT_FOUND", componentId };
+}
+
+export function footprintPinMismatch(
+  partId: string,
+  missingPinNumbers: string[],
+): DesignerDispatchResult {
+  return { ok: false, code: "FOOTPRINT_PIN_MISMATCH", partId, missingPinNumbers };
 }
 
 export function pinNotFound(pinId: string): DesignerDispatchResult {

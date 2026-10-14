@@ -48,6 +48,7 @@ function projection(
     ratsnest: parts.ratsnest ?? [],
     netNames: parts.netNames ?? {},
     padNets: parts.padNets,
+    unresolvedFootprints: [],
     warnings: [],
   };
 }
@@ -252,6 +253,17 @@ describe("buildBoardSnapshot", () => {
       "net_b",
     ]);
     expect(warnings).toEqual([]);
+  });
+
+  test("pad-less parts are named by refdes in the warnings", () => {
+    const { warnings } = buildBoardSnapshot(
+      projection({ placements: [placement("U1", []), placement("U2", [])] }),
+    );
+    expect(warnings.some((w) => /Skipped U1, U2: no footprint pads/.test(w))).toBe(
+      true,
+    );
+    expect(warnings.some((w) => /No routable nets: U1, U2/.test(w))).toBe(true);
+    expect(warnings.some((w) => /No unrouted nets match/.test(w))).toBe(false);
   });
 
   test("trace pointsNm pass through as integer nanometers (no conversion)", () => {

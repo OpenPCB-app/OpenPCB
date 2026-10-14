@@ -8,6 +8,7 @@ import type {
 } from "../../../../sdks";
 import { createDesignerApi } from "../api";
 import { PcbDesignRulesDialog } from "../components/PcbDesignRulesDialog";
+import { dispatchFailureMessage } from "./dispatch-failure";
 
 export interface PcbDesignRulesSaveInput {
   designRules: PcbDesignRules;
@@ -79,7 +80,10 @@ export function usePcbDesignRulesDialog({
           lengthMatchGroups: next.lengthMatchGroups,
         },
       };
-      await api.dispatch(designId, envelope);
+      const result = await api.dispatch(designId, envelope);
+      if (!result.ok) {
+        throw new Error(dispatchFailureMessage("Design rules", result));
+      }
       await onSaved?.();
     },
     [api, designId, fallbackRevision, onSaved, projection?.revision, sessionId],

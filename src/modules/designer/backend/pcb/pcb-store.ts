@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type {
   DrcRuleClass,
+  PcbBoardOutline,
   PcbBoardSettings,
   PcbCopperLayerId,
   PcbDesignRules,
@@ -47,8 +48,13 @@ import {
   upgradePcbZoneRecord,
   type ZoneRecordWarning,
 } from "../../../../shared/pcb-areas/zone-parse";
+import {
+  computeOutlineBboxMm,
+  type OutlineBboxMm,
+} from "../../../../shared/pcb-geometry/outline-geometry";
 import { pcbEntities } from "../schema";
 import { asNumber, asRecord, asString } from "../value-guards";
+import { stageNewPlacements } from "./placement-staging";
 import {
   serializeBoardSettings,
   serializeRawBoardSettings,
@@ -636,6 +642,117 @@ export function validateNetClassesForSave(
   const firstId = asString(asRecord(value[0])?.id)?.trim();
   if (defaultId !== undefined && firstId !== defaultId) {
     return `the default net class '${stored[0]!.name}' cannot be deleted or moved`;
+  }
+  return null;
+}
+
+type RuleBound = "nonNegative" | "positive";
+
+/** Optional keys may be an explicit `null` (= clear); the rest may not. */
+function ruleFieldProblem(
+  block: Record<string, unknown>,
+  key: string,
+  path: string,
+  bound: RuleBound,
+  nullable: boolean,
+): string | null {
+  const v = block[key];
+  if (v === undefined || (nullable && v === null)) return null;
+  const label = `designRules.${path}`;
+  if (typeof v !== "number" || !Number.isFinite(v)) {
+    return `${label} must be a finite number (got ${String(v)})`;
+  }
+  if (bound === "positive" ? v <= 0 : v < 0) {
+    return `${label} must be ${bound === "positive" ? "> 0" : ">= 0"} (got ${v})`;
+  }
+  return null;
+}
+
+const CLEARANCE_RULE_KEYS: readonly [string, boolean][] = [
+  ["traceToTraceMm", false],
+  ["traceToPadMm", false],
+  ["padToPadMm", false],
+  ["traceToViaMm", false],
+  ["viaToViaMm", false],
+  ["copperToBoardEdgeMm", false],
+  ["holeToBoardEdgeMm", true],
+  ["pourToCopperMm", true],
+  ["copperToHoleMm", true],
+];
+
+const MINIMUM_RULE_KEYS: readonly [string, RuleBound, boolean][] = [
+  ["traceWidthMm", "positive", false],
+  ["drillSizeMm", "positive", false],
+  ["annularRingMm", "nonNegative", false],
+  ["viaDiameterMm", "positive", false],
+  ["viaDrillMm", "positive", false],
+  ["holeToHoleMm", "nonNegative", false],
+  ["clearanceMm", "nonNegative", true],
+];
+
+const DFM_RULE_BLOCKS: readonly [string, readonly string[]][] = [
+  ["silkscreen", ["silkToMaskClearanceMm", "silkToBoardEdgeMm"]],
+  ["solderMask", ["minBridgeMm"]],
+  [
+    "dfm",
+    [
+      "sliverWidthMm",
+      "sliverMinLengthMm",
+      "acuteAngleDeg",
+      "courtyardFallbackMm",
+    ],
+  ],
+  ["outline", ["minWebMm"]],
+];
+
+/**
+ * Fail-closed validation of the RAW `designRules` / `boardThicknessMm` of a
+ * `pcb_set_design_rules` command, before {@link parseDesignRules} defaults or
+ * drops anything: a physically invalid value the user wrote (negative
+ * clearance, non-finite, non-numeric) is refused with a field-specific
+ * message instead of being persisted or silently replaced. Absent keys are
+ * fine. Returns the first problem, or `null`.
+ */
+export function validateDesignRulesForSave(
+  raw: unknown,
+  boardThicknessMm?: unknown,
+): string | null {
+  const thickness = ruleFieldProblem(
+    { boardThicknessMm },
+    "boardThicknessMm",
+    "boardThicknessMm",
+    "positive",
+    false,
+  );
+  if (thickness) return thickness.replace("designRules.", "");
+  const r = asRecord(raw);
+  if (!r) return null;
+  const c = asRecord(r.clearance);
+  if (c) {
+    for (const [key, nullable] of CLEARANCE_RULE_KEYS) {
+      const p = ruleFieldProblem(c, key, `clearance.${key}`, "nonNegative", nullable);
+      if (p) return p;
+    }
+  }
+  const m = asRecord(r.minimums);
+  if (m) {
+    for (const [key, bound, nullable] of MINIMUM_RULE_KEYS) {
+      const p = ruleFieldProblem(m, key, `minimums.${key}`, bound, nullable);
+      if (p) return p;
+    }
+    const drill = m.viaDrillMm;
+    const dia = m.viaDiameterMm;
+    if (typeof drill === "number" && typeof dia === "number" && drill >= dia) {
+      return `designRules.minimums.viaDrillMm must be < viaDiameterMm (got ${drill} >= ${dia})`;
+    }
+  }
+  for (const [block, keys] of DFM_RULE_BLOCKS) {
+    const b = asRecord(r[block]);
+    if (!b) continue;
+    for (const key of keys) {
+      const p = ruleFieldProblem(b, key, `${block}.${key}`, "nonNegative", true);
+      if (p) return p;
+    }
   }
   return null;
 }
@@ -1925,28 +2042,18 @@ export function flipPcbPlacement(params: {
   return next;
 }
 
-function deterministicOffset(index: number): { x: number; y: number } {
-  const base = 1.5;
-  const step = 0.8;
-  const slotsPerRing = 6;
-  const ring = Math.floor(index / slotsPerRing);
-  const slot = index % slotsPerRing;
-  const angle = (slot / slotsPerRing) * 2 * Math.PI;
-  const radius = base + ring * step;
+function toBbox(b: OutlineBboxMm): {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+} {
   return {
-    x: Number((radius * Math.cos(angle)).toFixed(3)),
-    y: Number((radius * Math.sin(angle)).toFixed(3)),
+    minX: b.centerMm.x - b.widthMm / 2,
+    maxX: b.centerMm.x + b.widthMm / 2,
+    minY: b.centerMm.y - b.heightMm / 2,
+    maxY: b.centerMm.y + b.heightMm / 2,
   };
-}
-
-function hashStringToIndex(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & 0x7fffffff; // Keep within 31-bit positive range
-  }
-  return hash;
 }
 
 export function syncPcbPlacementsFromSchematic(params: {
@@ -1959,6 +2066,8 @@ export function syncPcbPlacementsFromSchematic(params: {
     footprint: PcbPlacedPart["footprint"];
   }>;
   boardCenter: PcbPointMm;
+  /** When given, new placements are staged in a strip right of its bbox. */
+  outline?: PcbBoardOutline;
   /** Layer assigned to newly-created placements; B.Cu also flips mirror. Defaults to F.Cu. */
   defaultLayer?: PcbLayerId;
   timestamp: string;
@@ -1968,6 +2077,7 @@ export function syncPcbPlacementsFromSchematic(params: {
     designId,
     schematicParts,
     boardCenter,
+    outline,
     defaultLayer = "F.Cu",
     timestamp,
   } = params;
@@ -1994,6 +2104,31 @@ export function syncPcbPlacementsFromSchematic(params: {
     !Number.isFinite(p.positionMm.y) ||
     Math.abs(p.positionMm.x) > POSITION_SANITY_MM ||
     Math.abs(p.positionMm.y) > POSITION_SANITY_MM;
+
+  // Stage every part lacking a usable position (new or absurd) in one pass,
+  // in input order, against all kept placements — existing ones never move.
+  const kept = existing.filter(
+    (p) => schematicPartIds.has(p.partId) && !isAbsurd(p),
+  );
+  const needStaging = schematicParts.filter((part) => {
+    const e = existingByPartId.get(part.id);
+    return !e || isAbsurd(e);
+  });
+  const staged = stageNewPlacements(
+    needStaging.map((part) => ({
+      id: part.id,
+      bounds: part.footprint.preview?.bounds,
+    })),
+    {
+      outlineBbox: outline ? toBbox(computeOutlineBboxMm(outline)) : null,
+      boardCenterMm: boardCenter,
+      existing: kept.map((p) => ({
+        xMm: p.positionMm.x,
+        yMm: p.positionMm.y,
+        bounds: p.footprint.preview?.bounds,
+      })),
+    },
+  );
 
   // Create or repair placements for each schematic part.
   const result: PcbPlacedPart[] = [];
@@ -2022,11 +2157,10 @@ export function syncPcbPlacementsFromSchematic(params: {
       }
       continue;
     }
-    const index = hashStringToIndex(part.id) % 24;
-    const offset = deterministicOffset(index);
+    const slot = staged.get(part.id);
     const repairedPosition = {
-      x: Number((boardCenter.x + offset.x).toFixed(3)),
-      y: Number((boardCenter.y + offset.y).toFixed(3)),
+      x: slot?.xMm ?? boardCenter.x,
+      y: slot?.yMm ?? boardCenter.y,
     };
     if (existingPlacement) {
       // Repair in place: keep id + manual fields the user set, reset position.

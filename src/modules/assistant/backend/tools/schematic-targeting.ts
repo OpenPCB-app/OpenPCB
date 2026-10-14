@@ -345,13 +345,19 @@ export function planNetConnect(
 
   let primitiveCommand: PrimitiveCommand;
   if (kind === "gnd") {
-    primitiveCommand = { type: "place_gnd_port", positionNm, rotationDeg };
+    primitiveCommand = {
+      type: "place_gnd_port",
+      positionNm,
+      rotationDeg,
+      confirmMerge: true,
+    };
   } else if (kind === "pwr") {
     primitiveCommand = {
       type: "place_pwr_port",
       positionNm,
       rotationDeg,
       railText: name,
+      confirmMerge: true,
     };
   } else {
     primitiveCommand = {
@@ -359,6 +365,7 @@ export function planNetConnect(
       positionNm,
       rotationDeg,
       portalText: name,
+      confirmMerge: true,
     };
   }
   return { ok: true, plan: { sourcePinId, primitiveCommand } };

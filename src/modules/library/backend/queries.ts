@@ -16,6 +16,8 @@ import type {
   LibraryFootprintDetail,
   LibraryFootprintModelDescriptor,
   LibraryFootprintPlacementSnapshot,
+  LibraryAddComponentFootprintInput,
+  LibraryDefaultFootprintRef,
   LibraryListTagsOptions,
   LibraryMountType,
   LibraryPreviewWarning,
@@ -56,6 +58,13 @@ import {
   normalizeBounds,
 } from "../../../shared/rendering/geometry";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { PLACEHOLDER_FOOTPRINT_ID } from "./builtins/placeholder-footprint";
+import { buildAuthoredFootprintRecord } from "./import/footprint-record";
+import { buildIdentityPinMapJson } from "./import/pinmap";
+import {
+  validateFootprintPads,
+  validateSymbolPinsCoverFootprintPads,
+} from "./import/validate-pads";
 import {
   componentFootprints,
   components,
@@ -1701,6 +1710,8 @@ export function deleteComponents(
     // Delete orphaned footprints
     let deletedFootprints = 0;
     for (const footprintId of footprintIds) {
+      // The shared placeholder is referenced by id from designs; never GC it.
+      if (footprintId === PLACEHOLDER_FOOTPRINT_ID) continue;
       const still =
         transactionalDb
           .select({ id: components.id })
@@ -1904,14 +1915,53 @@ export async function updateComponent(
     updates.tagsJson = JSON.stringify(normalizeTagList(patch.tags));
   }
 
-  if (Object.keys(updates).length === 0) {
+  let defaultFootprint: FootprintRow | null = null;
+  let symbolRow: SymbolRow | null = null;
+  if (patch.defaultFootprintId !== undefined) {
+    if (
+      typeof patch.defaultFootprintId !== "string" ||
+      patch.defaultFootprintId.trim().length === 0
+    ) {
+      throw new ValidationError("defaultFootprintId must be a non-empty string");
+    }
+    defaultFootprint = await db
+      .select()
+      .from(footprints)
+      .where(eq(footprints.id, patch.defaultFootprintId))
+      .get() ?? null;
+    if (!defaultFootprint) {
+      throw new ValidationError(
+        `Footprint "${patch.defaultFootprintId}" does not exist`,
+      );
+    }
+    symbolRow = await db
+      .select()
+      .from(symbols)
+      .where(eq(symbols.id, existing.symbolId))
+      .get() ?? null;
+    if (!symbolRow) {
+      throw new ValidationError("Component symbol is missing");
+    }
+    assertSymbolPinsCoveredByFootprint(symbolRow, defaultFootprint);
+  }
+
+  if (Object.keys(updates).length === 0 && !defaultFootprint) {
     return mapComponent(existing);
   }
 
-  db.update(components)
-    .set(updates)
-    .where(eq(components.id, componentId))
-    .run();
+  db.transaction((tx) => {
+    const txDb = tx as typeof db;
+    if (Object.keys(updates).length > 0) {
+      txDb
+        .update(components)
+        .set(updates)
+        .where(eq(components.id, componentId))
+        .run();
+    }
+    if (defaultFootprint && symbolRow) {
+      linkFootprintAsDefault(txDb, existing.id, defaultFootprint, symbolRow);
+    }
+  });
 
   const refreshed = await db
     .select()
@@ -1919,6 +1969,345 @@ export async function updateComponent(
     .where(eq(components.id, componentId))
     .get();
   return refreshed ? mapComponent(refreshed) : null;
+}
+
+/**
+ * Pin⊆pad gate for linking an EXISTING footprint to a component. The shared
+ * placeholder is always allowed (it has no pads by design); any other footprint
+ * must carry pad geometry whose numbers cover every symbol pin number.
+ */
+function assertSymbolPinsCoveredByFootprint(
+  symbolRow: SymbolRow,
+  footprintRow: FootprintRow,
+): void {
+  if (footprintRow.id === PLACEHOLDER_FOOTPRINT_ID) return;
+  const symbolData = parseJsonObject(symbolRow.dataJson);
+  const normalizedSymbol = asRecord(symbolData.normalized);
+  const rawPins = Array.isArray(normalizedSymbol?.pins)
+    ? (normalizedSymbol.pins as unknown[])
+    : [];
+  const pins = rawPins.map((pin) => {
+    const record = asRecord(pin);
+    return { number: asString(record?.number) };
+  });
+  const fpData = parseJsonObject(footprintRow.dataJson);
+  const preview = asRecord(asRecord(fpData.normalized)?.preview);
+  const rawPads = Array.isArray(preview?.pads) ? (preview.pads as unknown[]) : [];
+  if (rawPads.length === 0) {
+    throw new ValidationError(
+      `Footprint "${footprintRow.name}" has no pads and cannot be a component default.`,
+    );
+  }
+  const pads = rawPads.map((pad) => ({
+    number: asString(asRecord(pad)?.number) ?? "",
+  })) as unknown as FootprintRenderSourcePad[];
+  const footprintLike = { name: footprintRow.name, pads };
+  const symbolLike = {
+    name: asString(normalizedSymbol?.name) ?? symbolRow.name,
+    pins,
+  };
+  validateFootprintPads(footprintLike);
+  validateSymbolPinsCoverFootprintPads(symbolLike, footprintLike);
+}
+
+/**
+ * Make `footprintRow` the component's default inside the caller's transaction:
+ * upsert its `component_footprints` row (existing pin map kept, else identity),
+ * clear `is_default` on every other row, and refresh the cached
+ * `components.footprint_id`.
+ */
+function linkFootprintAsDefault(
+  txDb: ReturnType<typeof getDb>,
+  componentId: string,
+  footprintRow: FootprintRow,
+  symbolRow: SymbolRow,
+  variantLabel?: string,
+): void {
+  const rows = txDb
+    .select()
+    .from(componentFootprints)
+    .where(eq(componentFootprints.componentId, componentId))
+    .all();
+  const existing = rows.find((row) => row.footprintId === footprintRow.id);
+  txDb
+    .update(componentFootprints)
+    .set({ isDefault: 0 })
+    .where(eq(componentFootprints.componentId, componentId))
+    .run();
+  if (existing) {
+    txDb
+      .update(componentFootprints)
+      .set({
+        isDefault: 1,
+        pinMapJson: existing.pinMapJson ?? identityPinMapFor(symbolRow, footprintRow),
+      })
+      .where(
+        and(
+          eq(componentFootprints.componentId, componentId),
+          eq(componentFootprints.footprintId, footprintRow.id),
+        ),
+      )
+      .run();
+  } else {
+    txDb
+      .insert(componentFootprints)
+      .values({
+        componentId,
+        footprintId: footprintRow.id,
+        isDefault: 1,
+        variantLabel: variantLabel ?? footprintRow.name,
+        sortOrder: rows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1,
+        pinMapJson: identityPinMapFor(symbolRow, footprintRow),
+      })
+      .run();
+  }
+  txDb
+    .update(components)
+    .set({ footprintId: footprintRow.id })
+    .where(eq(components.id, componentId))
+    .run();
+}
+
+function identityPinMapFor(
+  symbolRow: SymbolRow,
+  footprintRow: FootprintRow,
+): string | null {
+  const normalizedSymbol = asRecord(parseJsonObject(symbolRow.dataJson).normalized);
+  const pins = Array.isArray(normalizedSymbol?.pins)
+    ? (normalizedSymbol.pins as unknown[]).map((pin) => ({
+        number: asString(asRecord(pin)?.number),
+        name: asString(asRecord(pin)?.name) ?? "",
+      }))
+    : [];
+  const preview = asRecord(
+    asRecord(parseJsonObject(footprintRow.dataJson).normalized)?.preview,
+  );
+  const pads = Array.isArray(preview?.pads)
+    ? (preview.pads as unknown[]).map((pad) => ({
+        number: asString(asRecord(pad)?.number) ?? "",
+      }))
+    : [];
+  return buildIdentityPinMapJson(
+    { pins } as unknown as Parameters<typeof buildIdentityPinMapJson>[0],
+    { pads } as unknown as Parameters<typeof buildIdentityPinMapJson>[1],
+  );
+}
+
+const AUTHORED_MOUNT_TYPES = new Set(["smd", "through_hole", "mixed"]);
+const AUTHORED_PAD_SHAPES = new Set([
+  "circle",
+  "rect",
+  "oval",
+  "roundrect",
+  "trapezoid",
+  "custom",
+]);
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isNullableString(value: unknown): boolean {
+  return value === null || typeof value === "string";
+}
+
+/** Rejects malformed authoring payloads with a 400 before any builder runs. */
+function assertAuthoredFootprintSource(
+  authored: unknown,
+): asserts authored is LibraryAddComponentFootprintInput["source"] {
+  const bad = (message: string): never => {
+    throw new ValidationError(`source: ${message}`);
+  };
+  const root = asRecord(authored);
+  if (!root) return bad("must be { source, metadata }");
+  const metadata = asRecord(root.metadata);
+  if (!metadata) return bad("metadata is required");
+  if (typeof metadata.name !== "string" || metadata.name.trim().length === 0) {
+    bad("metadata.name must be a non-empty string");
+  }
+  if (
+    typeof metadata.mountType !== "string" ||
+    !AUTHORED_MOUNT_TYPES.has(metadata.mountType)
+  ) {
+    bad('metadata.mountType must be "smd", "through_hole" or "mixed"');
+  }
+  const packageCode = asRecord(metadata.packageCode);
+  if (
+    !packageCode ||
+    !isNullableString(packageCode.imperial) ||
+    !isNullableString(packageCode.metric)
+  ) {
+    bad("metadata.packageCode must be { imperial, metric } of string | null");
+  }
+  if (
+    metadata.tags !== undefined &&
+    (!Array.isArray(metadata.tags) ||
+      metadata.tags.some((tag) => typeof tag !== "string"))
+  ) {
+    bad("metadata.tags must be an array of strings");
+  }
+  const source = asRecord(root.source);
+  if (!source || !Array.isArray(source.pads)) {
+    return bad("source.pads must be an array");
+  }
+  source.pads.forEach((raw: unknown, index: number) => {
+    const pad = asRecord(raw);
+    const where = `source.pads[${index}]`;
+    if (!pad) return bad(`${where} must be an object`);
+    if (!(typeof pad.number === "string" || isFiniteNumber(pad.number))) {
+      bad(`${where}.number must be a string or number`);
+    }
+    if (typeof pad.shape !== "string" || !AUTHORED_PAD_SHAPES.has(pad.shape)) {
+      bad(`${where}.shape is not a supported pad shape`);
+    }
+    const center = asRecord(pad.centerMm);
+    if (!center || !isFiniteNumber(center.x) || !isFiniteNumber(center.y)) {
+      bad(`${where}.centerMm must be { x, y } of finite numbers`);
+    }
+    for (const key of ["widthMm", "heightMm", "rotationDeg"] as const) {
+      if (!isFiniteNumber(pad[key])) {
+        bad(`${where}.${key} must be a finite number`);
+      }
+    }
+    if (pad.drillDiameterMm !== undefined && !isFiniteNumber(pad.drillDiameterMm)) {
+      bad(`${where}.drillDiameterMm must be a finite number`);
+    }
+  });
+}
+
+/**
+ * Create a generated/drawn footprint for an existing USER component, link it
+ * as a variant, and (default true) make it the component default — one
+ * transaction. Returns null when the component does not exist.
+ */
+export async function addComponentFootprint(
+  ctx: CoreBackendModuleContext,
+  componentId: string,
+  input: LibraryAddComponentFootprintInput,
+): Promise<{ footprintId: string } | null> {
+  const db = getDb(ctx);
+  const existing = await db
+    .select()
+    .from(components)
+    .where(eq(components.id, componentId))
+    .get();
+  if (!existing) return null;
+  if (existing.isBuiltin) {
+    throw new ValidationError(
+      `Cannot edit built-in component "${existing.name}". Use "Duplicate to edit" to create an editable copy.`,
+    );
+  }
+  if (input.mode !== "generated" && input.mode !== "drawn") {
+    throw new ValidationError('mode must be "generated" or "drawn"');
+  }
+  const authored = input.source;
+  assertAuthoredFootprintSource(authored);
+  const symbolRow = await db
+    .select()
+    .from(symbols)
+    .where(eq(symbols.id, existing.symbolId))
+    .get();
+  if (!symbolRow) throw new ValidationError("Component symbol is missing");
+  const normalizedSymbol = asRecord(parseJsonObject(symbolRow.dataJson).normalized);
+  const symbolPins = (
+    Array.isArray(normalizedSymbol?.pins) ? (normalizedSymbol.pins as unknown[]) : []
+  ).map((pin) => ({
+    number: asString(asRecord(pin)?.number),
+    name: asString(asRecord(pin)?.name) ?? "",
+  }));
+
+  const footprintId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const record = buildAuthoredFootprintRecord({
+    mode: input.mode,
+    source: authored.source,
+    metadata: {
+      ...authored.metadata,
+      tags: authored.metadata.tags ?? [],
+    },
+    symbol: {
+      name: asString(normalizedSymbol?.name) ?? symbolRow.name,
+      pins: symbolPins,
+    },
+    footprintId,
+    now,
+  });
+  const variantLabel =
+    input.variantLabel?.trim() || record.footprintName;
+  const setDefault = input.setDefault ?? true;
+
+  db.transaction((tx) => {
+    const txDb = tx as typeof db;
+    txDb
+      .insert(footprints)
+      .values({
+        id: footprintId,
+        name: record.footprintName,
+        dataJson: record.footprintDataJson,
+        createdAt: now,
+        sourceId: USER_LOCAL_SOURCE_ID,
+      })
+      .run();
+    const inserted = txDb
+      .select()
+      .from(footprints)
+      .where(eq(footprints.id, footprintId))
+      .get();
+    if (!inserted) throw new Error("footprint insert failed");
+    if (setDefault) {
+      linkFootprintAsDefault(txDb, componentId, inserted, symbolRow, variantLabel);
+      return;
+    }
+    const rows = txDb
+      .select()
+      .from(componentFootprints)
+      .where(eq(componentFootprints.componentId, componentId))
+      .all();
+    txDb
+      .insert(componentFootprints)
+      .values({
+        componentId,
+        footprintId,
+        isDefault: 0,
+        variantLabel,
+        sortOrder: rows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1,
+        pinMapJson: record.pinMapJson,
+      })
+      .run();
+  });
+  return { footprintId };
+}
+
+/**
+ * Cheap default-footprint lookup for staleness checks (designer projection):
+ * no preview parsing, `sourceHash` read via json_extract. Unknown component
+ * ids are simply absent from the result.
+ */
+export async function getDefaultFootprintRefs(
+  ctx: CoreBackendModuleContext,
+  componentIds: readonly string[],
+): Promise<Record<string, LibraryDefaultFootprintRef>> {
+  const ids = [...new Set(componentIds)];
+  if (ids.length === 0) return {};
+  const db = getDb(ctx);
+  const rows = db
+    .select({
+      componentId: components.id,
+      footprintId: components.footprintId,
+      sourceHash: sql<string | null>`json_extract(${footprints.dataJson}, '$.provenance.sourceHash')`,
+    })
+    .from(components)
+    .leftJoin(footprints, eq(footprints.id, components.footprintId))
+    .where(inArray(components.id, ids))
+    .all();
+  const out: Record<string, LibraryDefaultFootprintRef> = {};
+  for (const row of rows) {
+    out[row.componentId] = {
+      footprintId: row.footprintId,
+      sourceHash: typeof row.sourceHash === "string" ? row.sourceHash : null,
+    };
+  }
+  return out;
 }
 
 export interface LibrarySourceSummary {
@@ -2057,5 +2446,9 @@ export function buildSdk(ctx: CoreBackendModuleContext): LibrarySDK {
     listTags: (options) => listTags(ctx, options),
     updateComponent: (componentId, patch) =>
       updateComponent(ctx, componentId, patch),
+    addComponentFootprint: (componentId, input) =>
+      addComponentFootprint(ctx, componentId, input),
+    getDefaultFootprintRefs: (componentIds) =>
+      getDefaultFootprintRefs(ctx, componentIds),
   };
 }

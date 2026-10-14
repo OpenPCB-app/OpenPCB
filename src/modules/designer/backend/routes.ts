@@ -109,6 +109,7 @@ import type {
   DesignerRotatePrimitiveCommand,
   DesignerUpdatePartPropertiesCommand,
   DesignerUpdatePartsPropertiesCommand,
+  DesignerRefreshPartFootprintCommand,
   DesignerUpdatePrimitiveTextCommand,
   DesignerUpsertLabelCommand,
   PcbCopperLayerId,
@@ -738,6 +739,22 @@ function parseUpdatePartsPropertiesCommand(
   };
 }
 
+function parseRefreshPartFootprintCommand(
+  raw: Record<string, unknown>,
+): DesignerRefreshPartFootprintCommand {
+  const partIdsRaw = raw.partIds;
+  if (
+    !Array.isArray(partIdsRaw) ||
+    partIdsRaw.length === 0 ||
+    partIdsRaw.some((id) => typeof id !== "string")
+  ) {
+    throw new ValidationError(
+      "command.partIds must be a non-empty array of strings",
+    );
+  }
+  return { type: "refresh_part_footprint", partIds: partIdsRaw };
+}
+
 function parseDeleteEntityCommand(
   raw: Record<string, unknown>,
 ): DesignerDeleteEntityCommand {
@@ -775,6 +792,16 @@ function parseOptionalRotationDeg(value: unknown): 0 | 90 | 180 | 270 {
   return rotationDeg as 0 | 90 | 180 | 270;
 }
 
+function parseConfirmMerge(
+  raw: Record<string, unknown>,
+): { confirmMerge?: boolean } {
+  if (raw.confirmMerge === undefined || raw.confirmMerge === null) return {};
+  if (typeof raw.confirmMerge !== "boolean") {
+    throw new ValidationError("command.confirmMerge must be a boolean");
+  }
+  return { confirmMerge: raw.confirmMerge };
+}
+
 function parsePlaceGndPortCommand(
   raw: Record<string, unknown>,
 ): DesignerPlaceGndPortCommand {
@@ -782,6 +809,7 @@ function parsePlaceGndPortCommand(
     type: "place_gnd_port",
     positionNm: parsePointNm(raw.positionNm, "command.positionNm"),
     rotationDeg: parseOptionalRotationDeg(raw.rotationDeg),
+    ...parseConfirmMerge(raw),
   };
 }
 
@@ -797,6 +825,7 @@ function parsePlacePwrPortCommand(
     positionNm: parsePointNm(raw.positionNm, "command.positionNm"),
     rotationDeg: parseOptionalRotationDeg(raw.rotationDeg),
     railText,
+    ...parseConfirmMerge(raw),
   };
 }
 
@@ -812,6 +841,7 @@ function parsePlaceNetPortalCommand(
     positionNm: parsePointNm(raw.positionNm, "command.positionNm"),
     rotationDeg: parseOptionalRotationDeg(raw.rotationDeg),
     portalText,
+    ...parseConfirmMerge(raw),
   };
 }
 
@@ -896,6 +926,7 @@ function parseUpsertLabelCommand(
     labelId: typeof labelIdValue === "string" ? labelIdValue : undefined,
     text,
     positionNm: parsePointNm(raw.positionNm, "command.positionNm"),
+    ...parseConfirmMerge(raw),
   };
 }
 
@@ -2865,6 +2896,9 @@ function parseCommand(
       break;
     case "update_parts_properties":
       command = parseUpdatePartsPropertiesCommand(commandRecord);
+      break;
+    case "refresh_part_footprint":
+      command = parseRefreshPartFootprintCommand(commandRecord);
       break;
     case "delete_entity":
       command = parseDeleteEntityCommand(commandRecord);

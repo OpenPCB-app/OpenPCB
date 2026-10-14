@@ -33,8 +33,8 @@ interface TracePreviewLayerProps {
 
 /**
  * Renders the in-progress route during a routing session identically to a
- * committed trace: full trace color, true world-width, no pending-tail tint
- * and no DRC overlay — the editor surfaces violation count via the toolbar.
+ * committed trace: full trace color, true world-width. When the caller marks
+ * the route illegal it passes `colorOverride` (DRC hue) + reduced `opacity`.
  */
 export function TracePreviewLayer({
   pointsNm,

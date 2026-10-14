@@ -29,6 +29,7 @@ import { DetailsCard } from "./components/DetailsCard";
 import { FootprintOptionsList } from "./components/FootprintOptionsList";
 import { PinsTable } from "./components/PinsTable";
 import { PreviewModal } from "./components/PreviewModal";
+import { ChangeFootprintDialog } from "./ChangeFootprintDialog";
 import { useLibraryTags } from "./hooks/useLibraryTags";
 import { useFootprintGeometry } from "./hooks/useFootprintGeometry";
 import { useComponentDetail } from "./hooks/useComponentDetail";
@@ -71,12 +72,19 @@ export function ComponentDetailPage({
   refreshToken?: number;
 }): ReactElement {
   const { mode: themeMode } = useTheme();
+  const [changeFootprintOpen, setChangeFootprintOpen] = useState(false);
+  const [footprintRefresh, setFootprintRefresh] = useState(0);
   const {
     detail,
     loading,
     error: loadError,
     setDetail,
-  } = useComponentDetail({ backendURL, moduleId, componentId, refreshToken });
+  } = useComponentDetail({
+    backendURL,
+    moduleId,
+    componentId,
+    refreshToken: refreshToken + footprintRefresh,
+  });
   /** Errors raised by page actions (clone), kept separate from the load error. */
   const [actionError, setActionError] = useState<string | null>(null);
   const error = loadError ?? actionError;
@@ -356,6 +364,17 @@ export function ComponentDetailPage({
               icon={<Plus className="h-3 w-3" />}
             >
               Place in design
+            </Button>
+
+            <Button
+              type="button"
+              variant={isPlaceholderFootprint ? "primary" : "secondary"}
+              onClick={() => setChangeFootprintOpen(true)}
+              disabled={!backendURL}
+              data-testid="component-change-footprint-button"
+              className="cursor-pointer"
+            >
+              {isPlaceholderFootprint ? "Add footprint" : "Change footprint"}
             </Button>
 
             {isBuiltin ? (
@@ -779,6 +798,23 @@ export function ComponentDetailPage({
           )}
         </div>
       </main>
+      {changeFootprintOpen ? (
+        <ChangeFootprintDialog
+          backendURL={backendURL}
+          moduleId={moduleId}
+          componentId={componentId}
+          symbolPinNumbers={(symbolPreview?.pins ?? []).flatMap((pin) =>
+            pin.number ? [pin.number] : [],
+          )}
+          onCancel={() => setChangeFootprintOpen(false)}
+          onCloned={onCloned}
+          onDone={() => {
+            setChangeFootprintOpen(false);
+            setFootprintRefresh((tick) => tick + 1);
+            setModelRefreshToken((tick) => tick + 1);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

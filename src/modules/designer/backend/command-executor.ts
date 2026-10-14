@@ -45,6 +45,7 @@ import { isFeatureEnabled } from "../../../core/contracts/feature-flags/backend"
 import { autoRouteWirePointsDetailed } from "./routing/wire-obstacles";
 import { applyAutoArrange } from "./layout/arrange-schematic";
 import { executeBatchCommands } from "./commands/batch";
+import { applyRefreshPartFootprint } from "./commands/refresh-footprint";
 import {
   buildPlacePartPayload,
   normalizeRotationDeg,
@@ -138,6 +139,7 @@ import {
   updatePcbViewState,
   updatePcbDesignRules,
   validateDrcRulesForSave,
+  validateDesignRulesForSave,
   validateNetClassesForSave,
   reassignDeletedNetClassCopper,
   updatePcbVia,
@@ -236,6 +238,14 @@ export interface ExecuteDesignerCommandParams {
   projection: DesignerSchematicProjection;
   timestamp: string;
   placeComponentDetail: LibraryComponentPlacementDetail | null;
+  /**
+   * `refresh_part_footprint` only: freshly resolved library detail per
+   * `componentId`, resolved by the store before the transaction opens.
+   */
+  refreshComponentDetails?: ReadonlyMap<
+    string,
+    LibraryComponentPlacementDetail
+  >;
   /** Present for every `pcb_*` command (see `PcbRowsBefore`). */
   pcbBefore?: PcbRowsBefore;
 }
@@ -1007,6 +1017,7 @@ export function executeDesignerCommand(
     projection,
     timestamp,
     placeComponentDetail,
+    refreshComponentDetails,
   } = params;
   if (command.type === "batch_commands") {
     return executeBatchCommands({
@@ -1838,6 +1849,16 @@ export function executeDesignerCommand(
       const problem = validateNetClassesForSave(
         command.netClasses,
         storedClasses,
+      );
+      if (problem) return invalidPcbBoardSettings(problem);
+    }
+    if (
+      command.designRules !== undefined ||
+      command.boardThicknessMm !== undefined
+    ) {
+      const problem = validateDesignRulesForSave(
+        command.designRules,
+        command.boardThicknessMm,
       );
       if (problem) return invalidPcbBoardSettings(problem);
     }
@@ -2754,6 +2775,23 @@ export function executeDesignerCommand(
     return okResult(
       bumpRevision(tx, designId, revision, timestamp),
       requestedPartIds[0] ?? null,
+    );
+  }
+
+  if (command.type === "refresh_part_footprint") {
+    const partIds = [...new Set(command.partIds)];
+    const refused = applyRefreshPartFootprint({
+      tx,
+      designId,
+      timestamp,
+      projection,
+      partIds,
+      details: refreshComponentDetails ?? new Map(),
+    });
+    if (refused) return refused;
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      partIds[0] ?? null,
     );
   }
 

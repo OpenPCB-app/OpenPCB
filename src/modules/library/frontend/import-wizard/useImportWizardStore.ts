@@ -50,6 +50,8 @@ export interface ImportWizardState {
   symbolSource: "import" | "draw";
 
   footprintSource: "import" | "preset" | "draw";
+  /** User explicitly accepted committing a drawn-symbol part with no footprint. */
+  noFootprintAcknowledged: boolean;
   presetFamily: PackageFamily | null;
   presetSize: string | null;
   presetDensity: DensityLevel;
@@ -105,6 +107,7 @@ export interface ImportWizardState {
   setSymbolSource: (source: "import" | "draw") => void;
 
   setFootprintSource: (source: "import" | "preset" | "draw") => void;
+  setNoFootprintAcknowledged: (acknowledged: boolean) => void;
   setPresetFamily: (family: PackageFamily | null) => void;
   setPresetSize: (size: string | null) => void;
   setPresetDensity: (density: DensityLevel) => void;
@@ -147,6 +150,7 @@ const INITIAL_STATE = {
   tagsDirty: false,
   symbolSource: "import" as const,
   footprintSource: "import" as const,
+  noFootprintAcknowledged: false,
   presetFamily: null,
   presetSize: null,
   presetDensity: "nominal" as DensityLevel,
@@ -241,7 +245,13 @@ export const useImportWizardStore = create<ImportWizardState>((set) => ({
   setSymbolSource: (source) => set({ symbolSource: source }),
 
   setFootprintSource: (source) =>
-    set({ footprintSource: source, generatedFootprint: null }),
+    set({
+      footprintSource: source,
+      generatedFootprint: null,
+      noFootprintAcknowledged: false,
+    }),
+  setNoFootprintAcknowledged: (acknowledged) =>
+    set({ noFootprintAcknowledged: acknowledged }),
   setPresetFamily: (family) =>
     set({ presetFamily: family, presetSize: null, generatedFootprint: null }),
   setPresetSize: (size) => set({ presetSize: size }),
@@ -263,3 +273,17 @@ export const useImportWizardStore = create<ImportWizardState>((set) => ({
 
   reset: () => set({ ...INITIAL_STATE }),
 }));
+
+/** True when a drawn-symbol commit would fall through to footprintMode "none". */
+export function wouldCommitWithoutFootprint(s: {
+  symbolSource: "import" | "draw";
+  footprintSource: "import" | "preset" | "draw";
+  footprintFiles: readonly unknown[];
+  selectedFootprintId: string;
+  generatedFootprint: unknown;
+}): boolean {
+  if (s.symbolSource !== "draw") return false;
+  if (s.footprintSource === "draw") return false;
+  if (s.footprintSource === "preset") return !s.generatedFootprint;
+  return s.footprintFiles.length === 0 || s.selectedFootprintId.length === 0;
+}

@@ -42,6 +42,11 @@ import { resolveCaptureRuntime } from "./capture";
 import type { DispatchCaptureMeta } from "./capture/types";
 import { executeDesignerCommand } from "./command-executor";
 import {
+  detectNetMerge,
+  isNetMergeGatedDispatch,
+  NetMergeRefusal,
+} from "./net-merge-guard";
+import {
   linkDesignToCloud as linkToCloud,
   mirrorCommand,
   readLinkPublic,
@@ -155,6 +160,51 @@ function resolveLibrarySdk(ctx: CoreBackendModuleContext): LibrarySDK {
     throw new Error("LibrarySDK unavailable in designer runtime context");
   }
   return sdk;
+}
+
+/**
+ * Attach `footprintStale` to every part: the library's current default
+ * footprint id or sourceHash differs from the part's snapshot. A component the
+ * library no longer has is NOT stale.
+ */
+async function markStaleFootprints(
+  ctx: CoreBackendModuleContext,
+  projection: DesignerSchematicProjection,
+): Promise<DesignerSchematicProjection> {
+  if (projection.parts.length === 0) return projection;
+  const refs = await resolveLibrarySdk(ctx).getDefaultFootprintRefs(
+    projection.parts.map((part) => part.componentId),
+  );
+  return {
+    ...projection,
+    parts: projection.parts.map((part) => {
+      const ref = refs[part.componentId];
+      const stale =
+        !!ref &&
+        (ref.footprintId !== part.footprint.footprintId ||
+          (ref.sourceHash ?? null) !== (part.footprint.sourceHash ?? null));
+      return { ...part, footprintStale: stale };
+    }),
+  };
+}
+
+async function resolveRefreshDetails(
+  store: Pick<DesignerStore, "resolveLibraryComponentForPlacement" | "getSchematicProjection">,
+  designId: string,
+  partIds: readonly string[],
+): Promise<Map<string, LibraryComponentPlacementDetail>> {
+  const details = new Map<string, LibraryComponentPlacementDetail>();
+  const projection = await store.getSchematicProjection(designId);
+  if (!projection) return details;
+  const wanted = new Set(partIds);
+  for (const part of projection.parts) {
+    if (!wanted.has(part.id) || details.has(part.componentId)) continue;
+    const detail = await store.resolveLibraryComponentForPlacement(
+      part.componentId,
+    );
+    if (detail) details.set(part.componentId, detail);
+  }
+  return details;
 }
 
 export interface DesignerStore {
@@ -546,7 +596,12 @@ export function createDesignerStore(
     },
 
     async getSchematicProjection(designId) {
-      return loadSchematicProjection(db, designId);
+      const projection = loadSchematicProjection(db, designId);
+      if (!projection) return null;
+      // `footprintStale` needs LibrarySDK, which the pure projection reader
+      // does not have — it is attached here, once per read, from one batched
+      // lookup over the distinct componentIds.
+      return markStaleFootprints(ctx, projection);
     },
 
     async getPcbProjection(designId) {
@@ -675,6 +730,15 @@ export function createDesignerStore(
               envelope.command.componentId,
             )
           : null;
+
+      const refreshComponentDetails =
+        envelope.command.type === "refresh_part_footprint"
+          ? await resolveRefreshDetails(
+              this,
+              designId,
+              envelope.command.partIds,
+            )
+          : undefined;
 
       const pendingHistoryRef: {
         current: {
@@ -831,8 +895,21 @@ export function createDesignerStore(
             projection,
             timestamp,
             placeComponentDetail,
+            ...(refreshComponentDetails ? { refreshComponentDetails } : {}),
             ...(pcbBefore ? { pcbBefore } : {}),
           });
+
+          // Net-merge gate: a label / net-port edit that fuses 2+ distinct
+          // nets needs `confirmMerge: true`. Thrown inside the transaction so
+          // the executor's writes, revision bump and command-log row all roll
+          // back (a refusal leaves no trace).
+          if (result.ok && isNetMergeGatedDispatch(command)) {
+            const after = loadSchematicProjection(tx, designId);
+            const merge = after
+              ? detectNetMerge(projection.nets, after.nets)
+              : null;
+            if (merge) throw new NetMergeRefusal(merge.nets);
+          }
 
           // View-only commands mutate display state in board_settings.viewState
           // but are not undoable — debounced slider drags would otherwise spam
@@ -971,6 +1048,14 @@ export function createDesignerStore(
         return result;
       } catch (error) {
         if (!committed) history.restore(previousHistory);
+        if (error instanceof NetMergeRefusal) {
+          return {
+            ok: false,
+            code: "NET_MERGE_REQUIRES_CONFIRM",
+            message: "This change would merge distinct nets",
+            nets: error.nets,
+          };
+        }
         // The returned shape stays a conflict — a caller retrying is the right
         // recovery either way — but a THROW is not a conflict: an aborted
         // transaction (a DRC kernel throw inside the commit gate, a constraint)

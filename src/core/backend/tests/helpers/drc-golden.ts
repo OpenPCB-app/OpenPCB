@@ -215,6 +215,7 @@ export function fixtureToProjection(fixture: any): DesignerPcbProjection {
     ratsnest: fixture.computeRatsnest ? deriveRatsnest() : [],
     netNames: fixture.netNames ?? {},
     ...(Object.keys(padNets).length > 0 ? { padNets } : {}),
+    unresolvedFootprints: [],
     warnings: [],
   };
 }

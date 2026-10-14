@@ -395,6 +395,13 @@ cross-repo parity checks instead of standing up a runtime.
   idempotency. Milestone snapshot hashes are **local dedup only** — canonical board identity is
   computed at ingest, never here.
 
+## UNDO HISTORY SESSIONS
+
+- History is keyed `${designId}:${sessionId}` (`historySessionKey`); `undo`/`redo` only see the stack of the session id they are given, else `HISTORY_EMPTY`.
+- The UI uses fixed module-constant ids so history survives remounts: `designer-ui-session` (`useDesignerWorkspace`, schematic) and `designer-pcb-session` (`usePcbWorkspace`; `dispatchEnvelope` routes every `pcb_*` command there). Schematic and PCB therefore have separate stacks; Cmd+Z in one view never reverts the other view's edits.
+- Stacks persist in `designer_session_histories` (written in the command transaction, hydrated on first resolve, capped at 200), so they survive store re-instantiation and app restart. Regression: `src/core/backend/tests/designer-history-session.test.ts`.
+- Other sessions: `designer-drc-session` (DRC view), `designer-comment-session` (comments). The assistant shares `designer-ui-session` (`AI_DESIGNER_SESSION_ID` in `assistant/backend/tools/designer-tools.ts`, `COMPILER_SESSION_ID` in `compiler/apply.ts`), so AI edits land on the schematic undo stack. Never rename these ids; doing so orphans persisted history.
+
 ## NOTES
 
 - Depends on `library`; resolves symbols and footprints through `LibrarySDK`, never by importing the

@@ -50,6 +50,7 @@ import {
   type SchematicCanvasHandle,
 } from "./components/SchematicCanvas";
 import { ComponentCommandPalette } from "./components/ComponentCommandPalette";
+import { ChangeFootprintDialog } from "../../library/frontend/ChangeFootprintDialog";
 import {
   SelectionInspector,
   type InspectorSelection,
@@ -64,6 +65,7 @@ import { useDesignerTabsStore } from "./stores/designer-tabs-store";
 import { useActiveDesignSync } from "./hooks/useActiveDesignSync";
 import type {
   DesignerPlacedPart,
+  DesignerUnresolvedFootprint,
   LibraryComponent,
   LibraryComponentFootprintVariant,
   LibraryComponentPlacementDetail,
@@ -170,6 +172,7 @@ function SelectionInspectorMount({
   onClose,
   onOpenInLibrary,
   onCrossProbePcb,
+  onChangeFootprint,
 }: {
   projection: NonNullable<DesignerWorkspaceState["projection"]>;
   state: DesignerWorkspaceState;
@@ -183,6 +186,7 @@ function SelectionInspectorMount({
   onClose(): void;
   onOpenInLibrary(componentId: string): void;
   onCrossProbePcb?(part: DesignerPlacedPart): void;
+  onChangeFootprint?(part: DesignerPlacedPart): void;
 }): ReactElement {
   const selectedIds = useMemo(() => {
     if (state.selectedPartIds.size > 0) {
@@ -280,6 +284,7 @@ function SelectionInspectorMount({
       onClose={onClose}
       onOpenInLibrary={onOpenInLibrary}
       onCrossProbePcb={onCrossProbePcb}
+      onChangeFootprint={onChangeFootprint}
     />
   );
 }
@@ -430,6 +435,48 @@ function DesignerSpaceInner({
   const pruneMissing = useDesignerTabsStore((s) => s.pruneMissing);
   const navigateToModule = useNavigationStore((s) => s.navigateToModule);
 
+  // Change-footprint flow (inspector "Change…" + PCB banner "Fix…"): edits the
+  // library component, then refreshes every part of it in this design.
+  const [footprintFix, setFootprintFix] = useState<{
+    componentId: string;
+    partIds: string[];
+    pinNumbers: string[];
+  } | null>(null);
+  const [pcbRefreshToken, setPcbRefreshToken] = useState(0);
+  const openChangeFootprint = useCallback(
+    (partId: string) => {
+      const parts = state.projection?.parts ?? [];
+      const part = parts.find((p) => p.id === partId);
+      if (!part) return;
+      setFootprintFix({
+        componentId: part.componentId,
+        partIds: parts
+          .filter((p) => p.componentId === part.componentId)
+          .map((p) => p.id),
+        pinNumbers: part.pins.flatMap((pin) => (pin.number ? [pin.number] : [])),
+      });
+    },
+    [state.projection?.parts],
+  );
+  const handleFootprintChanged = useCallback(async () => {
+    const fix = footprintFix;
+    setFootprintFix(null);
+    if (!fix) return;
+    try {
+      await actions.dispatchCommand({
+        type: "refresh_part_footprint",
+        partIds: fix.partIds,
+      });
+      setPcbRefreshToken((tick) => tick + 1);
+    } catch (error) {
+      actions.setError(
+        error instanceof Error
+          ? error.message
+          : "Failed to refresh footprint in design",
+      );
+    }
+  }, [actions, footprintFix]);
+
   // Mirror the focused tab to the backend so external MCP clients can default
   // to "the design the user is looking at".
   useActiveDesignSync(cloudBadgeApi, activeDesignId);
@@ -462,8 +509,13 @@ function DesignerSpaceInner({
   const [pcbSelectionRequest, setPcbSelectionRequest] = useState<{
     placementIds: string[];
     references?: string[];
+    frame?: boolean;
     nonce: number;
   } | null>(null);
+  // Parts with no usable footprint, published by PcbCanvas (status-bar chip).
+  const [pcbUnresolvedFootprints, setPcbUnresolvedFootprints] = useState<
+    readonly DesignerUnresolvedFootprint[]
+  >([]);
   const [pcbLayersSlot, setPcbLayersSlot] = useState<HTMLDivElement | null>(
     null,
   );
@@ -1411,6 +1463,9 @@ function DesignerSpaceInner({
                     actions.notifyExternalRevisionBump
                   }
                   onDrcCountChange={setPcbLiveDrc}
+                  onUnresolvedFootprintsChange={setPcbUnresolvedFootprints}
+                  onFixFootprint={openChangeFootprint}
+                  refreshToken={pcbRefreshToken}
                   onSelectionCountChange={setPcbSelectionCount}
                   commentThreads={comments.threads}
                   activeCommentThreadId={comments.activeThreadId}
@@ -1526,6 +1581,7 @@ function DesignerSpaceInner({
                 dispatchCommand={actions.dispatchCommand}
                 setError={actions.setError}
                 onCrossProbePcb={handleCrossProbePcb}
+                onChangeFootprint={(part) => openChangeFootprint(part.id)}
                 onClose={() => {
                   actions.setSelectedPartId(null);
                   actions.setSelectedPartIds(new Set<string>());
@@ -1590,6 +1646,16 @@ function DesignerSpaceInner({
             (drcSummary ? drcSummary.errors + drcSummary.warnings : 0)
           }
           onDrcClick={() => setDrcPanelOpen(true)}
+          unresolvedFootprintCount={pcbUnresolvedFootprints.length}
+          onUnresolvedFootprintsClick={() => {
+            const first = pcbUnresolvedFootprints[0];
+            if (!first) return;
+            setPcbSelectionRequest((current) => ({
+              placementIds: [first.placementId],
+              frame: true,
+              nonce: (current?.nonce ?? 0) + 1,
+            }));
+          }}
           viewSide={pcbViewSide}
         />
       ) : null}
@@ -1628,6 +1694,17 @@ function DesignerSpaceInner({
         fetchPlacementDetail={actions.resolvePlacement}
         fetchAvailableTags={actions.fetchAvailableTags}
       />
+
+      {footprintFix ? (
+        <ChangeFootprintDialog
+          backendURL={backendURL}
+          moduleId="library"
+          componentId={footprintFix.componentId}
+          symbolPinNumbers={footprintFix.pinNumbers}
+          onCancel={() => setFootprintFix(null)}
+          onDone={() => void handleFootprintChanged()}
+        />
+      ) : null}
 
       {kicadImportOpen && (
         <KicadProjectImportWizard

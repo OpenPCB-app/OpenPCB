@@ -2,10 +2,14 @@ import { Grid3X3, Upload } from "lucide-react";
 import { memo, useId, type ReactElement } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { FootprintPreviewCanvas } from "../../../../../shared/frontend/canvas/preview";
-import { FootprintPresetPicker } from "../components/FootprintPresetPicker";
+import { FootprintGeneratorPanel } from "../../footprint-generator/FootprintGeneratorPanel";
 import { WarningsPanel } from "../components/WarningsPanel";
 import { CanvasStepLayout } from "../layout/CanvasStepLayout";
-import { useImportWizardStore } from "../useImportWizardStore";
+import {
+  useImportWizardStore,
+  wouldCommitWithoutFootprint,
+} from "../useImportWizardStore";
+import { Banner, Checkbox } from "@shared/frontend/ui";
 import {
   FootprintEditorCanvas,
   FootprintEditorToolbar,
@@ -15,7 +19,13 @@ import {
 } from "../footprint-editor";
 import { isCopperLayer } from "../footprint-editor/types";
 
-export const FootprintStep = memo(function FootprintStep(): ReactElement {
+export const FootprintStep = memo(function FootprintStep({
+  backendURL,
+  moduleId,
+}: {
+  backendURL: string | null | undefined;
+  moduleId: string;
+}): ReactElement {
   const inputId = useId();
 
   const {
@@ -31,6 +41,13 @@ export const FootprintStep = memo(function FootprintStep(): ReactElement {
     footprintSource,
     setFootprintSource,
     generatedFootprint,
+    presetFamily,
+    presetSize,
+    presetDensity,
+    setPresetFamily,
+    setPresetSize,
+    setPresetDensity,
+    setGeneratedFootprint,
   } = useImportWizardStore(
     useShallow((s) => ({
       footprintFiles: s.footprintFiles,
@@ -45,7 +62,24 @@ export const FootprintStep = memo(function FootprintStep(): ReactElement {
       footprintSource: s.footprintSource,
       setFootprintSource: s.setFootprintSource,
       generatedFootprint: s.generatedFootprint,
+      presetFamily: s.presetFamily,
+      presetSize: s.presetSize,
+      presetDensity: s.presetDensity,
+      setPresetFamily: s.setPresetFamily,
+      setPresetSize: s.setPresetSize,
+      setPresetDensity: s.setPresetDensity,
+      setGeneratedFootprint: s.setGeneratedFootprint,
     })),
+  );
+
+  const showNoFootprintNotice = useImportWizardStore((s) =>
+    wouldCommitWithoutFootprint(s),
+  );
+  const noFootprintAcknowledged = useImportWizardStore(
+    (s) => s.noFootprintAcknowledged,
+  );
+  const setNoFootprintAcknowledged = useImportWizardStore(
+    (s) => s.setNoFootprintAcknowledged,
   );
 
   const isPresetMode = footprintSource === "preset";
@@ -145,10 +179,47 @@ export const FootprintStep = memo(function FootprintStep(): ReactElement {
             </button>
           </div>
 
+          {showNoFootprintNotice ? (
+            <Banner tone="warning" title="No footprint">
+              <p>
+                No footprint — this part will be schematic-only. PCB will flag
+                it as unresolved until a footprint is assigned.
+              </p>
+              <Checkbox
+                wrapperClassName="mt-2"
+                checked={noFootprintAcknowledged}
+                onChange={(e) => setNoFootprintAcknowledged(e.target.checked)}
+                label="Continue without footprint"
+              />
+            </Banner>
+          ) : null}
+
           {isDrawMode ? (
             <DrawFootprintSidebar />
           ) : isPresetMode ? (
-            <FootprintPresetPicker />
+            <FootprintGeneratorPanel
+              backendURL={backendURL}
+              moduleId={moduleId}
+              showPreview={false}
+              ipcSelection={{
+                family: presetFamily,
+                size: presetSize,
+                density: presetDensity,
+              }}
+              onIpcSelectionChange={(next) => {
+                if (next.family !== presetFamily) setPresetFamily(next.family);
+                else if (next.size !== presetSize) setPresetSize(next.size);
+                if (next.density !== presetDensity)
+                  setPresetDensity(next.density);
+              }}
+              onGenerated={(g) =>
+                setGeneratedFootprint(
+                  g
+                    ? { source: g.source, model: g.model, metadata: g.metadata }
+                    : null,
+                )
+              }
+            />
           ) : (
             <>
               <section className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">

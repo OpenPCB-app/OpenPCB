@@ -7,7 +7,6 @@
 
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import { buildSymbolRenderModel } from "../../../../shared/rendering/symbol-preview-builder";
-import { buildFootprintRenderModel } from "../../../../shared/rendering/footprint-preview-builder";
 import type {
   FootprintRenderSource,
   SymbolRenderSource,
@@ -26,6 +25,11 @@ import {
   validateSymbolPinsCoverFootprintPads,
 } from "./validate-pads";
 import { buildIdentityPinMapJson } from "./pinmap";
+import { buildAuthoredFootprintRecord, hashString } from "./footprint-record";
+import {
+  PLACEHOLDER_FOOTPRINT_NAME,
+  ensurePlaceholderFootprint,
+} from "../builtins/placeholder-footprint";
 
 export interface CommitDrawnRequest {
   drawnSymbol: {
@@ -73,14 +77,6 @@ function dedupeTags(values: readonly string[]): string[] {
     .filter((tag, index, all) => tag.length > 0 && all.indexOf(tag) === index);
 }
 
-function hashString(content: string): string {
-  let hash = 0;
-  for (let i = 0; i < content.length; i++) {
-    hash = ((hash << 5) - hash + content.charCodeAt(i)) | 0;
-  }
-  return `drawn:${(hash >>> 0).toString(16)}`;
-}
-
 export function commitDrawnImport(
   ctx: CoreBackendModuleContext,
   input: CommitDrawnRequest,
@@ -102,7 +98,7 @@ export function commitDrawnImport(
   const now = new Date().toISOString();
 
   const symbolId = crypto.randomUUID();
-  const footprintId = crypto.randomUUID();
+  let footprintId: string = crypto.randomUUID();
   const componentId = crypto.randomUUID();
 
   const symbolDataJson = JSON.stringify({
@@ -135,91 +131,36 @@ export function commitDrawnImport(
   });
 
   // Resolve footprint
-  let footprintDataJson: string;
+  let footprintDataJson: string | null = null;
   let footprintName: string;
   let tags: string[];
   let pinMapJson: string | null = null;
 
-  if (input.footprintMode === "generated" && input.generatedFootprint) {
-    const fpSource = input.generatedFootprint.source;
-    const fpMeta = input.generatedFootprint.metadata;
-    validateFootprintPads(fpSource);
-    validateSymbolPinsCoverFootprintPads(symbolSource, fpSource);
-    const fpModel = buildFootprintRenderModel(fpSource);
-    const fpHash = hashString(JSON.stringify(fpSource));
-    pinMapJson = buildIdentityPinMapJson(symbolSource, fpSource);
-    footprintName = fpMeta.name;
+  if (
+    (input.footprintMode === "generated" && input.generatedFootprint) ||
+    (input.footprintMode === "drawn" && input.drawnFootprint)
+  ) {
+    const generated = input.footprintMode === "generated";
+    const authored = (generated
+      ? input.generatedFootprint
+      : input.drawnFootprint)!;
+    const record = buildAuthoredFootprintRecord({
+      mode: generated ? "generated" : "drawn",
+      source: authored.source,
+      metadata: authored.metadata,
+      symbol: symbolSource,
+      footprintId,
+      now,
+    });
+    footprintDataJson = record.footprintDataJson;
+    pinMapJson = record.pinMapJson;
+    footprintName = record.footprintName;
     tags = dedupeTags([
       ...userTags,
-      ...fpMeta.tags,
+      ...authored.metadata.tags,
       "drawn-symbol",
-      "generated",
+      generated ? "generated" : "drawn-footprint",
     ]);
-
-    footprintDataJson = JSON.stringify({
-      provenance: {
-        sourceKind: "generated",
-        sourceFormat: "ipc-7351b",
-        fileName: null,
-        importedAt: now,
-        sourceHash: fpHash,
-      },
-      parser: { warnings: [] },
-      normalized: {
-        id: footprintId,
-        fileName: "",
-        name: fpMeta.name,
-        description: `Generated ${fpMeta.name} footprint`,
-        mountType: fpMeta.mountType,
-        padCount: fpSource.pads.length,
-        packageCode: fpMeta.packageCode,
-        tags: fpMeta.tags,
-        sourceHash: fpHash,
-        warnings: [],
-        preview: fpModel,
-      },
-      raw: { source: fpSource },
-    });
-  } else if (input.footprintMode === "drawn" && input.drawnFootprint) {
-    const fpSource = input.drawnFootprint.source;
-    const fpMeta = input.drawnFootprint.metadata;
-    validateFootprintPads(fpSource);
-    validateSymbolPinsCoverFootprintPads(symbolSource, fpSource);
-    const fpModel = buildFootprintRenderModel(fpSource);
-    const fpHash = hashString(JSON.stringify(fpSource));
-    pinMapJson = buildIdentityPinMapJson(symbolSource, fpSource);
-    footprintName = fpMeta.name;
-    tags = dedupeTags([
-      ...userTags,
-      ...fpMeta.tags,
-      "drawn-symbol",
-      "drawn-footprint",
-    ]);
-
-    footprintDataJson = JSON.stringify({
-      provenance: {
-        sourceKind: "drawn",
-        sourceFormat: "openpcb-editor",
-        fileName: null,
-        importedAt: now,
-        sourceHash: fpHash,
-      },
-      parser: { warnings: [] },
-      normalized: {
-        id: footprintId,
-        fileName: "",
-        name: fpMeta.name,
-        description: `Drawn ${fpMeta.name} footprint`,
-        mountType: fpMeta.mountType,
-        padCount: fpSource.pads.length,
-        packageCode: fpMeta.packageCode,
-        tags: fpMeta.tags,
-        sourceHash: fpHash,
-        warnings: [],
-        preview: fpModel,
-      },
-      raw: { source: fpSource },
-    });
   } else if (
     input.footprintMode === "import" &&
     input.footprintFiles &&
@@ -256,39 +197,14 @@ export function commitDrawnImport(
       raw: rawFp,
     });
   } else {
-    // No footprint — use placeholder
-    footprintName = "No footprint yet";
+    // No footprint — link the shared placeholder row (created in the tx below).
+    footprintName = PLACEHOLDER_FOOTPRINT_NAME;
     tags = dedupeTags([
       ...userTags,
       "drawn-symbol",
       "placeholder-footprint",
       "virtual",
     ]);
-
-    footprintDataJson = JSON.stringify({
-      provenance: {
-        sourceKind: "system",
-        sourceFormat: "placeholder",
-        fileName: null,
-        importedAt: now,
-        sourceHash: "placeholder:no-footprint-yet",
-      },
-      parser: { warnings: [] },
-      normalized: {
-        id: footprintId,
-        fileName: "",
-        name: footprintName,
-        description: "Component was created without a real PCB footprint.",
-        mountType: "virtual",
-        padCount: 0,
-        packageCode: { imperial: null, metric: null },
-        tags: ["placeholder-footprint", "virtual"],
-        sourceHash: "placeholder:no-footprint-yet",
-        warnings: [],
-        preview: null,
-      },
-      raw: { kind: "placeholder-footprint", name: footprintName },
-    });
   }
 
   const db = getDb(ctx);
@@ -307,16 +223,20 @@ export function commitDrawnImport(
       })
       .run();
 
-    txDb
-      .insert(footprints)
-      .values({
-        id: footprintId,
-        name: footprintName,
-        dataJson: footprintDataJson,
-        createdAt: now,
-        sourceId: "user.local",
-      })
-      .run();
+    if (footprintDataJson === null) {
+      footprintId = ensurePlaceholderFootprint(ctx, now, txDb);
+    } else {
+      txDb
+        .insert(footprints)
+        .values({
+          id: footprintId,
+          name: footprintName,
+          dataJson: footprintDataJson,
+          createdAt: now,
+          sourceId: "user.local",
+        })
+        .run();
+    }
 
     txDb
       .insert(components)

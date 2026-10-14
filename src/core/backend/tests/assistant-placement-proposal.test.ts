@@ -1748,6 +1748,7 @@ describe("assistant schematic connectivity and wiring tools", () => {
       labelId: "label-1",
       text: "OLD",
       positionNm: { x: 6_000_000, y: 0 },
+      confirmMerge: true,
     });
     expect(storedEnvelope).toEqual(result.data);
   });

@@ -41,6 +41,10 @@ import {
   freePadDrill,
   type FootprintPadDrill,
 } from "../../../../shared/rendering/pcb/pcb-drills";
+import {
+  collectUnresolvedFootprints,
+  unresolvedRefdesList,
+} from "../../../../shared/pcb-geometry/unresolved-footprints";
 import { freePadOutlineWorldMm, padOutlineWorldMm } from "./pad-outline";
 import { buildSnapshotPourIslands } from "./board-snapshot-pours";
 import { collectKeepouts } from "../../../../shared/pcb-areas/copper-zones";
@@ -456,8 +460,21 @@ export function buildBoardSnapshot(
         : `${keepoutCount} keepouts are not sent to the autorouter; routing ignores them.`,
     );
   }
+  // Footprint-less / pad-less parts contribute no pads, so their nets silently
+  // vanish from the ratsnest — name them by refdes instead.
+  const unresolved = collectUnresolvedFootprints(projection.placements);
+  if (unresolved.length > 0) {
+    const refs = unresolvedRefdesList(unresolved);
+    warnings.push(
+      `Skipped ${refs}: no footprint pads — assign footprints before auto-layout.`,
+    );
+  }
   if (ratsnest.length === 0) {
-    warnings.push("No unrouted nets match the selected net classes.");
+    warnings.push(
+      unresolved.length > 0
+        ? `No routable nets: ${unresolvedRefdesList(unresolved)} ${unresolved.length === 1 ? "has" : "have"} no footprint pads, so their nets cannot be routed.`
+        : "No unrouted nets match the selected net classes.",
+    );
   }
 
   const snapshot: BoardSnapshot = {

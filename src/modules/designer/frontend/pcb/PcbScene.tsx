@@ -67,6 +67,10 @@ import { DrillHighlightLayer, DrillHoleCutoutLayer } from "./layers/DrillLayer";
 import { FreePadLayer } from "./layers/FreePadLayer";
 import { OverlayLayer } from "./layers/OverlayLayer";
 import { DrcMarkerLayer } from "./layers/DrcMarkerLayer";
+import {
+  LiveRouteViolationLayer,
+  type LiveViolationMarker,
+} from "./layers/LiveRouteViolationLayer";
 import { DrcSelectionHighlight } from "./layers/DrcSelectionHighlight";
 import {
   OutlineEdgeLabels,
@@ -1003,8 +1007,12 @@ function PlacementRender({
   );
 }
 
-/** Visible fallback when a footprint has no pads/graphics — yellow dashed-look
- * outline + reference label so the user can locate and move the part. */
+/** Amber matching the status-warning banner for parts with no usable footprint. */
+const UNRESOLVED_WARNING_COLOR = "#f59e0b";
+
+/** Visible fallback when a footprint has no pads/graphics — amber dashed
+ * outline + "!" + reference label (same tone as the unresolved-footprint
+ * banner) so the user can locate and move the part. */
 function PlacementPlaceholder({
   reference,
 }: {
@@ -1031,14 +1039,29 @@ function PlacementPlaceholder({
   useEffect(() => () => geometry.dispose(), [geometry]);
   return (
     <>
-      <lineSegments geometry={geometry} renderOrder={RENDER_ORDER.BODIES}>
-        <lineBasicMaterial
-          color="#facc15"
+      <lineSegments
+        geometry={geometry}
+        renderOrder={RENDER_ORDER.BODIES}
+        onUpdate={(line) => line.computeLineDistances()}
+      >
+        <lineDashedMaterial
+          color={UNRESOLVED_WARNING_COLOR}
+          dashSize={0.5}
+          gapSize={0.3}
           depthTest={false}
           depthWrite={false}
         />
       </lineSegments>
       <PlacementPlaceholderLabel reference={reference} />
+      <EDAText
+        position={[half, half, 0]}
+        fontSize={1.4}
+        color={UNRESOLVED_WARNING_COLOR}
+        anchorX="center"
+        anchorY="middle"
+      >
+        !
+      </EDAText>
     </>
   );
 }
@@ -1535,7 +1558,12 @@ interface PcbSceneProps {
     pointsNm: Array<{ x: number; y: number }>;
     layer: PcbCopperLayerId;
     widthMm: number;
+    /** Illegal-style tint + dim (blocked / violating ghost); see routePreviewStyle. */
+    colorOverride?: string;
+    opacity?: number;
   } | null;
+  /** Live route-session DRC violation markers (transient; empty off-session). */
+  liveRouteViolations?: ReadonlyArray<LiveViolationMarker>;
   /**
    * Auto-route result preview: ghost traces drawn before the user applies, so
    * the cloud route is reviewable on the live board. Rendered with the same
@@ -1661,6 +1689,7 @@ export function PcbScene({
   displayMode = "normal",
   routeGuide = null,
   routePreview = null,
+  liveRouteViolations = [],
   autoroutePreview = null,
   routePendingPreview = null,
   autoFinishPreview = null,
@@ -2023,6 +2052,12 @@ export function PcbScene({
           layer={routePreview.layer}
           widthMm={routePreview.widthMm}
           mirror={mirror}
+          {...(routePreview.colorOverride !== undefined
+            ? { colorOverride: routePreview.colorOverride }
+            : {})}
+          {...(routePreview.opacity !== undefined
+            ? { opacity: routePreview.opacity }
+            : {})}
         />
       ) : null}
       {autoroutePreview?.map((t, i) => (
@@ -2380,6 +2415,7 @@ export function PcbScene({
         ) : null}
         <DrcSelectionHighlight traces={projection.traces} />
         <DrcMarkerLayer />
+        <LiveRouteViolationLayer markers={liveRouteViolations} />
         {selectedPlacements.map((placement) => (
           <SelectionOutline key={placement.id} placement={placement} />
         ))}

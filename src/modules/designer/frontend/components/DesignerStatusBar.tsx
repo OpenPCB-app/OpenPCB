@@ -21,6 +21,10 @@ interface DesignerStatusBarProps {
   drcCount?: number;
   /** When provided, the DRC segment becomes a button that opens the DRC tab. */
   onDrcClick?: () => void;
+  /** Parts with no usable footprint (PCB only); chip hidden when 0/absent. */
+  unresolvedFootprintCount?: number;
+  /** Click handler for the unresolved-footprint chip (select + frame). */
+  onUnresolvedFootprintsClick?: () => void;
   /** Label for the violation-count segment — "ERC" on the schematic. */
   drcLabel?: string;
   /** Native tooltip for the violation-count segment. */
@@ -78,6 +82,8 @@ export function DesignerStatusBar({
   selection,
   drcCount,
   onDrcClick,
+  unresolvedFootprintCount,
+  onUnresolvedFootprintsClick,
   drcLabel = "DRC",
   drcTitle = "Design rule violations",
   showCursor = false,
@@ -123,6 +129,25 @@ export function DesignerStatusBar({
       <StatusSegment flex sans className="text-text-tertiary">
         {hint}
       </StatusSegment>
+      {unresolvedFootprintCount !== undefined && unresolvedFootprintCount > 0 ? (
+        <StatusSegment
+          title="Parts with no usable footprint — nets on them cannot be routed"
+          {...(onUnresolvedFootprintsClick
+            ? {
+                onClick: onUnresolvedFootprintsClick,
+                "aria-label": `${unresolvedFootprintCount} unresolved footprints`,
+              }
+            : {})}
+        >
+          <SeverityDiamond severity="warning" />
+          <span className="font-medium text-status-warning">
+            {unresolvedFootprintCount}
+          </span>
+          <span className="text-text-caps">
+            unresolved {unresolvedFootprintCount === 1 ? "footprint" : "footprints"}
+          </span>
+        </StatusSegment>
+      ) : null}
       {drcCount !== undefined ? (
         <StatusSegment
           title={drcTitle}

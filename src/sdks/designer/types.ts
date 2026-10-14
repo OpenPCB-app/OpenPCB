@@ -1344,7 +1344,21 @@ export interface DesignerPcbProjection {
    * on pre-DRC saves and when there is no schematic.
    */
   padNets?: Record<string, string>;
+  /**
+   * Placed parts with no usable footprint (placeholder / missing) or a
+   * footprint with zero pads. Always present; `[]` when none. Blocking
+   * readiness problem for routing and manufacturing export.
+   */
+  unresolvedFootprints: DesignerUnresolvedFootprint[];
   warnings: string[];
+}
+
+export interface DesignerUnresolvedFootprint {
+  placementId: string;
+  partId: string;
+  /** Refdes, e.g. "U1". */
+  reference: string;
+  reason: "no-footprint" | "no-pads";
 }
 
 export interface DesignerJunction {
@@ -1405,6 +1419,13 @@ export interface DesignerPlacedPart {
   };
   symbol: LibrarySymbolPlacementSnapshot;
   footprint: LibraryFootprintPlacementSnapshot;
+  /**
+   * True when the library's current default footprint for `componentId` differs
+   * from this part's snapshot (footprint id or sourceHash). Only set by the
+   * store's `getSchematicProjection` (needs LibrarySDK); absent elsewhere.
+   * Fix with `refresh_part_footprint`.
+   */
+  footprintStale?: boolean;
   pins: DesignerPin[];
   propertiesJson: PartPropertiesJson;
 }
@@ -1436,6 +1457,9 @@ export interface DesignerLabel {
     x: number;
     y: number;
   };
+  /** Derived (never persisted): anchor touches a wire or pin. Name-only joins
+   *  do not count. Absent on hand-built fixtures. */
+  attached?: boolean;
 }
 
 /**
@@ -1449,6 +1473,8 @@ interface DesignerPrimitiveBase {
   id: string;
   positionNm: { x: number; y: number };
   rotationDeg: number;
+  /** Derived (never persisted): connection point lands on a pin or wire. */
+  attached?: boolean;
 }
 
 export interface DesignerGndPort extends DesignerPrimitiveBase {
@@ -1569,6 +1595,17 @@ export interface DesignerUpdatePartsPropertiesCommand {
   propertiesJson?: PartPropertiesJson;
 }
 
+/**
+ * Re-snapshot the library's CURRENT default footprint onto the parts (PCB
+ * placement position is kept; pads follow through the PCB sync). Undoable.
+ * Refused with `FOOTPRINT_PIN_MISMATCH` when a net-connected pin of any part
+ * has no matching pad in the new footprint.
+ */
+export interface DesignerRefreshPartFootprintCommand {
+  type: "refresh_part_footprint";
+  partIds: string[];
+}
+
 export interface DesignerDeleteEntityCommand {
   type: "delete_entity";
   entityId: string;
@@ -1583,12 +1620,15 @@ export interface DesignerUpsertLabelCommand {
     x: number;
     y: number;
   };
+  /** Required when the edit would merge 2+ distinct nets (NET_MERGE_REQUIRES_CONFIRM). */
+  confirmMerge?: boolean;
 }
 
 export interface DesignerPlaceGndPortCommand {
   type: "place_gnd_port";
   positionNm: { x: number; y: number };
   rotationDeg?: 0 | 90 | 180 | 270;
+  confirmMerge?: boolean;
 }
 
 export interface DesignerPlacePwrPortCommand {
@@ -1596,6 +1636,7 @@ export interface DesignerPlacePwrPortCommand {
   positionNm: { x: number; y: number };
   rotationDeg?: 0 | 90 | 180 | 270;
   railText: string;
+  confirmMerge?: boolean;
 }
 
 export interface DesignerPlaceNetPortalCommand {
@@ -1603,6 +1644,7 @@ export interface DesignerPlaceNetPortalCommand {
   positionNm: { x: number; y: number };
   rotationDeg?: 0 | 90 | 180 | 270;
   portalText: string;
+  confirmMerge?: boolean;
 }
 
 export interface DesignerMovePrimitiveCommand {
@@ -1854,7 +1896,11 @@ export interface DesignerPcbSetViewStateCommand {
 /**
  * Edit the board's design rules, net classes, and/or finished thickness.
  * One undo step; bumps the revision so a prior DRC run is marked stale. Any
- * omitted field is left unchanged.
+ * omitted field is left unchanged. A physically invalid `designRules` /
+ * `boardThicknessMm` value (non-finite or non-numeric; negative clearance /
+ * annular ring / hole-to-hole; non-positive trace width, drill, via size or
+ * thickness; via drill >= via diameter) is refused whole with
+ * `INVALID_PCB_BOARD_SETTINGS` and a field-specific detail; nothing persists.
  */
 export interface DesignerPcbSetDesignRulesCommand {
   type: "pcb_set_design_rules";
@@ -2153,6 +2199,7 @@ export type DesignerBatchableCommand = Exclude<
   | DesignerPlacePartCommand
   | DesignerPcbSetViewStateCommand
   | DesignerPcbApplyAutolayoutCandidateCommand
+  | DesignerRefreshPartFootprintCommand
 >;
 
 export const DESIGNER_BATCH_MAX_COMMANDS = 5000;
@@ -2204,6 +2251,7 @@ export type DesignerCommand =
   | DesignerMirrorPartCommand
   | DesignerUpdatePartPropertiesCommand
   | DesignerUpdatePartsPropertiesCommand
+  | DesignerRefreshPartFootprintCommand
   | DesignerDeleteEntityCommand
   | DesignerUpsertLabelCommand
   | DesignerPlaceGndPortCommand
@@ -2339,6 +2387,13 @@ export interface DesignerCommandOkResult {
 
 export type DesignerDispatchResult =
   | DesignerCommandOkResult
+  | {
+      ok: false;
+      code: "NET_MERGE_REQUIRES_CONFIRM";
+      message: string;
+      /** The distinct nets the command would fuse (name null = unnamed). */
+      nets: { name: string | null; pinCount: number }[];
+    }
   | { ok: false; code: "OPERATION_IDENTITY_CONFLICT"; commandId: string }
   | {
       ok: false;
@@ -2373,6 +2428,13 @@ export type DesignerDispatchResult =
       code: "COMPONENT_NOT_WIREABLE";
       componentId: string;
       reason: "NO_PINS";
+    }
+  | {
+      ok: false;
+      code: "FOOTPRINT_PIN_MISMATCH";
+      partId: string;
+      /** Pin numbers of net-connected pins that have no pad in the new footprint. */
+      missingPinNumbers: string[];
     }
   | {
       ok: false;

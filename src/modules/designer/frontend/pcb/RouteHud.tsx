@@ -169,7 +169,7 @@ export function RouteHudStatus({
         className={
           clean
             ? "font-medium text-status-success"
-            : "font-medium text-status-danger"
+            : "font-medium text-drc-error-text"
         }
       >
         {clean

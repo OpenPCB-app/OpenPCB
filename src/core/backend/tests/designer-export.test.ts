@@ -293,6 +293,7 @@ function fixtureProjection(): DesignerPcbProjection {
     keepouts: [],
     ratsnest: [],
     netNames: { "n-vcc": "VCC" },
+    unresolvedFootprints: [],
     warnings: [],
   };
 }
@@ -1977,6 +1978,17 @@ describe("export orchestrator", () => {
     proj.vias[0]!.drillMm = 0.1;
     const result = buildExportBundle(proj, null);
     expect(result.warnings.some((w) => /minimum drill/i.test(w))).toBe(true);
+  });
+
+  test("preflight blocks on parts with no footprint pads, naming refdes", () => {
+    const proj = fixtureProjection();
+    const ref = proj.placements[0]!.reference;
+    (proj.placements[0]!.footprint as { preview: unknown }).preview = null;
+    const result = buildExportBundle(proj, null);
+    const hit = result.warnings.find((w) => /^Error:.*no footprint pads/.test(w));
+    expect(hit).toBeDefined();
+    expect(hit).toContain(ref);
+    expect(hit).not.toContain(proj.placements[0]!.id);
   });
 
   test("preflight warns when the board has no outline", () => {

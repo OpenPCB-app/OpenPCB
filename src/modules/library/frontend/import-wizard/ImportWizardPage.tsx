@@ -7,7 +7,10 @@ import {
 } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
-import { useImportWizardStore } from "./useImportWizardStore";
+import {
+  useImportWizardStore,
+  wouldCommitWithoutFootprint,
+} from "./useImportWizardStore";
 import { WizardProgressBar } from "./WizardProgressBar";
 import { SymbolStep } from "./steps/SymbolStep";
 import { FootprintStep } from "./steps/FootprintStep";
@@ -142,6 +145,9 @@ export function ImportWizardPage({
         loadingInspect: s.inspectStatus === "loading",
       })),
     );
+  const footprintBlocked = useImportWizardStore(
+    (s) => wouldCommitWithoutFootprint(s) && !s.noFootprintAcknowledged,
+  );
 
   const symbolSig = useMemo(() => fileSignature(symbolFile), [symbolFile]);
   const footprintSig = useMemo(
@@ -287,6 +293,13 @@ export function ImportWizardPage({
     }
     if (!isDrawMode && !symbolFile) {
       store.setCommitError("No symbol file selected");
+      return;
+    }
+
+    if (wouldCommitWithoutFootprint(store) && !store.noFootprintAcknowledged) {
+      store.setCommitError(
+        "Confirm \"Continue without footprint\" on the Footprint step, or add a footprint.",
+      );
       return;
     }
 
@@ -605,8 +618,9 @@ export function ImportWizardPage({
   const canProceed = useMemo(() => {
     switch (currentStep) {
       case STEP_SYMBOL:
-      case STEP_FOOTPRINT:
         return readyForAdvancedSteps;
+      case STEP_FOOTPRINT:
+        return readyForAdvancedSteps && !footprintBlocked;
       case STEP_MODEL:
         return (
           readyForAdvancedSteps &&
@@ -617,7 +631,7 @@ export function ImportWizardPage({
       default:
         return false;
     }
-  }, [canProceedMetadata, currentStep, readyForAdvancedSteps]);
+  }, [canProceedMetadata, currentStep, footprintBlocked, readyForAdvancedSteps]);
 
   const isLastStep = currentStep === STEP_METADATA;
   const isCanvasStep =
@@ -713,7 +727,9 @@ export function ImportWizardPage({
         className={isCanvasStep ? "min-h-0 flex-1" : "flex-1 overflow-auto p-6"}
       >
         {currentStep === STEP_SYMBOL && <SymbolStep />}
-        {currentStep === STEP_FOOTPRINT && <FootprintStep />}
+        {currentStep === STEP_FOOTPRINT && (
+          <FootprintStep backendURL={backendURL} moduleId={moduleId} />
+        )}
         {currentStep === STEP_MODEL && <ModelStep />}
         {currentStep === STEP_METADATA && (
           <MetadataStep backendURL={backendURL} moduleId={moduleId} />

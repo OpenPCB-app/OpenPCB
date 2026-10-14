@@ -8,7 +8,9 @@ import type {
   ModuleRouterHandle,
 } from "../../../core/contracts/modules/backend-module";
 import { eq, or, sql } from "drizzle-orm";
+import { PLACEHOLDER_FOOTPRINT_ID } from "./builtins/placeholder-footprint";
 import { NotFoundError, ValidationError } from "../../../core/contracts/errors";
+import type { LibraryAddComponentFootprintInput } from "../../../sdks/library";
 import { isFeatureEnabled } from "../../../core/contracts/feature-flags/backend";
 import {
   getDb,
@@ -31,6 +33,7 @@ import {
   markFootprintModelConversionFailed,
   searchComponentsPage,
   toFootprintModelMetadata,
+  addComponentFootprint,
   updateComponent,
   upsertFootprintModelRecord,
 } from "./queries";
@@ -89,6 +92,14 @@ import {
 function parseTheme(value: string | null): PreviewTheme {
   if (value === "light" || value === "dark") return value;
   return "auto";
+}
+
+function assertFootprintNotPlaceholder(footprintId: string): void {
+  if (footprintId === PLACEHOLDER_FOOTPRINT_ID) {
+    throw new ValidationError(
+      "The placeholder footprint is shared; assign a real footprint first",
+    );
+  }
 }
 
 function success<T>(data: T, status = 200): Response {
@@ -1385,7 +1396,17 @@ export function registerRoutes(
       name?: string;
       description?: string;
       tags?: string[];
+      defaultFootprintId?: string;
     } = {};
+    if ("defaultFootprintId" in body) {
+      if (
+        typeof body.defaultFootprintId !== "string" ||
+        body.defaultFootprintId.trim().length === 0
+      ) {
+        throw new ValidationError("defaultFootprintId must be a non-empty string");
+      }
+      patch.defaultFootprintId = body.defaultFootprintId;
+    }
     if ("name" in body) {
       if (typeof body.name !== "string") {
         throw new ValidationError("name must be a string");
@@ -1417,6 +1438,37 @@ export function registerRoutes(
       throw new NotFoundError("Component not found");
     }
     return success({ component });
+  });
+
+  router.post("/components/:componentId/footprints", async (routeCtx) => {
+    const componentId = routeCtx.params.getOrThrow("componentId");
+    const body = await parseJsonBody<unknown>(routeCtx.req);
+    if (!isRecord(body)) {
+      throw new ValidationError("Request body must be an object");
+    }
+    if (body.mode !== "generated" && body.mode !== "drawn") {
+      throw new ValidationError('mode must be "generated" or "drawn"');
+    }
+    if (!isRecord(body.source)) {
+      throw new ValidationError("source must be an object");
+    }
+    if (body.setDefault !== undefined && typeof body.setDefault !== "boolean") {
+      throw new ValidationError("setDefault must be a boolean");
+    }
+    if (body.variantLabel !== undefined && typeof body.variantLabel !== "string") {
+      throw new ValidationError("variantLabel must be a string");
+    }
+    const result = await addComponentFootprint(ctx, componentId, {
+      mode: body.mode,
+      source:
+        body.source as unknown as LibraryAddComponentFootprintInput["source"],
+      ...(body.setDefault !== undefined && { setDefault: body.setDefault }),
+      ...(body.variantLabel !== undefined && { variantLabel: body.variantLabel }),
+    });
+    if (!result) {
+      throw new NotFoundError("Component not found");
+    }
+    return success(result, 201);
   });
 
   router.get("/models/export", async () => {
@@ -1619,6 +1671,7 @@ export function registerRoutes(
     if (!footprint) {
       throw new ValidationError("Footprint not found");
     }
+    assertFootprintNotPlaceholder(footprintId);
     assertFootprintNotBuiltinComponent(ctx, footprintId, "update");
 
     const existingModel = await getFootprintModelRecord(ctx, footprintId);
@@ -1691,6 +1744,7 @@ export function registerRoutes(
     if (!footprint) {
       throw new ValidationError("Footprint not found");
     }
+    assertFootprintNotPlaceholder(footprintId);
     assertFootprintNotBuiltinComponent(ctx, footprintId, "update");
     const body = await parseJsonBody<{
       status?: unknown;
@@ -1719,6 +1773,7 @@ export function registerRoutes(
     if (!footprint) {
       throw new ValidationError("Footprint not found");
     }
+    assertFootprintNotPlaceholder(footprintId);
     assertFootprintNotBuiltinComponent(ctx, footprintId, "delete");
 
     const existing = await getFootprintModelRecord(ctx, footprintId);

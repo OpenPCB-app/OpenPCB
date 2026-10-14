@@ -623,6 +623,7 @@ export function synthesizeBoard(opts: SynthesizeOpts): DesignerPcbProjection {
     ratsnest: [],
     netNames,
     padNets,
+    unresolvedFootprints: [],
     warnings: [],
   };
 }

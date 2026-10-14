@@ -209,6 +209,10 @@ describe("batch_commands (T-096)", () => {
       },
       {
         type: "batch_commands",
+        commands: [{ type: "refresh_part_footprint", partIds: ["x"] }],
+      },
+      {
+        type: "batch_commands",
         commands: [{ type: "delete_entity", entityId: 5, entityKind: "label" }],
       },
     ]) {

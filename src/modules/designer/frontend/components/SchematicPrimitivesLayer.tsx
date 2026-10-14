@@ -11,6 +11,7 @@ import {
   ThickLineBucket,
 } from "../../../../shared/frontend/canvas/primitives";
 import { useCanvasTheme } from "../../../../shared/frontend/canvas/theme";
+import { SchematicAttachAnchor } from "./SchematicAttachAnchor";
 
 type Vec2 = readonly [number, number];
 
@@ -177,12 +178,17 @@ interface SinglePrimitiveProps {
   primitive: DesignerPrimitive;
   selected?: boolean;
   ghost?: boolean;
+  /** Net highlight: true = on the highlighted net, false = dimmed, null = no highlight. */
+  netHighlighted?: boolean | null;
 }
+
+const NET_DIM_OPACITY = 0.35;
 
 function SinglePrimitive({
   primitive,
   selected = false,
   ghost = false,
+  netHighlighted = null,
 }: SinglePrimitiveProps): ReactElement {
   const { theme } = useCanvasTheme();
   const t = theme.schematic;
@@ -219,7 +225,12 @@ function SinglePrimitive({
   // Selected primitives keep their kind color — selection is communicated
   // by the surrounding outline rect (PrimitiveSelectionOutline), not by
   // recoloring the symbol itself.
-  const baseColor = ghost ? t.wirePreviewColor : kindBaseColor;
+  const baseColor = ghost
+    ? t.wirePreviewColor
+    : netHighlighted
+      ? t.wireSelectedColor
+      : kindBaseColor;
+  const dimOpacity = netHighlighted === false ? NET_DIM_OPACITY : 1;
 
   const labelText =
     primitive.kind === "pwr"
@@ -241,17 +252,14 @@ function SinglePrimitive({
         widthMm={BODY_STROKE_MM}
         color={baseColor}
         renderOrder={RENDER_ORDER.LABELS}
-        opacity={ghost ? 0.5 : 1}
+        opacity={ghost ? 0.5 : dimOpacity}
       />
       {ghost || primitive.kind === "junction" ? null : (
-        <mesh renderOrder={RENDER_ORDER.JUNCTIONS}>
-          <circleGeometry args={[SYMBOL_PIN_DOT_RADIUS_MM, 24]} />
-          <meshBasicMaterial
-            color={pinDotColor}
-            depthTest={false}
-            depthWrite={false}
-          />
-        </mesh>
+        <SchematicAttachAnchor
+          attached={primitive.attached !== false}
+          color={pinDotColor}
+          opacity={dimOpacity}
+        />
       )}
       {labelText ? (
         <EDAText
@@ -263,6 +271,7 @@ function SinglePrimitive({
           fontSize={1.27}
           anchorX={primitive.kind === "pwr" ? "center" : "right"}
           anchorY={primitive.kind === "pwr" ? "bottom" : "middle"}
+          opacity={dimOpacity}
         >
           {labelText}
         </EDAText>
@@ -274,11 +283,14 @@ function SinglePrimitive({
 export interface SchematicPrimitivesLayerProps {
   primitives: readonly DesignerPrimitive[];
   selectedPrimitiveIds: ReadonlySet<string>;
+  /** Primitives on the highlighted net; null when no highlight is active. */
+  highlightedPrimitiveIds?: ReadonlySet<string> | null;
 }
 
 export function SchematicPrimitivesLayer({
   primitives,
   selectedPrimitiveIds,
+  highlightedPrimitiveIds = null,
 }: SchematicPrimitivesLayerProps): ReactElement {
   return (
     <>
@@ -287,6 +299,11 @@ export function SchematicPrimitivesLayer({
           key={primitive.id}
           primitive={primitive}
           selected={selectedPrimitiveIds.has(primitive.id)}
+          netHighlighted={
+            highlightedPrimitiveIds
+              ? highlightedPrimitiveIds.has(primitive.id)
+              : null
+          }
         />
       ))}
     </>

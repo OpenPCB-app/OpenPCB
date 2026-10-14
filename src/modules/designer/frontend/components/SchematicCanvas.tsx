@@ -49,6 +49,7 @@ import { Units } from "../../../../shared/frontend/canvas/coords";
 import {
   DEFAULT_SCHEMATIC_ZOOM,
   NET_LABEL_FONT_MM,
+  SYMBOL_PIN_DOT_RADIUS_MM,
 } from "../../../../shared/frontend/canvas/defaults";
 import {
   isDeleteShortcut,
@@ -77,9 +78,19 @@ import type { ViewportState } from "../types";
 import { COMPONENT_DND_MIME } from "./DesignerSidebar";
 import { useDesignerHighlight } from "../useDesignerHighlight";
 import {
+  buildSchematicNetIndex,
+  netOfPin,
+  netOfSelection,
+  type SchematicNetIndex,
+} from "./schematic-net-index";
+import {
   PrimitiveGhost,
   SchematicPrimitivesLayer,
 } from "./SchematicPrimitivesLayer";
+import {
+  LABEL_STEM_MM,
+  SchematicAttachAnchor,
+} from "./SchematicAttachAnchor";
 import { NetPortalPicker, PwrRailPicker } from "./LabelPicker";
 import { openContextMenu } from "../../../../shared/frontend/context-menu";
 import type { ContextMenuGroup } from "../../../../shared/frontend/context-menu";
@@ -818,6 +829,9 @@ function PartSelectionOutline({
   );
 }
 
+/** Opacity of non-net text/glyphs while a net highlight is active. */
+const NET_DIM_OPACITY = 0.35;
+
 function InvalidateOnCanvasChange({
   projection,
   cursorNm,
@@ -827,6 +841,7 @@ function InvalidateOnCanvasChange({
   marqueeRect,
   wireSession,
   armedComponentDetail,
+  highlightedNetId,
 }: {
   projection: DesignerSchematicProjection | null;
   cursorNm: PointNm | null;
@@ -836,6 +851,7 @@ function InvalidateOnCanvasChange({
   marqueeRect: { a: PointMm | null; b: PointMm | null } | null;
   wireSession: WireSession | null;
   armedComponentDetail: LibraryComponentPlacementDetail | null;
+  highlightedNetId: string | null;
 }) {
   const invalidate = useThree((state) => state.invalidate);
   useEffect(() => {
@@ -850,6 +866,7 @@ function InvalidateOnCanvasChange({
     marqueeRect,
     wireSession,
     armedComponentDetail,
+    highlightedNetId,
   ]);
   return null;
 }
@@ -877,8 +894,10 @@ function ZoomReporter({
 }
 
 function ViewportReporter({
+  enabledRef,
   onViewportChange,
 }: {
+  enabledRef: React.MutableRefObject<boolean>;
   onViewportChange: (zoom: number, posX: number, posY: number) => void;
 }): null {
   const camera = useThree((s) => s.camera) as OrthographicCamera;
@@ -887,6 +906,7 @@ function ViewportReporter({
   );
 
   useFrame(() => {
+    if (!enabledRef.current) return;
     const { zoom, position } = camera;
     const l = lastRef.current;
     if (
@@ -984,6 +1004,32 @@ export const SchematicCanvas = forwardRef<
   const [cameraReady, setCameraReady] = useState(false);
   const lastAutoFittedDesignIdRef = useRef<string | null>(null);
   const markCameraReady = useCallback(() => setCameraReady(true), []);
+  // Viewport reporting stays off until the initial fit/restore is applied.
+  const viewportReportingRef = useRef(false);
+  // The parent's saved viewport is captured once per design: ViewportReporter
+  // writes back into the same parent store, so reading the live prop would
+  // let the pre-fit default camera masquerade as a saved viewport.
+  const initialViewportSnapshotRef = useRef<{
+    designId: string;
+    viewport: ViewportState | null;
+  } | null>(null);
+  if (
+    projection?.designId &&
+    initialViewportSnapshotRef.current?.designId !== projection.designId
+  ) {
+    initialViewportSnapshotRef.current = {
+      designId: projection.designId,
+      viewport: initialViewport ?? null,
+    };
+    // The camera still shows the previous design until the effect below
+    // restores/fits this one; reporting it now would save it under this key.
+    viewportReportingRef.current = false;
+  }
+  const awaitingContentRef = useRef(false);
+  const hasFittableContent = useMemo(
+    () => (projection ? computeProjectionBoundsMm(projection) !== null : false),
+    [projection],
+  );
 
   // Floating canvas comment overlay: projection + new-comment draft.
   const wrapperRef = useRef<HTMLElement | null>(null);
@@ -1151,7 +1197,8 @@ export const SchematicCanvas = forwardRef<
     const centerY = (bounds.minY + bounds.maxY) / 2;
 
     camera.position.set(centerX, centerY, camera.position.z);
-    camera.zoom = Math.max(5, Math.min(zoom, 500));
+    // Floor well below the default so large sheets still frame completely.
+    camera.zoom = Math.max(0.5, Math.min(zoom, 500));
     camera.updateProjectionMatrix();
     onZoomChange?.(camera.zoom * 2);
     requestRender();
@@ -1163,14 +1210,26 @@ export const SchematicCanvas = forwardRef<
   useEffect(() => {
     if (!cameraReady) return;
     if (!projection?.designId) return;
+    const camera = cameraRef.current;
+    if (!camera) return;
+
     if (lastAutoFittedDesignIdRef.current === projection.designId) {
-      // Already handled this design within this mount; skip revision bumps.
+      // Already handled this design within this mount. The one exception: a
+      // design that opened empty is framed once when its first content
+      // arrives (AI edit, import); later revisions never move the camera.
+      if (awaitingContentRef.current && hasFittableContent) {
+        awaitingContentRef.current = false;
+        fitCamera();
+      }
       return;
     }
     lastAutoFittedDesignIdRef.current = projection.designId;
 
-    const camera = cameraRef.current;
-    if (!camera) return;
+    const initialViewport =
+      initialViewportSnapshotRef.current?.designId === projection.designId
+        ? initialViewportSnapshotRef.current.viewport
+        : null;
+    awaitingContentRef.current = !initialViewport && !hasFittableContent;
 
     if (initialViewport) {
       camera.position.set(
@@ -1185,10 +1244,11 @@ export const SchematicCanvas = forwardRef<
     } else {
       fitCamera();
     }
+    viewportReportingRef.current = true;
   }, [
     cameraReady,
     projection?.designId,
-    initialViewport,
+    hasFittableContent,
     fitCamera,
     onZoomChange,
     requestRender,
@@ -1643,6 +1703,108 @@ export const SchematicCanvas = forwardRef<
     },
     [effectiveProjection, renderedPrimitivePositionNm],
   );
+
+  // Net highlight (hover + selection pin). Element id -> net id lookup from
+  // the same projection.nets ERC/netlist use.
+  const netIndex = useMemo(
+    () => buildSchematicNetIndex(effectiveProjection),
+    [effectiveProjection],
+  );
+  const highlightedNetId = useDesignerHighlight((s) => s.highlightedNetId);
+  const hoverNetStore = useDesignerHighlight((s) => s.hoverNet);
+  const hoverRafRef = useRef<number | null>(null);
+  const hoverPendingRef = useRef<PointNm | null>(null);
+  const hoverBusyRef = useRef(false);
+  const hoverResolveRef = useRef<(worldNm: PointNm) => string | null>(
+    () => null,
+  );
+
+  const setHoverNet = useCallback(
+    (netId: string | null) => {
+      // Compare with the store (not a shadow ref): hoverNet is a no-op while
+      // pinned, and a shadow would then go stale once the pin clears.
+      const state = useDesignerHighlight.getState();
+      if (state.pinned || state.highlightedNetId === netId) return;
+      hoverNetStore(netId);
+    },
+    [hoverNetStore],
+  );
+
+  // Priority pin > label > primitive > wire.
+  hoverResolveRef.current = (worldNm) => {
+    const pin = hitPin(worldNm);
+    if (pin) return netOfPin(netIndex, pin.id);
+    const labelId = hitLabelId(worldNm);
+    if (labelId) return netIndex.label.get(labelId) ?? null;
+    const primitiveId = hitPrimitiveId(worldNm);
+    if (primitiveId) return netIndex.primitive.get(primitiveId) ?? null;
+    const wire = hitWire(worldNm);
+    return wire ? (netIndex.wire.get(wire.wire.id) ?? null) : null;
+  };
+
+  const cancelHover = useCallback(() => {
+    if (hoverRafRef.current !== null) {
+      cancelAnimationFrame(hoverRafRef.current);
+      hoverRafRef.current = null;
+    }
+    hoverPendingRef.current = null;
+  }, []);
+
+  const scheduleHover = useCallback(
+    (worldNm: PointNm) => {
+      hoverPendingRef.current = worldNm;
+      if (hoverRafRef.current !== null) return;
+      hoverRafRef.current = requestAnimationFrame(() => {
+        hoverRafRef.current = null;
+        const pending = hoverPendingRef.current;
+        hoverPendingRef.current = null;
+        if (pending && !hoverBusyRef.current) {
+          setHoverNet(hoverResolveRef.current(pending));
+        }
+      });
+    },
+    [setHoverNet],
+  );
+
+  useEffect(() => cancelHover, [cancelHover]);
+
+  // Selection pins the highlight; clearing selection releases only a pin we
+  // set (PCB cross-probe pins are left alone).
+  const selectionPinnedRef = useRef(false);
+  // Pin held by someone else (PCB cross-probe) when we took over; restored on
+  // release instead of being lost.
+  const priorPinRef = useRef<string | null>(null);
+  const releaseSelectionPin = useCallback(() => {
+    if (!selectionPinnedRef.current) return;
+    selectionPinnedRef.current = false;
+    const store = useDesignerHighlight.getState();
+    const prior = priorPinRef.current;
+    priorPinRef.current = null;
+    if (prior) store.pinNet(prior);
+    else store.clear();
+  }, []);
+  useEffect(() => {
+    const netId = netOfSelection(netIndex, selection);
+    const store = useDesignerHighlight.getState();
+    if (netId) {
+      if (!selectionPinnedRef.current) {
+        priorPinRef.current = store.pinned ? store.highlightedNetId : null;
+        selectionPinnedRef.current = true;
+      }
+      store.pinNet(netId);
+    } else {
+      releaseSelectionPin();
+    }
+  }, [netIndex, selection, releaseSelectionPin]);
+  useEffect(() => releaseSelectionPin, [releaseSelectionPin]);
+
+  // Stale id (net merged/renamed/deleted): drop the highlight.
+  useEffect(() => {
+    if (!effectiveProjection || !highlightedNetId) return;
+    if (!netIndex.netIds.has(highlightedNetId)) {
+      useDesignerHighlight.getState().clear();
+    }
+  }, [effectiveProjection, highlightedNetId, netIndex]);
 
   const hitPartId = useCallback(
     (worldNm: PointNm): string | null => {
@@ -2214,11 +2376,33 @@ export const SchematicCanvas = forwardRef<
         if (marquee.marqueeSession) {
           marquee.updateMarqueeCursor(toMm(worldNm));
         }
+
+        const busy = !!(
+          dragRef.current ||
+          marquee.marqueeSession ||
+          wireSession ||
+          armedPrimitive ||
+          armedComponentDetail ||
+          armedLabelText
+        );
+        hoverBusyRef.current = busy;
+        if (busy) {
+          cancelHover();
+          setHoverNet(null);
+        } else {
+          scheduleHover(worldNm);
+        }
       },
       onPointerLeave() {
         setCursorNm((prev) => (prev === null ? prev : null));
+        cancelHover();
+        setHoverNet(null);
       },
       onPointerDown(event) {
+        // A press may start a gesture: drop any queued/applied hover.
+        hoverBusyRef.current = true;
+        cancelHover();
+        setHoverNet(null);
         if (!projection) {
           return;
         }
@@ -3051,6 +3235,7 @@ export const SchematicCanvas = forwardRef<
       armedPrimitive,
       armedComponentDetail,
       armDrag,
+      cancelHover,
       commentMode,
       commentThreads,
       commitWireToPin,
@@ -3073,7 +3258,9 @@ export const SchematicCanvas = forwardRef<
       pinById,
       projection,
       renderedPartPositionNm,
+      scheduleHover,
       selection,
+      setHoverNet,
       wireSession,
     ],
   );
@@ -3277,6 +3464,7 @@ export const SchematicCanvas = forwardRef<
         />
         <ZoomReporter onZoomChange={onZoomChange} />
         <ViewportReporter
+          enabledRef={viewportReportingRef}
           onViewportChange={(zoom, posX, posY) => {
             projection2d.setViewport(zoom, posX, posY);
             onViewportChange?.(zoom, posX, posY);
@@ -3291,9 +3479,11 @@ export const SchematicCanvas = forwardRef<
           marqueeRect={{ a: marqueeOverlay.a, b: marqueeOverlay.b }}
           wireSession={wireSession}
           armedComponentDetail={armedComponentDetail}
+          highlightedNetId={highlightedNetId}
         />
         <SchematicScene
           projection={effectiveProjection}
+          netIndex={netIndex}
           gridVisible={gridVisible}
           unselectedWires={unselectedWires}
           selectedWires={selectedWires}
@@ -3372,6 +3562,7 @@ export const SchematicCanvas = forwardRef<
 
 interface SchematicSceneProps {
   projection: DesignerSchematicProjection | null;
+  netIndex: SchematicNetIndex;
   gridVisible: boolean;
   unselectedWires: DesignerWire[];
   selectedWires: DesignerWire[];
@@ -3396,6 +3587,7 @@ interface SchematicSceneProps {
 
 function SchematicScene({
   projection,
+  netIndex,
   gridVisible,
   unselectedWires,
   selectedWires,
@@ -3422,14 +3614,37 @@ function SchematicScene({
   // Cross-probe: split unselected wires by net when a highlight is active
   // (set from this view or from the PCB view via the designer-wide store).
   const highlightedNetId = useDesignerHighlight((s) => s.highlightedNetId);
-  const wireToNet = useMemo(() => {
-    const map = new Map<string, string>();
-    if (!projection) return map;
-    for (const net of projection.nets) {
-      for (const wireId of net.wireIds) map.set(wireId, net.id);
+  const wireToNet = netIndex.wire;
+
+  // Net-highlight: non-net text/glyphs dim to this opacity. Part bodies are
+  // not dimmed (SymbolRenderLayer exposes no opacity); pins of the net get an
+  // emphasis dot instead.
+  const dimOpacity = highlightedNetId ? NET_DIM_OPACITY : 1;
+  const highlightedPrimitiveIds = useMemo(() => {
+    if (!highlightedNetId) return null;
+    const ids = new Set<string>();
+    for (const [id, netId] of netIndex.primitive) {
+      if (netId === highlightedNetId) ids.add(id);
     }
-    return map;
-  }, [projection]);
+    return ids;
+  }, [highlightedNetId, netIndex]);
+  const highlightedPinPoints = useMemo(() => {
+    const points: PointNm[] = [];
+    if (!highlightedNetId) return points;
+    for (const part of parts) {
+      const rendered = renderedPartPositionNm(part);
+      const dx = rendered.x - part.positionNm.x;
+      const dy = rendered.y - part.positionNm.y;
+      for (const pin of part.pins) {
+        if (netIndex.pin.get(pin.id) !== highlightedNetId) continue;
+        points.push({
+          x: pin.worldPositionNm.x + dx,
+          y: pin.worldPositionNm.y + dy,
+        });
+      }
+    }
+    return points;
+  }, [highlightedNetId, netIndex, parts, renderedPartPositionNm]);
 
   // Wire-id → net class (default | gnd | power) so we can color-bucket
   // unselected wires by net family.
@@ -3621,28 +3836,66 @@ function SchematicScene({
 
           {labels.map((label) => {
             const selected = selection.labelIds.has(label.id);
+            const onNet =
+              !!highlightedNetId &&
+              netIndex.label.get(label.id) === highlightedNetId;
+            const anchorColor = onNet ? t.wireSelectedColor : t.wireColor;
+            const attached = label.attached !== false;
             return (
-              <EDAText
+              <group
                 key={label.id}
                 position={[
                   Units.nmToMm(label.positionNm.x),
                   Units.nmToMm(label.positionNm.y),
                   0,
                 ]}
-                color={selected ? t.labelSelectedColor : t.labelColor}
-                fontSize={NET_LABEL_FONT_MM}
-                anchorX="left"
-                anchorY="middle"
               >
-                {label.text}
-              </EDAText>
+                <SchematicAttachAnchor
+                  attached={attached}
+                  color={anchorColor}
+                  opacity={onNet ? 1 : dimOpacity}
+                  stem
+                />
+                <EDAText
+                  opacity={onNet ? 1 : dimOpacity}
+                  position={[LABEL_STEM_MM + 0.1, 0, 0]}
+                  color={
+                    selected
+                      ? t.labelSelectedColor
+                      : onNet
+                        ? t.wireSelectedColor
+                        : t.labelColor
+                  }
+                  fontSize={NET_LABEL_FONT_MM}
+                  anchorX="left"
+                  anchorY="middle"
+                >
+                  {label.text}
+                </EDAText>
+              </group>
             );
           })}
 
           <SchematicPrimitivesLayer
             primitives={primitives}
             selectedPrimitiveIds={selection.primitiveIds}
+            highlightedPrimitiveIds={highlightedPrimitiveIds}
           />
+
+          {highlightedPinPoints.map((point) => (
+            <mesh
+              key={`netpin:${point.x}:${point.y}`}
+              position={[Units.nmToMm(point.x), Units.nmToMm(point.y), 0]}
+              renderOrder={RENDER_ORDER.JUNCTIONS}
+            >
+              <circleGeometry args={[SYMBOL_PIN_DOT_RADIUS_MM * 1.8, 24]} />
+              <meshBasicMaterial
+                color={t.wireSelectedColor}
+                depthTest={false}
+                depthWrite={false}
+              />
+            </mesh>
+          ))}
 
           {primitiveGhost ? (
             <PrimitiveGhost primitive={primitiveGhost} />

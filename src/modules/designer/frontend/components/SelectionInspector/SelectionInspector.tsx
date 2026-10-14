@@ -38,6 +38,8 @@ interface SelectionInspectorProps {
   onOpenInLibrary?(componentId: string): void;
   /** Cross-probe the selected part to the PCB editor. */
   onCrossProbePcb?(part: DesignerPlacedPart): void;
+  /** Open the change-footprint flow for a part's component. */
+  onChangeFootprint?(part: DesignerPlacedPart): void;
 }
 
 const PANEL_CLASS =
@@ -108,6 +110,7 @@ export function SelectionInspector({
   onClose,
   onOpenInLibrary,
   onCrossProbePcb,
+  onChangeFootprint,
 }: SelectionInspectorProps): ReactElement {
   const [referenceDraft, setReferenceDraft] = useState("");
   const [referenceEditing, setReferenceEditing] = useState(false);
@@ -183,7 +186,11 @@ export function SelectionInspector({
           onCrossProbePcb={
             onCrossProbePcb ? () => onCrossProbePcb(selection.part) : undefined
           }
-          onReplaceComponentDisabledMessage="Per-instance override coming soon"
+          onChangeFootprint={
+            onChangeFootprint
+              ? () => onChangeFootprint(selection.part)
+              : undefined
+          }
         />
       );
       break;

@@ -1,4 +1,5 @@
 import { AlertTriangle, Pencil } from "lucide-react";
+import { isUnresolvedFootprintWarning } from "../../../../shared/pcb-geometry/unresolved-footprints";
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import type { PcbBoardOutline, PcbPointMm } from "../../../../sdks";
 import { Button } from "../../../../shared/frontend/ui/button";
@@ -143,6 +144,10 @@ export function PcbBoardPanel({
   onEditRules,
   canEditRules,
 }: PcbBoardPanelProps): ReactElement {
+  // Unresolved-footprint warnings have their own banner + status chip.
+  const panelWarnings = (workspace.projection?.warnings ?? []).filter(
+    (w) => !isUnresolvedFootprintWarning(w),
+  );
   const widthRef = useRef<HTMLInputElement>(null);
   const [shapeType, setShapeType] = useState<ShapeType>(() =>
     shapeTypeFromOutline(currentOutline),
@@ -516,9 +521,9 @@ export function PcbBoardPanel({
         </p>
       ) : null}
 
-      {workspace.projection?.warnings.length ? (
+      {panelWarnings.length ? (
         <ul className="mx-2 mb-2 max-h-40 list-disc space-y-0.5 overflow-y-auto rounded-control border border-status-warning/30 bg-status-warning-soft py-1 pl-5 pr-2 text-2xs text-status-warning">
-          {workspace.projection.warnings.map((warning, i) => (
+          {panelWarnings.map((warning, i) => (
             <li key={i} className="break-words">
               {warning}
             </li>

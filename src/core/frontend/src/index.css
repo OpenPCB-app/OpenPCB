@@ -179,6 +179,12 @@
 
   /* Status — `-soft` fills, `-border` ~40% strokes. The base colour is AA
      (>=4.5:1) as text on its own -soft fill over every chrome surface. */
+  /* DRC palette — hex values MUST match DRC_SEVERITY in
+     src/modules/designer/frontend/pcb/drc/drc-colors.ts (canvas markers). */
+  --color-drc-error: var(--drc-error);
+  --color-drc-error-text: var(--drc-error-text);
+  --color-drc-warning: var(--drc-warning);
+  --color-drc-info: var(--drc-info);
   --color-status-danger: var(--status-danger);
   --color-status-danger-soft: var(--status-danger-soft);
   --color-status-danger-border: var(--status-danger-border);
@@ -270,6 +276,11 @@
   /* Light status colours are dark enough to stay >=4.5:1 as text on their
      own -soft fill over --surface-raised (#e2e2e5), the darkest chrome
      surface a status box sits on (T-175). */
+  --drc-error: #ff2d9e;
+  /* Text-only variant: #ff2d9e is ~3.3:1 on light chrome; darkened for 4.5:1. */
+  --drc-error-text: #b80f6b;
+  --drc-warning: #ffb020;
+  --drc-info: #38bdf8;
   --status-danger: #a3301f;
   --status-danger-soft: rgba(163, 48, 31, 0.12);
   --status-danger-border: rgba(163, 48, 31, 0.4);
@@ -339,6 +350,10 @@ html.dark {
   --selection: #33d1ff;
   --selection-soft: rgba(51, 209, 255, 0.08);
 
+  --drc-error: #ff2d9e;
+  --drc-error-text: #ff2d9e;
+  --drc-warning: #ffb020;
+  --drc-info: #38bdf8;
   --status-danger: #e0705f;
   --status-danger-soft: rgba(224, 112, 95, 0.12);
   --status-danger-border: rgba(224, 112, 95, 0.4);

@@ -191,6 +191,7 @@ export function CloudDesignBrowser({
               type: "upsert_label",
               text: label.text,
               positionNm: label.positionNm,
+              confirmMerge: true,
             },
             ["INVALID_LABEL"],
           );

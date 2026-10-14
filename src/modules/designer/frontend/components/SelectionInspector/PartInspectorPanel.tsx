@@ -5,13 +5,7 @@ import {
   useState,
   type ReactElement,
 } from "react";
-import {
-  BookOpen,
-  ChevronDown,
-  CircuitBoard,
-  Layers,
-  Replace,
-} from "lucide-react";
+import { BookOpen, CircuitBoard, Layers, Replace } from "lucide-react";
 import type {
   DesignerPlacedPart,
   DesignerSchematicProjection,
@@ -44,7 +38,8 @@ interface PartInspectorPanelProps {
   setError: DesignerWorkspaceActions["setError"];
   onOpenInLibrary?(componentId: string): void;
   onCrossProbePcb?(): void;
-  onReplaceComponentDisabledMessage?: string;
+  /** Opens the change-footprint flow for this part's component. */
+  onChangeFootprint?(): void;
 }
 
 function readPropString(
@@ -174,7 +169,7 @@ export function PartInspectorPanel({
   setError,
   onOpenInLibrary,
   onCrossProbePcb,
-  onReplaceComponentDisabledMessage,
+  onChangeFootprint,
 }: PartInspectorPanelProps): ReactElement {
   const [valueDraft, setValueDraft] = useState(part.value);
   const structured = part.propertiesJson.valueStructured;
@@ -189,7 +184,7 @@ export function PartInspectorPanel({
     (part.positionNm.y / 1_000_000).toFixed(3),
   );
   const [rotDraft, setRotDraft] = useState(String(part.rotationDeg));
-  const [footprintMenuOpen, setFootprintMenuOpen] = useState(false);
+  const [refreshingFootprint, setRefreshingFootprint] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // Fields: a per-part override in `propertiesJson` wins; otherwise the
@@ -414,7 +409,23 @@ export function PartInspectorPanel({
     [variants, part.footprint.footprintId],
   );
 
-  const hasAlternatives = variants.length > 1;
+  const refreshFootprint = useCallback(async () => {
+    setRefreshingFootprint(true);
+    try {
+      await dispatchCommand({
+        type: "refresh_part_footprint",
+        partIds: [part.id],
+      });
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Failed to update footprint from library",
+      );
+    } finally {
+      setRefreshingFootprint(false);
+    }
+  }, [dispatchCommand, part.id, setError]);
 
   const pinNets = useMemo(() => {
     const rows = part.pins.map((pin) => ({
@@ -470,87 +481,49 @@ export function PartInspectorPanel({
             />
           </PropertyRow>
         ) : null}
-        {variants.length > 0 && currentVariant ? (
-          <PropertyRow label="Footprint">
-            {hasAlternatives ? (
+        <PropertyRow label="Footprint">
+          <span className="flex min-w-0 items-center gap-1">
+            <Layers className="h-3 w-3 shrink-0 text-text-tertiary" />
+            <span
+              className="min-w-0 flex-1 truncate font-mono text-2xs"
+              title={currentVariant?.variantLabel ?? part.footprint.name}
+            >
+              {currentVariant?.variantLabel ?? part.footprint.name}
+            </span>
+            {onChangeFootprint ? (
               <button
                 type="button"
-                onClick={() => setFootprintMenuOpen((prev) => !prev)}
-                aria-expanded={footprintMenuOpen}
-                className="flex h-[18px] w-full min-w-0 items-center gap-1 rounded-control border border-border-control bg-surface-input px-1.5 text-left font-mono text-2xs text-text-strong hover:bg-surface-hover"
+                onClick={onChangeFootprint}
+                className="shrink-0 cursor-pointer rounded-control border border-border-control px-1.5 text-2xs text-text hover:bg-surface-hover"
               >
-                <Layers className="h-3 w-3 shrink-0 text-text-tertiary" />
-                <span className="min-w-0 flex-1 truncate">
-                  {currentVariant.variantLabel}
-                </span>
-                <ChevronDown className="h-3 w-3 shrink-0 text-text-tertiary" />
+                Change…
               </button>
-            ) : (
-              <span
-                className="block truncate font-mono text-2xs"
-                title={currentVariant.variantLabel}
-              >
-                {currentVariant.variantLabel}
-              </span>
-            )}
-          </PropertyRow>
-        ) : null}
+            ) : null}
+          </span>
+        </PropertyRow>
         <PropertyRow label="Symbol" mono title={part.symbol.name}>
           {part.symbol.name}
         </PropertyRow>
       </PropertyGrid>
 
-      {footprintMenuOpen && hasAlternatives && currentVariant ? (
-        <ul
-          role="listbox"
-          aria-label="Footprint variants"
-          className="max-h-48 overflow-y-auto border-b border-border bg-surface-raised py-1"
+      {part.footprintStale ? (
+        <div
+          className="flex items-center justify-between gap-2 border-b border-border px-2 py-1.5"
+          data-testid="footprint-stale-badge"
         >
-          {variants
-            .slice()
-            .sort((a, b) => a.sortOrder - b.sortOrder)
-            .map((variant) => {
-              const active = variant.footprintId === currentVariant.footprintId;
-              const disabled = Boolean(onReplaceComponentDisabledMessage);
-              return (
-                <li key={variant.footprintId}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={active}
-                    disabled={disabled || active}
-                    onClick={() => setFootprintMenuOpen(false)}
-                    className={`flex w-full items-center justify-between gap-3 px-2 py-1 text-left text-xs transition-colors ${
-                      active
-                        ? "bg-surface-selected text-text-strong"
-                        : disabled
-                          ? "cursor-not-allowed text-text-disabled"
-                          : "text-text hover:bg-surface-hover"
-                    }`}
-                  >
-                    <span className="flex min-w-0 flex-col">
-                      <span className="truncate font-mono">
-                        {variant.variantLabel}
-                      </span>
-                      <span className="truncate text-2xs text-text-tertiary">
-                        {variant.mountType ?? "—"} · {variant.padCount} pads
-                      </span>
-                    </span>
-                    {variant.isDefault ? (
-                      <span className="shrink-0 rounded-control border border-border-control px-1 text-2xs uppercase tracking-[.04em] text-text-tertiary">
-                        Default
-                      </span>
-                    ) : null}
-                  </button>
-                </li>
-              );
-            })}
-        </ul>
-      ) : null}
-      {variants.length > 0 && onReplaceComponentDisabledMessage ? (
-        <p className="border-b border-border px-2 py-1 text-2xs leading-snug text-status-warning">
-          {onReplaceComponentDisabledMessage}
-        </p>
+          <span className="text-2xs leading-snug text-status-warning">
+            Footprint updated in library
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            className="cursor-pointer"
+            disabled={refreshingFootprint}
+            onClick={() => void refreshFootprint()}
+          >
+            {refreshingFootprint ? "Updating…" : "Update from library"}
+          </Button>
+        </div>
       ) : null}
 
       <PanelSectionHeader variant="uppercase" title="Attributes" />

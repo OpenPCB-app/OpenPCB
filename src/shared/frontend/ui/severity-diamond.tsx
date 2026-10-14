@@ -4,9 +4,9 @@ import { cn } from "@/lib/utils";
 export type SeverityLevel = "error" | "warning" | "info";
 
 const SEVERITIES: Record<SeverityLevel, string> = {
-  error: "bg-status-danger",
-  warning: "bg-status-warning",
-  info: "bg-status-info",
+  error: "bg-drc-error",
+  warning: "bg-drc-warning",
+  info: "bg-drc-info",
 };
 
 export interface SeverityDiamondProps

@@ -3,6 +3,10 @@ import type {
   DesignerPcbProjection,
   DesignerSchematicProjection,
 } from "../../../../sdks/designer/types";
+import {
+  collectUnresolvedFootprints,
+  unresolvedRefdesList,
+} from "../../../../shared/pcb-geometry/unresolved-footprints";
 import { FAB_PRESETS } from "../pcb/fab-presets";
 import { buildBomProjection } from "./bom/writer";
 
@@ -19,6 +23,15 @@ export function runExportPreflight(
   overrides: readonly BomOverride[] = [],
 ): string[] {
   const warnings: string[] = [];
+
+  // Preflight has no severity tier (every item is a string); the "Error:"
+  // prefix marks this one as blocking — such parts export with no copper/drill.
+  const unresolved = collectUnresolvedFootprints(pcb.placements);
+  if (unresolved.length > 0) {
+    warnings.push(
+      `Error: ${unresolved.length} part(s) have no footprint pads and export with no copper or drills: ${unresolvedRefdesList(unresolved, 8)}. Assign footprints before manufacturing.`,
+    );
+  }
 
   if (!pcb.board.outline) {
     warnings.push(

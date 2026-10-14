@@ -2061,6 +2061,7 @@ export function makeDesignerProposeSchematicEditsTool(
           type: "upsert_label",
           text,
           positionNm: snapPoint(label.positionNm),
+          confirmMerge: true,
         };
         operations.push({
           id: `${proposalId}:label:${operations.length}`,
@@ -2089,19 +2090,21 @@ export function makeDesignerProposeSchematicEditsTool(
         }
         const command: DesignerCommandEnvelope["command"] =
           port.kind === "gnd"
-            ? { type: "place_gnd_port", positionNm, rotationDeg }
+            ? { type: "place_gnd_port", positionNm, rotationDeg, confirmMerge: true }
             : port.kind === "pwr"
               ? {
                   type: "place_pwr_port",
                   positionNm,
                   rotationDeg,
                   railText: port.text?.trim() || "VCC",
+                  confirmMerge: true,
                 }
               : {
                   type: "place_net_portal",
                   positionNm,
                   rotationDeg,
                   portalText: port.text?.trim() || "NET",
+                  confirmMerge: true,
                 };
         operations.push({
           id: `${proposalId}:port:${operations.length}`,
@@ -3030,6 +3033,7 @@ export function makeDesignerProposeSchematicUpdatesTool(
             positionNm: update.positionNm
               ? snapPoint(update.positionNm)
               : label.positionNm,
+            confirmMerge: true,
           },
           `Update label ${label.text}`,
           update.reason ?? `Update label ${label.text} to ${text}.`,

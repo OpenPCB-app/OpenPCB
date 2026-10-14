@@ -19,6 +19,7 @@ import {
 } from "../../../../shared/pcb-areas";
 import { boardPourSpecs, buildBoardPourFills } from "./board-connectivity";
 import { loadSchematicProjection } from "../projection-read";
+import { collectUnresolvedFootprints } from "../../../../shared/pcb-geometry/unresolved-footprints";
 import { correlateNetPads } from "./net-pad-correlation";
 import {
   ensurePcbBoardSettings,
@@ -213,6 +214,7 @@ export function loadPcbProjection(params: {
           footprint: part.footprint,
         })),
         boardCenter: board.outline.centerMm,
+        outline: board.outline,
         defaultLayer: "F.Cu",
         timestamp: params.timestamp,
       })
@@ -299,6 +301,7 @@ export function loadPcbProjection(params: {
     ratsnest,
     netNames: Object.fromEntries(netNames),
     padNets,
+    unresolvedFootprints: collectUnresolvedFootprints(placements),
     warnings: [
       // Pad-correlation warnings, then the zone / keepout derivation ones (a
       // zone off the stackup, an invalid ring, an unresolved net, a netless

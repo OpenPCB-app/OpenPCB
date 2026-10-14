@@ -1,5 +1,6 @@
 import type {
   FootprintRenderModel,
+  FootprintRenderSource,
   SymbolRenderModel,
 } from "../../shared/rendering/types";
 
@@ -263,4 +264,36 @@ export interface LibraryUpdateComponentInput {
   name?: string;
   description?: string;
   tags?: string[];
+  /**
+   * Make an existing footprint the component's default. Must exist; every
+   * symbol pin number needs a pad of equal number (the shared placeholder
+   * `fp-no-footprint-yet` is exempt). Applied atomically with other fields.
+   */
+  defaultFootprintId?: string;
+}
+
+/** Footprint authoring payload — same shape `POST /imports/drawn` takes for generated/drawn. */
+export interface LibraryAuthoredFootprintSource {
+  source: FootprintRenderSource;
+  metadata: {
+    name: string;
+    mountType: string;
+    packageCode: { imperial: string | null; metric: string | null };
+    tags?: string[];
+  };
+}
+
+export interface LibraryAddComponentFootprintInput {
+  mode: "generated" | "drawn";
+  source: LibraryAuthoredFootprintSource;
+  /** Default true. */
+  setDefault?: boolean;
+  /** Defaults to the footprint name. */
+  variantLabel?: string;
+}
+
+/** Lightweight default-footprint reference used for staleness checks. */
+export interface LibraryDefaultFootprintRef {
+  footprintId: string;
+  sourceHash: string | null;
 }

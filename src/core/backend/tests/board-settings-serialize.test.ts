@@ -571,6 +571,7 @@ function projectionOf(board: PcbBoardSettings): DesignerPcbProjection {
     keepouts: [],
     ratsnest: [],
     netNames: {},
+    unresolvedFootprints: [],
     warnings: [],
   };
 }

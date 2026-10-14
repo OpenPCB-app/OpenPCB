@@ -13,6 +13,7 @@ import type {
   LibraryComponentPlacementDetail,
   LibraryTagStat,
 } from "../../../../sdks";
+import { confirmDialog } from "../../../../shared/frontend/ui/dialog-host-store";
 import { createDesignerApi } from "../api";
 import type { DesignerView } from "../types";
 
@@ -96,6 +97,28 @@ export interface DesignerWorkspaceDerived {
   wireSourcePin: DesignerPin | null;
 }
 
+type NetMergeRefusalResult = Extract<
+  DesignerDispatchResult,
+  { code: "NET_MERGE_REQUIRES_CONFIRM" }
+>;
+
+/** User declined the net-merge confirm; nothing was written. */
+class NetMergeCancelledError extends Error {
+  constructor(readonly refusal: NetMergeRefusalResult) {
+    super("Net merge cancelled");
+  }
+}
+
+function netMergeDescription(nets: NetMergeRefusalResult["nets"]): string {
+  const list = nets
+    .map(
+      (net) =>
+        `${net.name ?? "unnamed net"} (${net.pinCount} pin${net.pinCount === 1 ? "" : "s"})`,
+    )
+    .join(", ");
+  return `This change merges these nets into one: ${list}.`;
+}
+
 function commandErrorMessage(
   result: Exclude<DesignerDispatchResult, { ok: true }>,
 ): string {
@@ -120,6 +143,12 @@ function commandErrorMessage(
       return result.detail;
     case "DUPLICATE_REFERENCE":
       return `Reference '${result.reference}' already exists`;
+    case "NET_MERGE_REQUIRES_CONFIRM":
+      return result.message;
+    case "FOOTPRINT_PIN_MISMATCH":
+      return `Footprint has no pad for connected pin${
+        result.missingPinNumbers.length === 1 ? "" : "s"
+      } ${result.missingPinNumbers.join(", ")}`;
     default:
       return "Command failed";
   }
@@ -498,21 +527,41 @@ export function useDesignerWorkspace(params: {
         ? "designer-pcb-session"
         : DESIGNER_SESSION_ID;
 
-      const envelope: DesignerCommandEnvelope = {
-        commandId: crypto.randomUUID(),
-        sessionId,
-        aggregateId: designId,
-        baseRevision: projectionRef.current?.revision ?? null,
-        issuedAt: Date.now(),
-        command,
-      };
-
-      pendingCommandsRef.current += 1;
+      let toSend: DesignerCommand = command;
       let result: DesignerDispatchResult;
-      try {
-        result = await api.dispatch(designId, envelope);
-      } finally {
-        pendingCommandsRef.current -= 1;
+      for (;;) {
+        const envelope: DesignerCommandEnvelope = {
+          commandId: crypto.randomUUID(),
+          sessionId,
+          aggregateId: designId,
+          baseRevision: projectionRef.current?.revision ?? null,
+          issuedAt: Date.now(),
+          command: toSend,
+        };
+
+        pendingCommandsRef.current += 1;
+        try {
+          result = await api.dispatch(designId, envelope);
+        } finally {
+          pendingCommandsRef.current -= 1;
+        }
+        // Refused net merge: ask once, then re-dispatch the SAME command with
+        // `confirmMerge: true` under a fresh envelope (fresh baseRevision).
+        if (
+          !result.ok &&
+          result.code === "NET_MERGE_REQUIRES_CONFIRM" &&
+          toSend === command
+        ) {
+          const confirmed = await confirmDialog({
+            title: "Merge nets?",
+            description: netMergeDescription(result.nets),
+            confirmLabel: "Merge nets",
+          });
+          if (!confirmed) throw new NetMergeCancelledError(result);
+          toSend = { ...command, confirmMerge: true } as DesignerCommand;
+          continue;
+        }
+        break;
       }
       if (!result.ok) {
         if (result.code === "REVISION_CONFLICT") {
@@ -537,8 +586,15 @@ export function useDesignerWorkspace(params: {
 
   const dispatchCommand = useCallback(
     async (command: DesignerCommand) => {
-      const { designId, result, isPcbCommand } =
-        await dispatchEnvelope(command);
+      let dispatched: Awaited<ReturnType<typeof dispatchEnvelope>>;
+      try {
+        dispatched = await dispatchEnvelope(command);
+      } catch (error) {
+        // Declined merge: not a failure — report the refusal, nothing changed.
+        if (error instanceof NetMergeCancelledError) return error.refusal;
+        throw error;
+      }
+      const { designId, result, isPcbCommand } = dispatched;
       if (!isPcbCommand) {
         // Counted as pending too: the refresh REWRITES the mounted revision, so
         // a capture harness waiting on `pendingCommands === 0` must not resume

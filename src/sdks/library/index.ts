@@ -1,4 +1,6 @@
 import type {
+  LibraryAddComponentFootprintInput,
+  LibraryDefaultFootprintRef,
   LibraryComponent,
   LibraryComponentDetail,
   LibraryComponentPlacementDetail,
@@ -11,6 +13,9 @@ import type {
 } from "./types";
 
 export type {
+  LibraryAddComponentFootprintInput,
+  LibraryAuthoredFootprintSource,
+  LibraryDefaultFootprintRef,
   LibraryComponent,
   LibraryComponentDetail,
   LibraryComponentOrigin,
@@ -56,4 +61,16 @@ export interface LibrarySDK {
     componentId: string,
     patch: LibraryUpdateComponentInput,
   ): Promise<LibraryComponent | null>;
+  /**
+   * Create a generated/drawn footprint for an existing user component and link
+   * it (default: as the component default). Null when the component is missing.
+   */
+  addComponentFootprint(
+    componentId: string,
+    input: LibraryAddComponentFootprintInput,
+  ): Promise<{ footprintId: string } | null>;
+  /** Batch default-footprint refs; unknown component ids are absent. */
+  getDefaultFootprintRefs(
+    componentIds: readonly string[],
+  ): Promise<Record<string, LibraryDefaultFootprintRef>>;
 }

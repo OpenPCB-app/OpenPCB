@@ -185,8 +185,14 @@ export function loadSchematicProjection(
     revision: head.revision,
     parts,
     wires,
-    labels,
-    primitives,
+    labels: labels.map((l) => ({
+      ...l,
+      attached: derived.attachedLabelIds.has(l.id),
+    })),
+    primitives: primitives.map((p) => ({
+      ...p,
+      attached: derived.attachedPrimitiveIds.has(p.id),
+    })),
     nets: derived.nets,
     junctions: derived.junctions,
   };

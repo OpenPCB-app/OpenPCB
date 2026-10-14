@@ -29,3 +29,8 @@ export const DRC_RING = "#f8fafc";
 export const DRC_STROKE = "#0b0f19";
 /** Cyan overlay for the selected/hovered violation's offending trace(s). */
 export const DRC_HIGHLIGHT = "#22d3ee";
+
+/** Route ghost tint while blocked / violating clearance (DRC error hue). */
+export const ROUTE_PREVIEW_ILLEGAL = DRC_SEVERITY.error.core;
+/** Route ghost opacity while illegal (legal ghost renders at 1). */
+export const ROUTE_PREVIEW_ILLEGAL_OPACITY = 0.55;
