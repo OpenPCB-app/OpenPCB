@@ -335,7 +335,6 @@ async function attachNativeIdentity(session: NativeSession): Promise<void> {
     [
       "electron",
       "@openpcb/opclib-pack",
-      "@openpcb/ai-core",
       "@openpcb/contracts",
       "@tiptap/react",
       "pdfjs-dist",

@@ -31,7 +31,6 @@ PACKAGES=(
   opclib-pack
   command-pattern
   contracts
-  ai-core
 )
 
 cd "$OPENPCB_ROOT"

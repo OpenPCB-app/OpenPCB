@@ -234,7 +234,7 @@ Same module, out of the Phases 0–4 scope that landed 2026-06-02. Not blocking.
       triad (persistence / tool-first / principled-stop); two-register selection by capability probe,
       dropping plan-then-reflect for reasoning models; inject a live design summary into the system
       prompt (reuse the existing `buildDesignContextSummary`); lean read-tool envelopes; additive presets.
-- [ ] **P6 loop robustness** (ai-core `run-loop.ts`): fingerprint dedup keyed on
+- [ ] **P6 loop robustness** (AgentKit run loop): fingerprint dedup keyed on
       `{tool, normalizedArgs, designRevision}` plus outcome; no-progress/stall detection off the
       design-revision signal; per-tool call caps; wall-clock timeout. Warning codes are already
       reserved in `events.ts`.
@@ -242,52 +242,26 @@ Same module, out of the Phases 0–4 scope that landed 2026-06-02. Not blocking.
       assistant *content* rather than real `tool_calls`, so they narrate fake progress, nothing is
       built, and the DoD verifier never runs. Detect the pattern and surface it.
 - [ ] **Verify:** headed Playwright assistant scenarios (a)–(e) were pending a local oMLX endpoint
-      at :8000. Typecheck, backend, react and ai-core suites were green at the time. Re-run and
+      at :8000. Typecheck, backend and react suites were green at the time. Re-run and
       close, or re-open with a real blocker.
 
 ---
 
-## 3. MCP integration — in flight
+## 3. MCP integration — on AgentKit
 
-The largest live workstream and the newest. Uncommitted WIP in the working tree as of the
-2026-07-28 verification pass; it is **not** unshipped and it is **not** finished.
+Inbound MCP is served by AgentKit's `createMcpServerHandler` from the assistant module
+(`src/modules/assistant/backend/agentkit/native-mcp*.ts`); the legacy `backend/mcp/` stack and
+`clientKey` sessions are gone (cutover b3a4b70). Shape and security model: `CLAUDE.md` § MCP server.
+Tracked in Plane OPENPCB-121 (M09) and OPENPCB-124 (M12 packaged qualification).
 
-OpenPCB exposes its assistant tool registry over MCP so external agents (Claude Code, Claude
-Desktop, Codex) can drive whatever design the user has open. It lives inside the assistant module,
-which already owns the registry, the `ContextResolver`, proposals and the write policy.
-
-**Shape as designed** (full description in `CLAUDE.md` — only the load-bearing constraints repeat here):
-
-- Streamable HTTP at `/api/modules/assistant/mcp`; sessions are backed by a real assistant chat,
-  one per client, keyed on `metadata.mcp.clientKey`. That key must be **header-stable and never the
-  display name** — it is what lets every existing designer tool resolve its design unchanged via
-  `contextResolver.getPrimaryDesign(chatId)`, and why MCP calls and proposals render in the panel.
-- The 15 in-app `AiTool`s projected 1:1, plus MCP-only extended reads and the session-scoped
-  `designer_use_design`. **Do not add the extended reads to the in-app registry** — its prompt and
-  DoD harness are tuned against the current 15.
-- Design targeting: explicit `designId` → session pin → UI-active design, pushed by the frontend to
-  `PUT /api/modules/designer/active-design`.
-- Two settings, both default off (`mcp_enabled`, `mcp_allow_writes`). Writes are forced off when the
-  server is off, and write tools are then not registered at all.
-- Bearer token plus loopback-only Origin check; discovery through a 0600 `mcp.json`. stdio clients
-  use the bundled shim on the app's own Electron binary. The app must be running — there is no
-  headless fallback, because there is one SQLite writer.
-
-**Working-tree surfaces:** `src/modules/assistant/backend/mcp/`, `electron/src/mcp-shim/`,
-`McpSection.tsx`, `0014_mcp_settings.sql`, `assistant-mcp-endpoint.test.ts`,
-`designer/backend/active-design.ts`, `useActiveDesignSync.ts`.
-
-- [ ] **Finish the WIP and commit it.** It is currently the only unversioned work in the repo.
-- [ ] **Test it.** `assistant-mcp-endpoint.test.ts` exists; establish what it covers and fill the
-      gaps — auth rejection paths, session/client-key stability, tool projection fidelity, the
-      write-policy matrix (server off, server on + writes off, server on + writes on), and the
-      active-design targeting precedence chain.
-- [ ] **Exercise the stdio shim end-to-end** from a real external client against a running app,
-      including the `mcp.json` discovery handoff.
+- [ ] **Packaged stdio shim** — run `build/mcp/openpcb-mcp` + `mcp.json` discovery from a packaged
+      `.app` (blocked on published AgentKit/contracts pins, OPENPCB-124).
+- [ ] **Owner-run real-client smoke** (Claude Code over stdio and HTTP: list, read, edit, undo,
+      approved delete).
+- [ ] **`resources/templates/list`** is not advertised — AgentKit 0.6.0 has no template hook.
 - [ ] **Decide `mcp.server` flag graduation.** It is a `dev` flag today. Graduating it means
       flipping the registry entry to `"all"`, and carries the same release-notes obligation as the
       route-tool flags.
-- [ ] Document the feature for users once the two settings are considered stable.
 
 ---
 
@@ -564,8 +538,7 @@ Unscheduled. Nothing here is committed to a release.
 - [ ] Symbol and footprint editor expansion — multi-unit, alternate graphical body styles.
 - [ ] OpenAPI codegen pipeline — revisit `gen:openapi` if and when frontend SDK regeneration is needed.
 - [ ] E2E test expansion beyond smoke.
-- [ ] Housekeeping: reconcile the shared `package-lock.json` left dirty by the `ai-core` 0.3.0 /
-      `contracts` 0.2.4 bumps, delete the local FF-merged `fix/library-model-double-apply-guard`
+- [ ] Housekeeping: reconcile the shared `package-lock.json` (`@openpcb/ai-core` is retired; contracts pin pending), delete the local FF-merged `fix/library-model-double-apply-guard`
       branch, and confirm a tag-based build on a fresh CI runner.
 
 **Wontfix.** Schematic wire → PCB trace auto-sync. The bridge between schematic and PCB is the
