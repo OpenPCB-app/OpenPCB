@@ -3,6 +3,7 @@
 // renderer-specific integrations.
 import * as Sentry from "@sentry/electron/renderer";
 import { init as reactInit } from "@sentry/react";
+import { TELEMETRY_SCRUB_HOOKS } from "../../contracts/credentials/telemetry-scrub";
 
 let initialized = false;
 
@@ -27,6 +28,7 @@ export function initRendererSentry(): void {
       // Session-replay only on errors; no continuous recording.
       replaysSessionSampleRate: 0,
       replaysOnErrorSampleRate: 1.0,
+      ...TELEMETRY_SCRUB_HOOKS,
     },
     // Cast: @sentry/electron's BrowserOptions superset includes the electron
     // event-loop-block integration which is not in @sentry/react's typing.

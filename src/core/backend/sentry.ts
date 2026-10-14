@@ -4,6 +4,7 @@
 // bundlers; loading via createRequire at runtime keeps Sentry optional —
 // when the dep isn't shipped, the app continues without telemetry.
 import { createRequire } from "node:module";
+import { TELEMETRY_SCRUB_HOOKS } from "../contracts/credentials/telemetry-scrub";
 
 const lazyRequire = createRequire(import.meta.url);
 
@@ -61,6 +62,7 @@ export function initBackendSentry(): boolean {
     environment,
     tracesSampleRate: 0.1,
     sendDefaultPii: false,
+    ...TELEMETRY_SCRUB_HOOKS,
   });
 
   return true;

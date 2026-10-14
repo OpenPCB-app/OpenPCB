@@ -7,6 +7,7 @@
 import { app } from "electron";
 import { createRequire } from "node:module";
 import { getTelemetryOptIn } from "./preferences.js";
+import { TELEMETRY_SCRUB_HOOKS } from "../../../src/core/contracts/credentials/telemetry-scrub.js";
 
 const requireFromHere = createRequire(import.meta.url);
 
@@ -44,6 +45,7 @@ export function initSentry(): boolean {
     tracesSampleRate: 0.1,
     sendDefaultPii: false,
     enableLogs: true,
+    ...TELEMETRY_SCRUB_HOOKS,
   });
 
   return true;
