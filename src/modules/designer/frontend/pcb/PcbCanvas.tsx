@@ -279,6 +279,7 @@ import {
 import { generateMeander } from "../../../../shared/pcb-routing/meander";
 import { routeAutoFinish } from "../../../../shared/pcb-routing/auto-finish";
 import { routePreviewStyle } from "./route-preview-style";
+import { promptOverlayText } from "./pcb-prompts";
 import { walkaroundHead } from "../../../../shared/pcb-routing/walkaround";
 import { buildRouteObstacles } from "../../../../shared/pcb-routing/route-obstacles";
 import { defaultNetClassId } from "../../../../shared/pcb-areas/net-class-resolver";
@@ -3068,14 +3069,14 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         // Text mode — prompt for label and drop it on the active overlay layer.
         if (toolMode === "text") {
           const point = snapPoint(cursor);
-          const label = window.prompt("Overlay text:", "");
-          if (label && label.length > 0) {
-            const textLayer = mirrorActive ? "B.SilkS" : "F.SilkS";
+          const textLayer = mirrorActive ? "B.SilkS" : "F.SilkS";
+          setToolMode("select");
+          void promptOverlayText().then((label) => {
+            if (!label) return;
             void workspace
               .addOverlayText(point, label, { layer: textLayer })
               .catch(() => undefined);
-          }
-          setToolMode("select");
+          });
           return;
         }
 

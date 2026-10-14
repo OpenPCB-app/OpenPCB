@@ -11,12 +11,7 @@ import { describe, expect, it } from "vitest";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const NATIVE = /\bwindow\.(?:prompt|confirm|alert)\s*\(/;
 
-const ALLOWLIST = new Set([
-  // remove when migrated
-  "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
-  // remove when migrated
-  "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx",
-]);
+const ALLOWLIST = new Set<string>([]);
 
 function roots(): string[] {
   const modules = path.join(repoRoot, "src/modules");

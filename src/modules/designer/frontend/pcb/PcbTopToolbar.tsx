@@ -36,6 +36,7 @@ import type { RoutePosture } from "./tools/route-tool-state";
 import { VIA_PRESETS, type PcbViaPreset } from "../../backend/pcb/via-presets";
 import { LAYER_PAIR_PRESETS } from "./tools/route-layer";
 import { usePcbViewStore } from "./pcb-view-store";
+import { promptPositiveMm } from "./pcb-prompts";
 
 const LAYER_LABELS = PCB_LAYER_LABELS as Record<string, string | undefined>;
 
@@ -205,15 +206,14 @@ function WidthDropdown({
           <button
             type="button"
             onClick={() => {
-              const input = window.prompt(
-                "Custom trace width (mm):",
-                activeWidthMm.toString(),
-              );
-              if (input !== null) {
-                const next = Number(input);
-                if (Number.isFinite(next) && next > 0) onPick(next);
-              }
               setOpen(false);
+              void promptPositiveMm(
+                "Custom trace width",
+                "Width (mm)",
+                activeWidthMm,
+              ).then((next) => {
+                if (next !== null) onPick(next);
+              });
             }}
             className={`border-t border-border ${MENU_ITEM_CLASS}`}
           >
@@ -292,15 +292,15 @@ function ViaSizeDropdown({
           <button
             type="button"
             onClick={() => {
-              const input = window.prompt(
-                `Custom ${label === "Ø" ? "diameter" : "drill"} (mm):`,
-                activeMm.toString(),
-              );
-              if (input !== null) {
-                const next = Number(input);
-                if (Number.isFinite(next) && next > 0) onPick(next);
-              }
               setOpen(false);
+              const field = label === "Ø" ? "diameter" : "drill";
+              void promptPositiveMm(
+                `Custom via ${field}`,
+                `${field[0]!.toUpperCase()}${field.slice(1)} (mm)`,
+                activeMm,
+              ).then((next) => {
+                if (next !== null) onPick(next);
+              });
             }}
             className={`border-t border-border ${MENU_ITEM_CLASS}`}
           >
