@@ -11,6 +11,8 @@ export interface NativeActionReservation {
 
 /** Build intent from an unbound run, held for the next bound run that can place it. */
 const DEFERRED_INTENT_RUN = "__deferred__";
+
+export type DeferredBuildIntent = BuildIntent & { designId?: string };
 const MAX_UNBOUND_RUNS = 512;
 
 export class NativeContextStore implements ContextBindingStore {
@@ -101,13 +103,15 @@ export class NativeContextStore implements ContextBindingStore {
     return row ? JSON.parse(row.intent_json) as BuildIntent : null;
   }
 
-  deferBuildIntent(intent: BuildIntent): void {
-    this.saveBuildIntent({ ...intent, taskId: DEFERRED_INTENT_RUN });
+  /** Holds the intent for the design its unbound run created; no other design may adopt it. */
+  deferBuildIntent(intent: BuildIntent, designId: string): void {
+    const deferred: DeferredBuildIntent = { ...intent, taskId: DEFERRED_INTENT_RUN, designId };
+    this.saveBuildIntent(deferred);
   }
 
   /** Removes the deferred intent; the caller decides whether a bound run adopts it. */
-  takeDeferredBuildIntent(chatId: string): BuildIntent | null {
-    const intent = this.getBuildIntent(chatId, DEFERRED_INTENT_RUN);
+  takeDeferredBuildIntent(chatId: string): DeferredBuildIntent | null {
+    const intent = this.getBuildIntent(chatId, DEFERRED_INTENT_RUN) as DeferredBuildIntent | null;
     if (intent) this.context.db.rawSql(
       "DELETE FROM assistant_native_build_intent WHERE chat_id=? AND run_id=?", [chatId, DEFERRED_INTENT_RUN],
     );

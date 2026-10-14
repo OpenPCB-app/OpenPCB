@@ -40,7 +40,9 @@ export function createNativeVerification(options: {
       }));
       const mutationFailures = records.flatMap((proposal, index) => mutationDeficiencies(proposal, outcomes[index] ?? null));
       if (options.contextStore.isUnboundRun(input.runId)) {
-        return deferredBuildReport(options.contextStore, input.chatId, input.runId, records.length > 0, mutationFailures);
+        const created = designId && records.some((proposal, index) => proposal.kind === "designer_create_design" &&
+          proposal.envelope.designId === designId && outcomes[index]?.status === "applied") ? designId : null;
+        return deferredBuildReport(options.contextStore, input.chatId, input.runId, created, records.length > 0, mutationFailures);
       }
       const report = await runDefinitionOfDone({
         designer, chatId: input.chatId, taskId: input.runId, designId,
@@ -48,7 +50,7 @@ export function createNativeVerification(options: {
         conversation: { listWriteProposals: () => records.map((proposal, index) => ({
           status: outcomes[index]?.status === "partial" ? "partial" : proposal.status,
         })) },
-        buildIntents: { get: (chatId, runId) => adoptBuildIntent(options.contextStore, chatId, runId) },
+        buildIntents: { get: (chatId, runId) => adoptBuildIntent(options.contextStore, chatId, runId, designId) },
       });
       const checks: VerificationCheck[] = report.checks.map((check) => ({ id: check.id, ok: check.passed, message: check.message }));
       if (records.length) checks.push({ id: "native_mutations", ok: mutationFailures.length === 0,
@@ -61,26 +63,33 @@ export function createNativeVerification(options: {
 
 /**
  * An unbound run was staged without placement or wiring tools, so a correction pass could not
- * act on placement gaps. Its build intent moves to the chat's next bound run instead.
+ * act on placement gaps. Only a run that created and bound its own design hands its build intent
+ * on, scoped to that design: a BOM lookup alone is not a build, and another design is not its target.
  */
 function deferredBuildReport(
-  store: NativeContextStore, chatId: string, runId: string, attempted: boolean, mutationFailures: string[],
+  store: NativeContextStore, chatId: string, runId: string, createdDesignId: string | null,
+  attempted: boolean, mutationFailures: string[],
 ): DeficiencyReport {
   const intent = store.getBuildIntent(chatId, runId);
-  if (intent?.items.length) store.deferBuildIntent(intent);
-  const checks: VerificationCheck[] = [{ id: "build_deferred", ok: true,
-    message: "No design was bound when this run started, so placement and wiring were not available; the next bound run verifies the build." }];
+  const deferred = Boolean(createdDesignId && intent?.items.length);
+  if (deferred) store.deferBuildIntent(intent!, createdDesignId!);
+  const checks: VerificationCheck[] = [{ id: "build_deferred", ok: true, message: deferred
+    ? "No design was bound when this run started, so placement and wiring were not available; the next run on the created design verifies the build."
+    : "No design was bound when this run started, so placement and wiring were not available." }];
   if (attempted) checks.push({ id: "native_mutations", ok: mutationFailures.length === 0,
     message: mutationFailures.length ? mutationFailures.join("; ") : "Every native mutation has a successful domain receipt." });
   return { status: mutationFailures.length ? "partial" : "pass", checks, deficiencies: mutationFailures };
 }
 
-/** A bound run's own intent wins; otherwise it adopts the intent its unbound predecessor deferred. */
-function adoptBuildIntent(store: NativeContextStore, chatId: string, runId: string): BuildIntent | null {
+/**
+ * A bound run's own intent wins; otherwise it adopts the intent its unbound predecessor deferred,
+ * but only on the design that predecessor created. Any other outcome discards the deferred intent.
+ */
+function adoptBuildIntent(store: NativeContextStore, chatId: string, runId: string, designId: string | null): BuildIntent | null {
   const own = store.getBuildIntent(chatId, runId);
   const deferred = store.takeDeferredBuildIntent(chatId);
-  if (own || !deferred) return own;
-  const adopted = { ...deferred, taskId: runId };
+  if (own || !deferred || !designId || deferred.designId !== designId) return own;
+  const adopted: BuildIntent = { chatId: deferred.chatId, taskId: runId, goal: deferred.goal, items: deferred.items };
   store.saveBuildIntent(adopted);
   return adopted;
 }

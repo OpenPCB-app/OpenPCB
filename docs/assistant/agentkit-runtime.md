@@ -49,8 +49,10 @@ only read tools and `designer_create_design` are staged, so an explicit `designI
 unrelated design. AgentKit stages tools once per run, so placing and wiring into a design created in
 the same run follows on the user's next message; the system prompt states this for unbound turns. A
 run staged unbound is not checked against Definition of Done (its correction passes could not place
-anything): its BOM build intent is deferred and adopted by the chat's next bound run that calls tools,
-unless that run records its own. A binding whose design was deleted is marked `missing` at turn start
+anything). Only when such a run created a design that is now the chat's primary binding is its BOM build
+intent deferred, scoped to that design: the chat's next run bound to that same design that calls tools
+adopts it, unless that run records its own. A BOM lookup without a created design defers nothing, and a
+deferred intent seen by a run bound to any other design is discarded. A binding whose design was deleted is marked `missing` at turn start
 and never falls back to another or the UI-active design.
 
 Residual risk (pre-existing, not changed here): a read tool called with an explicit `designId` in an

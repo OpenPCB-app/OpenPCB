@@ -459,3 +459,66 @@ test("unbound build run defers its BOM to the next bound run instead of correcti
   assert.ok(text.includes('"status":"partial"'), text);
   assert.ok(text.includes("Missing placements"), text);
 });
+
+async function assertNoPlacementCorrection(target: HttpDomain, runId: string): Promise<void> {
+  const events = await target.service.host.store.tasks.listEvents(runId);
+  assert.equal(
+    events.some((event) => event.type === "run.warning" && JSON.stringify(event).includes("retry_pass")),
+    false,
+  );
+  assert.equal(target.provider.requests.filter((request) => request.runId === runId).length, 2);
+  const verification = JSON.stringify(events.filter((event) => event.type === "run.verification"));
+  assert.ok(verification.includes('"status":"pass"'), verification);
+  assert.equal(verification.includes("Missing placements"), false, verification);
+}
+
+const bomCall = {
+  id: "bom",
+  name: "library_resolve_bom",
+  arguments: { goal: "Decoupling", items: [{ role: "capacitor", query: "capacitor", quantity: 1 }] },
+};
+const inspectRun = [
+  { newRun: true, calls: [{ id: "inspect", name: "designer_get_schematic_connectivity", arguments: {} }] },
+  { content: "Inspected" },
+];
+
+test("an unbound BOM lookup without a created design defers nothing to a later bound run", async () => {
+  domain = await isolatedHttpDomain([{ calls: [bomCall] }, { content: "Listed" }, ...inspectRun]);
+  const chat = (await (
+    await domain.request("/v1/chats", { method: "POST", body: JSON.stringify({ title: "Lookup" }) })
+  ).json()) as { id: string };
+  await submit(domain, chat.id, "lookup", "Which parts would a decoupling network need? Just list them.");
+  const existing = await domain.designer.createDesign({ name: "Existing board" });
+  const bound = await domain.request(`/v1/chats/${chat.id}/context-bindings`, {
+    method: "POST",
+    body: JSON.stringify({ designId: existing.id }),
+  });
+  assert.equal(bound.status, 201);
+  const checked = await submit(domain, chat.id, "check", "Check connectivity of my existing board.");
+  await assertNoPlacementCorrection(domain, checked.runId);
+});
+
+test("a deferred build is dropped when the chat is rebound to another design", async () => {
+  domain = await isolatedHttpDomain([
+    { calls: [bomCall, { id: "create", name: "designer_create_design", arguments: { name: "Deferred build" } }] },
+    { content: "Design ready" },
+    ...inspectRun,
+  ]);
+  const chat = (await (
+    await domain.request("/v1/chats", { method: "POST", body: JSON.stringify({ title: "Rebound" }) })
+  ).json()) as { id: string };
+  await submit(domain, chat.id, "build", "Build a decoupling capacitor circuit");
+  const created = domain.service.contextResolver.getPrimaryDesign(chat.id)!;
+  assert.ok(created);
+  const unbound = await domain.request(`/v1/chats/${chat.id}/context-bindings/${created.id}`, { method: "DELETE" });
+  assert.equal(unbound.status, 204);
+  const other = await domain.designer.createDesign({ name: "Other board" });
+  const bound = await domain.request(`/v1/chats/${chat.id}/context-bindings`, {
+    method: "POST",
+    body: JSON.stringify({ designId: other.id }),
+  });
+  assert.equal(bound.status, 201);
+  const checked = await submit(domain, chat.id, "check", "Check connectivity of the other board.");
+  assert.equal(domain.service.contextResolver.getPrimaryDesign(chat.id)?.refId, other.id);
+  await assertNoPlacementCorrection(domain, checked.runId);
+});
