@@ -6,6 +6,7 @@ import {
   resolvePinTarget,
   resolveWireEndpoint,
 } from "../../../modules/assistant/backend/tools/schematic-targeting";
+import { SCHEMATIC_GRID_NM } from "../../../shared/domain/editor-grid";
 
 function pin(id: string, number: string, name: string, x: number, y: number) {
   return {
@@ -218,6 +219,16 @@ describe("schematic targeting", () => {
     }
   });
 
+  test("planNetConnect keeps flags for on-grid pins on the 1.27 mm schematic grid", () => {
+    for (const [pin, net] of [["p-u1:1", "GND"], ["p-u1:2", "GND"], ["p-u1:3", "SDA"], ["p-u1:1", "+3V3"]]) {
+      const plan = planNetConnect(projection, pin!, net!);
+      expect(plan.ok).toBe(true);
+      if (!plan.ok) continue;
+      const { x, y } = plan.plan.primitiveCommand.positionNm;
+      expect([x % SCHEMATIC_GRID_NM, y % SCHEMATIC_GRID_NM].map(Math.abs)).toEqual([0, 0]);
+    }
+  });
+
   test("planNetConnect rejects an unknown source pin", () => {
     expect(planNetConnect(projection, "nope", "GND").ok).toBe(false);
   });
@@ -228,8 +239,8 @@ describe("schematic targeting", () => {
     expect(gnd.ok).toBe(true);
     if (gnd.ok) {
       expect(gnd.plan.primitiveCommand.positionNm.x).toBe(0);
-      // 8 mm offset on the default (+y) axis, rotation unchanged.
-      expect(gnd.plan.primitiveCommand.positionNm.y).toBe(8_000_000);
+      // 6 x 1.27 mm grid offset on the default (+y) axis, rotation unchanged.
+      expect(gnd.plan.primitiveCommand.positionNm.y).toBe(7_620_000);
       expect(gnd.plan.primitiveCommand.rotationDeg).toBe(0);
     }
   });
@@ -241,7 +252,7 @@ describe("schematic targeting", () => {
     if (portal.ok) {
       expect(portal.plan.primitiveCommand.type).toBe("place_net_portal");
       expect(portal.plan.primitiveCommand.positionNm).toEqual({
-        x: 2_540_000 + 8_000_000,
+        x: 2_540_000 + 7_620_000,
         y: 0,
       });
       // Glyph stays upright so the label is readable; only the side changes.
@@ -256,7 +267,7 @@ describe("schematic targeting", () => {
     if (gnd.ok) {
       expect(gnd.plan.primitiveCommand.positionNm).toEqual({
         x: 0,
-        y: -2_540_000 - 8_000_000,
+        y: -2_540_000 - 7_620_000,
       });
       expect(gnd.plan.primitiveCommand.rotationDeg).toBe(0);
     }

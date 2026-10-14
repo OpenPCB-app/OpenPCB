@@ -4,13 +4,15 @@
  * Lets the model reference pins as "U1.VCC" / "U1.1" / { ref, pin } / raw pin
  * IDs / "primitive:<id>", reference parts as a UUID or a reference designator,
  * and connect a pin to a named net (auto-placing a power/ground/net-portal
- * primitive + short wire). Pure: depends only on the SDK projection type.
+ * primitive + short wire). Pure: depends only on the SDK projection type and
+ * the shared editor grid policy.
  */
 
 import type {
   DesignerCommandEnvelope,
   DesignerSchematicProjection,
 } from "../../../../sdks";
+import { SCHEMATIC_GRID_NM } from "../../../../shared/domain/editor-grid";
 
 type PrimitiveCommand = Extract<
   DesignerCommandEnvelope["command"],
@@ -270,9 +272,8 @@ export type NetConnectPlan = {
  * primitive. The primitive's connection pin coincides with its position, so the
  * derived net picks up the pin once the wire is applied.
  */
-const GRID_NM = 2_000_000;
-/** 4 grid steps (8 mm) — far enough that the flag clears the pin-name label. */
-const FLAG_OFFSET_NM = 4 * GRID_NM;
+/** 6 schematic grid steps (7.62 mm): clears the pin-name label and keeps an on-grid pin's flag on-grid. */
+const FLAG_OFFSET_NM = 6 * SCHEMATIC_GRID_NM;
 
 type FlagKind = "gnd" | "pwr" | "portal";
 type UnitDir = { x: -1 | 0 | 1; y: -1 | 0 | 1 };
