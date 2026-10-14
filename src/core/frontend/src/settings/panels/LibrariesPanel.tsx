@@ -8,6 +8,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { confirmDialog } from "@shared/frontend/ui/dialog-host-store";
 import { useRuntime } from "../../providers/RuntimeProvider";
 
 interface LibrarySourceSummary {
@@ -217,13 +218,13 @@ export function LibrariesPanel() {
 
   const handleDelete = async (id: string) => {
     if (!base) return;
-    if (
-      !window.confirm(
-        `Remove library "${id}" and all its components? This cannot be undone.`,
-      )
-    ) {
-      return;
-    }
+    const confirmed = await confirmDialog({
+      title: `Remove library "${id}"?`,
+      description: "All its components are removed. This cannot be undone.",
+      confirmLabel: "Remove",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     setBusy(true);
     setError(null);
     try {

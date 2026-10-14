@@ -9,6 +9,7 @@ import { openContextMenu } from "@shared/frontend/context-menu";
 import { ErrorBoundary } from "@shared/frontend/ui/error-boundary";
 import { formatShortcut } from "@shared/frontend/ui/shortcut";
 import { Recovery } from "./shell/Recovery";
+import { BootstrapFailure } from "./shell/BootstrapFailure";
 import { reportRenderError } from "./shell/GlobalErrors";
 import { shouldOpenAppMenu } from "./shell/context-menu-policy";
 
@@ -20,18 +21,8 @@ function LoadingScreen() {
   );
 }
 
-function ErrorScreen({ message }: { message: string }) {
-  return (
-    <div className="flex h-full w-full items-center justify-center bg-surface-app p-6">
-      <div className="max-w-xl rounded-control border border-status-danger/30 bg-status-danger-soft px-4 py-3 text-sm text-status-danger">
-        {message}
-      </div>
-    </div>
-  );
-}
-
 export function AppShell() {
-  const { status, error } = useBootstrap();
+  const { status, error, retry } = useBootstrap();
   const currentRoute = useNavigationStore((state) => state.currentRoute);
   const openSettings = useNavigationStore((state) => state.openSettings);
 
@@ -42,7 +33,12 @@ export function AppShell() {
   }
 
   if (status === "error") {
-    return <ErrorScreen message={error ?? "Failed to bootstrap app"} />;
+    return (
+      <BootstrapFailure
+        message={error ?? "Failed to bootstrap app"}
+        onRetry={retry}
+      />
+    );
   }
 
   return (

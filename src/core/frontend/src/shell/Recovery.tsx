@@ -7,11 +7,16 @@ export function Recovery({
   reset,
   title = "This view stopped working",
   navigationAvailable = true,
+  description,
+  retryLabel = "Try again",
 }: {
   error: unknown;
   reset: () => void;
   title?: string;
   navigationAvailable?: boolean;
+  /** Replaces the default body copy (e.g. a concrete failure message). */
+  description?: string;
+  retryLabel?: string;
 }) {
   const [copyStatus, setCopyStatus] = useState("Copy details");
   const copy = async () => {
@@ -30,12 +35,12 @@ export function Recovery({
     >
       <h1 className="font-medium text-text-strong">{title}</h1>
       <p className="max-w-md text-text-secondary">
-        Try again to reopen this view. Unsaved changes in this view may be lost.
+        {description ?? (<>Try again to reopen this view. Unsaved changes in this view may be lost.
         No reload happens automatically.{" "}
-        {navigationAvailable && "You can use navigation to open another view."}
+        {navigationAvailable && "You can use navigation to open another view."}</>)}
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button onClick={reset}>Try again</Button>
+        <Button onClick={reset}>{retryLabel}</Button>
         <Button variant="secondary" onClick={() => void copy()}>
           {copyStatus}
         </Button>

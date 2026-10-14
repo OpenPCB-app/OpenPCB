@@ -1,6 +1,7 @@
 import {
   createContext,
   useContext,
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -10,12 +11,17 @@ import type { BootstrapState } from "../../../contracts/app/bootstrap";
 import type { ModuleRegistryResponse } from "../../../contracts/modules/registry";
 import { useRuntime } from "./RuntimeProvider";
 
-interface BootstrapContextValue extends BootstrapState {}
+interface BootstrapContextValue extends BootstrapState {
+  /** Re-runs the health/registry fetch without reloading the page. */
+  retry: () => void;
+}
 
 const BootstrapContext = createContext<BootstrapContextValue | null>(null);
 
 export function BootstrapProvider({ children }: { children: ReactNode }) {
   const { runtime, backendURL, error: runtimeError } = useRuntime();
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
   const [state, setState] = useState<BootstrapState>({
     status: "idle",
     runtime: null,
@@ -113,9 +119,9 @@ export function BootstrapProvider({ children }: { children: ReactNode }) {
       mounted = false;
       controller.abort();
     };
-  }, [runtime, backendURL, runtimeError]);
+  }, [runtime, backendURL, runtimeError, attempt]);
 
-  const value = useMemo(() => state, [state]);
+  const value = useMemo(() => ({ ...state, retry }), [state, retry]);
 
   return (
     <BootstrapContext.Provider value={value}>
