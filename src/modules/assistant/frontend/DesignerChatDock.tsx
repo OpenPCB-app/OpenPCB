@@ -21,7 +21,7 @@ import { ProposalActionsProvider } from "./components/ProposalActions";
 import { RunVerification } from "./components/RunVerification";
 import { useDesignerConversation, type DesignerConversationProps } from "./hooks/useDesignerConversation";
 import { useAssistantAvailability } from "./hooks/useAssistantAvailability";
-import { AssistantUnavailable } from "./components/AssistantUnavailable";
+import { AssistantUnavailable } from "../../../shared/frontend/assistant/AssistantUnavailable";
 
 const QUICK_ACTIONS = [
   "Wire the schematic",

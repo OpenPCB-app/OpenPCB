@@ -12,6 +12,8 @@ import {
   describeAssistantUnavailable,
   errorSummary,
   registerAvailabilityRoute,
+  registerUnavailableRoutes,
+  unavailableRunMonitor,
 } from "./availability";
 import type { AssistantUnavailable } from "../../../sdks/assistant/availability";
 
@@ -39,6 +41,7 @@ export function createAssistantModuleDefinition(
           code: unavailable.code,
           ...errorSummary(error),
         });
+        context.sdk.registerValue(AGENTKIT_MONITOR_TOKEN, unavailableRunMonitor(unavailable));
         return;
       }
       context.sdk.registerValue(
@@ -58,7 +61,7 @@ export function createAssistantModuleDefinition(
     },
     registerRoutes(router) {
       if (unavailable) {
-        registerAvailabilityRoute(router, unavailable);
+        registerUnavailableRoutes(router, unavailable);
         return;
       }
       if (!service) throw new Error("Assistant AgentKit runtime is not active");

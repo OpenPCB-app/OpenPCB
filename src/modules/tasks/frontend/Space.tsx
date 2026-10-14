@@ -3,6 +3,11 @@ import type { ModuleSpaceProps } from "../../../core/contracts/modules/frontend-
 import { useNavigationStore } from "../../../core/frontend/src/stores/navigation-store";
 import { localApiFetch } from "../../../shared/frontend/http/local-api";
 import type { TaskRunPage, TaskRunSummary } from "../../../sdks/tasks";
+import type { AssistantUnavailable as Unavailable } from "../../../sdks/assistant/availability";
+import {
+  AssistantUnavailable,
+  assistantUnavailableFromProblem,
+} from "../../../shared/frontend/assistant/AssistantUnavailable";
 
 const MALFORMED = "The run monitor returned a malformed response.";
 
@@ -15,12 +20,21 @@ function problemMessage(body: unknown, status: number): string {
   return `Request failed (${status})`;
 }
 
+/** The assistant degraded at boot; its run routes carry the same reason the Assistant space shows. */
+class AssistantUnavailableFailure extends Error {
+  constructor(readonly availability: Unavailable) { super(availability.message); }
+}
+
 async function readResponse(response: Response): Promise<unknown> {
   const text = await response.text();
   let body: unknown = null;
   try { body = text ? JSON.parse(text) : null; }
   catch { if (response.ok) throw new Error(MALFORMED); }
-  if (!response.ok) throw new Error(problemMessage(body, response.status));
+  if (!response.ok) {
+    const unavailable = assistantUnavailableFromProblem(body);
+    if (unavailable) throw new AssistantUnavailableFailure(unavailable);
+    throw new Error(problemMessage(body, response.status));
+  }
   return body;
 }
 
@@ -61,6 +75,7 @@ export function TasksSpace({ backendURL }: ModuleSpaceProps): ReactElement {
   const [tasks, setTasks] = useState<TaskRunSummary[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [unavailable, setUnavailable] = useState<Unavailable | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyRun, setBusyRun] = useState<string | null>(null);
   const pages = useRef(1);
@@ -85,13 +100,13 @@ export function TasksSpace({ backendURL }: ModuleSpaceProps): ReactElement {
         if (abort.aborted) return;
         pages.current++;
         cursor.current = next.nextCursor;
-        setTasks((current) => withoutDuplicates(current, next.items)); setNextCursor(next.nextCursor); setError(null);
+        setTasks((current) => withoutDuplicates(current, next.items)); setNextCursor(next.nextCursor); setError(null); setUnavailable(null);
         return;
       }
       if (mode === "poll" && pages.current > 1) {
         // Later pages hold older runs; a tick refreshes the head instead of replaying every loaded page.
         const first = await fetchPage(null, abort);
-        if (!abort.aborted) { setTasks((current) => withoutDuplicates(first.items, current)); setError(null); }
+        if (!abort.aborted) { setTasks((current) => withoutDuplicates(first.items, current)); setError(null); setUnavailable(null); }
         return;
       }
       const items: TaskRunSummary[] = [];
@@ -102,9 +117,11 @@ export function TasksSpace({ backendURL }: ModuleSpaceProps): ReactElement {
         after = result.nextCursor;
         if (!after) break;
       }
-      if (!abort.aborted) { cursor.current = after; setTasks(items); setNextCursor(after); setError(null); }
+      if (!abort.aborted) { cursor.current = after; setTasks(items); setNextCursor(after); setError(null); setUnavailable(null); }
     } catch (failure) {
-      if (!abort.aborted) setError(failure instanceof Error ? failure.message : "Runs could not be loaded.");
+      if (abort.aborted) return;
+      if (failure instanceof AssistantUnavailableFailure) { setUnavailable(failure.availability); setError(null); return; }
+      setError(failure instanceof Error ? failure.message : "Runs could not be loaded.");
     } finally { if (!abort.aborted) setLoading(false); }
   }, [fetchPage]);
 
@@ -156,7 +173,10 @@ export function TasksSpace({ backendURL }: ModuleSpaceProps): ReactElement {
     try {
       await readResponse(await localApiFetch(`${base}/${encodeURIComponent(task.taskId)}/${action}`, { method: "POST" }));
       await refresh("full");
-    } catch (failure) { setError(failure instanceof Error ? failure.message : "Run action failed."); }
+    } catch (failure) {
+      if (failure instanceof AssistantUnavailableFailure) setUnavailable(failure.availability);
+      else setError(failure instanceof Error ? failure.message : "Run action failed.");
+    }
     finally { setBusyRun(null); }
   };
 
@@ -173,6 +193,7 @@ export function TasksSpace({ backendURL }: ModuleSpaceProps): ReactElement {
           <button className="shrink-0 rounded border px-2 py-0.5 text-xs" onClick={() => { setLoading(true); void refresh("full"); }}>Retry</button>
         </div>
       ) : null}
+      {unavailable ? <div className="mt-4 flex"><AssistantUnavailable availability={unavailable} compact /></div> : (
       <div className="mt-4 rounded-xl border border-border bg-surface-card">
         {tasks.map((task) => (
           <div key={task.taskId} className="flex items-start justify-between gap-4 border-b px-4 py-3 text-sm last:border-b-0">
@@ -194,7 +215,8 @@ export function TasksSpace({ backendURL }: ModuleSpaceProps): ReactElement {
         ))}
         {loading ? <div role="status" className="p-4 text-sm text-text-tertiary">Loading runs…</div> : !error && tasks.length === 0 ? <div className="p-4 text-sm text-text-tertiary">No assistant runs yet.</div> : null}
       </div>
-      {nextCursor ? <button className="mt-4 self-start rounded border px-3 py-2 text-sm" onClick={() => { void loadMore(); }}>Load more runs</button> : null}
+      )}
+      {nextCursor && !unavailable ? <button className="mt-4 self-start rounded border px-3 py-2 text-sm" onClick={() => { void loadMore(); }}>Load more runs</button> : null}
     </div>
   );
 }

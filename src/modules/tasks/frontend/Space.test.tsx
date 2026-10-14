@@ -150,3 +150,24 @@ test("rows link to the owning design when the run's chat is bound", async () => 
   await click("Open design");
   expect(mocks.navigate).toHaveBeenCalledWith("designer", "design-9");
 });
+
+test("a degraded assistant renders the same unavailable state instead of an error, and clears on recovery", async () => {
+  const problem = { type: "https://openpcb.dev/problems/assistant-unavailable", title: "Assistant unavailable", status: 503,
+    detail: "The assistant database at /data/agentkit.sqlite is damaged.", code: "ASSISTANT_DATABASE_CORRUPT",
+    databasePath: "/data/agentkit.sqlite" };
+  mocks.fetch.mockImplementation(async () => new Response(JSON.stringify(problem),
+    { status: 503, headers: { "content-type": "application/problem+json" } }));
+  await mount();
+  const panel = container.querySelector('[data-testid="assistant-unavailable"]');
+  expect(panel?.textContent).toContain("Assistant unavailable");
+  expect(panel?.textContent).toContain(problem.detail);
+  expect(panel?.textContent).toContain("ASSISTANT_DATABASE_CORRUPT");
+  expect(panel?.querySelector("code")?.textContent).toBe("/data/agentkit.sqlite");
+  expect(container.textContent).not.toContain("Request failed");
+  expect(container.textContent).not.toContain("No assistant runs yet.");
+  expect(container.textContent).not.toContain("Loading runs…");
+  mocks.fetch.mockImplementation(async () => Response.json({ items: [run(1)], nextCursor: null }));
+  await click("Refresh");
+  expect(container.querySelector('[data-testid="assistant-unavailable"]')).toBeNull();
+  expect(container.textContent).toContain("run-1");
+});

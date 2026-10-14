@@ -7,6 +7,7 @@ import path from "node:path";
 import { format } from "node:util";
 import { gunzipSync } from "node:zlib";
 import { createServer, type IncomingMessage, type Server } from "node:http";
+import electronLog from "electron-log/node";
 import { startBackendRuntime, type StartedBackendRuntime } from "../../runtime";
 import { captureBackendException, initBackendSentry } from "../../sentry";
 import { buildCoreLibraryFixture } from "../helpers/core-library-fixture-data";
@@ -34,10 +35,18 @@ process.env.OPENPCB_TELEMETRY_OPT_IN = "1";
 process.env.OPENPCB_SENTRY_DSN = `http://canarypublickey@127.0.0.1:${sentry.port}/1`;
 await writeFile(process.env.OPENPCB_BUNDLED_LIBRARY_PATH, buildCoreLibraryFixture());
 assert.equal(initBackendSentry(), true);
+// Electron main routes console into electron-log's file transport (electron/src/main/logger.ts);
+// mirror that so the on-disk main.log a user attaches to a bug report is covered too.
+const electronLogFile = path.join(root, "logs", "main.log");
+electronLog.transports.file.resolvePathFn = () => electronLogFile;
+electronLog.transports.file.format = "[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}]{scope} {text}";
+electronLog.transports.file.level = "debug";
+electronLog.transports.console.level = false;
 for (const level of ["log", "info", "warn", "error", "debug"] as const) {
   const original = console[level].bind(console);
   console[level] = (...args: unknown[]) => {
     captured.push(format(...args));
+    electronLog.functions[level](...args);
     if (process.env.OPENPCB_CANARY_VERBOSE) original(...args);
   };
 }
@@ -184,6 +193,9 @@ test("credential lifecycle and provider echoes never reach logs, diagnostics, Se
     assert.ok(envelopes.some((envelope) => envelope.includes("upstream rejected")), "Sentry event was not delivered");
     assert.ok(envelopes.some((envelope) => envelope.includes("[REDACTED]")));
     assertClean("logger", captured.join("\n"));
+    const electronLogText = await readFile(electronLogFile, "utf8");
+    assert.ok(electronLogText.includes('"message":"assistant activated"'), "electron-log file output was not captured");
+    assertClean("electron-log file", electronLogText);
     assertClean("diagnostics", diagnosticsText);
     assertClean("sentry", envelopes.join("\n"));
     assertClean("public API", responses.join("\n"));

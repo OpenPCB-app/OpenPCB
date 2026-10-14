@@ -1,6 +1,26 @@
 import { AlertTriangle } from "lucide-react";
 import type { ReactElement } from "react";
-import type { AssistantUnavailable as Unavailable } from "../../../../sdks/assistant/availability";
+import {
+  ASSISTANT_UNAVAILABLE_PROBLEM_TYPE,
+  type AssistantUnavailable as Unavailable,
+  type AssistantUnavailableCode,
+} from "../../../sdks/assistant/availability";
+
+const CODES: readonly AssistantUnavailableCode[] = [
+  "ASSISTANT_DATABASE_CORRUPT", "ASSISTANT_DATABASE_UNREADABLE",
+  "ASSISTANT_DATABASE_UNSUPPORTED", "ASSISTANT_RUNTIME_FAILED",
+];
+
+/** Reads the 503 problem the assistant's run routes answer with while it is unavailable. */
+export function assistantUnavailableFromProblem(body: unknown): Unavailable | null {
+  const value = body && typeof body === "object" ? body as Record<string, unknown> : null;
+  if (!value || value.type !== ASSISTANT_UNAVAILABLE_PROBLEM_TYPE || typeof value.detail !== "string") return null;
+  const code = CODES.find((entry) => entry === value.code) ?? "ASSISTANT_RUNTIME_FAILED";
+  return {
+    available: false, code, message: value.detail,
+    ...(typeof value.databasePath === "string" ? { databasePath: value.databasePath } : {}),
+  };
+}
 
 export function AssistantUnavailable({ availability, compact = false }: {
   availability: Unavailable;

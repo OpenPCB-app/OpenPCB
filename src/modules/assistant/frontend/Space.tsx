@@ -22,7 +22,7 @@ import { ProposalActionsProvider } from "./components/ProposalActions";
 import { RunVerification } from "./components/RunVerification";
 import { useAssistantSpace } from "./hooks/useAssistantSpace";
 import { useAssistantAvailability } from "./hooks/useAssistantAvailability";
-import { AssistantUnavailable } from "./components/AssistantUnavailable";
+import { AssistantUnavailable } from "../../../shared/frontend/assistant/AssistantUnavailable";
 
 function navigateFromMention(
   mention: MentionReference,

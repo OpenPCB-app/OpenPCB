@@ -90,6 +90,37 @@ Counters and the overall deadline span retries and correction passes. LM Studio 
 local profile; custom compatible endpoints use it only for loopback hosts. Other custom endpoints,
 OpenAI and OpenRouter use the remote profile.
 
+## Degraded assistant
+
+The assistant is not a required desktop module. If the host fails to boot — a corrupt, truncated,
+non-SQLite, unreadable or future-schema `agentkit.sqlite`, or any other host failure — activation
+records a typed unavailable state instead of failing the module, and designs, libraries and documents
+stay usable. The state is never reset automatically: the file is not deleted, renamed or rewritten,
+and the user decides whether to restore access, update, or move it aside and restart.
+
+| Code | Cause |
+| --- | --- |
+| `ASSISTANT_DATABASE_CORRUPT` | Damaged, truncated or non-AgentKit SQLite file |
+| `ASSISTANT_DATABASE_UNREADABLE` | Permission denied, read-only or unopenable path |
+| `ASSISTANT_DATABASE_UNSUPPORTED` | Schema written by a newer or unsupported version |
+| `ASSISTANT_RUNTIME_FAILED` | Any other host boot failure (no database path is reported) |
+
+While degraded the module registers only:
+
+- `GET /api/modules/assistant/availability` → `{ available: false, code, message, databasePath? }`
+  (`{ available: true }` when healthy).
+- The run-monitor routes the Tasks space reads (`GET /v1/runs`, `GET /v1/runs/:runId`,
+  `POST /v1/runs/:runId/cancel|resume`) → HTTP 503 `application/problem+json` with
+  `type: https://openpcb.dev/problems/assistant-unavailable`, `detail` = the same message, `code` and
+  `databasePath`.
+
+Every other assistant route (chats, providers, settings, MCP) is absent and answers 404. The monitor
+SDK token is bound to a refusing monitor, so Tasks SDK callers receive the same message and code rather
+than a missing-monitor error. The Assistant space, the Designer chat dock and the Tasks space all render
+the same "Assistant unavailable" panel (message, database path, error code); Tasks clears it on the next
+successful refresh. The boot failure is logged once as `assistant unavailable` with its error codes
+and message.
+
 ## Development artifact provenance
 
 The root npm lockfile is dependency truth. These checked-in development archives are explicitly

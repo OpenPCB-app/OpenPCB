@@ -104,6 +104,12 @@ test("assistant init, induced failures and restart never change a populated appl
     assert.equal(corruptState.databasePath, agentDatabase);
     await assertDesignsUsable(runtime, designId);
     assert.equal((await call(runtime, "/assistant/v1/chats")).status, 404);
+    // The Tasks monitor reads these routes; it must see the same reason, not a missing route.
+    assert.equal(runtime.snapshot.modules.find((module) => module.id === "tasks")?.status, "loaded");
+    const runs = await call(runtime, "/assistant/v1/runs?limit=50");
+    assert.equal(runs.status, 503);
+    assert.equal(runs.body.code, "ASSISTANT_DATABASE_CORRUPT");
+    assert.equal(runs.body.detail, corruptState.message);
     await runtime.close(); runtime = undefined;
     assert.deepEqual(await readFile(agentDatabase), corrupt);
     assert.deepEqual(await snapshot(), baseline, "corrupt assistant database");

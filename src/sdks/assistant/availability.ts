@@ -14,3 +14,16 @@ export interface AssistantUnavailable {
 
 /** `GET /api/modules/assistant/availability`: the assistant degrades alone, designs stay usable. */
 export type AssistantAvailability = { available: true } | AssistantUnavailable;
+
+/** Problem `type` the run monitor routes answer with (HTTP 503) while the assistant is unavailable. */
+export const ASSISTANT_UNAVAILABLE_PROBLEM_TYPE = "https://openpcb.dev/problems/assistant-unavailable";
+
+export interface AssistantUnavailableProblem {
+  type: typeof ASSISTANT_UNAVAILABLE_PROBLEM_TYPE;
+  title: string;
+  status: 503;
+  detail: string;
+  instance?: string;
+  code: AssistantUnavailableCode;
+  databasePath?: string;
+}

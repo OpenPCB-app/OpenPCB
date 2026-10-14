@@ -4,6 +4,7 @@ import { test } from "node:test";
 import type { ModuleRouteHandler, ModuleRouterHandle } from "../../../../core/contracts/modules/backend-module";
 import { createOpenPcbAgentKitHost, type OpenPcbAgentKitHost } from "../agentkit-host";
 import { createAssistantModuleDefinition } from "../index";
+import { AGENTKIT_MONITOR_TOKEN, type TasksSDK } from "../../../../sdks/tasks";
 import { addProvider, applier, completed, fixture, nativeBinding, waitTerminal } from "./host-test-fixture";
 
 type Damage = (path: string, healthy: Buffer) => void;
@@ -40,15 +41,29 @@ test("damaged or unreadable agentkit.sqlite degrades the assistant module and is
 
       const definition = createAssistantModuleDefinition({ agentkit: {
         databasePath: f.databasePath, applicationDatabasePath: f.applicationDatabasePath, nativeBinding } });
-      await definition.onActivate!(f.context);
+      const registered = new Map<string, unknown>();
+      const context = { ...f.context, sdk: { ...f.context.sdk,
+        registerValue: (token: string, value: unknown) => { registered.set(token, value); } } };
+      await definition.onActivate!(context);
       const { routes, router } = capturingRouter();
-      await definition.registerRoutes!(router, f.context);
-      assert.deepEqual([...routes.keys()], ["GET /availability"], name);
+      await definition.registerRoutes!(router, context);
+      assert.deepEqual([...routes.keys()], ["GET /availability", "GET /v1/runs", "GET /v1/runs/:runId",
+        "POST /v1/runs/:runId/cancel", "POST /v1/runs/:runId/resume"], name);
       const availability = await (await routes.get("GET /availability")!({} as never)).json() as Record<string, unknown>;
       assert.equal(availability.available, false, name);
       assert.equal(availability.code, code, name);
       assert.equal(availability.databasePath, f.databasePath, name);
       assert.match(String(availability.message), /Designs and libraries are unaffected; the file was left in place/, name);
+      const runs = await routes.get("GET /v1/runs")!({ req: new Request("http://127.0.0.1/api/modules/assistant/v1/runs") } as never);
+      assert.equal(runs.status, 503, name);
+      assert.equal(runs.headers.get("content-type"), "application/problem+json", name);
+      assert.deepEqual(await runs.json(), { type: "https://openpcb.dev/problems/assistant-unavailable",
+        title: "Assistant unavailable", status: 503, detail: availability.message,
+        instance: "/api/modules/assistant/v1/runs", code, databasePath: f.databasePath }, name);
+      const monitor = registered.get(AGENTKIT_MONITOR_TOKEN) as TasksSDK | undefined;
+      await assert.rejects(monitor!.listTasks(), (error: unknown) => error instanceof Error
+        && (error as Error & { code?: string }).code === code && error.message === availability.message, name);
+      assert.deepEqual([...registered.keys()], [AGENTKIT_MONITOR_TOKEN], name);
       await definition.onDeactivate!(f.context);
 
       assert.equal(statSync(f.databasePath).mode, mode, name);
