@@ -5,6 +5,7 @@ import {
   isKeyEventConsumed,
   isModalOpen,
   isShortcutBlocked,
+  preventDefaultPassively,
 } from "./shortcut-guard";
 
 /*
@@ -505,5 +506,20 @@ describe("isKeyEventConsumed (shared with the Escape layer)", () => {
     expect(isKeyEventConsumed({ repeat: true }, { allowRepeat: true })).toBe(
       false,
     );
+  });
+
+  it("does not count a passive tooltip dismissal until someone else claims the key", () => {
+    const event = new Event("keydown", { cancelable: true });
+    preventDefaultPassively(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(isKeyEventConsumed(event)).toBe(false);
+    // A later handler (dirty field reverting) still consumes it.
+    event.preventDefault();
+    expect(isKeyEventConsumed(event)).toBe(true);
+
+    const claimed = new Event("keydown", { cancelable: true });
+    claimed.preventDefault();
+    preventDefaultPassively(claimed);
+    expect(isKeyEventConsumed(claimed)).toBe(true);
   });
 });

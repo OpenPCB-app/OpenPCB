@@ -224,11 +224,34 @@ function hasBlockingOverlay(
   return false;
 }
 
+const passivelyPrevented = new WeakSet<object>();
+
+/**
+ * `preventDefault` for a passive hint (a tooltip) closing on this key without
+ * claiming it. Radix dismisses its top layer only when the key is not yet
+ * prevented, then prevents it itself — so a focused tooltip would swallow the
+ * Escape meant for the overlay beneath it. The hint calls this from
+ * `onEscapeKeyDown` (which skips Radix's own dismissal), closes itself, and
+ * `isKeyEventConsumed` keeps treating the key as live. Any later
+ * `preventDefault` (e.g. a dirty field reverting) still consumes it.
+ */
+export function preventDefaultPassively(event: Event): void {
+  if (event.defaultPrevented) return;
+  const preventDefault = event.preventDefault.bind(event);
+  preventDefault();
+  passivelyPrevented.add(event);
+  event.preventDefault = () => {
+    passivelyPrevented.delete(event);
+    preventDefault();
+  };
+}
+
 /**
  * True when the key already belongs to someone else: an earlier handler
- * consumed it, an IME is composing (legacy keyCode 229 included), or it is
- * an auto-repeat the caller did not opt into. The first check of every
- * shortcut and Escape-layer handler.
+ * consumed it (a passive tooltip dismissal does not count), an IME is
+ * composing (legacy keyCode 229 included), or it is an auto-repeat the caller
+ * did not opt into. The first check of every shortcut and Escape-layer
+ * handler.
  */
 export function isKeyEventConsumed(
   event: Pick<
@@ -237,8 +260,9 @@ export function isKeyEventConsumed(
   >,
   options: Pick<ShortcutGuardOptions, "allowRepeat"> = {},
 ): boolean {
-  if (event.defaultPrevented || event.isComposing || event.keyCode === 229)
-    return true;
+  const consumed =
+    Boolean(event.defaultPrevented) && !passivelyPrevented.has(event);
+  if (consumed || event.isComposing || event.keyCode === 229) return true;
   return Boolean(event.repeat && !options.allowRepeat);
 }
 

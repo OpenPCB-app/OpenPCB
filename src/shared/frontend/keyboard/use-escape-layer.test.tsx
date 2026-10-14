@@ -2,6 +2,8 @@
 import React, { act, useState, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { IconButton } from "../ui/icon-button";
+import { TooltipProvider } from "../ui/tooltip";
 import { useEscapeLayer } from "./use-escape-layer";
 
 let host: HTMLDivElement;
@@ -170,6 +172,32 @@ describe("useEscapeLayer", () => {
       document.removeEventListener("keydown", radix, { capture: true });
     }
     await escape({}, document.body);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the popup beneath a focused button's tooltip on one Escape", async () => {
+    // OPENPCB-54: a closing Radix menu restores focus to its IconButton
+    // trigger, which opens that button's tooltip; the tooltip must not
+    // swallow the next Escape meant for the popup.
+    const onClose = vi.fn();
+    function Popup(): ReactElement {
+      useEscapeLayer(onClose);
+      return (
+        <TooltipProvider>
+          <IconButton label="More">…</IconButton>
+        </TooltipProvider>
+      );
+    }
+    await render(<Popup />);
+    const more = document.querySelector<HTMLButtonElement>(
+      '[aria-label="More"]',
+    )!;
+    await act(async () => more.focus());
+    expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+
+    const event = await escape({}, more);
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

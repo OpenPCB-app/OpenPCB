@@ -1,6 +1,7 @@
 import * as React from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { cn } from "@/lib/utils";
+import { preventDefaultPassively } from "../keyboard/shortcut-guard";
 
 export const TooltipProvider = TooltipPrimitive.Provider;
 export const TooltipRoot = TooltipPrimitive.Root;
@@ -34,10 +35,22 @@ export function Tooltip({
   children: React.ReactNode;
   side?: "top" | "right" | "bottom" | "left";
 }) {
+  const [open, setOpen] = React.useState(false);
   return (
-    <TooltipRoot>
+    <TooltipRoot open={open} onOpenChange={setOpen}>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent side={side}>{label}</TooltipContent>
+      <TooltipContent
+        side={side}
+        // A hint is not an overlay layer: Escape hides it and still reaches
+        // the popup/dialog beneath (e.g. the tooltip a closing menu's focus
+        // restore opens on its trigger).
+        onEscapeKeyDown={(event) => {
+          preventDefaultPassively(event);
+          setOpen(false);
+        }}
+      >
+        {label}
+      </TooltipContent>
     </TooltipRoot>
   );
 }
