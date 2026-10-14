@@ -29,6 +29,9 @@ jobs:
       - name: Validate shared lock
         if: always()
         run: npm run shared:check-lock 2>&1 | tee ci-artifacts/shared-lock.log
+      - name: No @openpcb/ai-core regression guard
+        if: always()
+        run: npm run check:no-ai-core 2>&1 | tee ci-artifacts/no-ai-core.log
       - name: CI script regressions
         if: always()
         run: npm run test:ci-scripts 2>&1 | tee ci-artifacts/ci-scripts.log
