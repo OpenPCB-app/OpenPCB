@@ -113,7 +113,10 @@ jobs:
           - name: shell Chromium regressions
             id: shell-browser
             command: npm run test:e2e:shell -- --reporter=list,junit,html
-          - name: AgentKit host and credential transport (Node)
+          - name: module backend Bun (assistant native/MCP, KiCad parsers)
+            id: modules-backend
+            command: npm run test:modules-backend -- --reporter=junit --reporter-outfile="$GITHUB_WORKSPACE/ci-artifacts/modules-backend-junit.xml"
+          - name: AgentKit host, redaction and attachment transport (Node)
             id: agentkit-host
             command: npm run test:agentkit-host
           - name: AgentKit native parity (Node)

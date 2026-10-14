@@ -46,6 +46,7 @@
     "db:check": "drizzle-kit check",
     "test:backend": "npm run test --workspace src/core/backend --",
     "test:corelib": "bun test scripts/core-library",
+    "test:modules-backend": "bun test src/modules/assistant/backend src/modules/library/backend",
     "test:backend:watch": "npm run test:watch --workspace src/core/backend",
     "test:react": "npm run test --workspace src/core/frontend --",
     "test:react:watch": "npm run test:watch --workspace src/core/frontend",
