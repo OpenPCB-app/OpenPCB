@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, type ReactElement } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { OrthographicCamera } from "three";
 import { buildSymbolRenderModel } from "../../../../../shared/rendering/symbol-preview-builder";
@@ -139,7 +139,8 @@ export function SymbolEditorCanvas({
 }: {
   className?: string;
 }): ReactElement {
-  const toolHandler = useEditorToolHandler();
+  const rootRef = useRef<HTMLElement>(null);
+  const toolHandler = useEditorToolHandler(rootRef);
 
   // Wrap the tool handler to additionally track the live cursor position
   // in mm-space. Paste uses `cursorMm` when the user hits Cmd/Ctrl+V.
@@ -166,9 +167,14 @@ export function SymbolEditorCanvas({
   );
 
   return (
-    <div className={`relative h-full w-full ${className ?? ""}`}>
+    <section
+      ref={rootRef}
+      tabIndex={0}
+      aria-label="Symbol editor canvas"
+      className={`relative h-full w-full ${className ?? ""}`}
+    >
       <EditorCanvasContent handler={handler} />
       <TextEditorOverlay />
-    </div>
+    </section>
   );
 }

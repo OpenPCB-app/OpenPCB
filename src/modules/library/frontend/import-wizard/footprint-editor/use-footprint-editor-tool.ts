@@ -1,7 +1,7 @@
-import { useCallback } from "react";
+import { useCallback, type RefObject } from "react";
 import type { InteractionHandler } from "../../../../../shared/frontend/canvas/interaction/types";
-import { matchesKey } from "../../../../../shared/frontend/canvas/utils/keyboard-shortcuts";
-import { useToolDispatch } from "../../../../../shared/frontend/canvas/tools/use-tool-dispatch";
+import { useScopedToolDispatch } from "../../../../../shared/frontend/canvas/tools/use-scoped-tool-dispatch";
+import { matchesShortcut } from "../../../../../shared/frontend/ui/shortcut";
 import { rotateSelection } from "./actions";
 import { useFootprintEditorStore } from "./useFootprintEditorStore";
 import type { FootprintEditorTool, FootprintEditorToolId } from "./types";
@@ -16,13 +16,13 @@ import {
 } from "./tools";
 
 const TOOL_SHORTCUTS: Record<string, FootprintEditorToolId> = {
-  v: "select",
-  l: "line",
-  r: "rect",
-  c: "circle",
-  a: "arc",
-  d: "pad",
-  t: "text",
+  V: "select",
+  L: "line",
+  R: "rect",
+  C: "circle",
+  A: "arc",
+  D: "pad",
+  T: "text",
 };
 
 function createFootprintEditorTool(
@@ -46,7 +46,9 @@ function createFootprintEditorTool(
   }
 }
 
-export function useFootprintEditorToolHandler(): InteractionHandler {
+export function useFootprintEditorToolHandler(
+  rootRef: RefObject<HTMLElement | null>,
+): InteractionHandler {
   const activeTool = useFootprintEditorStore((s) => s.activeTool);
 
   const onUndo = useCallback(
@@ -64,51 +66,30 @@ export function useFootprintEditorToolHandler(): InteractionHandler {
   );
 
   const onContextualKey = useCallback((event: KeyboardEvent): boolean => {
+    const state = useFootprintEditorStore.getState();
     // Shift+G toggles Figma-style alignment guides + magnetic snap.
-    if (
-      (event.key === "g" || event.key === "G") &&
-      event.shiftKey &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      !event.altKey
-    ) {
+    if (matchesShortcut(event, "Shift+G")) {
       event.preventDefault();
-      useFootprintEditorStore.getState().toggleAlignmentGuidesVisible();
+      state.toggleAlignmentGuidesVisible();
       return true;
     }
 
-    // Clipboard + select-all: Cmd/Ctrl+A/C/V/D
-    if ((event.ctrlKey || event.metaKey) && !event.altKey) {
-      if (matchesKey(event, "a") && !event.shiftKey) {
+    const clipboard: Record<string, () => void> = {
+      "Mod+A": state.selectAll,
+      "Mod+C": state.copySelection,
+      "Mod+V": () => state.paste(),
+      "Mod+D": state.duplicateSelection,
+    };
+    for (const [spec, run] of Object.entries(clipboard)) {
+      if (matchesShortcut(event, spec)) {
         event.preventDefault();
-        useFootprintEditorStore.getState().selectAll();
-        return true;
-      }
-      if (matchesKey(event, "c") && !event.shiftKey) {
-        event.preventDefault();
-        useFootprintEditorStore.getState().copySelection();
-        return true;
-      }
-      if (matchesKey(event, "v") && !event.shiftKey) {
-        event.preventDefault();
-        useFootprintEditorStore.getState().paste();
-        return true;
-      }
-      if (matchesKey(event, "d") && !event.shiftKey) {
-        event.preventDefault();
-        useFootprintEditorStore.getState().duplicateSelection();
+        run();
         return true;
       }
     }
 
-    // Contextual R / Shift+R = rotate selection
-    if (
-      matchesKey(event, "r") &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      !event.altKey
-    ) {
-      const state = useFootprintEditorStore.getState();
+    // Contextual R / Shift+R = rotate selection (only when Select tool has one).
+    if (matchesShortcut(event, "R") || matchesShortcut(event, "Shift+R")) {
       if (state.activeTool === "select" && state.selectedIds.size > 0) {
         event.preventDefault();
         rotateSelection(event.shiftKey ? -90 : 90);
@@ -118,8 +99,10 @@ export function useFootprintEditorToolHandler(): InteractionHandler {
     return false;
   }, []);
 
-  return useToolDispatch<FootprintEditorToolId>({
+  return useScopedToolDispatch<FootprintEditorToolId>({
+    rootRef,
     activeToolId: activeTool,
+    idleToolId: "select",
     createTool: createFootprintEditorTool,
     toolShortcuts: TOOL_SHORTCUTS,
     onUndo,

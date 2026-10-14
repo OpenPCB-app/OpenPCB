@@ -17,12 +17,10 @@ import { SymbolStep } from "./steps/SymbolStep";
 import { FootprintStep } from "./steps/FootprintStep";
 import { ModelStep } from "./steps/ModelStep";
 import { MetadataStep } from "./steps/MetadataStep";
-import {
-  isEscapeShortcut,
-  matchesKey,
-  useWindowKeyboardShortcuts,
-  type KeyboardShortcutBinding,
-} from "../../../../shared/frontend/canvas/utils/keyboard-shortcuts";
+import { isEditableTarget } from "../../../../shared/frontend/keyboard/shortcut-guard";
+import { useEscapeLayer } from "../../../../shared/frontend/keyboard/use-escape-layer";
+import { useGlobalShortcut } from "../../../../shared/frontend/keyboard/use-global-shortcut";
+import { confirmDialog } from "../../../../shared/frontend/ui/dialog-host-store";
 import { isAbortError, fileSignature, filesSignature } from "../utils";
 import {
   commitDrawnImportRequest,
@@ -99,6 +97,24 @@ function toGeneratedMountType(
   value: "smd" | "tht" | "mixed",
 ): "smd" | "through_hole" {
   return value === "smd" ? "smd" : "through_hole";
+}
+
+/** Anything the user would lose by closing: files or drawn symbol/footprint work. */
+function hasUnsavedWork(): boolean {
+  const wizard = useImportWizardStore.getState();
+  const symbol = useSymbolEditorStore.getState();
+  const footprint = useFootprintEditorStore.getState();
+  return (
+    wizard.symbolFile !== null ||
+    wizard.modelFile !== null ||
+    wizard.footprintFiles.length > 0 ||
+    symbol.graphics.length > 0 ||
+    symbol.pins.length > 0 ||
+    symbol.labels.length > 0 ||
+    footprint.pads.length > 0 ||
+    footprint.graphics.length > 0 ||
+    footprint.labels.length > 0
+  );
 }
 
 interface ImportWizardPageProps {
@@ -594,20 +610,23 @@ export function ImportWizardPage({
     onClose,
   ]);
 
+  const closingRef = useRef(false);
   const handleClose = useCallback(
-    (skipConfirm = false) => {
-      const wizardState = useImportWizardStore.getState();
-      const editorState = useSymbolEditorStore.getState();
-      const hasWork =
-        wizardState.symbolFile !== null ||
-        wizardState.modelFile !== null ||
-        (wizardState.symbolSource === "draw" &&
-          (editorState.graphics.length > 0 || editorState.pins.length > 0));
-      if (!skipConfirm && hasWork) {
-        const confirmed = window.confirm(
-          "Close the wizard? Unsaved changes will be lost.",
-        );
-        if (!confirmed) return;
+    async (skipConfirm = false) => {
+      if (closingRef.current) return;
+      if (!skipConfirm && hasUnsavedWork()) {
+        closingRef.current = true;
+        try {
+          const confirmed = await confirmDialog({
+            title: "Discard this component?",
+            description: "Unsaved changes in the wizard will be lost.",
+            confirmLabel: "Discard",
+            tone: "danger",
+          });
+          if (!confirmed) return;
+        } finally {
+          closingRef.current = false;
+        }
       }
       inspectAbortRef.current?.abort();
       commitAbortRef.current?.abort();
@@ -674,24 +693,16 @@ export function ImportWizardPage({
     useImportWizardStore.getState().goNext();
   };
 
-  const keyboardBindings = useMemo<KeyboardShortcutBinding[]>(
-    () => [
-      {
-        matches: (e) => isEscapeShortcut(e),
-        run: () => handleClose(),
-      },
-      {
-        matches: (e) => matchesKey(e, "Enter"),
-        run: (e) => {
-          e.preventDefault();
-          handleNext();
-        },
-      },
-    ],
-    [handleClose, handleNext],
-  );
-  useWindowKeyboardShortcuts(keyboardBindings, {
-    ignoreEditableTarget: true,
+  // Innermost-wins: an editor tool gesture/selection, the text overlay or a
+  // nested modal consumes Escape before this layer sees it.
+  useEscapeLayer((event) => {
+    if (isEditableTarget(event.target)) return;
+    void handleClose();
+  });
+  // The guard skips Enter from fields, buttons, menus, modals, IME and repeat.
+  useGlobalShortcut("Enter", () => {
+    if (loadingCommit || loadingInspect) return false;
+    handleNext();
   });
 
   return (
@@ -702,7 +713,7 @@ export function ImportWizardPage({
             <button
               type="button"
               className="rounded-md p-1 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-              onClick={() => handleClose()}
+              onClick={() => void handleClose()}
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
@@ -770,7 +781,7 @@ export function ImportWizardPage({
           </span>
           <button
             type="button"
-            onClick={() => handleClose(true)}
+            onClick={() => void handleClose(true)}
             className="ml-4 shrink-0 rounded-md border border-amber-300 bg-white px-3 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:bg-amber-900 dark:text-amber-300"
           >
             Close

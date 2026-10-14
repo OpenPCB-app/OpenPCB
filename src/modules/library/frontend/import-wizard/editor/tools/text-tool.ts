@@ -37,9 +37,10 @@ export function createTextTool(): EditorTool {
     },
 
     onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
+      const store = useSymbolEditorStore.getState();
+      if (event.key === "Escape" && store.textEditor) {
         event.preventDefault();
-        useSymbolEditorStore.getState().cancelTextEdit();
+        store.cancelTextEdit();
       }
     },
   };

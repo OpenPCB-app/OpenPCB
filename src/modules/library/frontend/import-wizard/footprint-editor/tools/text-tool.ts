@@ -30,9 +30,10 @@ export function createTextTool(): FootprintEditorTool {
     },
 
     onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
+      const store = useFootprintEditorStore.getState();
+      if (event.key === "Escape" && store.textEditor) {
         event.preventDefault();
-        useFootprintEditorStore.getState().cancelTextEdit();
+        store.cancelTextEdit();
       }
     },
   };

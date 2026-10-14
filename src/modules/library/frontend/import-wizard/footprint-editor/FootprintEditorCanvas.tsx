@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, type ReactElement } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { OrthographicCamera } from "three";
 import { buildFootprintRenderModel } from "../../../../../shared/rendering/footprint-preview-builder";
@@ -178,7 +178,8 @@ export function FootprintEditorCanvas({
 }: {
   className?: string;
 }): ReactElement {
-  const toolHandler = useFootprintEditorToolHandler();
+  const rootRef = useRef<HTMLElement>(null);
+  const toolHandler = useFootprintEditorToolHandler(rootRef);
 
   const handler: InteractionHandler = useMemo(
     () => ({
@@ -202,9 +203,14 @@ export function FootprintEditorCanvas({
   );
 
   return (
-    <div className={`relative h-full w-full ${className ?? ""}`}>
+    <section
+      ref={rootRef}
+      tabIndex={0}
+      aria-label="Footprint editor canvas"
+      className={`relative h-full w-full ${className ?? ""}`}
+    >
       <EditorCanvasContent handler={handler} />
       <FootprintTextEditorOverlay />
-    </div>
+    </section>
   );
 }

@@ -18,8 +18,6 @@ const ALLOWLIST = new Set([
   "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx",
   // remove when migrated
   "src/modules/library/frontend/Space.tsx",
-  // remove when migrated
-  "src/modules/library/frontend/import-wizard/ImportWizardPage.tsx",
 ]);
 
 function roots(): string[] {

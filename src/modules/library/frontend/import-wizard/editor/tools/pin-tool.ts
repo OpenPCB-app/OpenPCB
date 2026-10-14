@@ -57,8 +57,9 @@ export function createPinTool(): EditorTool {
     },
 
     onKeyDown(event: KeyboardEvent) {
+      // The hover preview is not a gesture: leave Escape unconsumed so the
+      // dispatcher returns to the Select tool.
       if (event.key === "Escape") {
-        event.preventDefault();
         useSymbolEditorStore.getState().setPreviewGraphic(null);
       }
     },

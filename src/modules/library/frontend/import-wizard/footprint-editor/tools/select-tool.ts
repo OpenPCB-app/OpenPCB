@@ -405,6 +405,20 @@ export function createSelectTool(): FootprintEditorTool {
     },
 
     onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        // Innermost first: marquee, then selection; otherwise leave Escape
+        // to the enclosing layer (e.g. the import wizard).
+        const store = useFootprintEditorStore.getState();
+        if (rectSelectState) {
+          event.preventDefault();
+          rectSelectState = null;
+          store.setSelectionRect(null);
+        } else if (store.selectedIds.size > 0) {
+          event.preventDefault();
+          store.clearSelection();
+        }
+        return;
+      }
       if (isDeleteShortcut(event)) {
         const store = useFootprintEditorStore.getState();
         if (store.selectedIds.size > 0) {
