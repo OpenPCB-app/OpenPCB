@@ -9,7 +9,7 @@ describe("schematic grid constants", () => {
     expect(SCHEMATIC_GRID_NM).toBe(SCHEMATIC_GRID_MM * 1_000_000);
   });
 
-  test("grid mm is 2", () => {
-    expect(SCHEMATIC_GRID_MM).toBe(2);
+  test("schematic editing grid is 1.27 mm (50 mil)", () => {
+    expect(SCHEMATIC_GRID_MM).toBe(1.27);
   });
 });

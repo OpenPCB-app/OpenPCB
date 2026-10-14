@@ -1,7 +1,7 @@
 // Boot order is intentional: crashReporter and Sentry MUST be initialized
 // before any window opens or any child process spawns. electron-log is
 // initialized first so the rest of bootstrap is captured to disk.
-import { app, BrowserWindow, ipcMain, session, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
 import { join } from "node:path";
 import { initLogger, log } from "./logger.js";
 import { initCrashReporter } from "./crash.js";
@@ -21,6 +21,8 @@ import {
   setSecureItem,
   removeSecureItem,
 } from "./secure-storage.js";
+import { registerEditContextMenu } from "./edit-context-menu.js";
+import { registerDraftJournalIpc } from "./draft-journal-ipc.js";
 import { getTelemetryOptIn, setTelemetryOptIn } from "./preferences.js";
 import { registerCredentialIpc } from "./credential-ipc.js";
 import { registerLocalApiIpc } from "./local-api-ipc.js";
@@ -56,6 +58,7 @@ initUpdater();
 initDeepLink(() => mainWindow);
 
 let mainWindow: BrowserWindow | null = null;
+registerDraftJournalIpc(() => mainWindow, isAllowedAppUrl);
 
 function installSecurityPolicy(): void {
   session.defaultSession.setPermissionRequestHandler(
@@ -75,7 +78,8 @@ function installSecurityPolicy(): void {
       // Dev: embedded backend (127.0.0.1), local devstack cloud (localhost:8000
       // Supabase / :3000 cloud-api / :5173 dashboard), and prod cloud domains so
       // a dev build can also point at prod.
-      "connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https://*.cloud.openpcb.app wss://*.cloud.openpcb.app https://cdn.jsdelivr.net",
+      // Verified resident font bytes are read by Troika workers through local blob XHR.
+      "connect-src 'self' blob: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https://*.cloud.openpcb.app wss://*.cloud.openpcb.app https://cdn.jsdelivr.net",
       "worker-src 'self' blob: http://127.0.0.1:*",
       "media-src 'self' blob:",
       "object-src 'none'",
@@ -90,7 +94,7 @@ function installSecurityPolicy(): void {
       "font-src 'self' data: https://cdn.jsdelivr.net",
       // Prod: embedded backend (127.0.0.1) + OpenPCB Cloud (Supabase, cloud-api,
       // realtime) under the *.cloud.openpcb.app wildcard.
-      "connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://*.cloud.openpcb.app wss://*.cloud.openpcb.app https://cdn.jsdelivr.net",
+      "connect-src 'self' blob: http://127.0.0.1:* ws://127.0.0.1:* https://*.cloud.openpcb.app wss://*.cloud.openpcb.app https://cdn.jsdelivr.net",
       "worker-src 'self' blob:",
       "media-src 'self' blob:",
       "object-src 'none'",
@@ -167,6 +171,21 @@ function createWindow(): void {
       // Capture: keep the renderer rendering when the window is backgrounded.
       ...(CAPTURE ? { backgroundThrottling: false } : {}),
     },
+  });
+
+  registerEditContextMenu(mainWindow);
+  mainWindow.webContents.on("will-prevent-unload", (event) => {
+    if (!mainWindow) return;
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: "warning",
+      buttons: ["Stay", "Leave without saving"],
+      defaultId: 0,
+      cancelId: 0,
+      title: "Draft not durably retained",
+      message: "Some edits are not saved or durably retained on this Mac.",
+      detail: "Stay to retry saving. Leaving can lose those edits.",
+    });
+    if (choice === 1) event.preventDefault();
   });
 
   mainWindow.once("ready-to-show", () => {
@@ -384,7 +403,9 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("before-quit", createGracefulQuitHandler({
+// will-quit fires only after every window approved its unload, so a cancelled close keeps
+// the backend alive; the graceful handler defers the final quit until shutdown settles.
+app.on("will-quit", createGracefulQuitHandler({
   stop: stopBackendServer,
   quit: () => app.quit(),
   reportFailure: () => log.error("Backend shutdown failed after cleanup attempts."),

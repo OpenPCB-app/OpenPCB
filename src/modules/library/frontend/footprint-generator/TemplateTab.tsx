@@ -18,6 +18,8 @@ interface TemplateInfo {
 }
 
 export interface MaterializedTemplate {
+  templateId: string;
+  params: Record<string, unknown>;
   source: FootprintRenderSource;
   metadata: {
     name: string;

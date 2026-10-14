@@ -9,7 +9,7 @@
  *
  * Deterministic: a single mm→nm round at the boundary, integer math thereafter.
  */
-import { SCHEMATIC_GRID_NM } from "@openpcb/rendering-core";
+import { SCHEMATIC_GRID_NM } from "../../../../shared/domain/editor-grid";
 import type { DesignerPlacedPart } from "../../../../sdks/designer/types";
 
 export interface BodyExtentNm {

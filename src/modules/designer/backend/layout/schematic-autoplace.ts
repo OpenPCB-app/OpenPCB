@@ -17,7 +17,7 @@
  *    integer-nm grid snapping, and a final AABB verifier that makes the
  *    no-overlap guarantee an executed invariant.
  */
-import { SCHEMATIC_GRID_NM } from "@openpcb/rendering-core";
+import { SCHEMATIC_GRID_NM } from "../../../../shared/domain/editor-grid";
 import type { BodyExtentNm } from "./body-extent";
 
 export type LayoutRole = "anchor" | "connector" | "passive";

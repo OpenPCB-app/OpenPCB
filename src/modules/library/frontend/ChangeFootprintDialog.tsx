@@ -135,6 +135,7 @@ export function ChangeFootprintDialog({
       await sendJson(`${base}/footprints`, "POST", {
         mode: g.mode,
         source: { source: g.source, metadata: g.metadata },
+        generator: g.generator,
         setDefault: true,
       });
     });

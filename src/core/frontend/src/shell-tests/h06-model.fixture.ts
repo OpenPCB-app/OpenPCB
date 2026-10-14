@@ -1,0 +1,106 @@
+import type { DesignerPcbProjection } from "@sdks/designer/types";
+
+// Test geometry matches existing live-DRC fixtures; these are not manufacturing defaults.
+export function keyboardPcbProjection(): DesignerPcbProjection {
+  return {
+    designId: "keyboard-fixture",
+    revision: 1,
+    board: {
+      outline: {
+        kind: "rect",
+        widthMm: 100,
+        heightMm: 100,
+        centerMm: { x: 0, y: 0 },
+      },
+      activeLayer: "F.Cu",
+      visibleLayers: ["F.Cu", "B.Cu"],
+      designRules: {
+        clearance: {
+          traceToTraceMm: 0.2,
+          traceToPadMm: 0.2,
+          padToPadMm: 0.2,
+          traceToViaMm: 0.2,
+          viaToViaMm: 0.2,
+          copperToBoardEdgeMm: 0.5,
+        },
+        minimums: {
+          traceWidthMm: 0.2,
+          drillSizeMm: 0.4,
+          annularRingMm: 0.2,
+          viaDiameterMm: 0.8,
+          viaDrillMm: 0.4,
+        },
+      },
+      netClasses: [
+        {
+          id: "default",
+          name: "default",
+          traceWidthMm: 0.2,
+          clearanceMm: 0.2,
+          viaDiameterMm: 0.8,
+          viaDrillMm: 0.4,
+          color: "#d4d4d8",
+          defaultViaProtection: "tented",
+        },
+      ],
+      tracePresets: [0.2],
+      fabricator: "custom",
+      layerCount: 2,
+      displayMode: "normal",
+      solderMaskExpansionMm: 0.075,
+      solderPasteExpansionMm: -0.05,
+      updatedAt: "2026-01-01T00:00:00Z",
+    },
+    placements: [
+      {
+        id: "placement",
+        partId: "part",
+        componentId: "component",
+        reference: "U1",
+        positionMm: { x: 0, y: 0 },
+        rotationDeg: 0,
+        mirrored: false,
+        layer: "F.Cu",
+        footprint: {
+          footprintId: "footprint",
+          name: "Fixture",
+          mountType: null,
+          sourceHash: null,
+          preview: {
+            kind: "footprint",
+            units: "mm",
+            name: "Fixture",
+            pads: [
+              {
+                id: "pad",
+                number: "1",
+                shape: "circle",
+                centerMm: { x: 0, y: 0 },
+                widthMm: 2,
+                heightMm: 2,
+                rotationDeg: 0,
+              },
+            ],
+            graphics: [],
+            labels: [],
+            bounds: null,
+            warnings: [],
+          },
+        },
+      },
+    ],
+    traces: [],
+    vias: [],
+    freeHoles: [],
+    freePads: [],
+    overlayTexts: [],
+    overlayShapes: [],
+    zones: [],
+    keepouts: [],
+    ratsnest: [],
+    netNames: { "net-fixture": "GND" },
+    padNets: { "placement|1": "net-fixture" },
+    warnings: [],
+    unresolvedFootprints: [],
+  };
+}

@@ -10,7 +10,11 @@ import { configureProviderCredentials, getCredentialSecretStore } from "./creden
 import { settleShutdownSteps } from "./graceful-quit.js";
 import { startBackendRuntime } from "../../../src/core/backend/runtime";
 import type { StartedBackendRuntime } from "../../../src/core/backend/runtime";
-import type { ModuleRegistryResponse } from "../../../src/core/contracts/modules/registry";
+import {
+  failDesktopStartup,
+  startRequiredDesktopRuntime,
+  summarizeModuleSnapshot,
+} from "./backend-startup.js";
 import {
   disposeDrcWorker,
   setDrcWorkerEntry,
@@ -38,7 +42,6 @@ let startup: Promise<BackendReadyPayload> | null = null;
 let shutdown: Promise<void> | null = null;
 let drcConfigured = false;
 const localApiToken = randomBytes(32).toString("hex");
-const REQUIRED_DESKTOP_MODULES = ["library", "designer", "assistant"] as const;
 
 function getAppDataDir(): string {
   const base = app.getPath("userData");
@@ -104,32 +107,6 @@ export function getLocalApiBootstrap(): LocalApiBootstrap | null {
   return backendPayload ? { url: backendPayload.url, token: localApiToken } : null;
 }
 
-function summarizeModuleSnapshot(snapshot: ModuleRegistryResponse): string {
-  if (snapshot.modules.length === 0) {
-    return "No module manifests were discovered.";
-  }
-
-  return snapshot.modules
-    .map((module) => {
-      const reason = module.reason ? ` — ${module.reason}` : "";
-      return `${module.id}: ${module.status}${reason}`;
-    })
-    .join("\n");
-}
-
-function assertRequiredModulesLoaded(snapshot: ModuleRegistryResponse): void {
-  const missing = REQUIRED_DESKTOP_MODULES.filter(
-    (id) => !snapshot.loadedModules.includes(id),
-  );
-  if (missing.length === 0) return;
-
-  throw new Error(
-    `Desktop backend started, but required module(s) failed to load: ${missing.join(
-      ", ",
-    )}\n\nModule registry:\n${summarizeModuleSnapshot(snapshot)}`,
-  );
-}
-
 /**
  * The DRC worker entry is a separate tsup bundle, spawned as a file — packaged
  * it lives outside app.asar (execution contract 09 §2.1). `app.getAppPath()`
@@ -166,14 +143,24 @@ async function closeCurrentRuntime(): Promise<void> {
 }
 
 async function startRuntimeWithRequiredModules(): Promise<StartedBackendRuntime> {
-  runtime = await startBackendRuntime({
-    host: "127.0.0.1", port: 0, secretStore: getCredentialSecretStore(),
-    localApi: { token: localApiToken, rendererOrigins: app.isPackaged ? [] : ["http://127.0.0.1:1420"] },
+  const started = await startRequiredDesktopRuntime({
+    start: async () => {
+      runtime = await startBackendRuntime({
+        host: "127.0.0.1", port: 0, secretStore: getCredentialSecretStore(),
+        localApi: { token: localApiToken, rendererOrigins: app.isPackaged ? [] : ["http://127.0.0.1:1420"] },
+      });
+      return runtime;
+    },
+    close: closeCurrentRuntime,
+    logSnapshot: (snapshot) => {
+      log.info(`Module registry:\n${summarizeModuleSnapshot(snapshot)}`);
+    },
+    reportCleanupFailure: (error) => {
+      log.warn("Failed to clean up backend after startup failure:", error);
+    },
   });
-  log.info(`Module registry:\n${summarizeModuleSnapshot(runtime.snapshot)}`);
-  assertRequiredModulesLoaded(runtime.snapshot);
-  configureProviderCredentials(runtime.providerCredentials ?? null);
-  return runtime;
+  configureProviderCredentials(started.providerCredentials ?? null);
+  return started;
 }
 
 async function bootBackendServer(): Promise<BackendReadyPayload> {
@@ -206,19 +193,26 @@ async function bootBackendServer(): Promise<BackendReadyPayload> {
     log.info(`Backend ready at ${startedRuntime.url}`);
     return backendPayload;
   } catch (error) {
-    await closeCurrentRuntime().catch(() => {
-      log.warn("Backend startup cleanup failed after cleanup attempts.");
+    backendPayload = null;
+    return failDesktopStartup(error, {
+      close: closeCurrentRuntime,
+      reportCleanupFailure: (cleanupError) => {
+        log.warn(
+          "Failed to clean up backend after publication failure:",
+          cleanupError,
+        );
+      },
+      // closeCurrentRuntime already removed the MCP portfile.
+      reportFailure: (startupError) => {
+        log.error(
+          "Backend startup failed; database was not reset:",
+          startupError,
+        );
+        Sentry.captureException(startupError, {
+          tags: { component: "backend", phase: "start" },
+        });
+      },
     });
-    try {
-      Sentry.captureException(error, {
-        tags: { component: "backend", phase: "start" },
-      });
-    } catch (reportingError) {
-      log.warn(
-        `Failed to report backend startup failure: ${String(reportingError)}`,
-      );
-    }
-    throw error;
   }
 }
 

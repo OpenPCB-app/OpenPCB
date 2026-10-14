@@ -31,7 +31,8 @@ export const ROUTE_KEY_BINDINGS: readonly RouteKeyBinding[] = [
   },
   { keys: "/", label: "posture", requiresSession: true },
   { keys: "⇧Space", label: "45°/90°", requiresSession: true },
-  { keys: "T/B", label: "layer" },
+  { keys: "T/B", label: "layer", requiresSession: true },
+  { keys: "1/2", label: "layer" },
   { keys: "⇧", label: "no snap", requiresSession: true },
   { keys: "Alt", label: "no guides", requiresSession: true },
 ];

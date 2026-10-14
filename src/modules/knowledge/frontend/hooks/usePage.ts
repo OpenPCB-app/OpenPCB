@@ -1,6 +1,14 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
 import type { Page } from "../../shared/types";
 import { useKnowledgeApi } from "../KnowledgeApiContext";
+import { getPageSaveCoordinator } from "../lib/page-save-coordinator";
 
 interface UsePageResult {
   page: Page | null;
@@ -16,11 +24,23 @@ export function usePage(pageId: string | null): UsePageResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const api = useKnowledgeApi();
+  const coordinator = useMemo(() => getPageSaveCoordinator(api), [api]);
+  const subscribe = useCallback(
+    (listener: () => void) => coordinator.subscribePage(pageId, listener),
+    [coordinator, pageId],
+  );
+  const draft = useSyncExternalStore(
+    subscribe,
+    () => coordinator.snapshot(pageId),
+    () => null,
+  );
   const currentPageIdRef = useRef<string | null>(null);
   const requestSeqRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const setPage = useCallback((nextPage: Page | null) => {
+    ++requestSeqRef.current;
+    abortControllerRef.current?.abort();
     setPageState(nextPage);
   }, []);
 
@@ -45,16 +65,30 @@ export function usePage(pageId: string | null): UsePageResult {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    const observedVersion = coordinator.version(pageId);
     setIsLoading(true);
     setError(null);
     try {
-      const loadedPage = await api.getPage(pageId, { signal: controller.signal });
+      const loadedPage = await api.getPage(pageId, {
+        signal: controller.signal,
+      });
+      if (
+        controller.signal.aborted ||
+        currentPageIdRef.current !== pageId ||
+        requestSeqRef.current !== currentRequestSeq
+      )
+        return;
+      const accepted = loadedPage
+        ? await coordinator.prepareRemote(loadedPage, observedVersion)
+        : true;
       if (
         !controller.signal.aborted &&
         currentPageIdRef.current === pageId &&
         requestSeqRef.current === currentRequestSeq
       ) {
-        setPageState(loadedPage);
+        if (accepted) {
+          setPageState(loadedPage);
+        }
       }
     } catch (err) {
       if (controller.signal.aborted) {
@@ -75,7 +109,7 @@ export function usePage(pageId: string | null): UsePageResult {
         setIsLoading(false);
       }
     }
-  }, [pageId, api]);
+  }, [pageId, api, coordinator]);
 
   useEffect(() => {
     currentPageIdRef.current = pageId;
@@ -88,5 +122,12 @@ export function usePage(pageId: string | null): UsePageResult {
     };
   }, []);
 
-  return { page, isLoading, error, refresh, setPage, mutatePage };
+  return {
+    page: draft?.page ?? (page?.id === pageId ? page : null),
+    isLoading,
+    error,
+    refresh,
+    setPage,
+    mutatePage,
+  };
 }

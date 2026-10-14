@@ -1,3 +1,4 @@
+import { rejectUnqualifiedPackFootprints } from "../import/unqualified-import";
 import { and, eq, inArray } from "drizzle-orm";
 import path from "node:path";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
@@ -253,7 +254,6 @@ export async function importOpclib(
   pkg: OpclibPackage,
   opts: ImporterOptions,
 ): Promise<ImportResult> {
-  const db = getDb(ctx);
   const now = new Date().toISOString();
   const lib = pkg.manifest.library;
   const kind = trustedSourceKind(lib);
@@ -276,6 +276,9 @@ export async function importOpclib(
       `core-library: importing without valid signature (reason=${verdict.reason}, source=${lib.id}@${lib.version}); set OPENPCB_REQUIRE_SIGNED_OPCLIB=1 to enforce`,
     );
   }
+
+  rejectUnqualifiedPackFootprints(pkg);
+  const db = getDb(ctx);
 
   const result: ImportResult = {
     sourceId: lib.id,

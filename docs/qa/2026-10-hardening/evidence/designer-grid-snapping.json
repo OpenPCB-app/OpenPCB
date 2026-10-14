@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "task": "OPENPCB-57/H09",
+  "tid": "T-095",
+  "status": "In Progress; not Done",
+  "implementationCommits": [
+    "ba0b6dde1b3e84cd68a5670906323a3f054b75c7",
+    "5446a3101bc40c4dedadaa12a4f4a59db0d84621"
+  ],
+  "shellDependencyCommit": "fc1302dd906ebb7a236719fac033169b0f43f634",
+  "regressionCommit": "d25ceeca3dc966cddac79b61963f41734ea7517b",
+  "reproduction": [
+    {
+      "path": "/private/tmp/openpcb-h09-native-baseline.log",
+      "result": "Failed native schematic pointer regression: placement was 400000 nm off the approved 1270000 nm grid."
+    },
+    {
+      "path": "/private/tmp/openpcb-h09-segment-baseline.log",
+      "result": "Failed regression: snapping segment delta left its absolute destination off-grid."
+    },
+    {
+      "path": "/private/tmp/openpcb-h05-csp-baseline-report.json",
+      "result": "Native worker reported blocked=blob, directive=connect-src. This was the decisive native font-read blocker; the independent URL-lifetime issue was reproduced by the source unit regression."
+    }
+  ],
+  "checks": {
+    "frontend": {
+      "passed": 788,
+      "todo": 1
+    },
+    "backend": {
+      "passed": 80,
+      "assertions": 474,
+      "files": 8
+    },
+    "sourceCanvas": {
+      "passed": 22,
+      "assertions": 56
+    },
+    "native": {
+      "passed": 10,
+      "failed": 0,
+      "durationSeconds": 17.2
+    },
+    "nativeHarnessTypecheck": "passed",
+    "mainFrontendBuild": "passed",
+    "candidateFrontendBuild": "passed",
+    "electronBuild": "passed",
+    "moduleTypecheck": {
+      "errors": 23,
+      "scope": "Existing Assistant/Library installed-package drift; no Designer errors"
+    }
+  },
+  "native": {
+    "platform": "macOS arm64",
+    "electron": "41.6.1",
+    "packaged": false,
+    "dependencyLockMatched": false,
+    "freshProfiles": true,
+    "originalDatabasesMutated": false,
+    "rendererExternalNetworkBlocked": true,
+    "mainProcessNetworkInstrumented": false,
+    "rendererDist": "/private/tmp/openpcb-h05-consumer-E7nzVl/app/src/core/frontend/dist",
+    "artifact": "/private/tmp/openpcb-h05-font-churn-artifact/openpcb-r3f-eda-canvas-0.1.4.tgz",
+    "artifactSha256": "5b4ee06c6b04b12371ca2bae40a18ba3bab0e8e3b952cd022e0c0ae939877db1",
+    "sourceRepository": "OpenPCB-app/shared",
+    "sourceCommit": "920ab9c32899cc94dea8ee86ebd75eec6e608da4",
+    "servedIndexMatchesArtifact": true,
+    "otherSharedPackagesAndPeersUnchanged": true,
+    "mainRenderer": "Rebuilt from main source and installed published dependencies; no H05 candidate installed in the main checkout.",
+    "scenarios": [
+      "Schematic and PCB rapid command ordering, pending feedback, stale Undo rejection and explicit retained-edit review",
+      "Schematic grid visibility independent of snapping; snap-off free placement",
+      "PCB 0.5 mm pointer hole placement, grid cycling and preference/exact-geometry preservation on reopen",
+      "Rotated intentionally off-grid pins at two measured zoom levels; nearby primitive placement resolves exact pin coordinates",
+      "Actual pin-to-pin wire clicks preserve endpoint IDs and exact integer coordinates; orthogonal path survives Undo, Redo and reopen",
+      "Library MIME drop agrees with explicit command placement at 7620000,3810000 nm",
+      "Actual off-grid component drag snaps destination; Undo restores source; outline Duplicate snaps only the copy",
+      "Worker XHR reads resident font blobs under Electron CSP; strict console and network assertions pass"
+    ]
+  },
+  "limits": [
+    "Full original T-095 multi-fixture matrix, PCB footprint rotation/drag and all imported-coordinate cases remain unqualified.",
+    "Native proof uses an isolated unpublished H05 source artifact and startup proposal. The main published canvas still requires H05 release/pin/startup integration; packaged cold-offline behavior is not qualified.",
+    "Resident font is bounded to one verified generation retained until explicit disposal. Dev CSP is native-tested; packaged CSP still needs packaged QA.",
+    "Schematic fixture labels render but the small fixture has overlapping pin/refdes text; this is not font-metric or all-consumer visual qualification.",
+    "H07 retained edits are not crash-durable; its wider physical PCB workflow matrix remains open.",
+    "H02 production CoreLibrary trust mismatch, H46 migration backup and full CI installed-dependency alignment remain open."
+  ],
+  "evidence": [
+    {
+      "path": "/private/tmp/openpcb-h09-native-baseline.log",
+      "sha256": "c23f92275cf8b1e9304d12c711b26afcb738dd2dd63ab84b91fc60823dbf4e9d"
+    },
+    {
+      "path": "/private/tmp/openpcb-h09-segment-baseline.log",
+      "sha256": "84bc7fcaf2f5a2fe580ecc9016330493c4733e10677ac121a457614949b8356c"
+    },
+    {
+      "path": "/private/tmp/openpcb-h09-duplication-frontend.log",
+      "sha256": "68d7ce4c998527433f5c52674f790143db0cc4ec9518c082c708e86b163b41ce"
+    },
+    {
+      "path": "/private/tmp/openpcb-h09-consumer-backend.log",
+      "sha256": "09c37a4f03185cf5b6a7e4d40bfc7cf390b2a97cbecec2803fb70dbc93471443"
+    },
+    {
+      "path": "/private/tmp/openpcb-h09-module-types.log",
+      "sha256": "87980da908d86c9abce45e777e59dc0e695d54f9b01150b953e39cfcf1cd9ed6"
+    },
+    {
+      "path": "/private/tmp/openpcb-h09-main-build.log",
+      "sha256": "00dc9adf708258236fcba1d5bd6fc4f20452b2a7877ea7683f7441f7b1b4ccdb"
+    },
+    {
+      "path": "/private/tmp/openpcb-h09-resident-font-build.log",
+      "sha256": "f52f2cad5cc5992bf407e8f09d9a6dc259f2005d4cdcff4e70ed43bc55b8e112"
+    },
+    {
+      "path": "/private/tmp/openpcb-h09-font-csp-electron-build.log",
+      "sha256": "8d64f6351bb94b11d9c2ac05b4fc51c35a7e3bde4b01956a36c5499d4daec81e"
+    },
+    {
+      "path": "/private/tmp/openpcb-h09-native-final-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/private/tmp/openpcb-h09-native-final2.log",
+      "sha256": "70c9bbe3fae61bcd76debb0fd9d121df014aa3ec6d1de18496e228924c377000"
+    },
+    {
+      "path": "/private/tmp/openpcb-h09-native-final2-report.json",
+      "sha256": "3187c924a49f47a5d0984d0f997254e322e8ff9635b3a2a2d6e3255bacab1687"
+    },
+    {
+      "path": "/private/tmp/openpcb-h05-csp-baseline-report.json",
+      "sha256": "927d73e9687ddeec1b6f5111a596601b3ef8a41f0b79ddac9dde08c6d53a91d8"
+    },
+    {
+      "path": "/private/tmp/openpcb-h05-font-churn-baseline.log",
+      "sha256": "b9c9606c76c765de09619dd4aa631eede00992d2bbd839b6b2b7c362639bbb52"
+    },
+    {
+      "path": "/private/tmp/openpcb-h05-font-churn-tests.log",
+      "sha256": "f9bc370b629ae2f48b59fa96e890f593515fb3b9d35b62c7d3fb046b8fbb3304"
+    },
+    {
+      "path": "/private/tmp/openpcb-h05-font-churn-build.log",
+      "sha256": "d7abd25a582fac5d3775100e710cef8092ae6c65c351e249be402e3c519167db"
+    },
+    {
+      "path": "/private/tmp/openpcb-h05-resident-install.json",
+      "sha256": "f01ecbc7ee4f7ad6f68844fedf421ef4e6790c64674b0ff22a7f0af374fc2c12"
+    },
+    {
+      "path": "/private/tmp/openpcb-h09-reopen-final.png",
+      "sha256": "13a84618df4840fc63df820243d6b8e80491e4d665200b46a693280132949c68"
+    }
+  ]
+}

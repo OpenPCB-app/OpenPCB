@@ -1,3 +1,5 @@
+import { useFeatureFlag } from "@/feature-flags";
+import { FOOTPRINT_IMPORT_UNAVAILABLE } from "../../../shared/import-policy";
 import { Grid3X3, Upload } from "lucide-react";
 import { memo, useId, type ReactElement } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -101,10 +103,13 @@ export const FootprintStep = memo(function FootprintStep({
     ? (generatedFootprint?.model ?? null)
     : (selectedFootprint?.preview ?? null);
 
+  const quarantined = useFeatureFlag("library.footprintIntakeQuarantine");
+  const importVerb = quarantined ? "Preview" : "Import";
+
   const emptyMessage = isPresetMode
     ? "Select a package family and size, then click Generate."
     : footprintFiles.length === 0
-      ? "Import one or more .kicad_mod files to preview geometry."
+      ? `${importVerb} one or more .kicad_mod files to preview geometry.`
       : "No footprint preview available for current selection.";
 
   // Import mode detail values
@@ -215,7 +220,12 @@ export const FootprintStep = memo(function FootprintStep({
               onGenerated={(g) =>
                 setGeneratedFootprint(
                   g
-                    ? { source: g.source, model: g.model, metadata: g.metadata }
+                    ? {
+                        source: g.source,
+                        model: g.model,
+                        metadata: g.metadata,
+                        generator: g.generator,
+                      }
                     : null,
                 )
               }
@@ -224,8 +234,17 @@ export const FootprintStep = memo(function FootprintStep({
             <>
               <section className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
                 <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                  Import Footprints
+                  {importVerb} Footprints
                 </h2>
+
+                {quarantined ? (
+                  <p
+                    role="status"
+                    className="text-xs text-[var(--text-secondary)]"
+                  >
+                    {FOOTPRINT_IMPORT_UNAVAILABLE}
+                  </p>
+                ) : null}
 
                 <input
                   id={inputId}
@@ -247,7 +266,7 @@ export const FootprintStep = memo(function FootprintStep({
                   className="inline-flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-violet-500 bg-violet-600 px-3 text-xs font-semibold text-white"
                 >
                   <Upload className="h-3.5 w-3.5" />
-                  Import .kicad_mod
+                  {importVerb} .kicad_mod
                 </label>
 
                 {footprintFiles.length > 0 ? (
@@ -269,7 +288,7 @@ export const FootprintStep = memo(function FootprintStep({
                   </div>
                 ) : (
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Import one or more .kicad_mod files.
+                    {importVerb} one or more .kicad_mod files.
                   </p>
                 )}
               </section>

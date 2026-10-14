@@ -1,0 +1,37 @@
+{
+  "implementationCommit": "891ef043d33620234ced67fa6f02f4da2bd4a7a5",
+  "scope": "H25/H26 focused behavioral checks; native acceptance remains incomplete",
+  "environment": { "platform": "macOS arm64", "node": "22.23.2", "bun": "1.4.0" },
+  "checks": [
+    {
+      "command": "npx --no-install vitest run --config src/core/frontend/vitest.config.ts src/modules/knowledge/frontend",
+      "exitCode": 0,
+      "filesPassed": 3,
+      "testsPassed": 27,
+      "localLog": ".build/hardening/2026-10-05/docs-tests.log"
+    },
+    {
+      "command": "bun test src/core/backend/tests/knowledge-page-save-conflict.test.ts",
+      "exitCode": 0,
+      "testsPassed": 4,
+      "assertionsPassed": 20,
+      "localLog": ".build/hardening/2026-10-05/docs-backend-tests.log"
+    }
+  ],
+  "reproduction": {
+    "componentChecksBeforeFix": [
+      "Mount emitted an unexpected document write.",
+      "Switching pages retained undo history.",
+      "Unmount retained the destroyed editor reference.",
+      "Toolbar state did not follow editor transactions."
+    ],
+    "reviewCorrection": "Two added regressions failed because keeping a title draft retained the old body/PDF editor. Effective-content generations corrected both failures before this commit.",
+    "limit": "These component reproductions do not establish completion of the archived native workflows. Per-TID fresh native reproduction remains unverified."
+  },
+  "limitations": [
+    "Native Electron keyboard, delayed writes, text/PDF/delete navigation and restart qualification remains pending.",
+    "No packaged application acceptance is claimed.",
+    "Recoverable drafts survive renderer navigation; process-crash recovery belongs to H46 and is not implemented here.",
+    "Local logs are ignored artifacts; this sanitized result records only the checks performed."
+  ]
+}

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   DesignerCommand,
-  DesignerCommandEnvelope,
   DesignerDesignSummary,
   DesignerDispatchResult,
   DesignerLabel,
@@ -16,10 +15,24 @@ import type {
 import { confirmDialog } from "../../../../shared/frontend/ui/dialog-host-store";
 import { createDesignerApi } from "../api";
 import type { DesignerView } from "../types";
+import {
+  getDesignerCommandCoordinator,
+  commandSession,
+  NetMergeDeclinedError,
+  SCHEMATIC_SESSION,
+  type DesignerAction,
+  type NetMergeRefusal,
+} from "../lib/command-coordinator";
+import type { CommandQueueSnapshot } from "../../../../shared/frontend/commands/revision-command-queue";
+import {
+  DESIGNER_BATCH_MAX_COMMANDS,
+  type DesignerBatchableCommand,
+} from "../../../../sdks/designer";
 
-const DESIGNER_SESSION_ID = "designer-ui-session";
+const DESIGNER_SESSION_ID = SCHEMATIC_SESSION;
 
 export interface DesignerWorkspaceState {
+  commandQueue: CommandQueueSnapshot<DesignerAction> | null;
   loadingDesigns: boolean;
   creatingDesign: boolean;
   loadingProjection: boolean;
@@ -79,13 +92,18 @@ export interface DesignerWorkspaceActions {
   setSelectedWireId(wireId: string | null): void;
   setWireSourcePinId(pinId: string | null): void;
   dispatchCommand(command: DesignerCommand): Promise<DesignerDispatchResult>;
-  /** Dispatch several commands sequentially with ONE projection + history
-   *  refresh at the end — a multi-part move refetching per command keeps the
-   *  optimistic overlay window (and its race surface) open N× longer. */
+  /** One atomic command, one revision and one undo entry. */
   dispatchCommandsBatch(commands: DesignerCommand[]): Promise<void>;
   undo(): Promise<void>;
   redo(): Promise<void>;
-  notifyExternalRevisionBump(revision: number): void;
+  notifyExternalRevisionBump(designId: string, revision: number): void;
+  runHistory(
+    designId: string,
+    sessionId: string,
+    kind: "undo" | "redo",
+  ): Promise<void>;
+  discardRetainedCommands(): Promise<void>;
+  reapplyRetainedCommand(id: string): Promise<void>;
 }
 
 export interface DesignerWorkspaceDerived {
@@ -97,19 +115,7 @@ export interface DesignerWorkspaceDerived {
   wireSourcePin: DesignerPin | null;
 }
 
-type NetMergeRefusalResult = Extract<
-  DesignerDispatchResult,
-  { code: "NET_MERGE_REQUIRES_CONFIRM" }
->;
-
-/** User declined the net-merge confirm; nothing was written. */
-class NetMergeCancelledError extends Error {
-  constructor(readonly refusal: NetMergeRefusalResult) {
-    super("Net merge cancelled");
-  }
-}
-
-function netMergeDescription(nets: NetMergeRefusalResult["nets"]): string {
+function netMergeDescription(nets: NetMergeRefusal["nets"]): string {
   const list = nets
     .map(
       (net) =>
@@ -117,41 +123,6 @@ function netMergeDescription(nets: NetMergeRefusalResult["nets"]): string {
     )
     .join(", ");
   return `This change merges these nets into one: ${list}.`;
-}
-
-function commandErrorMessage(
-  result: Exclude<DesignerDispatchResult, { ok: true }>,
-): string {
-  switch (result.code) {
-    case "REVISION_CONFLICT":
-      return "Revision conflict. Please retry after refresh.";
-    case "COMPONENT_NOT_FOUND":
-      return `Component '${result.componentId}' not found in library`;
-    case "COMPONENT_NOT_WIREABLE":
-      return `Component '${result.componentId}' has no pins and is not wireable`;
-    case "PIN_NOT_FOUND":
-      return `Pin '${result.pinId}' not found`;
-    case "ENTITY_NOT_FOUND":
-      return `${result.entityKind} '${result.entityId}' not found`;
-    case "INVALID_WIRE_PATH":
-      return result.detail;
-    case "INVALID_LABEL":
-      return result.detail;
-    case "INVALID_PRIMITIVE":
-      return result.detail;
-    case "INVALID_PCB_BOARD_SETTINGS":
-      return result.detail;
-    case "DUPLICATE_REFERENCE":
-      return `Reference '${result.reference}' already exists`;
-    case "NET_MERGE_REQUIRES_CONFIRM":
-      return result.message;
-    case "FOOTPRINT_PIN_MISMATCH":
-      return `Footprint has no pad for connected pin${
-        result.missingPinNumbers.length === 1 ? "" : "s"
-      } ${result.missingPinNumbers.join(", ")}`;
-    default:
-      return "Command failed";
-  }
 }
 
 export function useDesignerWorkspace(params: {
@@ -183,6 +154,33 @@ export function useDesignerWorkspace(params: {
 
   const notify = params.onNotify;
 
+  const coordinator = useMemo(
+    () =>
+      getDesignerCommandCoordinator(
+        api,
+        params.backendURL
+          ? `${params.backendURL}/api/modules/${params.moduleId}`
+          : undefined,
+      ),
+    [params.backendURL, params.moduleId],
+  );
+  coordinator.setApi(api);
+  coordinator.confirmNetMerge = (refusal) =>
+    confirmDialog({
+      title: "Merge nets?",
+      description: netMergeDescription(refusal.nets),
+      confirmLabel: "Merge nets",
+    });
+  const [, setCommandVersion] = useState(0);
+  useEffect(
+    () =>
+      coordinator.queue.subscribe(() =>
+        setCommandVersion((version) => version + 1),
+      ),
+    [coordinator],
+  );
+  const projectionRequest = useRef(0);
+  const historyRequest = useRef(0);
   const [loadingDesigns, setLoadingDesigns] = useState(true);
   const [creatingDesign, setCreatingDesign] = useState(false);
   const [loadingProjection, setLoadingProjection] = useState(false);
@@ -230,19 +228,27 @@ export function useDesignerWorkspace(params: {
   const pendingCommandsRef = useRef(0);
   const lastConflictAtRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    projectionRef.current = projection;
-  }, [projection]);
+  const selectDesign = useCallback((id: string | null) => {
+    selectedDesignIdRef.current = id;
+    projectionRequest.current += 1;
+    historyRequest.current += 1;
+    projectionRef.current = null;
+    setProjection(null);
+    setSelectedDesignId(id);
+    setCanUndo(false);
+    setCanRedo(false);
+    setUndoDepth(0);
+    setRedoDepth(0);
+    setError(null);
+  }, []);
 
   useEffect(() => {
-    selectedDesignIdRef.current = selectedDesignId;
-  }, [selectedDesignId]);
-
-  useEffect(() => {
-    if (params.initialDesignId && params.initialDesignId !== selectedDesignId) {
-      setSelectedDesignId(params.initialDesignId);
-    }
-  }, [params.initialDesignId]);
+    if (
+      params.initialDesignId &&
+      params.initialDesignId !== selectedDesignIdRef.current
+    )
+      selectDesign(params.initialDesignId);
+  }, [params.initialDesignId, selectDesign]);
 
   const refreshDesigns = useCallback(async () => {
     setLoadingDesigns(true);
@@ -264,25 +270,35 @@ export function useDesignerWorkspace(params: {
 
   const refreshProjectionForDesign = useCallback(
     async (designId: string) => {
-      setLoadingProjection(true);
-      setError(null);
+      if (selectedDesignIdRef.current !== designId) return;
+      const request = ++projectionRequest.current;
+      const current = () =>
+        selectedDesignIdRef.current === designId &&
+        request === projectionRequest.current;
+      if (current()) setLoadingProjection(true);
       try {
         const next = await api.getSchematicProjection(designId);
+        if (!current() || next.designId !== designId) return;
+        if (
+          next.revision < (coordinator.queue.snapshot(designId).revision ?? 0)
+        )
+          return;
+        coordinator.queue.observe(designId, next.revision);
         projectionRef.current = next;
         setProjection(next);
-      } catch (projectionError) {
-        setError(
-          projectionError instanceof Error
-            ? projectionError.message
-            : "Failed to load schematic projection",
-        );
-        setProjection(null);
-        projectionRef.current = null;
+      } catch (error) {
+        if (current())
+          setError(
+            error instanceof Error
+              ? error.message
+              : "Failed to load schematic projection",
+          );
+        throw error;
       } finally {
-        setLoadingProjection(false);
+        if (current()) setLoadingProjection(false);
       }
     },
-    [api],
+    [api, coordinator],
   );
 
   const refreshProjection = useCallback(async () => {
@@ -320,14 +336,19 @@ export function useDesignerWorkspace(params: {
 
   const refreshHistoryForDesign = useCallback(
     async (designId: string) => {
-      setLoadingHistory(true);
+      if (selectedDesignIdRef.current !== designId) return;
+      const request = ++historyRequest.current;
+      const current = () =>
+        selectedDesignIdRef.current === designId &&
+        request === historyRequest.current;
+      if (current()) setLoadingHistory(true);
       try {
         const history = await api.getHistory(designId, DESIGNER_SESSION_ID);
-        applyHistorySnapshot(history);
+        if (current()) applyHistorySnapshot(history);
       } catch {
-        clearHistorySnapshot();
+        if (current()) clearHistorySnapshot();
       } finally {
-        setLoadingHistory(false);
+        if (current()) setLoadingHistory(false);
       }
     },
     [api, applyHistorySnapshot, clearHistorySnapshot],
@@ -361,7 +382,8 @@ export function useDesignerWorkspace(params: {
           }
           return [created, ...current];
         });
-        setSelectedDesignId(created.id);
+        if (selectedDesignIdRef.current === selectedDesignId)
+          selectDesign(created.id);
         return created.id;
       } catch (createError) {
         const message =
@@ -381,7 +403,7 @@ export function useDesignerWorkspace(params: {
     } finally {
       ensureDesignPromiseRef.current = null;
     }
-  }, [api, selectedDesignId]);
+  }, [api, selectedDesignId, selectDesign]);
 
   const createDesign = useCallback(
     async (name?: string): Promise<DesignerDesignSummary | null> => {
@@ -390,7 +412,8 @@ export function useDesignerWorkspace(params: {
       try {
         const created = await api.createDesign(name);
         await refreshDesigns();
-        setSelectedDesignId(created.id);
+        if (selectedDesignIdRef.current === selectedDesignId)
+          selectDesign(created.id);
         notify?.("Design created", "success");
         return created;
       } catch (createError) {
@@ -404,7 +427,7 @@ export function useDesignerWorkspace(params: {
         setCreatingDesign(false);
       }
     },
-    [api, refreshDesigns, notify],
+    [api, refreshDesigns, notify, selectedDesignId, selectDesign],
   );
 
   const renameDesign = useCallback(
@@ -511,168 +534,121 @@ export function useDesignerWorkspace(params: {
     dragResolveComponentRef.current = null;
   }, []);
 
-  const dispatchEnvelope = useCallback(
-    async (command: DesignerCommand) => {
-      let designId = selectedDesignIdRef.current;
-      if (!designId && command.type === "place_part") {
-        designId = await ensureDesignForPlacement();
-      }
-
-      if (!designId) {
-        throw new Error("No design selected");
-      }
-
-      const isPcbCommand = command.type.startsWith("pcb_");
-      const sessionId = isPcbCommand
-        ? "designer-pcb-session"
-        : DESIGNER_SESSION_ID;
-
-      let toSend: DesignerCommand = command;
-      let result: DesignerDispatchResult;
-      for (;;) {
-        const envelope: DesignerCommandEnvelope = {
-          commandId: crypto.randomUUID(),
-          sessionId,
-          aggregateId: designId,
-          baseRevision: projectionRef.current?.revision ?? null,
-          issuedAt: Date.now(),
-          command: toSend,
-        };
-
-        pendingCommandsRef.current += 1;
-        try {
-          result = await api.dispatch(designId, envelope);
-        } finally {
-          pendingCommandsRef.current -= 1;
-        }
-        // Refused net merge: ask once, then re-dispatch the SAME command with
-        // `confirmMerge: true` under a fresh envelope (fresh baseRevision).
-        if (
-          !result.ok &&
-          result.code === "NET_MERGE_REQUIRES_CONFIRM" &&
-          toSend === command
-        ) {
-          const confirmed = await confirmDialog({
-            title: "Merge nets?",
-            description: netMergeDescription(result.nets),
-            confirmLabel: "Merge nets",
-          });
-          if (!confirmed) throw new NetMergeCancelledError(result);
-          toSend = { ...command, confirmMerge: true } as DesignerCommand;
-          continue;
-        }
-        break;
-      }
-      if (!result.ok) {
-        if (result.code === "REVISION_CONFLICT") {
-          lastConflictAtRef.current = Date.now();
-        }
-        throw new Error(commandErrorMessage(result));
-      }
-
-      // PCB commands track revision optimistically instead of refetching the
-      // schematic projection; keep the ref current so the NEXT envelope's
-      // baseRevision is valid even before any refresh runs.
-      if (projectionRef.current) {
-        projectionRef.current = {
-          ...projectionRef.current,
-          revision: result.revision,
-        };
-      }
-      return { designId, result, isPcbCommand };
-    },
-    [api, ensureDesignForPlacement],
-  );
-
   const dispatchCommand = useCallback(
     async (command: DesignerCommand) => {
-      let dispatched: Awaited<ReturnType<typeof dispatchEnvelope>>;
+      // This callback belongs to the rendered document; delayed consumers cannot retarget it.
+      const designId =
+        selectedDesignId ??
+        (command.type === "place_part"
+          ? await ensureDesignForPlacement()
+          : null);
+      if (!designId) throw new Error("No design selected");
+      pendingCommandsRef.current += 1;
       try {
-        dispatched = await dispatchEnvelope(command);
-      } catch (error) {
-        // Declined merge: not a failure — report the refusal, nothing changed.
-        if (error instanceof NetMergeCancelledError) return error.refusal;
-        throw error;
-      }
-      const { designId, result, isPcbCommand } = dispatched;
-      if (!isPcbCommand) {
-        // Counted as pending too: the refresh REWRITES the mounted revision, so
-        // a capture harness waiting on `pendingCommands === 0` must not resume
-        // while it is still in flight.
-        pendingCommandsRef.current += 1;
+        let result: DesignerDispatchResult;
         try {
+          result = await coordinator.dispatch(designId, command);
+        } catch (error) {
+          // Declined merge: not a failure; report the refusal, nothing changed.
+          if (error instanceof NetMergeDeclinedError) return error.refusal;
+          throw error;
+        }
+        if (
+          selectedDesignIdRef.current === designId &&
+          projectionRef.current?.designId === designId
+        )
+          projectionRef.current = {
+            ...projectionRef.current,
+            revision: result.ok
+              ? result.revision
+              : projectionRef.current.revision,
+          };
+        if (commandSession(command) === SCHEMATIC_SESSION) {
           await refreshProjectionForDesign(designId);
           await refreshHistoryForDesign(designId);
-        } finally {
-          pendingCommandsRef.current -= 1;
         }
+        return result;
+      } finally {
+        pendingCommandsRef.current -= 1;
+        lastConflictAtRef.current = coordinator.lastConflictAt;
       }
-      return result;
     },
-    [dispatchEnvelope, refreshProjectionForDesign, refreshHistoryForDesign],
+    [
+      selectedDesignId,
+      ensureDesignForPlacement,
+      coordinator,
+      refreshProjectionForDesign,
+      refreshHistoryForDesign,
+    ],
   );
 
   const dispatchCommandsBatch = useCallback(
     async (commands: DesignerCommand[]) => {
-      if (commands.length === 0) return;
-      let refreshDesignId: string | null = null;
-      try {
-        for (const command of commands) {
-          const { designId, isPcbCommand } = await dispatchEnvelope(command);
-          if (!isPcbCommand) refreshDesignId = designId;
-        }
-      } finally {
-        // Refresh even after a mid-batch failure — earlier commands already
-        // applied and the UI must converge on the persisted state.
-        if (refreshDesignId) {
-          pendingCommandsRef.current += 1;
-          try {
-            await refreshProjectionForDesign(refreshDesignId);
-            await refreshHistoryForDesign(refreshDesignId);
-          } finally {
-            pendingCommandsRef.current -= 1;
-          }
-        }
+      if (!commands.length) return;
+      if (commands.length > DESIGNER_BATCH_MAX_COMMANDS)
+        throw new Error("Selection exceeds the atomic batch limit");
+      const batch: DesignerBatchableCommand[] = [];
+      for (const command of commands) {
+        if (
+          command.type === "batch_commands" ||
+          command.type === "place_part" ||
+          command.type === "pcb_set_view_state" ||
+          command.type === "pcb_apply_autolayout_candidate" ||
+          command.type === "refresh_part_footprint"
+        )
+          throw new Error("This action cannot be included in an atomic batch");
+        batch.push(command);
       }
+      await dispatchCommand({ type: "batch_commands", commands: batch });
     },
-    [dispatchEnvelope, refreshProjectionForDesign, refreshHistoryForDesign],
+    [dispatchCommand],
   );
 
+  const runHistory = useCallback(
+    async (designId: string, sessionId: string, kind: "undo" | "redo") => {
+      await coordinator.history(designId, sessionId, kind, async () => {
+        await refreshProjectionForDesign(designId);
+        await refreshHistoryForDesign(designId);
+      });
+    },
+    [coordinator, refreshProjectionForDesign, refreshHistoryForDesign],
+  );
   const undo = useCallback(async () => {
-    const designId = selectedDesignIdRef.current;
-    if (!designId) {
-      return;
-    }
-    const result = await api.undo(designId, DESIGNER_SESSION_ID);
-    if (!result.ok) {
-      applyHistorySnapshot(result.history);
-      setError("Nothing to undo");
-      return;
-    }
-    applyHistorySnapshot(result.history);
-    await refreshProjectionForDesign(designId);
-  }, [api, applyHistorySnapshot, refreshProjectionForDesign]);
-
+    if (selectedDesignId)
+      await runHistory(selectedDesignId, DESIGNER_SESSION_ID, "undo");
+  }, [selectedDesignId, runHistory]);
   const redo = useCallback(async () => {
-    const designId = selectedDesignIdRef.current;
-    if (!designId) {
-      return;
-    }
-    const result = await api.redo(designId, DESIGNER_SESSION_ID);
-    if (!result.ok) {
-      applyHistorySnapshot(result.history);
-      setError("Nothing to redo");
-      return;
-    }
-    applyHistorySnapshot(result.history);
-    await refreshProjectionForDesign(designId);
-  }, [api, applyHistorySnapshot, refreshProjectionForDesign]);
-
-  const notifyExternalRevisionBump = useCallback((revision: number) => {
-    if (projectionRef.current && projectionRef.current.revision < revision) {
-      projectionRef.current = { ...projectionRef.current, revision };
-    }
-  }, []);
+    if (selectedDesignId)
+      await runHistory(selectedDesignId, DESIGNER_SESSION_ID, "redo");
+  }, [selectedDesignId, runHistory]);
+  const notifyExternalRevisionBump = useCallback(
+    (designId: string, revision: number) => {
+      coordinator.queue.observe(designId, revision);
+    },
+    [coordinator],
+  );
+  const discardRetainedCommands = useCallback(async () => {
+    if (!selectedDesignId) return;
+    await refreshProjectionForDesign(selectedDesignId);
+    coordinator.queue.discardRetained(selectedDesignId);
+  }, [selectedDesignId, coordinator, refreshProjectionForDesign]);
+  const reapplyRetainedCommand = useCallback(
+    async (id: string) => {
+      if (!selectedDesignId) return;
+      await refreshProjectionForDesign(selectedDesignId);
+      if (selectedDesignIdRef.current !== selectedDesignId)
+        throw new Error("Return to the originating design to review this edit");
+      await coordinator.reapply(selectedDesignId, id);
+      await refreshProjectionForDesign(selectedDesignId);
+      await refreshHistoryForDesign(selectedDesignId);
+    },
+    [
+      selectedDesignId,
+      coordinator,
+      refreshProjectionForDesign,
+      refreshHistoryForDesign,
+    ],
+  );
 
   // Dev-only capture hooks (M0.2): expose command dispatch + the active design
   // on `window.__openpcbCapture`, gated on OPENPCB_CAPTURE=1. Merges into the
@@ -693,7 +669,9 @@ export function useDesignerWorkspace(params: {
       dispatch: (command) => dispatchCommand(command),
       selectedDesignId,
       sync: () => ({
-        mountedRevision: projectionRef.current?.revision ?? null,
+        mountedRevision: selectedDesignId
+          ? coordinator.queue.snapshot(selectedDesignId).revision
+          : null,
         pendingCommands: pendingCommandsRef.current,
         lastConflictAt: lastConflictAtRef.current,
       }),
@@ -706,7 +684,7 @@ export function useDesignerWorkspace(params: {
         delete current.sync;
       }
     };
-  }, [dispatchCommand, selectedDesignId]);
+  }, [dispatchCommand, selectedDesignId, coordinator]);
 
   useEffect(() => {
     void refreshDesigns();
@@ -714,7 +692,7 @@ export function useDesignerWorkspace(params: {
   }, [refreshDesigns, searchComponents]);
 
   useEffect(() => {
-    void refreshProjection();
+    void refreshProjection().catch(() => undefined);
   }, [refreshProjection]);
 
   useEffect(() => {
@@ -781,6 +759,9 @@ export function useDesignerWorkspace(params: {
 
   return {
     state: {
+      commandQueue: selectedDesignId
+        ? coordinator.queue.snapshot(selectedDesignId)
+        : null,
       loadingDesigns,
       creatingDesign,
       loadingProjection,
@@ -804,8 +785,14 @@ export function useDesignerWorkspace(params: {
       dragPlacementLoading,
       dragPlacementDetail,
       dragGhostNm,
-      canUndo,
-      canRedo,
+      canUndo:
+        canUndo &&
+        !!selectedDesignId &&
+        coordinator.queue.snapshot(selectedDesignId).pending === 0,
+      canRedo:
+        canRedo &&
+        !!selectedDesignId &&
+        coordinator.queue.snapshot(selectedDesignId).pending === 0,
       undoDepth,
       redoDepth,
     },
@@ -814,7 +801,7 @@ export function useDesignerWorkspace(params: {
       refreshDesigns,
       createDesign,
       renameDesign,
-      selectDesign: setSelectedDesignId,
+      selectDesign,
       refreshProjection,
       refreshHistory,
       setActiveView,
@@ -838,6 +825,9 @@ export function useDesignerWorkspace(params: {
       undo,
       redo,
       notifyExternalRevisionBump,
+      runHistory,
+      discardRetainedCommands,
+      reapplyRetainedCommand,
     },
     derived: {
       selectedPart,

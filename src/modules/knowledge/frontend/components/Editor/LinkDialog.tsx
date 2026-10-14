@@ -1,10 +1,6 @@
 import { useState, useEffect } from "react";
 import type { Editor } from "@tiptap/react";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@shared/frontend/ui/button";
 
 interface LinkDialogProps {
@@ -17,13 +13,14 @@ export function LinkDialog({ editor, open, onOpenChange }: LinkDialogProps) {
   const [url, setUrl] = useState("");
 
   useEffect(() => {
-    if (open) {
+    if (open && !editor.isDestroyed) {
       const attrs = editor.getAttributes("link");
       setUrl(attrs.href ?? "");
     }
   }, [open, editor]);
 
   const handleSave = () => {
+    if (editor.isDestroyed) return;
     if (url.trim()) {
       editor.chain().focus().setLink({ href: url.trim() }).run();
     } else {
@@ -33,9 +30,12 @@ export function LinkDialog({ editor, open, onOpenChange }: LinkDialogProps) {
   };
 
   const handleRemove = () => {
+    if (editor.isDestroyed) return;
     editor.chain().focus().unsetLink().run();
     onOpenChange(false);
   };
+
+  if (editor.isDestroyed) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

@@ -5,6 +5,7 @@
  * Footprint can be imported (KiCad) or generated (IPC preset).
  */
 
+import { rejectKicadFootprints } from "./unqualified-import";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import { buildSymbolRenderModel } from "../../../../shared/rendering/symbol-preview-builder";
 import type {
@@ -30,6 +31,12 @@ import {
   PLACEHOLDER_FOOTPRINT_NAME,
   ensurePlaceholderFootprint,
 } from "../builtins/placeholder-footprint";
+import {
+  resolveGeneratedFootprint,
+  UnqualifiedGeneratorError,
+  type FootprintPayload,
+  type GeneratedFootprintInput,
+} from "./resolve-generated-footprint";
 
 export interface CommitDrawnRequest {
   drawnSymbol: {
@@ -40,26 +47,8 @@ export interface CommitDrawnRequest {
   // For import mode
   footprintFiles?: { fileName: string; content: string }[];
   footprintSelection?: { footprintId: string };
-  // For generated or drawn mode
-  generatedFootprint?: {
-    source: FootprintRenderSource;
-    metadata: {
-      name: string;
-      mountType: string;
-      packageCode: { imperial: string | null; metric: string | null };
-      tags: string[];
-    };
-  };
-  // For drawn mode (identical shape to generatedFootprint)
-  drawnFootprint?: {
-    source: FootprintRenderSource;
-    metadata: {
-      name: string;
-      mountType: string;
-      packageCode: { imperial: string | null; metric: string | null };
-      tags: string[];
-    };
-  };
+  generatedFootprint?: GeneratedFootprintInput;
+  drawnFootprint?: FootprintPayload;
   component: { name: string; description: string; tags?: string[] };
 }
 
@@ -81,6 +70,23 @@ export function commitDrawnImport(
   ctx: CoreBackendModuleContext,
   input: CommitDrawnRequest,
 ): CommitKicadResponse {
+  if (input.footprintMode === "import") {
+    rejectKicadFootprints("kicad_mod", [
+      input.footprintSelection?.footprintId ?? "unselected",
+    ]);
+  }
+  const generated =
+    input.footprintMode === "generated"
+      ? resolveGeneratedFootprint(input.generatedFootprint)
+      : null;
+  if (
+    input.footprintMode === "drawn" &&
+    (!input.drawnFootprint || input.generatedFootprint)
+  ) {
+    throw new UnqualifiedGeneratorError(
+      "Drawn mode requires a separate drawnFootprint payload; generated geometry must use explicit generator parameters.",
+    );
+  }
   const componentName = requireNonEmpty(input.component.name, "component.name");
   const componentDescription = input.component.description.trim();
   const userTags = dedupeTags(input.component.tags ?? []);
@@ -136,14 +142,8 @@ export function commitDrawnImport(
   let tags: string[];
   let pinMapJson: string | null = null;
 
-  if (
-    (input.footprintMode === "generated" && input.generatedFootprint) ||
-    (input.footprintMode === "drawn" && input.drawnFootprint)
-  ) {
-    const generated = input.footprintMode === "generated";
-    const authored = (generated
-      ? input.generatedFootprint
-      : input.drawnFootprint)!;
+  if (generated || (input.footprintMode === "drawn" && input.drawnFootprint)) {
+    const authored = (generated ?? input.drawnFootprint)!;
     const record = buildAuthoredFootprintRecord({
       mode: generated ? "generated" : "drawn",
       source: authored.source,
@@ -151,6 +151,7 @@ export function commitDrawnImport(
       symbol: symbolSource,
       footprintId,
       now,
+      provenance: generated?.provenance,
     });
     footprintDataJson = record.footprintDataJson;
     pinMapJson = record.pinMapJson;

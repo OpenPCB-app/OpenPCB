@@ -149,6 +149,12 @@ describe("designer: footprintStale + refresh_part_footprint", () => {
       source: (({ source, metadata }) => ({ source, metadata }))(
         generateFootprint("soic", "SOIC-8", "nominal"),
       ),
+      generator: {
+        kind: "ipc7351b",
+        family: "soic",
+        size: "SOIC-8",
+        density: "nominal",
+      },
     });
     expect(added.status).toBe(201);
     const newFp = added.json.data.footprintId as string;

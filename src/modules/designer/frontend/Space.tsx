@@ -1,3 +1,4 @@
+import { CommandQueueNotice } from "./components/CommandQueueNotice";
 import {
   useCallback,
   useEffect,
@@ -72,7 +73,8 @@ import type {
 } from "../../../sdks";
 import type { DesignerWorkspaceState } from "./hooks/useDesignerWorkspace";
 import type { ModuleSpaceProps, ViewportState } from "./types";
-import { isEditableShortcutTarget } from "../../../shared/frontend/canvas/utils/keyboard-shortcuts";
+import { isShortcutBlocked } from "@shared/frontend/keyboard/shortcut-guard";
+import { matchesShortcut } from "@shared/frontend/ui/shortcut";
 import type { PcbLayerId } from "../../../sdks";
 import { IconButton } from "@shared/frontend/ui/icon-button";
 import { TooltipProvider } from "@shared/frontend/ui/tooltip";
@@ -707,22 +709,16 @@ function DesignerSpaceInner({
     [navigateToModule, openTab],
   );
 
-  // Cmd/Ctrl+K to open palette; Cmd/Ctrl+W to close active tab (capture phase
-  // so the Electron accelerator does not also fire).
+  // Bubble after local tools, so consumed keys never reach tab actions.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isEditableShortcutTarget(event.target)) {
-        return;
-      }
-      const hasModifier = event.metaKey || event.ctrlKey;
-      if (!hasModifier) return;
-      const key = event.key.toLowerCase();
-      if (key === "k") {
+      if (isShortcutBlocked(event)) return;
+      if (matchesShortcut(event, "Mod+K")) {
         event.preventDefault();
         openComponentPalette();
         return;
       }
-      if (key === "w") {
+      if (matchesShortcut(event, "Mod+W")) {
         const tabsState = useDesignerTabsStore.getState();
         if (tabsState.activeDesignId) {
           event.preventDefault();
@@ -731,8 +727,8 @@ function DesignerSpaceInner({
         }
       }
     };
-    window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleCloseTab, openComponentPalette]);
 
   const handlePaletteSelect = useCallback(
@@ -843,9 +839,7 @@ function DesignerSpaceInner({
       }
     }
     if (state.selectedPartId) {
-      const part = projection?.parts.find(
-        (p) => p.id === state.selectedPartId,
-      );
+      const part = projection?.parts.find((p) => p.id === state.selectedPartId);
       if (part) {
         return part.value
           ? `${part.reference} · ${part.value}`
@@ -1019,7 +1013,8 @@ function DesignerSpaceInner({
             id: "drc",
             label: "DRC",
             badge: drcIssueCount > 0 ? drcIssueCount : undefined,
-            badgeClassName: drcIssueCount > 0 ? "text-status-danger" : undefined,
+            badgeClassName:
+              drcIssueCount > 0 ? "text-status-danger" : undefined,
           },
           { id: "assistant", label: "Assistant" },
         ];
@@ -1127,19 +1122,17 @@ function DesignerSpaceInner({
   // Cmd/Ctrl+. toggles the dock (was: toggle inspector dock).
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isEditableShortcutTarget(event.target)) return;
-      if (!(event.metaKey || event.ctrlKey)) return;
-      const key = event.key.toLowerCase();
-      if (key === "i") {
+      if (isShortcutBlocked(event)) return;
+      if (matchesShortcut(event, "Mod+I")) {
         event.preventDefault();
         openAssistantDock();
-      } else if (event.key === ".") {
+      } else if (matchesShortcut(event, "Mod+.")) {
         event.preventDefault();
         setDockOpen((value) => !value);
       }
     };
-    window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [openAssistantDock]);
 
   const startDockResize = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1148,9 +1141,7 @@ function DesignerSpaceInner({
     const startWidth = dockWidth;
     const onMove = (moveEvent: PointerEvent) => {
       const delta = startX - moveEvent.clientX;
-      setDockWidth(
-        clamp(startWidth + delta, MIN_DOCK_WIDTH, MAX_DOCK_WIDTH),
-      );
+      setDockWidth(clamp(startWidth + delta, MIN_DOCK_WIDTH, MAX_DOCK_WIDTH));
     };
     const stop = () => {
       window.removeEventListener("pointermove", onMove);
@@ -1168,8 +1159,8 @@ function DesignerSpaceInner({
       designId?: string;
       revision?: number;
     }) => {
-      if (change?.revision !== undefined) {
-        actions.notifyExternalRevisionBump(change.revision);
+      if (change?.revision !== undefined && change.designId) {
+        actions.notifyExternalRevisionBump(change.designId, change.revision);
       }
 
       void (async () => {
@@ -1213,9 +1204,8 @@ function DesignerSpaceInner({
         selectionRequest={schematicSelectionRequest}
         wireSourcePinId={state.wireSourcePinId}
         labelDraftText={state.labelDraftText}
-        // The schematic grid overlay + grid snap have never been switchable
-        // from the shell; keep the constant the dead state used to supply.
-        gridVisible={false}
+        canUndo={state.canUndo}
+        canRedo={state.canRedo}
         draggingComponentId={state.draggingComponentId}
         dragPlacementLoading={state.dragPlacementLoading}
         dragPlacementDetail={state.dragPlacementDetail}
@@ -1352,6 +1342,13 @@ function DesignerSpaceInner({
         />
       )}
 
+      <CommandQueueNotice
+        key={state.selectedDesignId}
+        snapshot={state.commandQueue}
+        refresh={actions.refreshProjection}
+        discard={actions.discardRetainedCommands}
+        reapply={actions.reapplyRetainedCommand}
+      />
       {state.error ? (
         <div className="shrink-0 border-b border-border bg-status-danger-soft px-3 py-1 text-xs text-status-danger">
           {state.error}
@@ -1373,8 +1370,12 @@ function DesignerSpaceInner({
         <SchematicToolbar
           canUndo={state.canUndo}
           canRedo={state.canRedo}
-          onUndo={() => void actions.undo()}
-          onRedo={() => void actions.redo()}
+          onUndo={() => void actions.undo().catch((error: unknown) =>
+            actions.setError(error instanceof Error ? error.message : "Undo failed"),
+          )}
+          onRedo={() => void actions.redo().catch((error: unknown) =>
+            actions.setError(error instanceof Error ? error.message : "Redo failed"),
+          )}
           onFit={() => canvasRef.current?.fit()}
           onZoomToSelection={() => canvasRef.current?.frameSelection()}
           canZoomToSelection={hasSchematicSelection}
@@ -1454,11 +1455,12 @@ function DesignerSpaceInner({
                   backendURL={backendURL}
                   moduleId={moduleId}
                   designId={state.selectedDesignId}
-                  gridVisible={false}
                   cloudHeaders={autoLayoutCloudHeaders}
                   autoLayoutEnabled={autoLayoutEnabled}
                   autoLayoutSignedIn={autoLayoutSignedIn}
+                  commandRevision={state.commandQueue?.revision}
                   dispatchCommand={actions.dispatchCommand}
+                  runHistory={actions.runHistory}
                   notifyExternalRevisionBump={
                     actions.notifyExternalRevisionBump
                   }
@@ -1638,6 +1640,7 @@ function DesignerSpaceInner({
         <DesignerStatusBar
           showCursor
           zoom={zoomPercent}
+          gridEditor="pcb"
           activeLayer={pcbActiveLayer}
           hint={pcbHint}
           selection={pcbSelectionSummary}
@@ -1674,6 +1677,7 @@ function DesignerSpaceInner({
       {!noTabsOpen && state.activeView === "schem" ? (
         <DesignerStatusBar
           showCursor
+          gridEditor="schematic"
           cursorSource="schematic"
           zoom={zoomPercent}
           hint={schemHint}

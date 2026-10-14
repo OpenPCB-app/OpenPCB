@@ -27,8 +27,9 @@ import {
   type WireEndpoint,
 } from "./schematic-targeting";
 
+import { SCHEMATIC_GRID_NM } from "../../../../shared/domain/editor-grid";
+
 const AI_DESIGNER_SESSION_ID = "designer-ui-session";
-const SCHEMATIC_GRID_NM = 2_000_000;
 const DEFAULT_GRID_SPACING_X_NM = 24_000_000;
 const DEFAULT_GRID_SPACING_Y_NM = 16_000_000;
 const MAX_PLACEMENTS_PER_PROPOSAL = 20;

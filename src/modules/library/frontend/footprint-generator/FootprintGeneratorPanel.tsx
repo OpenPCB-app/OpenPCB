@@ -13,6 +13,10 @@ import type {
 import { IpcPresetTab, type IpcSelection } from "./IpcPresetTab";
 import { TemplateTab, type MaterializedTemplate } from "./TemplateTab";
 import { missingPinNumbers } from "./footprint-validation";
+import {
+  generatorUnavailableReason,
+  type FootprintGeneratorIdentity,
+} from "../../shared/generator-policy";
 
 /** What a generator hands back; `source`+`metadata` feed the library routes. */
 export interface GeneratedFootprintPayload {
@@ -20,6 +24,8 @@ export interface GeneratedFootprintPayload {
   source: FootprintRenderSource;
   model: FootprintRenderModel;
   metadata: GeneratedFootprintMetadata;
+  /** Explicit inputs the backend re-derives the geometry from. */
+  generator: FootprintGeneratorIdentity;
 }
 
 const EMPTY_SELECTION: IpcSelection = {
@@ -40,6 +46,11 @@ export function templateToPayload(
       mountType: result.metadata.mountType,
       packageCode: { imperial: result.metadata.packageCode, metric: null },
       tags: result.metadata.tags,
+    },
+    generator: {
+      kind: "template",
+      templateId: result.templateId,
+      params: result.params,
     },
   };
 }
@@ -125,6 +136,11 @@ export function FootprintGeneratorPanel({
 
   const handleIpcGenerate = useCallback(() => {
     if (!selection.family || !selection.size) return;
+    const unavailable = generatorUnavailableReason(selection.family);
+    if (unavailable) {
+      setIpcError(unavailable);
+      return;
+    }
     try {
       const result = generateFootprint(
         selection.family,
@@ -137,6 +153,12 @@ export function FootprintGeneratorPanel({
         source: result.source,
         model: result.model,
         metadata: result.metadata,
+        generator: {
+          kind: "ipc7351b",
+          family: selection.family,
+          size: selection.size,
+          density: selection.density,
+        },
       });
     } catch (error) {
       setIpcError(
@@ -173,10 +195,14 @@ export function FootprintGeneratorPanel({
               changeSelection({ ...selection, family, size: null });
               emit(null);
             }}
-            onSizeChange={(size) => changeSelection({ ...selection, size })}
-            onDensityChange={(density) =>
-              changeSelection({ ...selection, density })
-            }
+            onSizeChange={(size) => {
+              changeSelection({ ...selection, size });
+              emit(null);
+            }}
+            onDensityChange={(density) => {
+              changeSelection({ ...selection, density });
+              emit(null);
+            }}
             onGenerate={handleIpcGenerate}
           />
           {ipcError ? (

@@ -1,4 +1,9 @@
 import {
+  attachElectronLogs,
+  attachHomeNameGeometry,
+  getDiagnosticsPaths,
+} from "./electron-smoke-evidence";
+import {
   _electron as electron,
   expect,
   test,
@@ -9,6 +14,12 @@ import {
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
+import {
+  setNativeViewport,
+  writeNativeNetworkGuard,
+  type NetworkRecord,
+} from "./electron-native-helpers";
 
 type BackendPayload = {
   url: string;
@@ -18,12 +29,70 @@ type BackendPayload = {
   startupLicenseCode?: string;
 };
 
-type DiagnosticsPaths = {
-  logs: string;
-  crashDumps: string;
-  userData: string;
-  appVersion: string;
-};
+type DesktopWindow = { webContents: { getURL(): string } };
+type NativeOutput = { run: string; channel: string; text: string };
+
+function captureProcess(
+  app: ElectronApplication,
+  run: string,
+  output: NativeOutput[],
+): void {
+  app
+    .process()
+    .stdout?.on("data", (chunk: Buffer) =>
+      output.push({ run, channel: "stdout", text: chunk.toString() }),
+    );
+  app
+    .process()
+    .stderr?.on("data", (chunk: Buffer) =>
+      output.push({ run, channel: "stderr", text: chunk.toString() }),
+    );
+}
+
+async function finishSmokeCapture(
+  app: ElectronApplication | null,
+  page: Page | null,
+  testInfo: TestInfo,
+  label: string,
+): Promise<void> {
+  await attachElectronLogs(page, testInfo);
+  if (!app) return;
+  const trace = testInfo.outputPath(`${label}-trace.zip`);
+  await app
+    .context()
+    .tracing.stop({ path: trace })
+    .catch(() => {});
+  if (await pathExists(trace))
+    await testInfo.attach(`${label}-trace.zip`, {
+      path: trace,
+      contentType: "application/zip",
+    });
+  let network: NetworkRecord[] | null = null;
+  if (!process.env.OPENPCB_ELECTRON_EXECUTABLE) {
+    network = await app
+      .evaluate(
+        () =>
+          (globalThis as unknown as { __openpcbNativeNetwork: NetworkRecord[] })
+            .__openpcbNativeNetwork,
+      )
+      .catch(() => null);
+    await testInfo.attach(`${label}-network.json`, {
+      body: JSON.stringify(network, null, 2),
+      contentType: "application/json",
+    });
+  }
+  await app.close();
+  if (!process.env.OPENPCB_ELECTRON_EXECUTABLE) {
+    expect(
+      network,
+      "Development launch must install its network guard",
+    ).not.toBeNull();
+    expect(
+      network?.filter((request) => request.blocked),
+      "No external requests may be attempted",
+    ).toEqual([]);
+  }
+}
 
 const requiredModules = ["library", "designer", "assistant"] as const;
 
@@ -62,7 +131,15 @@ async function launchDesktopApp(
   }
 
   return electron.launch({
-    args: [".", ...launchArgs],
+    executablePath: createRequire(path.resolve("electron/package.json"))(
+      "electron",
+    ) as string,
+    args: [
+      "-r",
+      path.join(path.dirname(userDataDir), "network-guard.cjs"),
+      ".",
+      ...launchArgs,
+    ],
     cwd: path.resolve("electron"),
     env,
     timeout: 120_000,
@@ -70,9 +147,38 @@ async function launchDesktopApp(
 }
 
 async function firstReadyWindow(app: ElectronApplication): Promise<Page> {
-  const window = await app.firstWindow({ timeout: 120_000 });
-  await window.waitForLoadState("domcontentloaded", { timeout: 60_000 });
-  return window;
+  // Detached DevTools can arrive before the application window in development.
+  let window: Page | null = null;
+  await expect
+    .poll(
+      async () => {
+        for (const candidate of app.windows()) {
+          if (candidate.isClosed()) continue;
+          const ready = await candidate
+            .evaluate(() =>
+              Boolean(
+                (globalThis as unknown as { electronAPI?: unknown })
+                  .electronAPI,
+              ),
+            )
+            .catch(() => false);
+          if (ready) {
+            window = candidate;
+            return true;
+          }
+        }
+        return false;
+      },
+      {
+        timeout: 120_000,
+        message: "Application window must expose its preload API",
+      },
+    )
+    .toBe(true);
+  if (!window) throw new Error("Application window unavailable");
+  const readyWindow = window as Page;
+  await readyWindow.waitForLoadState("domcontentloaded", { timeout: 60_000 });
+  return readyWindow;
 }
 
 async function resolveBackendPayload(page: Page): Promise<BackendPayload> {
@@ -122,48 +228,11 @@ async function expectBackendHealthy(payload: BackendPayload): Promise<void> {
   }
 }
 
-async function getDiagnosticsPaths(
-  page: Page,
-): Promise<DiagnosticsPaths | null> {
-  return page.evaluate(async () => {
-    if (!window.electronAPI?.getDiagnosticsPaths) return null;
-    return window.electronAPI.getDiagnosticsPaths();
-  });
-}
-
-async function attachElectronLogs(
-  page: Page | null,
-  testInfo: TestInfo,
-): Promise<void> {
-  if (!page) return;
-
-  try {
-    const diagnostics = await getDiagnosticsPaths(page);
-    if (!diagnostics) return;
-
-    await testInfo.attach("electron-diagnostics.json", {
-      body: JSON.stringify(diagnostics, null, 2),
-      contentType: "application/json",
-    });
-
-    const entries = await fs.readdir(diagnostics.logs).catch(() => []);
-    for (const entry of entries) {
-      if (!entry.endsWith(".log")) continue;
-      const logPath = path.join(diagnostics.logs, entry);
-      const body = await fs.readFile(logPath, "utf8").catch(() => null);
-      if (body) {
-        await testInfo.attach(`electron-log-${entry}`, {
-          body,
-          contentType: "text/plain",
-        });
-      }
-    }
-  } catch {
-    // Best-effort diagnostics only; never mask the original failure.
-  }
-}
-
-test.describe.serial("Electron desktop release smoke", () => {
+const buildKind = process.env.OPENPCB_ELECTRON_EXECUTABLE
+  ? "packaged release"
+  : "development";
+test.describe.serial(`Electron desktop ${buildKind} smoke`, () => {
+  test.describe.configure({ retries: 0 });
   test.skip(
     !process.env.OPENPCB_E2E_NO_WEBSERVER,
     "Electron desktop smoke launches its own backend; set OPENPCB_E2E_NO_WEBSERVER=1",
@@ -176,6 +245,7 @@ test.describe.serial("Electron desktop release smoke", () => {
     tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openpcb-desktop-e2e-"));
     userDataDir = path.join(tmpRoot, "user-data");
     await fs.mkdir(userDataDir, { recursive: true });
+    await writeNativeNetworkGuard(tmpRoot);
   });
 
   test.afterAll(async () => {
@@ -184,23 +254,48 @@ test.describe.serial("Electron desktop release smoke", () => {
     }
   });
 
-  test("packaged desktop app launches, boots backend, and persists local state", async ({}, testInfo) => {
+  test(`${buildKind} app launches, boots backend, and persists local state`, async ({}, testInfo) => {
     const pageErrors: string[] = [];
+    const output: NativeOutput[] = [];
+    const consoleMessages: Array<{ run: string; type: string; text: string }> =
+      [];
     let app: ElectronApplication | null = null;
     let page: Page | null = null;
     let backendPayload: BackendPayload | null = null;
 
     try {
       app = await launchDesktopApp(userDataDir);
+      captureProcess(app, "initial", output);
+      await app
+        .context()
+        .tracing.start({ screenshots: true, snapshots: true, sources: true });
       page = await firstReadyWindow(app);
       page.on("pageerror", (error) => pageErrors.push(error.message));
+      page.on("console", (message) =>
+        consoleMessages.push({
+          run: "initial",
+          type: message.type(),
+          text: message.text(),
+        }),
+      );
+      await testInfo.attach("initial-docked-window.png", {
+        body: await page.screenshot(),
+        contentType: "image/png",
+      });
+      await setNativeViewport(app, page, testInfo, "initial");
 
       const appState = await app.evaluate(({ app, BrowserWindow }) => ({
         isPackaged: app.isPackaged,
         name: app.getName(),
         version: app.getVersion(),
         windowCount: BrowserWindow.getAllWindows().length,
+        gpuFeatures: app.getGPUFeatureStatus(),
       }));
+      const gpu = await app.evaluate(({ app }) => app.getGPUInfo("basic"));
+      await testInfo.attach("electron-gpu.json", {
+        body: JSON.stringify({ appState, gpu }, null, 2),
+        contentType: "application/json",
+      });
 
       if (process.env.OPENPCB_ELECTRON_EXPECT_PACKAGED === "1") {
         expect(appState.isPackaged).toBe(true);
@@ -256,7 +351,11 @@ test.describe.serial("Electron desktop release smoke", () => {
       await expect(page.getByRole("heading", { name: "Designs" })).toBeVisible({
         timeout: 30_000,
       });
-      await expect(page.getByText("Untitled Design").first()).toBeVisible({
+      await attachHomeNameGeometry(page, testInfo, "initial");
+      await expect(
+        page.getByText("Untitled Design").first(),
+        "Home design label must be visible at supported native content width1100",
+      ).toBeVisible({
         timeout: 30_000,
       });
 
@@ -269,8 +368,15 @@ test.describe.serial("Electron desktop release smoke", () => {
       };
       expect(createdPayload.data?.designs?.length ?? 0).toBeGreaterThan(0);
     } finally {
-      await attachElectronLogs(page, testInfo);
-      await app?.close();
+      await finishSmokeCapture(app, page, testInfo, "initial");
+      await testInfo.attach("electron-smoke-initial-run.json", {
+        body: JSON.stringify(
+          { output, console: consoleMessages, pageErrors },
+          null,
+          2,
+        ),
+        contentType: "application/json",
+      });
     }
 
     app = null;
@@ -278,8 +384,20 @@ test.describe.serial("Electron desktop release smoke", () => {
 
     try {
       app = await launchDesktopApp(userDataDir);
+      captureProcess(app, "restarted", output);
+      await app
+        .context()
+        .tracing.start({ screenshots: true, snapshots: true, sources: true });
       page = await firstReadyWindow(app);
       page.on("pageerror", (error) => pageErrors.push(error.message));
+      page.on("console", (message) =>
+        consoleMessages.push({
+          run: "restarted",
+          type: message.type(),
+          text: message.text(),
+        }),
+      );
+      await setNativeViewport(app, page, testInfo, "restarted");
       await expect(page.getByRole("heading", { name: "Designs" })).toBeVisible({
         timeout: 60_000,
       });
@@ -295,19 +413,44 @@ test.describe.serial("Electron desktop release smoke", () => {
         data?: { designs?: Array<{ id: string; name: string }> };
       };
       expect(persistedPayload.data?.designs?.length ?? 0).toBeGreaterThan(0);
-      await expect(page.getByText("Untitled Design").first()).toBeVisible({
+      await attachHomeNameGeometry(page, testInfo, "restarted");
+      await expect(
+        page.getByText("Untitled Design").first(),
+        "Persisted design label must be visible at supported native content width1100",
+      ).toBeVisible({
         timeout: 30_000,
       });
 
-      const windowCount = await app.evaluate(
-        ({ BrowserWindow }) => BrowserWindow.getAllWindows().length,
+      const windows = await app.evaluate(({ app, BrowserWindow }) => ({
+        packaged: app.isPackaged,
+        urls: BrowserWindow.getAllWindows().map((window: DesktopWindow) =>
+          window.webContents.getURL(),
+        ),
+      }));
+      await testInfo.attach("electron-restart-windows.json", {
+        body: JSON.stringify(windows, null, 2),
+        contentType: "application/json",
+      });
+      const applicationWindows = windows.urls.filter(
+        (url: string) => !url.startsWith("devtools://"),
       );
-      expect(windowCount).toBe(1);
+      expect(applicationWindows).toHaveLength(1);
+      if (windows.packaged) expect(windows.urls).toHaveLength(1);
     } finally {
-      await attachElectronLogs(page, testInfo);
-      await app?.close();
+      await finishSmokeCapture(app, page, testInfo, "restarted");
+      await testInfo.attach("electron-smoke-current-run.json", {
+        body: JSON.stringify(
+          { output, console: consoleMessages, pageErrors },
+          null,
+          2,
+        ),
+        contentType: "application/json",
+      });
     }
 
     expect(pageErrors).toEqual([]);
+    expect(
+      consoleMessages.filter((message) => message.type === "error"),
+    ).toEqual([]);
   });
 });

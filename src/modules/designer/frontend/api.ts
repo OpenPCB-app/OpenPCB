@@ -591,6 +591,7 @@ export function createDesignerApi(params: {
     async undo(
       designId: string,
       sessionId: string,
+      expectedRevision: number,
     ): Promise<DesignerHistoryActionResult> {
       const data = await fetchData<{ result: DesignerHistoryActionResult }>(
         buildModuleUrl(
@@ -601,7 +602,7 @@ export function createDesignerApi(params: {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ sessionId }),
+          body: JSON.stringify({ sessionId, expectedRevision }),
         },
       );
       return data.result;
@@ -610,6 +611,7 @@ export function createDesignerApi(params: {
     async redo(
       designId: string,
       sessionId: string,
+      expectedRevision: number,
     ): Promise<DesignerHistoryActionResult> {
       const data = await fetchData<{ result: DesignerHistoryActionResult }>(
         buildModuleUrl(
@@ -620,7 +622,7 @@ export function createDesignerApi(params: {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ sessionId }),
+          body: JSON.stringify({ sessionId, expectedRevision }),
         },
       );
       return data.result;

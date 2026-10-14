@@ -91,6 +91,14 @@ async function importNone(
   return json.data.componentId as string;
 }
 
+// Generated footprints are re-derived server-side from these parameters.
+const SOIC8_GENERATOR = {
+  kind: "ipc7351b",
+  family: "soic",
+  size: "SOIC-8",
+  density: "nominal",
+} as const;
+
 function soic8() {
   const result = generateFootprint("soic", "SOIC-8", "nominal");
   return { source: result.source, metadata: result.metadata };
@@ -106,6 +114,7 @@ describe("library: assign / replace component default footprint", () => {
     const res = await call(server, "POST", `/components/${id}/footprints`, {
       mode: "generated",
       source: soic8(),
+      generator: SOIC8_GENERATOR,
     });
     expect(res.status).toBe(201);
     const footprintId = res.json.data.footprintId as string;
@@ -147,6 +156,7 @@ describe("library: assign / replace component default footprint", () => {
     const res = await call(server, "POST", `/components/${id}/footprints`, {
       mode: "generated",
       source: soic8(),
+      generator: SOIC8_GENERATOR,
     });
     expect(res.status).toBe(400);
     const after = await sdk.resolveComponentForPlacement(id);
@@ -161,6 +171,7 @@ describe("library: assign / replace component default footprint", () => {
     const created = await call(server, "POST", `/components/${other}/footprints`, {
       mode: "generated",
       source: soic8(),
+      generator: SOIC8_GENERATOR,
     });
     const fpId = created.json.data.footprintId as string;
 
@@ -190,6 +201,7 @@ describe("library: assign / replace component default footprint", () => {
     const created = await call(server, "POST", `/components/${src}/footprints`, {
       mode: "generated",
       source: soic8(),
+      generator: SOIC8_GENERATOR,
     });
     const fpId = created.json.data.footprintId as string;
     const id = await importNone(server, "FpMm", ["1", "42"]);
@@ -223,7 +235,7 @@ describe("library: assign / replace component default footprint", () => {
       server,
       "POST",
       `/components/${builtin!.id}/footprints`,
-      { mode: "generated", source: soic8() },
+      { mode: "generated", source: soic8(), generator: SOIC8_GENERATOR },
     );
     expect(post.status).toBe(400);
   });

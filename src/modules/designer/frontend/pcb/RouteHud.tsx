@@ -10,7 +10,7 @@ interface RouteHudStatusProps {
   widthInputOpen: boolean;
   onOpenWidthInput: () => void;
   onWidthInputSubmit: (widthMm: number) => void;
-  onWidthInputClose: () => void;
+  onWidthInputClose: (restoreFocus?: boolean) => void;
   /** Shown when widthSource !== "netclass" — one click back to the class. */
   onResetWidthToNetClass: () => void;
 }
@@ -96,15 +96,21 @@ export function RouteHudStatus({
           className="h-[20px] w-16 rounded-control border border-border-control bg-surface-input px-1 text-2xs text-text-strong outline-none"
           onKeyDown={(e) => {
             if (e.key === "Enter") {
+              e.preventDefault();
+              e.stopPropagation();
               const next = Number(e.currentTarget.value);
               if (Number.isFinite(next) && next > 0) {
                 onWidthInputSubmit(next);
               }
-              onWidthInputClose();
+              onWidthInputClose(true);
             }
-            if (e.key === "Escape") onWidthInputClose();
+            if (e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation();
+              onWidthInputClose(true);
+            }
           }}
-          onBlur={onWidthInputClose}
+          onBlur={() => onWidthInputClose()}
         />
       ) : (
         <button
@@ -142,8 +148,9 @@ export function RouteHudStatus({
               : " (approximate: the net has no single routed path yet)"
           }`}
           className={
-            Math.abs(model.lengthTarget.totalMm - model.lengthTarget.targetMm) <=
-            model.lengthTarget.toleranceMm
+            Math.abs(
+              model.lengthTarget.totalMm - model.lengthTarget.targetMm,
+            ) <= model.lengthTarget.toleranceMm
               ? "font-medium text-status-success"
               : "font-medium text-status-warning"
           }

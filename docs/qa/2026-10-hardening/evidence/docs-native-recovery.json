@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "implementationCommit": "7c01674",
+  "scope": "H25/H26 native Docs recovery and H46 draft-journal foundation; broader release gates remain open",
+  "tids": [
+    "T-360",
+    "T-361",
+    "T-362",
+    "T-363",
+    "T-367",
+    "T-372",
+    "T-377",
+    "T-381",
+    "T-382"
+  ],
+  "checks": {
+    "frontendTests": 769,
+    "frontendTodo": 1,
+    "atomicStoreTests": 15,
+    "atomicStoreAssertions": 66,
+    "nativeTests": 24,
+    "nativeFailures": 0
+  },
+  "runtime": {
+    "platform": "macOS arm64",
+    "electron": "41.6.1",
+    "packaged": false,
+    "dependencyLockMatched": false
+  },
+  "nativeEvidenceDirectory": "/private/tmp/openpcb-native-journal-checkpoint-tests",
+  "evidence": [
+    {
+      "path": "/private/tmp/openpcb-native-journal-checkpoint-report.json",
+      "sha256": "b50f2ed26141c9c4df31b5778b84de94b6cb2b5f223db75955d996aeb8d96dd5"
+    },
+    {
+      "path": "/private/tmp/openpcb-native-journal-checkpoint-run.log",
+      "sha256": "ec7ddff127916e408c2060a903424b000c4937435334c2ff69947bfd4e46cbc6"
+    },
+    {
+      "path": "/private/tmp/openpcb-journal-checkpoint-unit.log",
+      "sha256": "b585c519e9d299c2c7a6020915a3225d854c70fa24c988fc5359240eca8c412a"
+    },
+    {
+      "path": "/private/tmp/openpcb-journal-checkpoint-storage.log",
+      "sha256": "fba91e1ee67a503105b3b610fdbf73a688aab749ac9c91d1cc1bb292c02a426a"
+    }
+  ],
+  "reproduction": [
+    "Failed drafts disappeared after native window close and SIGKILL before journal integration.",
+    "First close-guard run exposed test harness auto-dismiss racing Electron; corrected by observing beforeunload and awaiting each native prompt.",
+    "Awaiting HTTP server shutdown during quit hung on live SSE; cleanup now begins after close approval and cannot prevent approved quit."
+  ],
+  "qualified": [
+    "No opening write; title/body acknowledgements remain isolated",
+    "Native close and quit default to Stay for non-durable edits; backend remains alive",
+    "Failed backend draft survives close and SIGKILL after journal acknowledgement",
+    "Restart recovery displays the draft without PATCH; explicit Retry performs one write",
+    "Future journal bytes retained; unsafe overwrite refused"
+  ],
+  "limitations": [
+    "No immediate-kill-before-journal-acknowledgement or power-loss guarantee",
+    "No packaged or upgraded Electron release qualification",
+    "Orphan and unreadable-record recovery UI remains open",
+    "Pre-migration backups and broader H46 gates remain open"
+  ],
+  "status": "In Progress; not Done"
+}

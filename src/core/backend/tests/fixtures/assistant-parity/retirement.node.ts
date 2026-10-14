@@ -58,7 +58,8 @@ test("place, move, wire, value update and Undo retain actual IDs and connectivit
   await submit(domain, chatId, "move");
   const moved = (await domain.designer.getSchematicProjection(designId))!;
   assert.equal(moved.revision, 3);
-  assert.deepEqual(moved.parts.find((part) => part.reference === "C1")?.positionNm, { x: 30_000_000, y: 10_000_000 });
+  // Unified 1.27 mm schematic grid (editor-grid.ts) snaps the requested 30 mm / 10 mm.
+  assert.deepEqual(moved.parts.find((part) => part.reference === "C1")?.positionNm, { x: 30_480_000, y: 10_160_000 });
   await submit(domain, chatId, "wire");
   const wired = (await domain.designer.getSchematicProjection(designId))!;
   assert.equal(wired.revision, 5);

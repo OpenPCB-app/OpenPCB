@@ -1,3 +1,4 @@
+import { rejectKicadFootprints } from "./unqualified-import";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import { and, eq } from "drizzle-orm";
 import {
@@ -158,6 +159,9 @@ export function commitKicadImport(
       "Selected footprint is not present in import payload",
     );
   }
+
+  if (selectedFootprint)
+    rejectKicadFootprints("kicad_mod", [selectedFootprint.id]);
 
   const rawSymbol = parsed.raw.symbolById[selectedSymbolId];
   if (!rawSymbol) {

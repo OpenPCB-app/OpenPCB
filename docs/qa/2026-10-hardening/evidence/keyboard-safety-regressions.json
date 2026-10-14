@@ -1,0 +1,269 @@
+{
+  "schemaVersion": 1,
+  "scope": "H06 focused keyboard behavioral regressions; T-002 and T-133 qualification remains pending",
+  "plane": {
+    "identifier": "OPENPCB-54",
+    "workItemId": "abe23723-ae2f-4f50-8a1a-b8b248b80448",
+    "task": "H06",
+    "trackerUpdate": "None; this artifact is code-coupled evidence, not a Plane completion record."
+  },
+  "implementationCommit": "a3c6591732df526c29f8076a3cf739260f8adbb7",
+  "regressionCommit": "a3c6591732df526c29f8076a3cf739260f8adbb7",
+  "evidenceRecordedAtHead": "b9bb2d7d2a622a3dfb29c7bbf4c3191bda08f24f",
+  "environment": {
+    "platform": "macOS arm64",
+    "node": "22.23.2",
+    "bun": "1.4.0",
+    "playwright": "1.60.0",
+    "vitest": "4.1.6",
+    "browser": "Playwright default Chromium; no native Electron run recorded here."
+  },
+  "sourceIdentity": {
+    "algorithm": "sha256",
+    "basis": "Exact Git blob bytes at implementationCommit; every listed working-tree file matched those bytes when evidence was recorded.",
+    "files": [
+      {
+        "path": "src/core/frontend/src/components/AppContextMenu.tsx",
+        "sha256": "9bee4d235a33e22763eb99f37b9a5869f5cf24e4cf4b1c410676178be6766e94"
+      },
+      {
+        "path": "src/core/frontend/src/screens/HomeScreen.tsx",
+        "sha256": "b0967fe009e73c4d149c88e20ebc807aadb08984c6de5f14e268134ae963bfea"
+      },
+      {
+        "path": "src/core/frontend/src/settings/hooks/useSettingsHotkeys.ts",
+        "sha256": "360ce08f416e5306d6e0617c9f5beba991ef96abe27d8cebafa14456ac34d461"
+      },
+      {
+        "path": "src/core/frontend/src/shell-tests/h06-model.fixture.ts",
+        "sha256": "59e24352618a08434c80c7791aa9ad911e5463125dd2c3802308914a879e8157"
+      },
+      {
+        "path": "src/core/frontend/src/shell-tests/h06-playwright.config.ts",
+        "sha256": "eae02f01f0a929ef95946f60eada43b8b46dd16c24aa6684e2742a9fd45064e4"
+      },
+      {
+        "path": "src/core/frontend/src/shell-tests/h06.e2e.ts",
+        "sha256": "3194f3c81436297bc6fce01d4987e6b6056c8135c868578508e03ff7ffd407a5"
+      },
+      {
+        "path": "src/core/frontend/src/shell/use-menu-lifecycle.ts",
+        "sha256": "c80bb2dd54ffa4702c25199dec70a71fab084bd0f711ffd87ece9d9ec41f30b2"
+      },
+      {
+        "path": "src/modules/designer/frontend/Space.tsx",
+        "sha256": "8abf5cd4a914f1732557a807540f17f5327401dd7c7b197d93b4d8115b175696"
+      },
+      {
+        "path": "src/modules/designer/frontend/components/DesignerBomView.tsx",
+        "sha256": "c9c511917d36759edc8980402c139ff5758abfb4c59e8afe4b65b931bba78c9d"
+      },
+      {
+        "path": "src/modules/designer/frontend/components/DesignerFloatingToolbar.tsx",
+        "sha256": "9157946facbfd26cb05b98708e64d0495e8ab9cccd3c01eb1d57f9b483fac6d9"
+      },
+      {
+        "path": "src/modules/designer/frontend/components/SchematicCanvas.tsx",
+        "sha256": "a6b54d5dd5916fb4931e9f5803a1e79f87e965352b07fae94d0a95b5877cb609"
+      },
+      {
+        "path": "src/modules/designer/frontend/keyboard-safety.fixture.tsx",
+        "sha256": "e7583a4756a348a9951ba3b4d3201ad57f6216a114d681fefa56c2b67a737dfd"
+      },
+      {
+        "path": "src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+        "sha256": "6f4c16975fd6b2a425c40f3bf96ed83a61ce7c3b0113801dbc28c63641cadb56"
+      },
+      {
+        "path": "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx",
+        "sha256": "0ba6a8d2101e5a5830b3e0b8167369f01763806684c013dbc2d58deaf5d801d6"
+      },
+      {
+        "path": "src/modules/designer/frontend/pcb/RouteHud.tsx",
+        "sha256": "58dba7de1a716deca60343bd79444ee71dedd2b923bfdf8b8709a8f7ee0339ea"
+      },
+      {
+        "path": "src/modules/designer/frontend/pcb/tools/route-keymap.ts",
+        "sha256": "67d9bbb4eaeaebbe3a0fac4047903f7a93c91367225e5bb711690294aaa49dbd"
+      },
+      {
+        "path": "src/modules/designer/frontend/pcb/tools/use-area-interactions.ts",
+        "sha256": "1c9b421eaa4fa2f1c0602ad244ad60aada9a4dff087a80625a1c38fffab4d91d"
+      },
+      {
+        "path": "src/shared/frontend/context-menu/types.ts",
+        "sha256": "f4a72a5588adedb0abed2bad7f014d4da7828c6f8b0ff5be2d124f3ffab4d08a"
+      },
+      {
+        "path": "src/shared/frontend/context-menu/use-context-menu-store.test.ts",
+        "sha256": "d8ca9021ac24dfa10c40408459c966557c2ed2f59e3197f20e511db0113a9beb"
+      },
+      {
+        "path": "src/shared/frontend/context-menu/use-context-menu-store.ts",
+        "sha256": "be2975213570739f33fd67108379efb0243a3c6885fdf453a6f09f760c645db7"
+      },
+      {
+        "path": "src/shared/frontend/keyboard/shortcut-guard.test.ts",
+        "sha256": "a2127ebb6e20894aa7ecf4abd70480fbf2bb23150f4d7e38c3748da52d6be87a"
+      },
+      {
+        "path": "src/shared/frontend/keyboard/shortcut-guard.ts",
+        "sha256": "c3cfe6efab2706752c307818e5684b0ab54c03b3fb8036aa20530df95f74d68e"
+      },
+      {
+        "path": "src/shared/frontend/keyboard/use-editor-shortcut-scope.ts",
+        "sha256": "a4b6de4681f4ebd388bd8fb303514e4894aeb3921ac8396fe46513d7a1b24236"
+      },
+      {
+        "path": "src/shared/frontend/keyboard/use-global-shortcut.ts",
+        "sha256": "b897acb5e30328853e6baeb9b0fd0ec96eac8dfd56f56aea9324006d594f660a"
+      },
+      {
+        "path": "src/core/frontend/src/shell-tests/playwright.config.ts",
+        "sha256": "1a465019c728e2fde40289dab84825f69810de1d125a6763d1ea2d5935e43452"
+      },
+      {
+        "path": "src/core/frontend/src/shell-tests/vite.config.ts",
+        "sha256": "a9540c5c1d08760f63c7f67d64815edd2c7a8133d6d75971722d6460957060f1"
+      },
+      {
+        "path": "src/core/frontend/vitest.config.ts",
+        "sha256": "c960d62147edca44be94779fc9f0564f70974f7ca8c3d5522f792a06b15b27ed"
+      },
+      {
+        "path": "src/core/frontend/tsconfig.json",
+        "sha256": "b7336a459f377b50ea834a47db4f26ba06b48832b64bed5567116b54cdf251bd"
+      },
+      {
+        "path": "src/shared/frontend/ui/shortcut.test.ts",
+        "sha256": "4b121c6ef4a2e84b626fd2f006bd101cf145b7f14475569b5c80d92009b7bba1"
+      },
+      {
+        "path": "src/core/frontend/src/ui-discipline.test.ts",
+        "sha256": "258955dd785e58b4c9039f79ce2e5609dc6d49c912da94178c389ef17a58e21e"
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "5a245dd632906be6117689526891b30f0e849b3ee5244d83ef21400aeebd899c"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "command": "npx --no-install playwright test --config src/core/frontend/src/shell-tests/playwright.config.ts --max-failures 1 --output /private/tmp/openpcb-h06-lead-browser > /private/tmp/openpcb-h06-lead-browser.log 2>&1",
+      "observer": "Independent lead run; complete local log inspected by evidence integrator.",
+      "exitCode": 0,
+      "testsPassed": 25,
+      "h04CasesPassed": 17,
+      "h06CasesPassed": 8,
+      "durationSeconds": 28.3,
+      "log": {
+        "path": "/private/tmp/openpcb-h06-lead-browser.log",
+        "sha256": "d17f674795a9aa499fcd6174fc14c9cd8bfde4c6a8c01b244966678be8e784e4",
+        "availability": "Temporary local artifact; not required in a clean checkout."
+      }
+    },
+    {
+      "command": "npx --no-install vitest run --config src/core/frontend/vitest.config.ts src/shared/frontend/keyboard/shortcut-guard.test.ts src/shared/frontend/ui/shortcut.test.ts src/shared/frontend/context-menu/use-context-menu-store.test.ts src/core/frontend/src/ui-discipline.test.ts",
+      "observer": "Independent lead tool record; repeated by evidence integrator against matching committed test sources.",
+      "exitCode": 0,
+      "filesPassed": 4,
+      "testsPassed": 42,
+      "integratorRunDurationMs": 304,
+      "log": null,
+      "logAvailability": "Both results were tool output; no persistent log hash is claimed."
+    },
+    {
+      "command": "npx tsc -p src/core/frontend/tsconfig.json --noEmit --pretty false",
+      "observer": "Independent lead tool record.",
+      "exitCode": 0,
+      "log": null,
+      "logAvailability": "Tool output only; no persistent log hash is claimed."
+    },
+    {
+      "command": "git diff --check",
+      "observer": "Independent lead tool record before evidence integration.",
+      "exitCode": 0,
+      "log": null
+    }
+  ],
+  "browserFixture": {
+    "testPath": "src/core/frontend/src/shell-tests/h06.e2e.ts",
+    "canvasPath": "src/modules/designer/frontend/keyboard-safety.fixture.tsx",
+    "modelPath": "src/core/frontend/src/shell-tests/h06-model.fixture.ts",
+    "server": "Vite shell fixture on 127.0.0.1:15241; no backend or SQLite process started.",
+    "boundary": "App routes and all /api requests are replaced. Command/history assertions inspect intercepted requests and an in-memory PCB projection, not persisted design rows.",
+    "modelHash": "SHA-256 of JSON.stringify(in-memory projection) before/after each covered no-write scenario; the mock updates revision and PCB rotation but does not implement complete production command semantics.",
+    "cases": [
+      {
+        "name": "PCB typing in editable surfaces issues zero commands/history writes and preserves API model hash",
+        "result": "passed",
+        "assertions": "Synthetic R/G/H/N/C/U/Delete/Backspace and Ctrl/Meta+A/Z/Y in fixture textarea, select and nested contenteditable leave mock command/history counts zero and mock projection SHA-256 unchanged."
+      },
+      {
+        "name": "PCB focused exact action runs once; consumed, IME, repeat and wrong modifiers stay inert",
+        "result": "passed",
+        "assertions": "IME, legacy keyCode 229, repeated, consumed and extra-modifier events issue no commands; intentional focused R dispatches one rotation and changes mock placement rotation to 90 degrees."
+      },
+      {
+        "name": "open modal blocks leaked canvas focus; focus loss cancels tool before module remount",
+        "result": "passed",
+        "assertions": "Fixture aria-modal blocks synthetic design keys despite leaked canvas focus; outside focus cancels measure; held Shift state does not survive editor unmount/remount."
+      },
+      {
+        "name": "schematic typing stays inert; focused select-all/delete dispatches once",
+        "result": "passed",
+        "assertions": "Fixture textarea events leave model/history unchanged; focused Ctrl/Meta+A and Delete dispatch exactly one schematic delete. Unsupported R/Shift+R remain inert."
+      },
+      {
+        "name": "owned route HUD portal retains session while typing width; outside focus abandons it",
+        "result": "passed",
+        "assertions": "Route HUD width editing retains the route session and issues no design/history commands; outside focus abandons it and a stale pointer event cannot commit."
+      },
+      {
+        "name": "canvas-owned route menu retains session; Escape closes only menu and Finish writes once",
+        "result": "passed",
+        "assertions": "Owned PCB route menu keeps the route; Escape closes only that menu and restores canvas focus; Finish Route dispatches one mock route command."
+      },
+      {
+        "name": "leaving owned route menu or changing editor discards stale callbacks without writes",
+        "result": "passed",
+        "assertions": "Outside focus or editor change discards route callbacks without command/history changes; another owner's menu survives this editor unmount."
+      },
+      {
+        "name": "schematic primitive menu retains rotation actions without unsupported R hints",
+        "result": "passed",
+        "assertions": "Schematic primitive menu has rotation actions without unsupported R hints; clockwise click dispatches exactly one mock rotation command."
+      }
+    ]
+  },
+  "findings": [
+    {
+      "tid": "T-002",
+      "resolution": "pending",
+      "reproductionState": "unverified",
+      "historicalScope": "Shared guard adoption across PCB/schematic, Home N, Settings Escape and Library wizard Escape; broader H06 scope also includes Library editors, Assistant and all window/document listeners.",
+      "currentEvidence": "Shared guard ownership, IME/repeat/composed-path checks and the eight real-canvas fixture cases pass. Home/Settings consumers changed in the commit but these eight cases do not mount those screens.",
+      "remaining": "Full consumer audit and real Library/editor/native acceptance, nested dirty-dialog Escape ordering and persistent design hashes remain outstanding."
+    },
+    {
+      "tid": "T-133",
+      "resolution": "pending",
+      "reproductionState": "unverified",
+      "historicalAliases": ["Q4-019", "Q5-024", "Q8-023", "Q4-040"],
+      "historicalScope": "Assistant/comment text corruption, selected trace/pad/placement deletion or rotation, design undo instead of text undo, and Export-dialog background tool/layer/deletion commands.",
+      "currentEvidence": "Actual PCB/Schematic canvas listeners are mounted with generic editable fields and a generic modal. Zero mocked writes and unchanged in-memory hashes cover the guarded paths; intentional actions and owned portal/menu lifecycle also pass.",
+      "remaining": "Re-run actual Assistant composer, comment composer/thread, free-pad inspector and Export dialog on an isolated database; verify typed text, native undo, command/history counts, persisted design hashes and save/reopen."
+    }
+  ],
+  "limitations": [
+    "Passing focused regressions do not establish a fresh reproduction verdict for either whole archived root or change historical alias verdicts/severities.",
+    "The fixture textarea is labelled Assistant draft but is not the actual Assistant dock or comment/thread composer; the fixture select is not the production free-pad inspector.",
+    "Synthetic keydown dispatch checks shortcut suppression, not character insertion, typo correction, native select behavior, native text undo/select-all, physical IME input or OS keyboard delivery.",
+    "The modal is a generic aria-modal fixture, not production Export/rules/import dialogs. Nested dirty-wizard/dialog Escape ordering and all focus-return paths are not qualified.",
+    "Library import wizard, symbol/footprint editors, other editable consumers and an exhaustive window/document listener audit remain unqualified by these cases.",
+    "No SQLite writes, persisted projection hashes, save/reopen, crash/restart, packaged Electron, Windows native shortcuts or original archived design/screenshot reruns were performed here.",
+    "Historical r/o/t/f/b/z and other swallowed-character combinations are not all enumerated by the eight blocked-key set; no complete text-preservation claim follows.",
+    "Command counts and model hashes are observed at the mocked HTTP boundary. Browser success cannot prove transactional or manufacturing correctness."
+  ]
+}

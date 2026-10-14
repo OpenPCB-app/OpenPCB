@@ -101,11 +101,7 @@ import {
   replacePcbZones,
 } from "./pcb/pcb-store";
 import { loadPcbProjection, netNamesFromSchematic } from "./pcb/pcb-projection";
-import {
-  historyEmpty,
-  historySessionKey,
-  summarizeHistory,
-} from "./history-state";
+import { historyEmpty, summarizeHistory } from "./history-state";
 import {
   hydrateSessionHistory,
   persistSessionHistorySnapshot,
@@ -288,10 +284,12 @@ export interface DesignerStore {
   undo(
     designId: string,
     sessionId: string,
+    expectedRevision?: number,
   ): Promise<DesignerHistoryActionResult>;
   redo(
     designId: string,
     sessionId: string,
+    expectedRevision?: number,
   ): Promise<DesignerHistoryActionResult>;
 }
 
@@ -303,28 +301,16 @@ export function createDesignerStore(
   // Process-wide singleton: both store instances (sdk.ts / routes.ts) feed one
   // capture log + registry. No-op when the dataset.capture flag is off.
   const capture = resolveCaptureRuntime(ctx);
-  const sessionHistories = new Map<
-    string,
-    CommandHistory<DesignerCommand, DesignerWorldComponent>
-  >();
-
   function resolveSessionHistory(
     designId: string,
     sessionId: string,
   ): CommandHistory<DesignerCommand, DesignerWorldComponent> {
-    const key = historySessionKey(designId, sessionId);
-    const existing = sessionHistories.get(key);
-    if (existing) {
-      // Routes and SDK own separate stores; SQLite is the shared history authority.
-      hydrateSessionHistory(db, designId, sessionId, existing);
-      return existing;
-    }
-    const created = new CommandHistory<DesignerCommand, DesignerWorldComponent>(
+    // HTTP and SDK stores share SQLite, not object identity. Always load the committed history.
+    const history = new CommandHistory<DesignerCommand, DesignerWorldComponent>(
       200,
     );
-    hydrateSessionHistory(db, designId, sessionId, created);
-    sessionHistories.set(key, created);
-    return created;
+    hydrateSessionHistory(db, designId, sessionId, history);
+    return history;
   }
 
   /** Return the cached schematic preview for a design head, recomputing and
@@ -436,6 +422,77 @@ export function createDesignerStore(
       persistSessionHistorySnapshot({ db: tx, designId, sessionId, history, timestamp });
       return nextRevision;
     });
+  }
+
+  function replayHistory(
+    designId: string,
+    sessionId: string,
+    direction: "undo" | "redo",
+    expectedRevision?: number,
+  ): DesignerHistoryActionResult {
+    const replay = ctx.db.transaction(() => {
+      const history = resolveSessionHistory(designId, sessionId);
+      const actual =
+        db
+          .select({ revision: designHeads.revision })
+          .from(designHeads)
+          .where(eq(designHeads.id, designId))
+          .get()?.revision ?? -1;
+      if (
+        expectedRevision !== undefined &&
+        (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)
+      )
+        throw new Error("expectedRevision must be a non-negative integer");
+      if (expectedRevision !== undefined && actual !== expectedRevision)
+        return {
+          result: {
+            ok: false as const,
+            code: "REVISION_CONFLICT" as const,
+            direction,
+            history: summarizeHistory(history),
+            conflict: { expected: expectedRevision, actual },
+          },
+          entry: null,
+        };
+      const entry =
+        direction === "undo" ? history.consumeUndo() : history.consumeRedo();
+      if (!entry)
+        return {
+          result: historyEmpty(direction, summarizeHistory(history)),
+          entry: null,
+        };
+      // The consumed entry is persisted inside the patch transaction.
+      const revision = applyHistoryPatches(
+        designId,
+        direction === "undo" ? entry.inversePatches : entry.forwardPatches,
+        sessionId,
+        history,
+      );
+      if (revision === null)
+        return {
+          result: historyEmpty(direction, summarizeHistory(history)),
+          entry: null,
+        };
+      return {
+        result: {
+          ok: true as const,
+          revision,
+          history: summarizeHistory(history),
+        },
+        entry,
+      };
+    });
+    if (replay.entry && replay.result.ok)
+      capture.onHistoryReplay({
+        designId,
+        editorSessionId: sessionId,
+        direction,
+        commandId: replay.entry.envelope.commandId,
+        revision: replay.result.revision,
+        forwardPatches: replay.entry.forwardPatches,
+        inversePatches: replay.entry.inversePatches,
+      });
+    return replay.result;
   }
 
   return {
@@ -874,8 +931,14 @@ export function createDesignerStore(
           // The rows above, handed to the copper commit gate (contract 07 §6)
           // so it never loads a projection inside the transaction.
           const pcbBefore =
-            pcbBefore_ && placementsBefore && tracesBefore && viasBefore &&
-            freeHolesBefore && freePadsBefore && zonesBefore && keepoutsBefore
+            pcbBefore_ &&
+            placementsBefore &&
+            tracesBefore &&
+            viasBefore &&
+            freeHolesBefore &&
+            freePadsBefore &&
+            zonesBefore &&
+            keepoutsBefore
               ? {
                   board: pcbBefore_,
                   placements: placementsBefore,
@@ -1005,10 +1068,16 @@ export function createDesignerStore(
 
           const pendingHistory = pendingHistoryRef.current;
           if (pendingHistory) {
-            history.record({ envelope, revision: pendingHistory.revision,
+            const history = resolveSessionHistory(designId, envelope.sessionId);
+            history.record({
+              envelope,
+              revision: pendingHistory.revision,
               forwardPatches: pendingHistory.forwardPatches,
               inversePatches: pendingHistory.inversePatches,
-              createdEntityId: pendingHistory.createdEntityId, timestamp: envelope.issuedAt });
+              createdEntityId: pendingHistory.createdEntityId,
+              timestamp: envelope.issuedAt,
+            });
+            // Persist in the command transaction: the mutation and its undo entry commit together.
             persistSessionHistorySnapshot({
               db: tx, designId, sessionId: envelope.sessionId, history, timestamp,
             });
@@ -1085,76 +1154,12 @@ export function createDesignerStore(
       return summarizeHistory(history);
     },
 
-    async undo(designId, sessionId) {
-      const history = resolveSessionHistory(designId, sessionId);
-      const previousHistory = history.snapshot();
-      const entry = history.consumeUndo();
-      if (!entry) {
-        return historyEmpty("undo", summarizeHistory(history));
-      }
-
-      let revision: number | null;
-      try {
-        revision = applyHistoryPatches(designId, entry.inversePatches, sessionId, history);
-      } catch (error) {
-        history.restore(previousHistory);
-        throw error;
-      }
-      if (revision === null) {
-        history.restore(previousHistory);
-        return historyEmpty("undo", summarizeHistory(history));
-      }
-
-      capture.onHistoryReplay({
-        designId,
-        editorSessionId: sessionId,
-        direction: "undo",
-        commandId: entry.envelope.commandId,
-        revision,
-        forwardPatches: entry.forwardPatches,
-        inversePatches: entry.inversePatches,
-      });
-      return {
-        ok: true,
-        revision,
-        history: summarizeHistory(history),
-      };
+    async undo(designId, sessionId, expectedRevision) {
+      return replayHistory(designId, sessionId, "undo", expectedRevision);
     },
 
-    async redo(designId, sessionId) {
-      const history = resolveSessionHistory(designId, sessionId);
-      const previousHistory = history.snapshot();
-      const entry = history.consumeRedo();
-      if (!entry) {
-        return historyEmpty("redo", summarizeHistory(history));
-      }
-
-      let revision: number | null;
-      try {
-        revision = applyHistoryPatches(designId, entry.forwardPatches, sessionId, history);
-      } catch (error) {
-        history.restore(previousHistory);
-        throw error;
-      }
-      if (revision === null) {
-        history.restore(previousHistory);
-        return historyEmpty("redo", summarizeHistory(history));
-      }
-
-      capture.onHistoryReplay({
-        designId,
-        editorSessionId: sessionId,
-        direction: "redo",
-        commandId: entry.envelope.commandId,
-        revision,
-        forwardPatches: entry.forwardPatches,
-        inversePatches: entry.inversePatches,
-      });
-      return {
-        ok: true,
-        revision,
-        history: summarizeHistory(history),
-      };
+    async redo(designId, sessionId, expectedRevision) {
+      return replayHistory(designId, sessionId, "redo", expectedRevision);
     },
 
     async linkDesignToCloud(designId, cloud) {

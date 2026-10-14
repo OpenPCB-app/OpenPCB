@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { ModuleSpaceProps } from "../../../core/contracts/modules/frontend-entry";
 import { KnowledgeApiProvider } from "./KnowledgeApiContext";
 import { Sidebar } from "./components/Sidebar/Sidebar";
 import { PageEditor } from "./components/Editor/PageEditor";
-import { usePage, usePageTree, useKnowledgePageUpdates } from "./hooks";
+import { usePage, useKnowledgeApi, useKnowledgePageUpdates } from "./hooks";
+import { getPageSaveCoordinator } from "./lib/page-save-coordinator";
 import { useTreeStore } from "./stores/tree-store";
 import type { PageUpdateEvent } from "../shared/types";
 
@@ -15,12 +16,9 @@ function KnowledgeSpaceInner({
   designId,
 }: ModuleSpaceProps) {
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
-  const recentRequestIdsRef = useRef<Set<string>>(new Set());
-  const deferredPageUpdateRef = useRef<PageUpdateEvent | null>(null);
-  const deferredReconnectRefreshRef = useRef(false);
-  const authorityModeRef = useRef<"idle" | "manual" | "ai">("idle");
+  const api = useKnowledgeApi();
+  const coordinator = useMemo(() => getPageSaveCoordinator(api), [api]);
 
-  const { tree } = usePageTree(designId);
   const {
     page,
     isLoading: isPageLoading,
@@ -36,29 +34,20 @@ function KnowledgeSpaceInner({
       if (!selectedPageId) return;
       if (event.pageId !== selectedPageId) return;
 
-      if (event.requestId && recentRequestIdsRef.current.has(event.requestId)) {
-        recentRequestIdsRef.current.delete(event.requestId);
-        return;
-      }
-
-      if (authorityModeRef.current === "idle") {
-        void refreshPage();
-        return;
-      }
-      deferredPageUpdateRef.current = event;
+      if (coordinator.isOwnRequest(event.requestId)) return;
+      const dirty = coordinator.isDirty(selectedPageId);
+      coordinator.remoteChanged(selectedPageId);
+      if (!dirty) void refreshPage();
     },
-    [refreshPage, selectedPageId],
+    [coordinator, refreshPage, selectedPageId],
   );
 
   const handleReconnectAfterOutage = useCallback(() => {
     if (!selectedPageId) return;
-    if (authorityModeRef.current === "idle") {
-      deferredReconnectRefreshRef.current = false;
-      void refreshPage();
-      return;
-    }
-    deferredReconnectRefreshRef.current = true;
-  }, [refreshPage, selectedPageId]);
+    const dirty = coordinator.isDirty(selectedPageId);
+    coordinator.remoteChanged(selectedPageId);
+    if (!dirty) void refreshPage();
+  }, [coordinator, refreshPage, selectedPageId]);
 
   useKnowledgePageUpdates(
     backendURL,
@@ -71,17 +60,6 @@ function KnowledgeSpaceInner({
     setSelectedPageId(null);
     setPage(null);
   }, [designId, setPage]);
-
-  const handleSaveRequestId = useCallback((requestId: string) => {
-    const recent = recentRequestIdsRef.current;
-    recent.delete(requestId);
-    recent.add(requestId);
-    while (recent.size > 50) {
-      const oldest = recent.values().next().value;
-      if (!oldest) break;
-      recent.delete(oldest);
-    }
-  }, []);
 
   const handlePageDeleted = useCallback(
     (deletedPageId: string) => {
@@ -116,7 +94,6 @@ function KnowledgeSpaceInner({
           workspaceId={DEFAULT_WORKSPACE}
           designId={designId}
           onSelectPage={setSelectedPageId}
-          onSaveRequestId={handleSaveRequestId}
           onRefreshTree={requestRefresh}
         />
       </div>

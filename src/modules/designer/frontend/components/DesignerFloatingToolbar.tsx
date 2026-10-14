@@ -1,3 +1,4 @@
+import { formatShortcut } from "@shared/frontend/ui/shortcut";
 import {
   ArrowRightFromLine,
   ChevronsDown,
@@ -68,12 +69,14 @@ export function SchematicToolbar({
     <Toolbar aria-label="Schematic tools">
       <ToolbarButton
         label="Undo"
+        title={`Undo (${formatShortcut("Mod+Z")})`}
         icon={<Undo2 />}
         onClick={onUndo}
         disabled={!canUndo}
       />
       <ToolbarButton
         label="Redo"
+        title={`Redo (${formatShortcut("Mod+Shift+Z")})`}
         icon={<Redo2 />}
         onClick={onRedo}
         disabled={!canRedo}
@@ -103,7 +106,7 @@ export function SchematicToolbar({
       {onPlaceComponent ? (
         <ToolbarButton
           label="Place component"
-          title="Place component (⌘/Ctrl K)"
+          title={`Place component (${formatShortcut("Mod+K")})`}
           icon={<Search />}
           onClick={onPlaceComponent}
         >

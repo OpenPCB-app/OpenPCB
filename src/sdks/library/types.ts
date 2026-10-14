@@ -286,6 +286,8 @@ export interface LibraryAuthoredFootprintSource {
 export interface LibraryAddComponentFootprintInput {
   mode: "generated" | "drawn";
   source: LibraryAuthoredFootprintSource;
+  /** Required for "generated": the backend re-derives geometry from it. */
+  generator?: unknown;
   /** Default true. */
   setDefault?: boolean;
   /** Defaults to the footprint name. */

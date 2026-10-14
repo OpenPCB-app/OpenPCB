@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "task": "OPENPCB-55/H07",
+  "status": "In Progress; not Done",
+  "implementationCommits": [
+    "f6beb62a610d9ed9f20416c9d348634b08bce78e",
+    "205bfb84ebbdc64fc94a9407c5a2f92f6ffd3b19",
+    "9c4764799eb8af0ed491ed0154efc010e7139d5c"
+  ],
+  "regressionCommit": "f82f4a8344628bb83fea80312491d73a31c47867",
+  "findings": [
+    {
+      "tid": "T-134",
+      "reproduction": "Delayed frontend tests reproduced two concurrent PCB writes before acknowledgement, stale A projection replacing B, and logical batches split across requests. Exact physical drag and layer-solo archive reproductions remain unqualified.",
+      "regression": "serializes rapid PCB edits with the acknowledged revision",
+      "path": "src/modules/designer/frontend/hooks/useDesignerWorkspace.test.tsx"
+    },
+    {
+      "tid": "T-200",
+      "reproduction": "Native delayed command and history requests exercise visible pending state and disabled duplicate Undo. Full original PCB movement gesture matrix remains unqualified.",
+      "regression": "rapid schematic actions use successive revisions and native Undo restores geometry",
+      "path": "tests/e2e/electron-designer-hardening.spec.ts"
+    }
+  ],
+  "checks": {
+    "frontendPassed": 782,
+    "frontendTodo": 1,
+    "backendPassed": 33,
+    "backendAssertions": 203,
+    "nativeCandidatePassed": 4,
+    "nativeCandidateFailed": 0,
+    "generatedContracts": 13,
+    "moduleTypeErrors": 23,
+    "moduleTypeErrorScope": "Existing Assistant/Library installed-package drift; none in Designer or command queue",
+    "legacyBackendSuite": {
+      "passed": 49,
+      "failed": 6,
+      "reason": "Import fixtures return 422 under deliberate unsafe-import quarantine"
+    }
+  },
+  "native": {
+    "platform": "macOS arm64",
+    "electron": "41.6.1",
+    "packaged": false,
+    "dependencyLockMatched": false,
+    "freshProfiles": true,
+    "externalNetworkDenied": true,
+    "renderer": "Isolated H05 source package plus startup proposal; not the published main dependency",
+    "rendererArtifact": "/private/tmp/openpcb-h05-consumer-E7nzVl/artifact/openpcb-r3f-eda-canvas-0.1.4.tgz",
+    "rendererArtifactSha256": "6c115607d91c90aaf652a993bab8e63a1363b9180785871dbd5772b77de62966",
+    "sourceAtRun": "f6beb62 plus H07 worktree subsequently committed as 205bfb8, 9c47647 and f82f4a8; final formatting-only differences",
+    "evidenceDirectory": "/private/tmp/openpcb-native-h07-final-tests",
+    "publishedDependencyResult": "Failed strict native teardown: Troika remote font TypeError: Failed to fetch. Functional command assertions passed; release gate remains open.",
+    "mainBundleRestored": "Rebuilt from main source and installed published dependencies after the isolated candidate run."
+  },
+  "limits": [
+    "Retained Designer edits survive module remount but are not crash-durable.",
+    "Full physical PCB footprint drag, two-inspector, double-click and consumer matrix remains open.",
+    "Expected history revision is optional for legacy SDK/HTTP consumers; selective undo across other sessions is not qualified.",
+    "H05 packaged, all-consumer offline and font-failure qualification remains open.",
+    "No original user or QA databases were mutated."
+  ],
+  "evidence": [
+    {
+      "path": "/private/tmp/openpcb-h07-baseline.log",
+      "sha256": "6cb38518537eb097ee05b4a8f7038fc84e5757c9a444d20f79e437a764027448"
+    },
+    {
+      "path": "/private/tmp/openpcb-h07-retention-unit.log",
+      "sha256": "91baf2fce36f47b2427023a7f8be98f7519cb66b653e1e0ad989d47b410e0e1a"
+    },
+    {
+      "path": "/private/tmp/openpcb-h07-occ-backend.log",
+      "sha256": "5e46956294c7d2bab7ea2dfcc7c35cfa11c07509524ed27870311eac2942d7d3"
+    },
+    {
+      "path": "/private/tmp/openpcb-h07-backend.log",
+      "sha256": "3131e31bf9f57522712746b12dfefad2f09a1edf98699bf9e54ca07f6aa9c571"
+    },
+    {
+      "path": "/private/tmp/openpcb-h07-complete-module-types.log",
+      "sha256": "9b9836330f0e058e85372039a30da73520f365016b7a69dccfe83238b5662444"
+    },
+    {
+      "path": "/private/tmp/openpcb-h07-contract-generation.log",
+      "sha256": "ed62725c8ee405fa8e89dde250d5385d6301a02c042246316d6c5e6ce7ec2f6e"
+    },
+    {
+      "path": "/private/tmp/openpcb-native-h07-final-report.json",
+      "sha256": "0e61b5308e3e36207585f02accac321f2c7a1f071a6569e5b19179b4d70d0857"
+    },
+    {
+      "path": "/private/tmp/openpcb-native-h07-final-run.log",
+      "sha256": "e3a3fe77b065522bc6e9d3bfe558710cad665c7e108fb2329a033f6bf0342865"
+    },
+    {
+      "path": "/private/tmp/openpcb-native-h07-second-report.json",
+      "sha256": "9db850f583c6ce2d7cb4cc87ad2b1e1d841d4388372593c63e0ff19ac6cfe42e"
+    },
+    {
+      "path": "/private/tmp/openpcb-native-h07-second-run.log",
+      "sha256": "39947ae873895ffa1d0aa3527342fd74133522e18e261af9eb8367bb12ad96a0"
+    },
+    {
+      "path": "/private/tmp/openpcb-h07-main-restore-build.log",
+      "sha256": "5db68372fcebedaf6d642c6bb40e37dcf4f8a934ff60c4c50efb3105f7c2fe0c"
+    }
+  ]
+}

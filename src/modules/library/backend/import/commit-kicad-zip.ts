@@ -1,3 +1,4 @@
+import { rejectKicadFootprints } from "./unqualified-import";
 import { createHash } from "node:crypto";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import { eq } from "drizzle-orm";
@@ -32,10 +33,7 @@ type Confidence = "high" | "medium" | "low";
 interface ModelSelection {
   fileName: string;
   association:
-    | "footprint-model-ref"
-    | "symbol-name"
-    | "archive-name"
-    | "single-model";
+    "footprint-model-ref" | "symbol-name" | "archive-name" | "single-model";
 }
 
 interface ArchiveImportMetadata {
@@ -386,7 +384,10 @@ async function persistPendingSourceStep(
       .from(footprintModels)
       .where(eq(footprintModels.footprintId, footprintId))
       .get();
-    const selectedRef = findSelectedModelRef(rawFootprint, selectedEntry.baseName);
+    const selectedRef = findSelectedModelRef(
+      rawFootprint,
+      selectedEntry.baseName,
+    );
     // Persist the selected model ref only; retries and previews need the same
     // transform that was used for conversion.
     const modelRefJson = JSON.stringify(selectedRef);
@@ -514,6 +515,11 @@ export async function commitKicadZipImport(
     throw new ImportValidationError(
       "ZIP archive does not contain a .kicad_mod file",
     );
+
+  rejectKicadFootprints(
+    "kicad_zip",
+    footprintEntries.map((entry) => entry.path),
+  );
 
   const symbolLibrary: ImportFileInput = {
     fileName: symbolEntries[0]!.baseName,

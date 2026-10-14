@@ -1,0 +1,156 @@
+{
+  "scope": "H03 first bounded Electron dependency group; isolated install, bundle and native-binding qualification only",
+  "environment": {
+    "platform": "macOS arm64",
+    "hostNode": "22.23.2",
+    "npm": "10.9.8",
+    "electronNode": "24.18.0"
+  },
+  "versions": {
+    "electron": { "before": "41.6.1", "after": "41.10.6" },
+    "electron-builder": { "before": "26.8.1", "after": "26.15.0" },
+    "app-builder-lib": { "before": "26.8.1", "after": "26.15.0" },
+    "electron-updater": { "before": "6.8.3", "after": "6.8.9" },
+    "builder-util-runtime": { "before": "9.5.1", "after": "9.7.0" },
+    "better-sqlite3": "12.10.0",
+    "sqlite": "3.53.1"
+  },
+  "advisories": [
+    {
+      "package": "electron",
+      "verifiedPatchedVersion": "41.10.6",
+      "urls": [
+        "https://github.com/electron/electron/security/advisories/GHSA-9f4c-93c8-jc8g",
+        "https://github.com/electron/electron/security/advisories/GHSA-hq2x-r82h-9wj4",
+        "https://github.com/electron/electron/security/advisories/GHSA-gr2m-v5gq-v685",
+        "https://github.com/electron/electron/security/advisories/GHSA-j84w-jfhq-vhvj",
+        "https://github.com/electron/electron/security/advisories/GHSA-9qh4-3jw8-366w"
+      ]
+    },
+    {
+      "package": "app-builder-lib",
+      "verifiedPatchedVersion": "26.15.0",
+      "url": "https://github.com/electron-userland/electron-builder/security/advisories/GHSA-7g7r-gx96-252g"
+    },
+    {
+      "package": "builder-util-runtime",
+      "verifiedPatchedVersion": "9.7.0",
+      "url": "https://github.com/electron-userland/electron-builder/security/advisories/GHSA-p2f4-r6v6-j797"
+    }
+  ],
+  "lock": {
+    "file": "package-lock.json",
+    "sha256": "5a245dd632906be6117689526891b30f0e849b3ee5244d83ef21400aeebd899c",
+    "cleanInstallPreservedBytes": true,
+    "existingSharedPackageEntriesPreserved": 10,
+    "sharedPinCheck": "All existing @openpcb lock records, including resolved commits and dependency fields, remained unchanged. Main baseline files matched the isolated before snapshot byte for byte before transfer.",
+    "heldVersions": {
+      "@tiptap/core": "3.27.1",
+      "pdfjs-dist": "6.1.200",
+      "@openpcb/rendering-core": "0.1.3",
+      "@openpcb/opclib-pack": "0.3.0"
+    }
+  },
+  "execution": {
+    "checkout": "Temporary isolated source snapshot with frozen H15 and H04 files; not the evolving main worktree",
+    "cachePolicy": "Writable external npm, Electron and native-header caches were used.",
+    "localLogRoot": "/private/tmp/openpcb-h47-lock.zogbTJ",
+    "checks": [
+      {
+        "command": "npm install --workspace electron --save-dev --save-exact electron@41.10.6 electron-builder@26.15.0",
+        "exitCode": 0,
+        "localLog": "h03-electron-group-install-dev.log"
+      },
+      {
+        "command": "npm install --workspace electron --save-exact electron-updater@6.8.9",
+        "exitCode": 0,
+        "localLog": "h03-electron-group-install-updater.log"
+      },
+      {
+        "command": "npm ci",
+        "exitCode": 0,
+        "successfulCleanInstalls": 3,
+        "localLog": "h03-electron-group-npm-ci-final.log"
+      },
+      {
+        "command": "npm run build --workspace electron",
+        "exitCode": 0,
+        "bundleOutputs": ["main/index", "main/drc-worker", "mcp/shim", "preload/index"],
+        "localLog": "h03-electron-group-bundle-final.log"
+      },
+      {
+        "command": "node --test scripts/electron-package-resolution.test.mjs",
+        "exitCode": 0,
+        "testsPassed": 4,
+        "localLog": "h03-electron-group-resolution-final.log"
+      },
+      {
+        "command": "node scripts/ensure-electron-native-deps.mjs",
+        "exitCode": 0,
+        "localLog": "h03-electron-group-native-script-final.log"
+      },
+      {
+        "command": "node -e 'console.log(require(\"./electron/electron-builder.cjs\").electronVersion)'",
+        "exitCode": 0,
+        "result": "41.10.6",
+        "localLog": "h03-electron-group-builder-config-final.log"
+      },
+      {
+        "command": "npm run shared:check-lock",
+        "exitCode": 0,
+        "localLog": "h03-electron-group-shared-lock.log"
+      },
+      {
+        "command": "npx tsc -p src/core/frontend/tsconfig.json --noEmit --pretty false",
+        "exitCode": 0,
+        "localLog": "h03-electron-group-frontend-typecheck.log"
+      },
+      {
+        "command": "npx tsc -b --pretty false",
+        "exitCode": 1,
+        "diagnosticOccurrences": 36,
+        "uniqueErrors": 22,
+        "attribution": "Nineteen Assistant source/shared API mismatches and three Assistant backend-test errors, unchanged from the isolated pre-upgrade snapshot.",
+        "localLog": "h03-electron-group-root-typecheck.log"
+      }
+    ]
+  },
+  "reproductions": {
+    "resolver": "The actual setup script and builder config passed hoisted fixtures and failed both nested fixtures before the fix: two pass, two fail. Workspace package resolution corrected both failures; all four tests passed. SQLite in these resolver fixtures is mocked; real native proof is separate.",
+    "initialIntegrationFailures": "A clean workspace install nested Electron. The setup script could not find the assumed root .bin/electron; builder configuration could not find the assumed root electron/package.json.",
+    "hostAbiTrap": "A normal package build deliberately changed the root SQLite binding to Electron ABI145. The old repository-wide npm rebuild returned success but also changed the private Electron binding to host ABI127. Host probe passed; Electron probe failed with ERR_DLOPEN_FAILED.",
+    "resolution": "Electron binary/version resolve from the Electron workspace. Host recovery runs npm run build-release inside the actual root SQLite package, preserving the existing private Electron-local copy/build strategy.",
+    "finalProof": "After a third clean install, the setup script passed. A deliberately induced root ABI mismatch was recovered by the scoped host build. Concurrent in-memory CREATE, INSERT and SELECT probes then passed for host ABI127 and Electron ABI145, loading distinct root and Electron-local SQLite packages.",
+    "finalHostAbi": 127,
+    "finalElectronAbi": 145,
+    "localLogs": [
+      "h03-electron-group-resolution-red.log",
+      "h03-electron-group-deliberate-host-restore.log",
+      "h03-electron-group-host-restore-electron-probe.log",
+      "h03-electron-group-deliberate-host-mismatch-probe-final.log",
+      "h03-electron-group-deliberate-host-restore-fixed.log",
+      "h03-electron-group-dual-host-final.log",
+      "h03-electron-group-dual-electron-final.log"
+    ]
+  },
+  "audit": {
+    "all": { "total": 68, "critical": 3, "high": 15, "moderate": 49, "low": 1 },
+    "productionFilter": { "total": 45, "critical": 0, "high": 5, "moderate": 40, "low": 0 },
+    "commandExitCodes": [1, 1],
+    "targetedPackageAdvisoriesAbsent": true,
+    "interpretation": "Counts describe npm package/metavulnerability entries, not independently exploitable defects. Production filtering excludes the shipped Electron devDependency and does not qualify artifact contents.",
+    "localLogs": ["h03-electron-group-audit-all.json", "h03-electron-group-audit-production.json"]
+  },
+  "remainingBlockingIssues": [
+    "Root typecheck still requires the intended Assistant/shared API release integration. The copilot generator also expects schemas absent from the pinned contracts distribution.",
+    "Full native application, packaging, updater redirect/install/signature and supported-platform qualification remains outstanding.",
+    "Linux AppImage was not built or launched on this Mac. The installed patched AppRun template was inspected; this is not Linux artifact acceptance.",
+    "Remaining critical build-tool advisories and five high production-filter package entries remain unresolved by this bounded group."
+  ],
+  "limitations": [
+    "No native application window, original database or main-worktree dependency tree was used for these upgrade checks.",
+    "Main transfer changed only reviewed source/manifests and this evidence record; no main install, build or runtime qualification is claimed.",
+    "No audit exception, exploitability exemption, release-wide green gate, artifact SBOM acceptance or H03 completion is claimed.",
+    "Temporary local logs are supporting artifacts; this Git record preserves sanitized results and is not a task tracker."
+  ]
+}

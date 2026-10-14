@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "task": "OPENPCB-79/H31",
+  "tid": "T-094",
+  "status": "In Progress; not Done",
+  "implementationCommit": "9ef4a8763be319a8d309caf1d42d9e9df6c05f23",
+  "regressionCommit": "9ef4a8763be319a8d309caf1d42d9e9df6c05f23",
+  "reproduction": "Fresh native Cmd+Z left one placed primitive unchanged; the regression timed out expecting zero. Existing toolbar history was operational. Reproduced on baseline 3cd664a with isolated H05 renderer.",
+  "implementation": "Canvas-scoped Mod+Z, Mod+Shift+Z and Ctrl+Y use revision-safe history, gate on history availability and active gestures, preserve native text editing, expose platform shortcut hints and surface failures without automatic retry.",
+  "checks": {
+    "frontendPassed": 788,
+    "frontendTodo": 1,
+    "nativeHarnessTypecheck": "passed",
+    "mainFrontendBuild": "passed",
+    "candidateFrontendBuild": "passed",
+    "nativeCombinedPassed": 11,
+    "nativeCombinedFailed": 0,
+    "nativeCombinedDurationSeconds": 18.6
+  },
+  "native": {
+    "platform": "macOS arm64",
+    "electron": "41.6.1",
+    "packaged": false,
+    "freshProfiles": true,
+    "originalDatabasesMutated": false,
+    "externalRendererNetworkBlocked": true,
+    "mainProcessNetworkInstrumented": false,
+    "renderer": "Isolated H05 source artifact plus startup proposal; served-index and asset identity recorded by the harness.",
+    "artifactSha256": "5b4ee06c6b04b12371ca2bae40a18ba3bab0e8e3b952cd022e0c0ae939877db1",
+    "sourceAtRun": "9ef4a87; candidate source differs only in formatting of the new handler",
+    "command": "OPENPCB_E2E_NO_WEBSERVER=1 OPENPCB_CAPTURE=1 OPENPCB_NATIVE_RENDERER_DIST=/private/tmp/openpcb-h05-consumer-E7nzVl/app/src/core/frontend/dist npx --no-install playwright test --project=electron-desktop tests/e2e/electron-designer-keyboard.spec.ts tests/e2e/electron-designer-anchors.spec.ts tests/e2e/electron-designer-hardening.spec.ts --workers=1"
+  },
+  "limits": [
+    "H31 remains open for its other selection, inspector, palette, viewport and command-UX roots. MultiPartInspectorPanel still deletes one part per command (T-096); this consumer has not yet adopted the existing atomic batch capability.",
+    "T-094 native verification is macOS only. Full platform/theme/viewport acceptance and main-dependency/packaged H05 qualification remain open.",
+    "The combined run revalidates ten H07/H09 native checks after the keyboard change; it does not expand their previously documented qualification scope."
+  ],
+  "evidence": [
+    {
+      "path": "/private/tmp/openpcb-h31-keyboard-baseline.log",
+      "sha256": "72ea5036708351585851a437bd46a5c0d6da15599dd09bbb1e92ae35ab4d76fc"
+    },
+    {
+      "path": "/private/tmp/openpcb-h31-keyboard-baseline-report.json",
+      "sha256": "ece4daccf9c23f879004346a8c5edaaae9fd3aeb4dc1ff1c81134de93bd8054e"
+    },
+    {
+      "path": "/private/tmp/openpcb-h31-frontend.log",
+      "sha256": "d803359808578c07b1965f34812ae73e80e7004a78b8f12f6045f646d5ec60be"
+    },
+    {
+      "path": "/private/tmp/openpcb-h31-native-types-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/private/tmp/openpcb-h31-main-build.log",
+      "sha256": "510c9c544b83e280cedaa524ed8bb976d302e2347a423f00af3c52eecdf81689"
+    },
+    {
+      "path": "/private/tmp/openpcb-h31-candidate-build.log",
+      "sha256": "72ef3d1b5e2041787b291a2ab3917c5a580ed7bf12f4d38bb462291a1cd9b687"
+    },
+    {
+      "path": "/private/tmp/openpcb-h31-keyboard-final2-report.json",
+      "sha256": "1d860c52a25f1ef93cb8afbbd759f55a1c0c68c8c2783f5019e63907f12fe729"
+    },
+    {
+      "path": "/private/tmp/openpcb-designer-final.log",
+      "sha256": "19d01552cc60e57eca050c234472c055ba5b47e6f6327acd539ad04cc28043d1"
+    },
+    {
+      "path": "/private/tmp/openpcb-designer-final-report.json",
+      "sha256": "e1e8a65393e0fa3aee3740788191293978ca20e948fb8cfeaf8191835bf38656"
+    }
+  ]
+}

@@ -123,6 +123,19 @@ export const FEATURE_FLAGS = {
     description:
       "Full command-log session capture + dataset upload (internal training data; default OFF in dev/test builds, ON in packaged builds)",
   },
+  "library.footprintIntakeQuarantine": {
+    // Fail closed in release builds until KiCad source-frame conversion is
+    // qualified (H13); dev/test keep intake so the editor stays usable.
+    availability: "prod",
+    description:
+      "Refuse KiCad-derived footprint intake (.kicad_mod, KiCad ZIP, .opclib packs)",
+  },
+  "designer.outputQuarantine": {
+    // Fail closed in release builds until electrical identity, source frames
+    // and output completeness are qualified (H08/H13/H19).
+    availability: "prod",
+    description: "Refuse manufacturing export and KiCad project import",
+  },
 } satisfies Record<string, FeatureFlagDef>;
 
 export type FeatureFlagName = keyof typeof FEATURE_FLAGS;

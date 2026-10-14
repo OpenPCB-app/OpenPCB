@@ -1,4 +1,5 @@
 import { useFrame, useThree } from "@react-three/fiber";
+import { PCB_GRID_MM } from "../../../../shared/domain/editor-grid";
 import {
   useCallback,
   useEffect,
@@ -1482,6 +1483,8 @@ export interface AutoroutePreviewTrace {
 }
 
 interface PcbSceneProps {
+  gridVisible?: boolean;
+  gridMm?: number;
   projection: DesignerPcbProjection;
   selection?: PcbSelection;
   /**
@@ -1672,6 +1675,8 @@ interface PcbSceneProps {
 }
 
 export function PcbScene({
+  gridVisible = true,
+  gridMm = PCB_GRID_MM,
   projection,
   effectiveKeepouts,
   selection,
@@ -1718,6 +1723,8 @@ export function PcbScene({
   useEffect(() => {
     invalidate();
   }, [
+    gridVisible,
+    gridMm,
     projection,
     effectiveKeepouts,
     selection,
@@ -2139,7 +2146,8 @@ export function PcbScene({
           <ViewportReporter onViewportChange={onViewportChange} />
         )}
         <GridShader
-          gridSize={1}
+          gridSize={gridMm}
+          visible={gridVisible}
           majorEvery={5}
           color="#3f4754"
           alpha={0.22}

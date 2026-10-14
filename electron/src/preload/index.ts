@@ -5,6 +5,7 @@ import "electron-log/preload";
 import { contextBridge, ipcRenderer } from "electron";
 import type { RendererCredentials } from "../../../src/core/contracts/credentials/renderer.js";
 import type { RendererLocalApi } from "../../../src/core/contracts/security/local-api.js";
+import type { DraftJournal } from "../../../src/core/contracts/app/draft-journal.js";
 
 interface BackendReadyPayload {
   url: string;
@@ -50,6 +51,12 @@ const credentials: RendererCredentials = {
 const localApi: RendererLocalApi = { bootstrap: () => ipcRenderer.invoke("local-api:bootstrap") };
 
 contextBridge.exposeInMainWorld("electronAPI", {
+  draftJournal: {
+    read: (key: string) => ipcRenderer.invoke("draft-journal:read", key),
+    write: (input) => ipcRenderer.invoke("draft-journal:write", input),
+    remove: (input) => ipcRenderer.invoke("draft-journal:remove", input),
+    list: () => ipcRenderer.invoke("draft-journal:list"),
+  } satisfies DraftJournal,
   // Dev-only marketing-capture flag (M0.2). Renderer-side capture hooks mount
   // only when this is true (OPENPCB_CAPTURE=1); false/absent in normal runs.
   captureMode: process.env.OPENPCB_CAPTURE === "1",

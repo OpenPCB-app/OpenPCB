@@ -1,4 +1,6 @@
 import type { ReactElement } from "react";
+import { GridControls } from "./GridControls";
+import type { GridEditor } from "../stores/grid-prefs";
 import { StatusBar, StatusSegment } from "@shared/frontend/ui/status-bar";
 import { SeverityDiamond } from "@shared/frontend/ui/severity-diamond";
 import {
@@ -15,6 +17,7 @@ const LAYER_LABELS = PCB_LAYER_LABELS as Record<string, string | undefined>;
 interface DesignerStatusBarProps {
   /** Snap/grid pitch; omit when the editor has no grid snapping in effect. */
   gridMm?: number;
+  gridEditor?: GridEditor;
   /** Zoom, in percent. */
   zoom: number;
   selection: string;
@@ -53,11 +56,21 @@ function CursorSegment({
   point: { xMm: number; yMm: number } | null;
 }): ReactElement {
   return (
-    <StatusSegment>
+    <StatusSegment className="shrink-0">
       <span className="text-text-caps">X</span>
-      <span className="text-text-strong">{point ? formatMm(point.xMm) : "—"}</span>
+      <span
+        className="w-[9ch] shrink-0 truncate text-right tabular-nums text-text-strong"
+        title={point ? formatMm(point.xMm) : undefined}
+      >
+        {point ? formatMm(point.xMm) : "—"}
+      </span>
       <span className="text-text-caps">Y</span>
-      <span className="text-text-strong">{point ? formatMm(point.yMm) : "—"}</span>
+      <span
+        className="w-[9ch] shrink-0 truncate text-right tabular-nums text-text-strong"
+        title={point ? formatMm(point.yMm) : undefined}
+      >
+        {point ? formatMm(point.yMm) : "—"}
+      </span>
     </StatusSegment>
   );
 }
@@ -78,6 +91,7 @@ function SchematicCursorReadout(): ReactElement {
 /** 22px editor status bar (design D2 §9). */
 export function DesignerStatusBar({
   gridMm,
+  gridEditor,
   zoom,
   selection,
   drcCount,
@@ -94,7 +108,9 @@ export function DesignerStatusBar({
   unit = "mm",
 }: DesignerStatusBarProps): ReactElement {
   const layerColor = activeLayer ? LAYER_COLORS[activeLayer] : undefined;
-  const layerLabel = activeLayer ? (LAYER_LABELS[activeLayer] ?? activeLayer) : null;
+  const layerLabel = activeLayer
+    ? (LAYER_LABELS[activeLayer] ?? activeLayer)
+    : null;
 
   return (
     <StatusBar>
@@ -105,6 +121,7 @@ export function DesignerStatusBar({
           <PcbCursorReadout />
         )
       ) : null}
+      {gridEditor && <GridControls editor={gridEditor} />}
       {gridMm !== undefined && (
         <StatusSegment>
           <span className="text-text-caps">grid</span>

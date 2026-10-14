@@ -15,6 +15,8 @@ interface GuardElement {
   isContentEditable?: boolean;
   getAttribute(name: string): string | null;
   closest(selector: string): unknown;
+  contains?(target: unknown): boolean;
+  parentElement?: GuardElement | null;
 }
 
 /** `<input type>` values that do not take typed text. */
@@ -30,7 +32,8 @@ const NON_TEXT_INPUT_TYPES = new Set([
   "file",
 ]);
 
-const TEXT_ENTRY_ROLES = new Set(["textbox", "searchbox", "combobox", "spinbutton"]);
+const TEXT_ENTRY_SELECTOR =
+  '[role="textbox"],[role="searchbox"],[role="combobox"],[role="spinbutton"]';
 
 const OVERLAY_SELECTOR =
   '[role="dialog"],[role="alertdialog"],[role="menu"],[role="menubar"],[role="listbox"]';
@@ -62,7 +65,9 @@ const NAVIGATION_KEYS = new Set([
   "PageDown",
 ]);
 
-function asElement(target: EventTarget | null | undefined): GuardElement | null {
+function asElement(
+  target: EventTarget | null | undefined,
+): GuardElement | null {
   if (!target || typeof target !== "object") return null;
   const candidate = target as Partial<GuardElement> & { nodeType?: number };
   if (candidate.nodeType !== undefined && candidate.nodeType !== 1) return null;
@@ -79,7 +84,9 @@ function inputType(element: GuardElement): string | null {
 }
 
 /** True when typing into `target` would edit text (input, textarea, …). */
-export function isEditableTarget(target: EventTarget | null | undefined): boolean {
+export function isEditableTarget(
+  target: EventTarget | null | undefined,
+): boolean {
   const element = asElement(target);
   if (!element) return false;
   const tag = element.tagName.toUpperCase();
@@ -87,19 +94,23 @@ export function isEditableTarget(target: EventTarget | null | undefined): boolea
   const type = inputType(element);
   if (type !== null) return !NON_TEXT_INPUT_TYPES.has(type);
   if (element.isContentEditable) return true;
-  const role = element.getAttribute("role");
-  if (role && TEXT_ENTRY_ROLES.has(role)) return true;
-  return Boolean(element.closest('[contenteditable]:not([contenteditable="false"])'));
+  if (element.closest(TEXT_ENTRY_SELECTOR)) return true;
+  return Boolean(
+    element.closest('[contenteditable]:not([contenteditable="false"])'),
+  );
 }
 
 /** True when `target` sits inside a dialog, menu or listbox. */
-export function isInsideOverlay(target: EventTarget | null | undefined): boolean {
+export function isInsideOverlay(
+  target: EventTarget | null | undefined,
+): boolean {
   const element = asElement(target);
   return Boolean(element?.closest(OVERLAY_SELECTOR));
 }
 
 interface QueryableDocument {
   querySelectorAll(selector: string): ArrayLike<unknown>;
+  activeElement?: EventTarget | null;
 }
 
 /**
@@ -112,7 +123,7 @@ export function isModalOpen(doc?: QueryableDocument | null): boolean {
   const modals = root.querySelectorAll('[aria-modal="true"]');
   for (let index = 0; index < modals.length; index += 1) {
     const modal = asElement(modals[index] as EventTarget);
-    if (modal && !modal.closest("[hidden]")) return true;
+    if (modal && isVisibleOverlay(modal)) return true;
   }
   return false;
 }
@@ -121,6 +132,9 @@ export interface ShortcutGuardEvent {
   key: string;
   target: EventTarget | null;
   isComposing?: boolean;
+  keyCode?: number;
+  repeat?: boolean;
+  composedPath?(): EventTarget[];
   /** An earlier handler (e.g. a kit roving group) already consumed the key. */
   defaultPrevented?: boolean;
 }
@@ -131,6 +145,10 @@ export interface ShortcutGuardOptions {
    * menus and open modals still block it.
    */
   allowInEditable?: boolean;
+  /** Deliberate opt-in for commands that are safe to repeat. Default false. */
+  allowRepeat?: boolean;
+  /** Require intentional focus inside this editor; ancestor dialogs belong to it. */
+  scopeRoot?: HTMLElement | null;
   /** Document to probe for open modals (defaults to the global one). */
   doc?: QueryableDocument | null;
 }
@@ -156,19 +174,93 @@ function isKeyOwnedByTarget(event: ShortcutGuardEvent): boolean {
   return Boolean(element.closest(ARROW_OWNER_SELECTOR));
 }
 
-/**
- * True when a global shortcut must NOT run: IME composition, typing in an
- * editable field, focus inside a dialog/menu/listbox, a modal is open, or
- * the focused control owns the key (see `isKeyOwnedByTarget`).
- */
+function isVisibleOverlay(element: GuardElement): boolean {
+  if (
+    element.closest(
+      '[hidden],[inert],[aria-hidden="true"],[data-state="closed"]',
+    )
+  )
+    return false;
+  if (typeof getComputedStyle === "function") {
+    for (
+      let node: GuardElement | null | undefined = element;
+      node;
+      node = node.parentElement
+    ) {
+      const style = getComputedStyle(node as unknown as Element);
+      if (style.display === "none" || style.visibility === "hidden")
+        return false;
+    }
+  }
+  return true;
+}
+
+function belongsToScope(
+  overlay: GuardElement,
+  scope: HTMLElement | null | undefined,
+): boolean {
+  if (!scope || !overlay.contains?.(scope)) return false;
+  const role = overlay.getAttribute("role");
+  return (
+    role === "dialog" ||
+    role === "alertdialog" ||
+    overlay.getAttribute("aria-modal") === "true"
+  );
+}
+
+function hasBlockingOverlay(
+  doc: QueryableDocument | null,
+  scope: HTMLElement | null | undefined,
+): boolean {
+  if (!doc) return false;
+  const overlays = doc.querySelectorAll(
+    `${OVERLAY_SELECTOR},[aria-modal="true"],[data-shortcut-overlay]`,
+  );
+  for (let index = 0; index < overlays.length; index += 1) {
+    const overlay = asElement(overlays[index] as EventTarget);
+    if (overlay && isVisibleOverlay(overlay) && !belongsToScope(overlay, scope))
+      return true;
+  }
+  return false;
+}
+
+/** Shared gate for global and intentionally focused editor commands. */
 export function isShortcutBlocked(
   event: ShortcutGuardEvent,
   options: ShortcutGuardOptions = {},
 ): boolean {
-  if (event.isComposing) return true;
-  const target = event.target;
-  if (!options.allowInEditable && isEditableTarget(target)) return true;
-  if (isInsideOverlay(target)) return true;
-  if (isModalOpen(options.doc)) return true;
-  return isKeyOwnedByTarget(event);
+  if (event.defaultPrevented || event.isComposing || event.keyCode === 229)
+    return true;
+  if (event.repeat && !options.allowRepeat) return true;
+  const doc =
+    options.doc ?? (typeof document === "undefined" ? null : document);
+  const targets = event.composedPath?.() ?? [event.target];
+  const scope = options.scopeRoot;
+  if (
+    "scopeRoot" in options &&
+    (!scope || !scope.contains(doc?.activeElement as Node | null))
+  )
+    return true;
+  if (
+    scope &&
+    !targets.some(
+      (target) => asElement(target) && scope.contains(target as Node),
+    )
+  )
+    return true;
+  for (const target of targets) {
+    const element = asElement(target);
+    if (!element) continue;
+    if (!options.allowInEditable && isEditableTarget(target)) return true;
+    const overlay = asElement(element.closest(OVERLAY_SELECTOR) as EventTarget);
+    if (overlay && isVisibleOverlay(overlay) && !belongsToScope(overlay, scope))
+      return true;
+    if (
+      scope &&
+      (inputType(element) !== null || element.closest(ACTIVATABLE_SELECTOR))
+    )
+      return true;
+    if (isKeyOwnedByTarget({ ...event, target })) return true;
+  }
+  return hasBlockingOverlay(doc, scope);
 }

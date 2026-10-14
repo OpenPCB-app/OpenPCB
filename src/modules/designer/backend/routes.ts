@@ -1,4 +1,8 @@
 import { commentAttachmentResponse } from "./comments/attachment-response";
+import {
+  assertQualifiedManufacturing,
+  assertQualifiedProjectImport,
+} from "./capability-quarantine";
 import type {
   CoreBackendModuleContext,
   ModuleRouterHandle,
@@ -516,7 +520,10 @@ function parseUpdateDesignBody(body: unknown): { name: string } {
   return { name };
 }
 
-function parseHistoryBody(body: unknown): { sessionId: string } {
+function parseHistoryBody(body: unknown): {
+  sessionId: string;
+  expectedRevision?: number;
+} {
   const record = asRecord(body);
   if (!record) {
     throw new ValidationError("Request body must be an object");
@@ -525,7 +532,15 @@ function parseHistoryBody(body: unknown): { sessionId: string } {
   if (!sessionId) {
     throw new ValidationError("sessionId must be a string");
   }
-  return { sessionId };
+  const expectedRevision = record.expectedRevision;
+  if (
+    expectedRevision !== undefined &&
+    (typeof expectedRevision !== "number" ||
+      !Number.isSafeInteger(expectedRevision) ||
+      expectedRevision < 0)
+  )
+    throw new ValidationError("expectedRevision must be a non-negative integer");
+  return { sessionId, expectedRevision };
 }
 
 // Cherry-picked auto-router ops to apply. Each op.payload is re-validated by
@@ -3409,6 +3424,7 @@ export function registerRoutes(
   });
 
   router.get("/designs/:designId/exports/pnp.csv", async ({ params }) => {
+    assertQualifiedManufacturing();
     const designId = params.getOrThrow("designId");
     const pcb = await store.getPcbProjection(designId);
     if (!pcb) throw new NotFoundError(`Design '${designId}' not found`);
@@ -3424,6 +3440,7 @@ export function registerRoutes(
   router.post(
     "/designs/:designId/exports/gerber",
     async ({ params, req, query }) => {
+      assertQualifiedManufacturing();
       const designId = params.getOrThrow("designId");
       const pcb = await store.getPcbProjection(designId);
       if (!pcb) throw new NotFoundError(`Design '${designId}' not found`);
@@ -4010,8 +4027,10 @@ export function registerRoutes(
     if (!projection) {
       throw new NotFoundError(`Design '${designId}' not found`);
     }
-    const { sessionId } = parseHistoryBody(await parseJsonBody<unknown>(req));
-    const result = await store.undo(designId, sessionId);
+    const { sessionId, expectedRevision } = parseHistoryBody(
+      await parseJsonBody<unknown>(req),
+    );
+    const result = await store.undo(designId, sessionId, expectedRevision);
     return success({ result });
   });
 
@@ -4021,8 +4040,10 @@ export function registerRoutes(
     if (!projection) {
       throw new NotFoundError(`Design '${designId}' not found`);
     }
-    const { sessionId } = parseHistoryBody(await parseJsonBody<unknown>(req));
-    const result = await store.redo(designId, sessionId);
+    const { sessionId, expectedRevision } = parseHistoryBody(
+      await parseJsonBody<unknown>(req),
+    );
+    const result = await store.redo(designId, sessionId, expectedRevision);
     return success({ result });
   });
 
@@ -4065,6 +4086,7 @@ export function registerRoutes(
   });
 
   router.post("/imports/kicad-project", async (routeCtx) => {
+    assertQualifiedProjectImport();
     const body = await parseZipUploadBody(routeCtx.req);
     const formData = body.formData;
     const overrideName =

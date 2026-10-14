@@ -22,7 +22,7 @@ export interface AuthoredFootprintMetadata {
   name: string;
   mountType: string;
   packageCode: { imperial: string | null; metric: string | null };
-  tags: string[];
+  tags: readonly string[];
 }
 
 export function hashString(content: string): string {
@@ -50,6 +50,8 @@ export function buildAuthoredFootprintRecord(params: {
   symbol: SymbolRenderSource | SymbolPinsLike;
   footprintId: string;
   now: string;
+  /** Server-derived generator provenance; never taken from the client payload. */
+  provenance?: Record<string, unknown>;
 }): AuthoredFootprintRecord {
   const { mode, source, metadata, symbol, footprintId, now } = params;
   validateFootprintPads(source);
@@ -68,6 +70,7 @@ export function buildAuthoredFootprintRecord(params: {
       fileName: null,
       importedAt: now,
       sourceHash: hash,
+      ...params.provenance,
     },
     parser: { warnings: [] },
     normalized: {

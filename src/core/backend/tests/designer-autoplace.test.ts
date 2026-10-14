@@ -9,7 +9,7 @@ import {
 } from "../../../modules/designer/backend/layout/schematic-autoplace";
 import type { DesignerPlacedPart } from "../../../sdks/designer/types";
 
-const GRID = 2_000_000;
+const GRID = 1_270_000; // Approved 50 mil application grid; independent test oracle.
 const MM = 1_000_000;
 
 function part(

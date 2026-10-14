@@ -121,9 +121,10 @@ export class PageService {
       icon?: string;
       properties_json?: PageProperties;
     },
+    expectedUpdatedAt?: Date,
   ): Promise<Page> {
-    const row = await this.repo.updateMeta(pageId, updates);
-    return toPage(row);
+    const row = await this.repo.updateMeta(pageId, updates, expectedUpdatedAt);
+    return this.requireUpdatedPage(pageId, row, expectedUpdatedAt);
   }
 
   async updatePageContent(
@@ -131,25 +132,25 @@ export class PageService {
     content: EditorContent,
     expectedUpdatedAt?: Date,
   ): Promise<Page> {
-    const row = await this.repo.updateContent(pageId, content, expectedUpdatedAt);
-    if (row) {
-      return toPage(row);
-    }
+    const row = await this.repo.updateContent(
+      pageId,
+      content,
+      expectedUpdatedAt,
+    );
+    return this.requireUpdatedPage(pageId, row, expectedUpdatedAt);
+  }
 
+  private async requireUpdatedPage(
+    pageId: string,
+    row: KnowledgePage | null,
+    expectedUpdatedAt?: Date,
+  ): Promise<Page> {
+    if (row) return toPage(row);
     const current = await this.repo.findById(pageId);
-    if (current) {
-      if (expectedUpdatedAt) {
-        throw new PageContentConflictError(toPage(current));
-      }
-      throw new Error("PAGE_NOT_FOUND");
-    }
-
+    if (current && expectedUpdatedAt)
+      throw new PageContentConflictError(toPage(current));
     const deleted = await this.repo.findByIdIncludeDeleted(pageId);
-    if (deleted) {
-      throw new Error("PAGE_DELETED");
-    }
-
-    throw new Error("PAGE_NOT_FOUND");
+    throw new Error(deleted?.deleted_at ? "PAGE_DELETED" : "PAGE_NOT_FOUND");
   }
 
   async movePage(pageId: string, target: MovePageParams): Promise<Page> {

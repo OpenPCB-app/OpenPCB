@@ -4,6 +4,7 @@ import {
   type DensityLevel,
   type PackageFamily,
 } from "../../../../shared/rendering/ipc7351b";
+import { generatorUnavailableReason } from "../../shared/generator-policy";
 
 const DENSITY_OPTIONS: { value: DensityLevel; label: string; desc: string }[] =
   [
@@ -51,11 +52,16 @@ export const IpcPresetTab = memo(function IpcPresetTab({
         <div className="grid grid-cols-2 gap-1.5">
           {ALL_FAMILIES.map((family) => {
             const active = presetFamily === family.id;
+            const unavailableReason = generatorUnavailableReason(
+              family.id as PackageFamily,
+            );
             return (
               <button
                 key={family.id}
                 type="button"
                 aria-pressed={active}
+                disabled={Boolean(unavailableReason)}
+                title={unavailableReason ?? undefined}
                 onClick={() =>
                   onFamilyChange(
                     active ? null : (family.id as PackageFamily),
@@ -71,7 +77,7 @@ export const IpcPresetTab = memo(function IpcPresetTab({
                   {family.label}
                 </div>
                 <div className="mt-0.5 text-2xs leading-4 text-text-tertiary">
-                  {family.subtitle}
+                  {unavailableReason ?? family.subtitle}
                 </div>
               </button>
             );

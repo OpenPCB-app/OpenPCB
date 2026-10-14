@@ -1,3 +1,4 @@
+import { useGlobalShortcut } from "@shared/frontend/keyboard/use-global-shortcut";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownWideNarrow,
@@ -261,46 +262,18 @@ export function HomeScreen() {
 
   // Keyboard: ⌘K focus search, N new design, Enter opens the selected design
   // (when not typing into a field).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const typing =
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement;
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        searchRef.current?.focus();
-        return;
-      }
-      if (
-        e.key === "/" &&
-        !e.metaKey &&
-        !e.ctrlKey &&
-        !e.altKey &&
-        !typing &&
-        !(e.target as HTMLElement | null)?.isContentEditable
-      ) {
-        e.preventDefault();
-        searchRef.current?.focus();
-        return;
-      }
-      // Enter opens the selected design, but only when focus is not on a
-      // control that has its own Enter behaviour (buttons, menu items…).
-      const onControl = (e.target as HTMLElement | null)?.closest?.(
-        "input, textarea, select, button, a, [role='menuitem'], [contenteditable='true']",
-      );
-      if (!typing && !onControl && e.key === "Enter" && selectedId) {
-        e.preventDefault();
-        openDesign(selectedId);
-        return;
-      }
-      if (!typing && (e.key === "n" || e.key === "N") && designerAvailable) {
-        e.preventDefault();
-        void handleCreateDesign();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [handleCreateDesign, designerAvailable, openDesign, selectedId]);
+  useGlobalShortcut("Mod+K", () => searchRef.current?.focus(), {
+    allowInEditable: true,
+  });
+  useGlobalShortcut("/", () => searchRef.current?.focus());
+  useGlobalShortcut("Enter", () => {
+    if (!selectedId) return false;
+    openDesign(selectedId);
+  });
+  useGlobalShortcut("N", () => {
+    if (!designerAvailable) return false;
+    void handleCreateDesign();
+  });
 
   const counts = useMemo(() => {
     const now = Date.now();
@@ -512,9 +485,7 @@ export function HomeScreen() {
             onToggleArchive={() =>
               selectedDesign && userState.toggleArchive(selectedDesign.id)
             }
-            onDelete={() =>
-              selectedDesign && setDeletingDesign(selectedDesign)
-            }
+            onDelete={() => selectedDesign && setDeletingDesign(selectedDesign)}
           />
         </div>
 
@@ -527,8 +498,7 @@ export function HomeScreen() {
           <StatusSegment>Local</StatusSegment>
           {appVersion && (
             <StatusSegment>
-              v
-              {appVersion.startsWith("v") ? appVersion.slice(1) : appVersion}
+              v{appVersion.startsWith("v") ? appVersion.slice(1) : appVersion}
             </StatusSegment>
           )}
         </StatusBar>

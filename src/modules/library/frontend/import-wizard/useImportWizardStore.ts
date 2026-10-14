@@ -9,15 +9,15 @@ import type {
   PackageFamily,
 } from "../../../../shared/rendering/ipc7351b";
 import type { InspectPayload } from "../types";
+import {
+  generatorUnavailableReason,
+  sameGeneratorIdentity,
+  type FootprintGeneratorIdentity,
+} from "../../shared/generator-policy";
 
 export type InspectStatus = "idle" | "loading" | "success" | "error";
 export type ModelConversionStatus =
-  | "idle"
-  | "fetching_source"
-  | "converting"
-  | "uploading"
-  | "ready"
-  | "failed";
+  "idle" | "fetching_source" | "converting" | "uploading" | "ready" | "failed";
 
 export interface ImportWizardState {
   currentStep: number;
@@ -59,6 +59,7 @@ export interface ImportWizardState {
     source: FootprintRenderSource;
     model: FootprintRenderModel;
     metadata: GeneratedFootprintMetadata;
+    generator: FootprintGeneratorIdentity;
   } | null;
 
   symbolGridVisible: boolean;
@@ -116,6 +117,7 @@ export interface ImportWizardState {
       source: FootprintRenderSource;
       model: FootprintRenderModel;
       metadata: GeneratedFootprintMetadata;
+      generator: FootprintGeneratorIdentity;
     } | null,
   ) => void;
 
@@ -254,9 +256,16 @@ export const useImportWizardStore = create<ImportWizardState>((set) => ({
     set({ noFootprintAcknowledged: acknowledged }),
   setPresetFamily: (family) =>
     set({ presetFamily: family, presetSize: null, generatedFootprint: null }),
-  setPresetSize: (size) => set({ presetSize: size }),
-  setPresetDensity: (density) => set({ presetDensity: density }),
-  setGeneratedFootprint: (fp) => set({ generatedFootprint: fp }),
+  setPresetSize: (size) => set({ presetSize: size, generatedFootprint: null }),
+  setPresetDensity: (density) =>
+    set({ presetDensity: density, generatedFootprint: null }),
+  setGeneratedFootprint: (fp) =>
+    set((state) => ({
+      generatedFootprint:
+        fp && hasCurrentPreset({ ...state, generatedFootprint: fp })
+          ? fp
+          : null,
+    })),
 
   setSymbolGridVisible: (visible) => set({ symbolGridVisible: visible }),
   setFootprintGridVisible: (visible) => set({ footprintGridVisible: visible }),
@@ -286,4 +295,29 @@ export function wouldCommitWithoutFootprint(s: {
   if (s.footprintSource === "draw") return false;
   if (s.footprintSource === "preset") return !s.generatedFootprint;
   return s.footprintFiles.length === 0 || s.selectedFootprintId.length === 0;
+}
+
+/** A generated footprint is committable only while it matches its generator inputs. */
+export function hasCurrentPreset(
+  state: Pick<
+    ImportWizardState,
+    "presetFamily" | "presetSize" | "presetDensity" | "generatedFootprint"
+  >,
+): boolean {
+  const generated = state.generatedFootprint;
+  if (!generated) return false;
+  // Templates are re-materialized by the backend from templateId + params.
+  if (generated.generator.kind === "template") return true;
+  if (
+    !state.presetFamily ||
+    !state.presetSize ||
+    generatorUnavailableReason(state.presetFamily)
+  )
+    return false;
+  return sameGeneratorIdentity(generated.generator, {
+    kind: "ipc7351b",
+    family: state.presetFamily,
+    size: state.presetSize,
+    density: state.presetDensity,
+  });
 }

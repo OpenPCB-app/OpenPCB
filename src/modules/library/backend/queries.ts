@@ -60,6 +60,10 @@ import {
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { PLACEHOLDER_FOOTPRINT_ID } from "./builtins/placeholder-footprint";
 import { buildAuthoredFootprintRecord } from "./import/footprint-record";
+import {
+  resolveGeneratedFootprint,
+  type GeneratedFootprintInput,
+} from "./import/resolve-generated-footprint";
 import { buildIdentityPinMapJson } from "./import/pinmap";
 import {
   validateFootprintPads,
@@ -2200,8 +2204,19 @@ export async function addComponentFootprint(
   if (input.mode !== "generated" && input.mode !== "drawn") {
     throw new ValidationError('mode must be "generated" or "drawn"');
   }
-  const authored = input.source;
-  assertAuthoredFootprintSource(authored);
+  assertAuthoredFootprintSource(input.source);
+  // Generated geometry is never trusted from the client; re-derive it.
+  const resolved =
+    input.mode === "generated"
+      ? resolveGeneratedFootprint({
+          generator: input.generator,
+          source: input.source.source,
+          metadata: input.source.metadata as GeneratedFootprintInput["metadata"],
+        })
+      : null;
+  const authored = resolved
+    ? { source: resolved.source, metadata: resolved.metadata }
+    : input.source;
   const symbolRow = await db
     .select()
     .from(symbols)
@@ -2231,6 +2246,7 @@ export async function addComponentFootprint(
     },
     footprintId,
     now,
+    provenance: resolved?.provenance,
   });
   const variantLabel =
     input.variantLabel?.trim() || record.footprintName;

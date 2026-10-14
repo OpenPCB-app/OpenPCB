@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { AlertTriangle, Download, X } from "lucide-react";
+import { useFeatureFlag } from "@/feature-flags";
+import { Button } from "@shared/frontend/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from "@shared/frontend/ui/dialog";
+import { MANUFACTURING_UNAVAILABLE } from "../../shared/capability-policy";
 import { createDesignerApi, type ExportSummary } from "../api";
 
 interface PcbExportDialogProps {
@@ -7,7 +16,7 @@ interface PcbExportDialogProps {
   moduleId: string;
   designId: string;
   open: boolean;
-  onClose: () => void;
+  onClose(): void;
 }
 
 interface ExportStatus {
@@ -27,7 +36,7 @@ interface ExportStatus {
  *   - Include inner copper layers (4-layer boards only — backend ignores
  *     when board.layerCount === 2)
  */
-export function PcbExportDialog({
+function PcbExportDialogFull({
   backendURL,
   moduleId,
   designId,
@@ -298,9 +307,7 @@ export function PcbExportDialog({
           ) : null}
 
           {status.state === "running" ? (
-            <p className="text-xs text-selection">
-              Building bundle…
-            </p>
+            <p className="text-xs text-selection">Building bundle…</p>
           ) : null}
           {status.state === "ok" ? (
             <p className="rounded-control border border-status-success bg-status-success-soft px-3 py-2 text-xs text-status-success">
@@ -348,5 +355,48 @@ export function PcbExportDialog({
         </footer>
       </div>
     </div>
+  );
+}
+
+function PcbExportDialogUnavailable({
+  open,
+  onClose,
+}: PcbExportDialogProps): ReactElement {
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        if (!value) onClose();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader
+          title="Manufacturing exports unavailable"
+          description={MANUFACTURING_UNAVAILABLE}
+        />
+        <p className="px-4 py-3 text-xs text-text-secondary">
+          Descriptive BOM exports remain available from the BOM view. No
+          fabrication ZIP or placement-coordinate file is created.
+        </p>
+        <DialogFooter>
+          <Button onClick={onClose}>Close</Button>
+          <Button variant="primary" disabled title={MANUFACTURING_UNAVAILABLE}>
+            Download ZIP
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Full export dialog in dev/test; fail-closed stub when `designer.outputQuarantine` is on. */
+export function PcbExportDialog(
+  props: PcbExportDialogProps,
+): ReactElement | null {
+  const quarantined = useFeatureFlag("designer.outputQuarantine");
+  return quarantined ? (
+    <PcbExportDialogUnavailable {...props} />
+  ) : (
+    <PcbExportDialogFull {...props} />
   );
 }

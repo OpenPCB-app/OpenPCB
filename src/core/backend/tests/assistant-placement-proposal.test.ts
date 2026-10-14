@@ -1747,7 +1747,8 @@ describe("assistant schematic connectivity and wiring tools", () => {
       type: "upsert_label",
       labelId: "label-1",
       text: "OLD",
-      positionNm: { x: 6_000_000, y: 0 },
+      // Unified 1.27 mm schematic grid (editor-grid.ts): 6.000001 mm snaps to 6.35 mm.
+      positionNm: { x: 6_350_000, y: 0 },
       confirmMerge: true,
     });
     expect(storedEnvelope).toEqual(result.data);

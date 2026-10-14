@@ -10,8 +10,12 @@ import {
 import { Button } from "@shared/frontend/ui/button";
 import { useTreeStore, isDescendant } from "../../stores/tree-store";
 import { useKnowledgeApi } from "../../hooks";
+import { deletePageWithDrafts } from "../../lib/delete-page-with-drafts";
 import type { PageTreeNode } from "../../../shared/types";
-import { findParentNode as findParentNodeInPageTree, getPreviousSibling } from "./PageTree";
+import {
+  findParentNode as findParentNodeInPageTree,
+  getPreviousSibling,
+} from "./PageTree";
 
 interface TreeItemProps {
   node: PageTreeNode;
@@ -34,7 +38,9 @@ export const TreeItem = memo(function TreeItem({
   const api = useKnowledgeApi();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCreatingChild, setIsCreatingChild] = useState(false);
-  const [dropPosition, setDropPosition] = useState<"before" | "after" | "inside" | null>(null);
+  const [dropPosition, setDropPosition] = useState<
+    "before" | "after" | "inside" | null
+  >(null);
   const [draggedOver, setDraggedOver] = useState(false);
 
   const hasChildren = node.children && node.children.length > 0;
@@ -80,7 +86,7 @@ export const TreeItem = memo(function TreeItem({
       if (!window.confirm(`Delete "${node.title}"?`)) return;
       setIsDeleting(true);
       try {
-        await api.deletePage(node.id);
+        await deletePageWithDrafts(api, tree, node.id);
         onPageDeleted?.(node.id);
       } catch (err) {
         console.error("Failed to delete page:", err);
@@ -88,7 +94,7 @@ export const TreeItem = memo(function TreeItem({
         setIsDeleting(false);
       }
     },
-    [api, node, onPageDeleted],
+    [api, node, tree, onPageDeleted],
   );
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -128,7 +134,10 @@ export const TreeItem = memo(function TreeItem({
     if (isDescendant(tree, draggedId, node.id)) return;
 
     try {
-      let target: { target_parent_id?: string | null; after_sibling_id?: string };
+      let target: {
+        target_parent_id?: string | null;
+        after_sibling_id?: string;
+      };
       if (position === "inside") {
         target = { target_parent_id: node.id };
         setExpanded(node.id, true);
@@ -204,13 +213,21 @@ export const TreeItem = memo(function TreeItem({
           )}
         </span>
 
-        <span className="min-w-0 flex-1 truncate font-medium">{node.title}</span>
+        <span className="min-w-0 flex-1 truncate font-medium">
+          {node.title}
+        </span>
 
         <div className="flex items-center opacity-0 group-hover:opacity-100">
           <Button
             variant="ghost"
             size="sm"
-            icon={isCreatingChild ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+            icon={
+              isCreatingChild ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Plus className="h-3 w-3" />
+              )
+            }
             onClick={handleCreateChild}
             disabled={isCreatingChild}
             className="h-6 w-6"
@@ -220,7 +237,13 @@ export const TreeItem = memo(function TreeItem({
             <Button
               variant="ghost"
               size="sm"
-              icon={isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              icon={
+                isDeleting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )
+              }
               onClick={handleDelete}
               disabled={isDeleting}
               className="h-6 w-6"

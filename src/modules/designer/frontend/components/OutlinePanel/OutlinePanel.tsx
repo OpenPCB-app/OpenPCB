@@ -14,6 +14,8 @@ import {
   inferComponentClass,
   partValueLabel,
 } from "../../lib/outline-format";
+import { duplicateSchematicPositionNm } from "../../lib/grid";
+import { useGridPreferences } from "../../stores/grid-prefs";
 import { classifyNet, isPowerNet } from "../../lib/net-class";
 import { ComponentClassIcon } from "../ComponentClassIcon";
 import { OutlineRow, type OutlineRowAction } from "./OutlineRow";
@@ -276,10 +278,10 @@ export function OutlinePanel({
       await actions.dispatchCommand({
         type: "place_part",
         componentId: part.componentId,
-        positionNm: {
-          x: part.positionNm.x + 2_540_000, // 2.54mm offset (100 mil)
-          y: part.positionNm.y + 2_540_000,
-        },
+        positionNm: duplicateSchematicPositionNm(
+          part.positionNm,
+          useGridPreferences.getState().schematic.snap,
+        ),
         rotationDeg: part.rotationDeg,
         mirrored: part.mirrored,
       });
@@ -295,10 +297,10 @@ export function OutlinePanel({
       await actions.dispatchCommand({
         type: "upsert_label",
         text: label.text,
-        positionNm: {
-          x: label.positionNm.x + 2_540_000,
-          y: label.positionNm.y + 2_540_000,
-        },
+        positionNm: duplicateSchematicPositionNm(
+          label.positionNm,
+          useGridPreferences.getState().schematic.snap,
+        ),
       });
     } catch (err) {
       actions.setError(

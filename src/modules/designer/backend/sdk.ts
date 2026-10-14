@@ -1,3 +1,4 @@
+import { assertQualifiedManufacturing } from "./capability-quarantine";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
 import { NotFoundError } from "../../../core/contracts/errors";
@@ -8,10 +9,7 @@ import { getActiveDesignId } from "./active-design";
 import { buildExportBundle } from "./export";
 import { pushCloudSnapshot, readLinkPublic } from "./cloud-sync";
 import { buildBoardSnapshot as buildBoardSnapshotFromProjection } from "./pcb/board-snapshot";
-import {
-  DrcRunCancelledError,
-  resolveDrcRunService,
-} from "./drc/run-service";
+import { DrcRunCancelledError, resolveDrcRunService } from "./drc/run-service";
 import { runErc } from "./erc/erc-engine";
 import {
   commitKicadProjectImport,
@@ -68,8 +66,10 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
     listOperationReceipts: (actorScope, operationId) =>
       store.listOperationReceipts(actorScope, operationId),
     getHistory: (designId, sessionId) => store.getHistory(designId, sessionId),
-    undo: (designId, sessionId) => store.undo(designId, sessionId),
-    redo: (designId, sessionId) => store.redo(designId, sessionId),
+    undo: (designId, sessionId, expectedRevision) =>
+      store.undo(designId, sessionId, expectedRevision),
+    redo: (designId, sessionId, expectedRevision) =>
+      store.redo(designId, sessionId, expectedRevision),
     runErc: async (designId) => {
       const projection = await store.getSchematicProjection(designId);
       if (!projection) return null;
@@ -134,6 +134,7 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
     },
     getBomProjection: (designId) => store.getBomProjection(designId),
     getManufacturingExportSummary: async (designId, options) => {
+      assertQualifiedManufacturing();
       const pcb = await store.getPcbProjection(designId);
       if (!pcb) return null;
       const schematic = await store.getSchematicProjection(designId);

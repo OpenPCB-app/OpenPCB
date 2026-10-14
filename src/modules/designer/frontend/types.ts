@@ -10,9 +10,8 @@ export interface ModuleSpaceProps {
   params?: Record<string, string>;
 }
 
-// Re-exported from the shared canvas-defaults module so all canvases share
-// one source of truth. Numerically identical to the previous local constants.
+// Application editing policy is independent of rendering-package visual defaults.
 export {
   SCHEMATIC_GRID_MM,
   SCHEMATIC_GRID_NM,
-} from "../../../shared/frontend/canvas/defaults";
+} from "../../../shared/domain/editor-grid";

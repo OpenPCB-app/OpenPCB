@@ -39,6 +39,7 @@ declare global {
   }
 
   interface ElectronAPI {
+    draftJournal?: import("../../contracts/app/draft-journal").DraftJournal;
     /** Dev-only marketing-capture flag (OPENPCB_CAPTURE=1); absent in normal runs. */
     captureMode?: boolean;
     onBackendReady: (

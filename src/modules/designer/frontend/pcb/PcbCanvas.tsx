@@ -1,6 +1,10 @@
+import { isShortcutBlocked } from "@shared/frontend/keyboard/shortcut-guard";
+import { useEditorShortcutScope } from "@shared/frontend/keyboard/use-editor-shortcut-scope";
+import { matchesShortcut } from "@shared/frontend/ui/shortcut";
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useReducer,
   useRef,
@@ -37,6 +41,7 @@ import type {
 import { nmToSceneMm } from "../../../../shared/frontend/canvas/coords";
 import type { OpenpcbCapturePcbApi } from "../capture-bridge";
 import { EdaCanvas } from "../../../../shared/frontend/canvas/interaction/EdaCanvas";
+import { useCanvasThemeMode } from "../../../../shared/frontend/canvas/use-canvas-theme-mode";
 import type {
   InteractionCoordinateTransform,
   InteractionEvent,
@@ -230,10 +235,7 @@ import {
   resolveAnchorLabel,
 } from "./drc/drc-labels";
 import { usePcbViewStore } from "./pcb-view-store";
-import {
-  DEFAULT_PCB_ZOOM,
-  PCB_GRID_MM,
-} from "../../../../shared/frontend/canvas/defaults";
+import { DEFAULT_PCB_ZOOM } from "../../../../shared/frontend/canvas/defaults";
 import {
   PCB_LAYER_COLORS,
   PCB_LAYER_PRESETS,
@@ -297,16 +299,11 @@ import {
   shouldRenderCopperLayer,
 } from "./pcb-visual-state";
 
+import { snapCoordinateMm } from "../../../../shared/domain/editor-grid";
+import { useGridPreferences } from "../stores/grid-prefs";
+import { useGridHotkeys } from "../hooks/use-grid-hotkeys";
+
 const NM_PER_MM = 1_000_000;
-
-function snapMm(value: number, gridEnabled: boolean): number {
-  if (!gridEnabled) return value;
-  return Math.round(value / PCB_GRID_MM) * PCB_GRID_MM;
-}
-
-function snapPointMm(p: PcbPointMm, gridEnabled: boolean): PcbPointMm {
-  return { x: snapMm(p.x, gridEnabled), y: snapMm(p.y, gridEnabled) };
-}
 
 function pointMmToNm(p: PcbPointMm): PointNm {
   return { x: Math.round(p.x * NM_PER_MM), y: Math.round(p.y * NM_PER_MM) };
@@ -425,7 +422,7 @@ interface PcbCanvasProps {
   backendURL?: string | null;
   moduleId: string;
   designId: string | null;
-  gridVisible?: boolean;
+  commandRevision?: number | null;
   /** Login-only cloud auth headers (bearer) for the auto-layout service. */
   cloudHeaders?: CloudHeadersProvider;
   /** Logged in + cloud configured → show the unified Auto-Layout button. */
@@ -440,7 +437,12 @@ interface PcbCanvasProps {
   dispatchCommand: (
     command: DesignerCommand,
   ) => Promise<DesignerDispatchResult>;
-  notifyExternalRevisionBump?: (revision: number) => void;
+  notifyExternalRevisionBump?: (designId: string, revision: number) => void;
+  runHistory?: (
+    designId: string,
+    sessionId: string,
+    kind: "undo" | "redo",
+  ) => Promise<void>;
   /**
    * Live in-progress-trace DRC conflict count while a route session is active;
    * `null` when idle (so the status bar can fall back to the batch count).
@@ -565,21 +567,30 @@ function violationCodeList(violations: readonly DrcViolation[]): string {
 }
 
 export function PcbCanvas(props: PcbCanvasProps): ReactElement {
-  const gridEnabled = props.gridVisible ?? false;
+  const themeMode = useCanvasThemeMode();
+  const canvasInstanceId = useId();
+  const menuOwnerId = `${canvasInstanceId}:${props.designId ?? ""}`;
+  const grid = useGridPreferences((state) => state.pcb);
+  const gridEnabled = grid.snap;
   // Stable identities — several per-pointer-move memos (bundlePreview, …)
   // list these as deps; plain arrows would invalidate them on EVERY render.
-  const snap = useCallback((v: number) => snapMm(v, gridEnabled), [gridEnabled]);
+  const snap = useCallback(
+    (v: number) => snapCoordinateMm(v, gridEnabled ? grid.mm : 0),
+    [gridEnabled, grid.mm],
+  );
   const snapPoint = useCallback(
-    (p: PcbPointMm) => snapPointMm(p, gridEnabled),
-    [gridEnabled],
+    (p: PcbPointMm) => ({ x: snap(p.x), y: snap(p.y) }),
+    [snap],
   );
 
   const workspace = usePcbWorkspace({
     backendURL: props.backendURL,
     moduleId: props.moduleId,
     designId: props.designId,
+    commandRevision: props.commandRevision,
     dispatchCommand: props.dispatchCommand,
     notifyExternalRevisionBump: props.notifyExternalRevisionBump,
+    runHistory: props.runHistory,
   });
   const { refresh: refreshPcbProjection } = workspace;
   const lastRefreshToken = useRef(props.refreshToken ?? 0);
@@ -651,6 +662,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   const [dragSession, setDragSession] = useState<DragSession | null>(null);
   const [committedDragOverride, setCommittedDragOverride] =
     useState<ReadonlyMap<string, PcbPointMm> | null>(null);
+  useEffect(() => {
+    setCommittedDragOverride(null);
+    setDragSession(null);
+  }, [props.designId]);
   const [freePrimitiveDragSession, setFreePrimitiveDragSession] =
     useState<FreePrimitiveDragSession | null>(null);
   const freePrimitiveDragSessionRef = useRef<FreePrimitiveDragSession | null>(
@@ -1376,6 +1391,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
 
   // Floating canvas comment overlay: projection + new-comment draft + recenter.
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  useGridHotkeys(wrapperRef, "pcb");
   const commentProjection = useCanvasProjection(
     wrapperRef,
     props.initialViewport,
@@ -3340,7 +3356,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         // keepout wins over the copper underneath it, or it would be
         // unreachable over a pour (contract §12.3 vertex editing).
         if (areaInteractions.tryGrabVertex(cursor)) {
-          setCommittedDragOverride(null);
           setDragSession(null);
           setFreePrimitiveDragSession(null);
           return;
@@ -3355,7 +3370,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             ? hitTrace(tracesRef.current, cursor, activeCopperLayer)
             : null;
         if (traceHit) {
-          setCommittedDragOverride(null);
           setDragSession(null);
           setSelection(
             shift
@@ -3371,7 +3385,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         const viaHit =
           sf.vias && viasVisible ? hitVia(viasRef.current, cursor) : null;
         if (viaHit) {
-          setCommittedDragOverride(null);
           setDragSession(null);
           setSelection(
             shift
@@ -3386,7 +3399,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         const freeHoleHit = hitFreeHole(freeHolesRef.current, cursor);
         if (freeHoleHit) {
-          setCommittedDragOverride(null);
           setDragSession(null);
           setSelection(
             shift
@@ -3419,7 +3431,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         const freePadHit = hitFreePad(freePadsRef.current, cursor);
         if (freePadHit) {
-          setCommittedDragOverride(null);
           setDragSession(null);
           setSelection(
             shift
@@ -3452,7 +3463,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         const overlayTextHit = hitOverlayText(overlayTextsRef.current, cursor);
         if (overlayTextHit) {
-          setCommittedDragOverride(null);
           setDragSession(null);
           setSelection(
             shift
@@ -3487,7 +3497,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           ? hitPlacement(visiblePlacements, cursor)
           : null;
         if (hit) {
-          setCommittedDragOverride(null);
           if (shift) {
             // Shift-click toggles placement membership; no drag.
             setDragSession(null);
@@ -3553,14 +3562,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         // still start anywhere inside a pour (contract §12.3).
         const areaSelection = areaInteractions.trySelect(cursor, shift, current);
         if (areaSelection) {
-          setCommittedDragOverride(null);
           setDragSession(null);
           setFreePrimitiveDragSession(null);
           setSelection(areaSelection);
           return;
         }
         // Empty space → start marquee (no drag).
-        setCommittedDragOverride(null);
         setDragSession(null);
         marquee.beginMarquee(cursor, shift);
       },
@@ -3809,8 +3816,18 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             // Non-destructive: fold the move into the preview map, not the DB.
             setPlacePreviewPositions(updates, originalByIdRef.current);
           } else {
-            setCommittedDragOverride(optimistic);
-            const clearOptimistic = () => setCommittedDragOverride(null);
+            setCommittedDragOverride((current) =>
+              new Map([...(current ?? []), ...optimistic]),
+            );
+            const clearOptimistic = () => setCommittedDragOverride((current) => {
+              if (!current) return null;
+              const next = new Map(current);
+              for (const [id, position] of optimistic) {
+                // An older acknowledgement cannot clear a newer drag of the same placement.
+                if (next.get(id) === position) next.delete(id);
+              }
+              return next.size ? next : null;
+            });
             if (updates.length === 1) {
               void workspace
                 .movePlacement(updates[0]!.placementId, updates[0]!.positionMm)
@@ -3857,6 +3874,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         if (areaGroup) {
           openContextMenu({
             scope: "pcb",
+            ownerId: menuOwnerId,
             position: { x: event.screenPoint.x, y: event.screenPoint.y },
             groups: [areaGroup],
           });
@@ -3886,6 +3904,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               editOutline.kind === "contour" ? editOutline : null;
             openContextMenu({
               scope: "pcb",
+            ownerId: menuOwnerId,
               position: { x: event.screenPoint.x, y: event.screenPoint.y },
               groups: [
                 {
@@ -3946,6 +3965,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           if (edge) {
             openContextMenu({
               scope: "pcb",
+            ownerId: menuOwnerId,
               position: { x: event.screenPoint.x, y: event.screenPoint.y },
               groups: [
                 {
@@ -4205,7 +4225,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                       toolMode === "select"
                         ? "Enter route mode"
                         : "Enter select mode",
-                    shortcut: "X",
+                    shortcut: "R",
                     onSelect: () =>
                       setToolMode((prev) =>
                         prev === "select" ? "route" : "select",
@@ -4332,6 +4352,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
 
         openContextMenu({
           scope: "pcb",
+            ownerId: menuOwnerId,
           position: { x: event.screenPoint.x, y: event.screenPoint.y },
           groups,
         });
@@ -4354,6 +4375,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     pendingRouteGeometry,
     previewActive,
     props.activeCommentThreadId,
+    menuOwnerId,
     props.commentMode,
     props.commentThreads,
     props.onCreateComment,
@@ -4378,8 +4400,49 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     workspace,
   ]);
 
+  const keyboardControls = useMemo(
+    () =>
+      [props.toolbarTarget, props.paramRowTarget].filter(
+        (target): target is HTMLElement => Boolean(target),
+      ),
+    [props.toolbarTarget, props.paramRowTarget],
+  );
+  useEditorShortcutScope(wrapperRef, {
+    ownerId: menuOwnerId,
+    identity: props.designId,
+    ownedControls: keyboardControls,
+    onDeactivate: () => {
+      setDragSession(null);
+      setFreePrimitiveDragSession(null);
+      setBoardResizeSession(null);
+      setVertexDragSession(null);
+      marquee.cancelMarquee();
+      areaInteractions.cancelDrag();
+      freePrimitiveDragSessionRef.current = null;
+      boardResizeSessionRef.current = null;
+      vertexDragSessionRef.current = null;
+      dispatchRoute({ kind: "cancel" });
+      dispatchSketch({ kind: "cancel" });
+      dispatchTune({ kind: "cancel" });
+      dispatchBundle({ kind: "cancel" });
+      dispatchMeasure({ kind: "clear" });
+      setAutoFinishProposal(null);
+      setToolMode("select");
+    },
+    releaseHeldKeys: () => {
+      shiftHeldRef.current = false;
+      altHeldRef.current = false;
+      setMeasureShowDeltas(false);
+    },
+  });
+
   useEffect(() => {
     const onShiftKey = (event: KeyboardEvent): void => {
+      if (
+        event.type === "keydown" &&
+        isShortcutBlocked(event, { scopeRoot: wrapperRef.current })
+      )
+        return;
       if (event.key === "Shift") {
         setMeasureShowDeltas(event.type === "keydown");
         // Shift also suppresses object+guide snap while held (grid stays).
@@ -4388,20 +4451,22 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       // Track Alt to let the user suppress guide snapping mid-drag/route.
       if (event.key === "Alt") altHeldRef.current = event.type === "keydown";
     };
-    window.addEventListener("keydown", onShiftKey);
+    const root = wrapperRef.current;
+    root?.addEventListener("keydown", onShiftKey);
     window.addEventListener("keyup", onShiftKey);
     return () => {
-      window.removeEventListener("keydown", onShiftKey);
+      root?.removeEventListener("keydown", onShiftKey);
       window.removeEventListener("keyup", onShiftKey);
     };
   }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      if (event.target instanceof HTMLInputElement) return;
+      if (isShortcutBlocked(event, { scopeRoot: wrapperRef.current })) return;
+      const matches = (spec: string) => matchesShortcut(event, spec);
 
       // Esc rejects the active auto-place preview (cancelling any in-flight drag first).
-      if (event.key === "Escape" && previewActive) {
+      if (matches("Escape") && previewActive) {
         event.preventDefault();
         rejectPreview();
         return;
@@ -4412,7 +4477,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       // F.Cu↔B.Cu and `mirrored` flips. Rotation/position preserved.
       // Disabled while routing — routing-mode keys are handled below.
       if (
-        (event.key === "f" || event.key === "F") &&
+        matches("F") &&
         !event.shiftKey &&
         toolMode === "select" &&
         routeState.kind !== "routing" &&
@@ -4446,23 +4511,14 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       // Tool toggles are inert during an active route session — routing owns
       // the keyboard (Esc is the one cancel gesture). `T` deliberately falls
       // through so the layer-switch hotkey below can drive the smart via.
-      if (
-        (event.key === "h" || event.key === "H") &&
-        routeState.kind !== "routing"
-      ) {
+      if (matches("H") && routeState.kind !== "routing") {
         event.preventDefault();
         setToolMode((prev) => (prev === "hole" ? "select" : "hole"));
         dispatchRoute({ kind: "cancel" });
         dispatchMeasure({ kind: "clear" });
         return;
       }
-      if (
-        (event.key === "o" || event.key === "O") &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        routeState.kind !== "routing"
-      ) {
+      if (matches("O") && routeState.kind !== "routing") {
         event.preventDefault();
         dispatchSketch({ kind: "cancel" });
         setBoardDimMode(false);
@@ -4476,14 +4532,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       // Shift+Z — Zone cutout sub-mode. Needs exactly one unlocked polygon
       // zone selected; without a subject it refuses with a notice and changes
       // nothing (copper-pour contract §11).
-      if (
-        (event.key === "z" || event.key === "Z") &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        event.shiftKey &&
-        routeState.kind !== "routing"
-      ) {
+      if (matches("Shift+Z") && routeState.kind !== "routing") {
         event.preventDefault();
         if (toolMode === "zoneHole") {
           dispatchSketch({ kind: "cancel" });
@@ -4501,14 +4550,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         dispatchMeasure({ kind: "clear" });
         return;
       }
-      if (
-        (event.key === "z" || event.key === "Z") &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        routeState.kind !== "routing"
-      ) {
+      if (matches("Z") && routeState.kind !== "routing") {
         event.preventDefault();
         dispatchSketch({ kind: "cancel" });
         setBoardDimMode(false);
@@ -4517,14 +4559,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         dispatchMeasure({ kind: "clear" });
         return;
       }
-      if (
-        (event.key === "k" || event.key === "K") &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        routeState.kind !== "routing"
-      ) {
+      if (matches("K") && routeState.kind !== "routing") {
         event.preventDefault();
         dispatchSketch({ kind: "cancel" });
         setBoardDimMode(false);
@@ -4533,10 +4568,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         dispatchMeasure({ kind: "clear" });
         return;
       }
-      if (
-        (event.key === "p" || event.key === "P") &&
-        routeState.kind !== "routing"
-      ) {
+      if (matches("P") && routeState.kind !== "routing") {
         // Skip if a placement is selected — P is also "pad" shortcut, but
         // currently no conflicting binding exists for select mode.
         event.preventDefault();
@@ -4545,20 +4577,14 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         dispatchMeasure({ kind: "clear" });
         return;
       }
-      if (
-        (event.key === "t" || event.key === "T") &&
-        routeState.kind !== "routing"
-      ) {
+      if (matches("T") && routeState.kind !== "routing") {
         event.preventDefault();
         setToolMode((prev) => (prev === "text" ? "select" : "text"));
         dispatchRoute({ kind: "cancel" });
         dispatchMeasure({ kind: "clear" });
         return;
       }
-      if (
-        (event.key === "m" || event.key === "M") &&
-        routeState.kind !== "routing"
-      ) {
+      if (matches("M") && routeState.kind !== "routing") {
         event.preventDefault();
         setToolMode((prev) => {
           if (prev === "measure") {
@@ -4572,7 +4598,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       }
       // U toggles the length-Tune tool (pcb.lengthTuning).
       if (
-        (event.key === "u" || event.key === "U") &&
+        matches("U") &&
         lengthTuningEnabled &&
         routeState.kind !== "routing" &&
         !event.ctrlKey &&
@@ -4594,32 +4620,32 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       }
       // Tune-session keys.
       if (toolMode === "tune" && tuneState.kind === "tuning") {
-        if (event.key === "Escape") {
+        if (matches("Escape")) {
           event.preventDefault();
           dispatchTune({ kind: "cancel" });
           return;
         }
-        if (event.key === "Enter") {
+        if (matches("Enter")) {
           event.preventDefault();
           commitTuneProposal();
           return;
         }
-        if (event.key === "+" || event.key === "=") {
+        if (matches("+") || matches("=")) {
           event.preventDefault();
           dispatchTune({ kind: "nudge-amplitude", direction: 1 });
           return;
         }
-        if (event.key === "-") {
+        if (matches("-")) {
           event.preventDefault();
           dispatchTune({ kind: "nudge-amplitude", direction: -1 });
           return;
         }
-        if (event.key === ",") {
+        if (matches(",")) {
           event.preventDefault();
           dispatchTune({ kind: "nudge-spacing", direction: -1 });
           return;
         }
-        if (event.key === ".") {
+        if (matches(".")) {
           event.preventDefault();
           dispatchTune({ kind: "nudge-spacing", direction: 1 });
           return;
@@ -4627,22 +4653,22 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       }
       // Bundle-session keys.
       if (toolMode === "bundle" && bundleState.kind === "bundling") {
-        if (event.key === "Escape") {
+        if (matches("Escape")) {
           event.preventDefault();
           dispatchBundle({ kind: "cancel" });
           return;
         }
-        if (event.key === "Backspace") {
+        if (matches("Backspace")) {
           event.preventDefault();
           dispatchBundle({ kind: "step-back" });
           return;
         }
-        if (event.key === "Enter") {
+        if (matches("Enter")) {
           event.preventDefault();
           void finishBundle();
           return;
         }
-        if (event.key === "," || event.key === ".") {
+        if (matches(",") || matches(".")) {
           event.preventDefault();
           const clearanceMm = Math.max(
             defaultNetClass?.clearanceMm ?? 0,
@@ -4651,7 +4677,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           );
           dispatchBundle({
             kind: "nudge-pitch",
-            direction: event.key === "." ? 1 : -1,
+            direction: matches(".") ? 1 : -1,
             minPitchNm: Math.round(
               (bundleState.session.widthMm + clearanceMm + 0.001) * NM_PER_MM,
             ),
@@ -4660,12 +4686,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
       }
       // Shift+G toggles alignment guides (visual + magnetic snap).
-      if ((event.key === "g" || event.key === "G") && event.shiftKey) {
+      if (matches("Shift+G")) {
         event.preventDefault();
         usePcbViewStore.getState().toggleAlignmentGuidesVisible();
         return;
       }
-      if (event.key === "r" || event.key === "R") {
+      if (matches("R")) {
         // Inert while routing — Esc cancels, R must not destroy the session.
         if (routeState.kind === "routing") return;
         const sole =
@@ -4703,7 +4729,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         // Typed numeric entry: digits / dot / (angle) minus build the buffer.
         if (
           drawing &&
-          (/^[0-9]$/.test(event.key) || event.key === "." || event.key === "-")
+          ((/^[0-9]$/.test(event.key) && matches(event.key)) ||
+            matches(".") ||
+            matches("-"))
         ) {
           event.preventDefault();
           setSketchEntry((cur) =>
@@ -4711,12 +4739,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           );
           return;
         }
-        if (drawing && event.key === "Tab") {
+        if (drawing && matches("Tab")) {
           event.preventDefault();
           setSketchEntry((cur) => toggleEntryField(cur ?? emptySketchEntry()));
           return;
         }
-        if (event.key === "Enter") {
+        if (matches("Enter")) {
           event.preventDefault();
           const entry = sketchEntryRef.current;
           if (drawing && entry && entryHasValue(entry)) {
@@ -4744,7 +4772,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           }
           return;
         }
-        if (event.key === "Escape") {
+        if (matches("Escape")) {
           event.preventDefault();
           if (sketchEntryRef.current) {
             setSketchEntry(null); // first Esc drops the typed buffer
@@ -4754,7 +4782,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           setToolMode("select");
           return;
         }
-        if (event.key === "Backspace") {
+        if (matches("Backspace")) {
           event.preventDefault();
           const entry = sketchEntryRef.current;
           if (
@@ -4773,7 +4801,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       // Routing-only keys.
       if (toolMode === "route" && routeState.kind === "routing") {
         const session = routeState.session;
-        if (event.key === "Escape") {
+        if (matches("Escape")) {
           event.preventDefault();
           // A pending auto-finish proposal absorbs the first Esc; the
           // session itself only cancels on the next one.
@@ -4784,14 +4812,14 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           dispatchRoute({ kind: "cancel" });
           return;
         }
-        if (event.key === "Backspace") {
+        if (matches("Backspace")) {
           event.preventDefault();
           dispatchRoute({ kind: "step-back" });
           return;
         }
         // Tab — auto-finish: propose an A* completion to the nearest open
         // same-net pad (the pad the dashed ratsnest guide points at).
-        if (event.key === "Tab" && autoFinishEnabled) {
+        if (matches("Tab") && autoFinishEnabled) {
           event.preventDefault();
           runAutoFinish();
           return;
@@ -4800,7 +4828,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         // commit the ghost through the snapped cursor (or just the committed
         // segments when the cursor is unknown), leaving a dangling end.
         // KiCad "Finish Route" parity.
-        if (event.key === "Enter" || event.key === "End") {
+        if (matches("Enter") || matches("End")) {
           event.preventDefault();
           if (autoFinishProposal) {
             acceptAutoFinish();
@@ -4814,7 +4842,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           }
           return;
         }
-        if (event.key === "w" || event.key === "W") {
+        if (matches("W") || matches("Shift+W") || matches("Alt+W")) {
           event.preventDefault();
           if (event.altKey) {
             // Alt+W → inline custom-width editor in the route HUD.
@@ -4826,24 +4854,18 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           void setSessionWidth(next, "preset");
           return;
         }
-        if (event.key === "/") {
+        if (matches("/")) {
           // KiCad-style track-posture toggle.
           event.preventDefault();
           dispatchRoute({ kind: "cycle-posture" });
           return;
         }
-        if (
-          (event.key === "f" || event.key === "F") &&
-          !event.ctrlKey &&
-          !event.metaKey &&
-          !event.altKey &&
-          !event.shiftKey
-        ) {
+        if (matches("F")) {
           event.preventDefault();
           dispatchRoute({ kind: "cycle-posture" });
           return;
         }
-        if (event.shiftKey && event.key === " ") {
+        if (matches("Shift+Space")) {
           event.preventDefault();
           dispatchRoute({
             kind: "set-mode",
@@ -4858,12 +4880,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         // Flushes segments-so-far into the session, drops a via at the
         // cursor, then rebases onto the other layer of the active LAYER PAIR
         // (toolbar-selectable on 4-layer boards; 1-4 hotkeys jump directly).
-        if (
-          event.key === "+" ||
-          event.key === "-" ||
-          event.key === "v" ||
-          event.key === "V"
-        ) {
+        if (matches("+") || matches("-") || matches("V")) {
           event.preventDefault();
           if (!cursorMm) return;
           const nextLayer = nextRouteLayer(
@@ -4880,13 +4897,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       // Flip board view (Shift+F). One-way sync: the active copper layer
       // follows the side now facing the user (bottom → B.Cu, top → F.Cu).
       // Changing layer alone still never flips the view.
-      if (
-        (event.key === "F" || event.key === "f") &&
-        event.shiftKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey
-      ) {
+      if (matches("Shift+F")) {
         event.preventDefault();
         handleToggleViewSide();
         return;
@@ -4895,7 +4906,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       // select mode only). Route mode uses F for posture flip.
       if (
         toolMode === "select" &&
-        (event.key === "f" || event.key === "F") &&
+        matches("F") &&
         !event.shiftKey &&
         !event.ctrlKey &&
         !event.metaKey &&
@@ -4906,7 +4917,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         return;
       }
       // Layer-switch hotkeys (no view flip — that's Shift+F):
-      //   T / 1 / PgUp → F.Cu, B / 2 / PgDn → B.Cu.
+      //   1 / PgUp → F.Cu, B / 2 / PgDn → B.Cu; T routes to Front while routing.
       // Fire globally so the user can switch active copper layer outside route
       // mode too. While idle these also engage the routing lock (focus) so the
       // chosen layer wins over Auto; pressing the locked layer's key again
@@ -4923,10 +4934,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         !event.metaKey &&
         !event.altKey &&
         !event.shiftKey &&
-        (event.key === "1" ||
-          event.key === "PageUp" ||
-          event.key === "t" ||
-          event.key === "T")
+        (matches("1") || matches("PageUp") || matches("T"))
       ) {
         event.preventDefault();
         lockLayer("F.Cu");
@@ -4937,10 +4945,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         !event.metaKey &&
         !event.altKey &&
         !event.shiftKey &&
-        (event.key === "2" ||
-          event.key === "PageDown" ||
-          event.key === "b" ||
-          event.key === "B")
+        (matches("2") || matches("PageDown") || matches("B"))
       ) {
         event.preventDefault();
         lockLayer("B.Cu");
@@ -4955,7 +4960,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         !event.metaKey &&
         !event.altKey &&
         !event.shiftKey &&
-        event.key === "3" &&
+        matches("3") &&
         workspace.projection?.board.layerCount === 4
       ) {
         event.preventDefault();
@@ -4967,7 +4972,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         !event.metaKey &&
         !event.altKey &&
         !event.shiftKey &&
-        event.key === "4" &&
+        matches("4") &&
         workspace.projection?.board.layerCount === 4
       ) {
         event.preventDefault();
@@ -4975,35 +4980,20 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         return;
       }
       // Ratsnest toggle moved to Shift+B (B alone now selects Bottom Copper).
-      if (
-        (event.key === "B" || event.key === "b") &&
-        event.shiftKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey
-      ) {
+      if (matches("Shift+B")) {
         event.preventDefault();
         workspace.toggleRatsnestVisible();
         return;
       }
       // Display-mode cycle (Normal → Dim → Solo) — KiCad's Ctrl+H.
-      if (
-        (event.key === "h" || event.key === "H") &&
-        (event.ctrlKey || event.metaKey) &&
-        !event.altKey &&
-        !event.shiftKey
-      ) {
+      if (matches("Mod+H")) {
         event.preventDefault();
         workspace.cycleDisplayMode();
         return;
       }
       // Undo / Redo — ⌘/Ctrl+Z, ⌘/Ctrl+Shift+Z, Ctrl+Y. Skipped during active
       // routing (route owns its own backspace/escape semantics).
-      if (
-        (event.ctrlKey || event.metaKey) &&
-        !event.altKey &&
-        (event.key === "z" || event.key === "Z")
-      ) {
+      if (matches("Mod+Z") || matches("Mod+Shift+Z")) {
         if (routeState.kind === "routing") return;
         event.preventDefault();
         if (event.shiftKey) {
@@ -5013,18 +5003,13 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         return;
       }
-      if (
-        (event.ctrlKey || event.metaKey) &&
-        !event.altKey &&
-        !event.shiftKey &&
-        (event.key === "y" || event.key === "Y")
-      ) {
+      if (matches("Ctrl+Y")) {
         if (routeState.kind === "routing") return;
         event.preventDefault();
         if (workspace.canRedo) void workspace.redo();
         return;
       }
-      if (event.key === "`") {
+      if (matches("`")) {
         event.preventDefault();
         if (workspace.highlightedNetId) {
           workspace.pinHighlightedNet(workspace.highlightedNetId);
@@ -5033,7 +5018,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         return;
       }
-      if (event.key === "Escape") {
+      if (matches("Escape")) {
+        event.preventDefault();
         if (marquee.marqueeSession) {
           marquee.cancelMarquee();
           return;
@@ -5041,7 +5027,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         setSelection(emptyPcbSelection());
         setDragSession(null);
         setFreePrimitiveDragSession(null);
-        setCommittedDragOverride(null);
         workspace.clearHighlight();
         if (toolMode === "route") {
           setToolMode("select");
@@ -5068,7 +5053,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         return;
       }
       // Delete all selected primitives.
-      if (event.key === "Delete" || event.key === "Backspace") {
+      if (matches("Delete") || matches("Backspace")) {
         const placementIds = [...selection.placementIds];
         const traceIds = [...selection.traceIds];
         const viaIds = [...selection.viaIds];
@@ -5108,8 +5093,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         return;
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const root = wrapperRef.current;
+    root?.addEventListener("keydown", onKey);
+    return () => root?.removeEventListener("keydown", onKey);
   }, [
     acceptAutoFinish,
     areaInteractions,
@@ -6000,6 +5986,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   return (
     <div
       ref={wrapperRef}
+      tabIndex={0}
+      aria-label="PCB canvas"
       className="relative h-full w-full bg-surface-canvas-well"
       style={canvasCursor ? { cursor: canvasCursor } : undefined}
     >
@@ -6016,6 +6004,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       ) : null}
       {workspace.projection ? (
         <EdaCanvas
+          themeMode={themeMode}
           key={props.designId}
           testId="designer-pcb-canvas"
           initialZoom={DEFAULT_PCB_ZOOM}
@@ -6024,6 +6013,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           interactionCoordinateTransform={interactionCoordinateTransform}
         >
           <PcbScene
+            gridVisible={grid.visible}
+            gridMm={grid.mm}
             projection={workspace.projection}
             effectiveKeepouts={effectiveKeepouts}
             selection={sceneSelection}
@@ -6800,7 +6791,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                       onWidthInputSubmit={(w) =>
                         void setSessionWidth(w, "manual")
                       }
-                      onWidthInputClose={() => setWidthInputOpen(false)}
+                      onWidthInputClose={(restoreFocus) => {
+                        setWidthInputOpen(false);
+                        if (restoreFocus)
+                          wrapperRef.current?.focus({ preventScroll: true });
+                      }}
                       onResetWidthToNetClass={resetSessionWidthToNetClass}
                     />
                   }

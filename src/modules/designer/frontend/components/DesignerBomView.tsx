@@ -1,3 +1,6 @@
+import { useFeatureFlag } from "@/feature-flags";
+import { MANUFACTURING_UNAVAILABLE } from "../../shared/capability-policy";
+import { useGlobalShortcut } from "@shared/frontend/keyboard/use-global-shortcut";
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { Package } from "lucide-react";
 import type {
@@ -264,21 +267,10 @@ export function DesignerBomView({
     await navigator.clipboard.writeText(text);
   }
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent): void {
-      if (!(event.metaKey || event.ctrlKey)) return;
-      if (event.key.toLowerCase() !== "e") return;
-      const target = event.target as HTMLElement | null;
-      const tag = target?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) {
-        return;
-      }
-      event.preventDefault();
-      void exportArtifact("csv");
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [designId]);
+  useGlobalShortcut("Mod+E", () => {
+    if (!designId) return false;
+    void exportArtifact("csv");
+  });
 
   if (!designId) {
     return (
@@ -674,9 +666,7 @@ function BomInspector({
           </PropertyRow>
           <PropertyRow label="Description" title={row.description ?? ""}>
             {row.description ?? (
-              <span className="italic text-text-tertiary">
-                No description
-              </span>
+              <span className="italic text-text-tertiary">No description</span>
             )}
           </PropertyRow>
           <PropertyRow label="Quantity" mono>
@@ -853,6 +843,7 @@ function ExportMenu({
   onExport(kind: "csv" | "tsv" | "jlc" | "kicad" | "pnp"): Promise<void>;
   onCopyTsv(): Promise<void>;
 }): ReactElement {
+  const quarantined = useFeatureFlag("designer.outputQuarantine");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -872,9 +863,15 @@ function ExportMenu({
           JLC BOM
           <span className="text-2xs text-status-warning">experimental</span>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => void onExport("pnp")}>
-          PnP
-        </DropdownMenuItem>
+        {quarantined ? (
+          <DropdownMenuItem disabled title={MANUFACTURING_UNAVAILABLE}>
+            PnP unavailable: placement coordinates unqualified
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem onSelect={() => void onExport("pnp")}>
+            PnP
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onSelect={() => void onExport("kicad")}>
           KiCad CSV
         </DropdownMenuItem>

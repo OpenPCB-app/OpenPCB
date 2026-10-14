@@ -2,6 +2,7 @@ import {
   forwardRef,
   useCallback,
   useEffect,
+  useId,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -44,19 +45,16 @@ import {
 } from "./OutlinePanel/bounds";
 import { RENDER_ORDER } from "../../../../shared/frontend/canvas/layers";
 import { useCanvasTheme } from "../../../../shared/frontend/canvas/theme";
-import { useTheme } from "../../../../core/frontend/src/providers/ThemeProvider";
+import { useCanvasThemeMode } from "../../../../shared/frontend/canvas/use-canvas-theme-mode";
 import { Units } from "../../../../shared/frontend/canvas/coords";
 import {
   DEFAULT_SCHEMATIC_ZOOM,
   NET_LABEL_FONT_MM,
   SYMBOL_PIN_DOT_RADIUS_MM,
 } from "../../../../shared/frontend/canvas/defaults";
-import {
-  isDeleteShortcut,
-  isEditableShortcutTarget,
-  isSelectAllShortcut,
-  matchesKey,
-} from "../../../../shared/frontend/canvas/utils/keyboard-shortcuts";
+import { isShortcutBlocked } from "@shared/frontend/keyboard/shortcut-guard";
+import { useEditorShortcutScope } from "@shared/frontend/keyboard/use-editor-shortcut-scope";
+import { matchesShortcut, formatShortcut } from "@shared/frontend/ui/shortcut";
 import type {
   DesignerCommand,
   DesignerCommentAnchor,
@@ -74,6 +72,13 @@ import type {
 import type { SymbolRenderModel } from "../../../../shared/rendering";
 import type { DesignerWorkspaceActions } from "../hooks/useDesignerWorkspace";
 import { SCHEMATIC_GRID_NM, SCHEMATIC_GRID_MM } from "../types";
+import {
+  snapPointNm,
+  snappedMoveDeltaNm,
+} from "../../../../shared/domain/editor-grid";
+import { useGridPreferences } from "../stores/grid-prefs";
+import { useGridHotkeys } from "../hooks/use-grid-hotkeys";
+import { snapWireWaypointNm } from "../lib/grid";
 import type { ViewportState } from "../types";
 import { COMPONENT_DND_MIME } from "./DesignerSidebar";
 import { useDesignerHighlight } from "../useDesignerHighlight";
@@ -181,11 +186,13 @@ interface DragCommonState {
   startScreenPx: { x: number; y: number };
   startPointerNm: PointNm;
   deltaNm: PointNm;
+  gridNm: number;
   /** Removes the gesture's window listeners + releases pointer capture. */
   cleanup: () => void;
 }
 interface DragMovePayload {
   kind: "move";
+  originNm: PointNm;
   initialPartPositionsNm: Map<string, PointNm>;
   initialPrimitivePositionsNm: Map<string, PointNm>;
 }
@@ -248,7 +255,8 @@ interface SchematicCanvasProps {
   } | null;
   wireSourcePinId: string | null;
   labelDraftText: string;
-  gridVisible: boolean;
+  canUndo?: boolean;
+  canRedo?: boolean;
   draggingComponentId: string | null;
   dragPlacementLoading: boolean;
   dragPlacementDetail: LibraryComponentPlacementDetail | null;
@@ -312,14 +320,6 @@ function toNm(pointMm: PointMm): PointNm {
   return {
     x: Math.round(Units.mmToNm(pointMm.x)),
     y: Math.round(Units.mmToNm(pointMm.y)),
-  };
-}
-
-function snapNm(pointNm: PointNm, gridEnabled: boolean): PointNm {
-  if (!gridEnabled) return pointNm;
-  return {
-    x: Math.round(pointNm.x / SCHEMATIC_GRID_NM) * SCHEMATIC_GRID_NM,
-    y: Math.round(pointNm.y / SCHEMATIC_GRID_NM) * SCHEMATIC_GRID_NM,
   };
 }
 
@@ -930,7 +930,8 @@ export const SchematicCanvas = forwardRef<
   const {
     projection,
     labelDraftText,
-    gridVisible,
+    canUndo = false,
+    canRedo = false,
     draggingComponentId,
     dragPlacementLoading,
     dragPlacementDetail,
@@ -957,10 +958,18 @@ export const SchematicCanvas = forwardRef<
 
   // Light-mode canvas background tracks the app surface (#f0f4fb) so the
   // schematic reads as part of the shell; dark mode keeps the canvas default.
-  const { mode } = useTheme();
+  const mode = useCanvasThemeMode();
+  const canvasInstanceId = useId();
+  const menuOwnerId = `${canvasInstanceId}:${projection?.designId ?? ""}`;
   const canvasBackground = mode === "light" ? "#f0f4fb" : undefined;
 
-  const snap = (pointNm: PointNm) => snapNm(pointNm, gridVisible);
+  const grid = useGridPreferences((state) => state.schematic);
+  const gridVisible = grid.visible;
+  const gridNm = grid.snap ? SCHEMATIC_GRID_NM : 0;
+  const snap = useCallback(
+    (pointNm: PointNm) => snapPointNm(pointNm, gridNm),
+    [gridNm],
+  );
 
   const [cursorNm, setCursorNm] = useState<PointNm | null>(null);
   const [selection, setSelection] = useState<SelectionState>(emptySelection);
@@ -1033,6 +1042,7 @@ export const SchematicCanvas = forwardRef<
 
   // Floating canvas comment overlay: projection + new-comment draft.
   const wrapperRef = useRef<HTMLElement | null>(null);
+  useGridHotkeys(wrapperRef, "schematic");
   const projection2d = useCanvasProjection(wrapperRef, initialViewport);
   const [commentDraft, setCommentDraft] = useState<CommentDraft | null>(null);
   // Schedule a re-render in demand mode. CameraRefBridge publishes R3F's
@@ -1898,13 +1908,52 @@ export const SchematicCanvas = forwardRef<
     [actions],
   );
 
+  useEditorShortcutScope(wrapperRef, {
+    ownerId: menuOwnerId,
+    identity: projection?.designId,
+    onDeactivate: () => {
+      setWireSession(null);
+      marquee.cancelMarquee();
+      finalizeDragRef.current(false);
+      setArmedLabelText(null);
+      setArmedPrimitive(null);
+      setArmedComponentDetail(null);
+      actions.setWireSourcePinId(null);
+    },
+  });
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isEditableShortcutTarget(event.target)) {
+      if (isShortcutBlocked(event, { scopeRoot: wrapperRef.current })) return;
+
+      const undo = matchesShortcut(event, "Mod+Z");
+      const redo =
+        matchesShortcut(event, "Mod+Shift+Z") ||
+        matchesShortcut(event, "Ctrl+Y");
+      if (undo || redo) {
+        event.preventDefault();
+        // History must not invalidate geometry beneath an unfinished gesture.
+        if (
+          wireSession ||
+          marquee.marqueeSession ||
+          dragRef.current ||
+          armedLabelText ||
+          armedPrimitive ||
+          armedComponentDetail ||
+          draggingComponentId ||
+          commentMode
+        )
+          return;
+        if ((undo && !canUndo) || (redo && !canRedo)) return;
+        void (undo ? actions.undo() : actions.redo()).catch((error: unknown) =>
+          actions.setError(
+            error instanceof Error ? error.message : "History action failed",
+          ),
+        );
         return;
       }
 
-      if (matchesKey(event, "Escape")) {
+      if (matchesShortcut(event, "Escape")) {
         if (
           wireSession ||
           marquee.marqueeSession ||
@@ -1931,7 +1980,7 @@ export const SchematicCanvas = forwardRef<
         return;
       }
 
-      if (isSelectAllShortcut(event)) {
+      if (matchesShortcut(event, "Mod+A")) {
         if (!projection) {
           return;
         }
@@ -1951,7 +2000,10 @@ export const SchematicCanvas = forwardRef<
         return;
       }
 
-      if (isDeleteShortcut(event)) {
+      if (
+        matchesShortcut(event, "Delete") ||
+        matchesShortcut(event, "Backspace")
+      ) {
         if (!projection || selectionIsEmpty(selection)) {
           return;
         }
@@ -2021,10 +2073,7 @@ export const SchematicCanvas = forwardRef<
       }
 
       if (
-        matchesKey(event, "r") &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
+        (matchesShortcut(event, "R") || matchesShortcut(event, "Shift+R")) &&
         selection.partIds.size > 0 &&
         projection
       ) {
@@ -2051,81 +2100,58 @@ export const SchematicCanvas = forwardRef<
         if (commands.length === 0) {
           return;
         }
-        void actions.dispatchCommandsBatch(commands).catch((error) =>
-          actions.setError(
-            error instanceof Error ? error.message : "Rotate failed",
-          ),
-        );
+        void actions
+          .dispatchCommandsBatch(commands)
+          .catch((error) =>
+            actions.setError(
+              error instanceof Error ? error.message : "Rotate failed",
+            ),
+          );
         return;
       }
 
-      if (
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        matchesKey(event, "l")
-      ) {
+      if (matchesShortcut(event, "L")) {
         event.preventDefault();
         setArmedLabelText(labelDraftText.trim() || "NET");
         return;
       }
 
-      if (
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        matchesKey(event, "g")
-      ) {
+      if (matchesShortcut(event, "G")) {
         event.preventDefault();
         setArmedPrimitive({ kind: "gnd" });
         return;
       }
 
-      if (
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        matchesKey(event, "p")
-      ) {
+      if (matchesShortcut(event, "P")) {
         event.preventDefault();
         setPwrPickerOpen(true);
         return;
       }
 
-      if (
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        matchesKey(event, "h")
-      ) {
+      if (matchesShortcut(event, "H")) {
         event.preventDefault();
         setNetPortalPickerOpen(true);
         return;
       }
 
       // Comment mode — same toggle the toolbar's "Comment (C)" button drives.
-      if (
-        onToggleCommentMode &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        matchesKey(event, "c")
-      ) {
+      if (onToggleCommentMode && matchesShortcut(event, "C")) {
         event.preventDefault();
         onToggleCommentMode();
         return;
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    const root = wrapperRef.current;
+    root?.addEventListener("keydown", handleKeyDown);
+    return () => root?.removeEventListener("keydown", handleKeyDown);
   }, [
     actions,
     onToggleCommentMode,
+    canUndo,
+    canRedo,
+    commentMode,
+    draggingComponentId,
     armedLabelText,
     armedPrimitive,
     armedComponentDetail,
@@ -2156,6 +2182,7 @@ export const SchematicCanvas = forwardRef<
             state.basePointsNm,
             state.segmentIndex,
             state.deltaNm,
+            state.gridNm,
           ),
         ],
       ]);
@@ -2190,6 +2217,7 @@ export const SchematicCanvas = forwardRef<
           state.basePointsNm,
           state.segmentIndex,
           state.deltaNm,
+          state.gridNm,
         );
         // dragWireSegment returns the base array unchanged on a no-op.
         if (finalPoints === state.basePointsNm) return;
@@ -2309,6 +2337,7 @@ export const SchematicCanvas = forwardRef<
         startScreenPx: { x: event.screenPoint.x, y: event.screenPoint.y },
         startPointerNm: worldNm,
         deltaNm: { x: 0, y: 0 },
+        gridNm,
         cleanup: () => {
           window.removeEventListener("pointerup", handleUp);
           window.removeEventListener("pointercancel", handleCancel);
@@ -2317,7 +2346,7 @@ export const SchematicCanvas = forwardRef<
         },
       };
     },
-    [],
+    [gridNm],
   );
 
   // Component unmount mid-gesture must not leak the window listeners.
@@ -2362,7 +2391,14 @@ export const SchematicCanvas = forwardRef<
               x: worldNm.x - dragState.startPointerNm.x,
               y: worldNm.y - dragState.startPointerNm.y,
             };
-            const snappedDelta = snap(rawDelta);
+            const snappedDelta =
+              dragState.kind === "wireSegment"
+                ? rawDelta
+                : snappedMoveDeltaNm(
+                    dragState.originNm,
+                    rawDelta,
+                    dragState.gridNm,
+                  );
             if (
               snappedDelta.x !== dragState.deltaNm.x ||
               snappedDelta.y !== dragState.deltaNm.y
@@ -2501,21 +2537,23 @@ export const SchematicCanvas = forwardRef<
         }
 
         if (armedPrimitive) {
+          // A selected electrical anchor is exact, even when intentionally off-grid.
+          const positionNm = pin?.worldPositionNm ?? snappedWorldNm;
           const command =
             armedPrimitive.kind === "gnd"
               ? {
                   type: "place_gnd_port" as const,
-                  positionNm: snappedWorldNm,
+                  positionNm,
                 }
               : armedPrimitive.kind === "pwr"
                 ? {
                     type: "place_pwr_port" as const,
-                    positionNm: snappedWorldNm,
+                    positionNm,
                     railText: armedPrimitive.railText,
                   }
                 : {
                     type: "place_net_portal" as const,
-                    positionNm: snappedWorldNm,
+                    positionNm,
                     portalText: armedPrimitive.portalText,
                   };
           void actions
@@ -2579,7 +2617,15 @@ export const SchematicCanvas = forwardRef<
 
           setWireSession({
             ...activeSession,
-            waypointsNm: [...activeSession.waypointsNm, snappedWorldNm],
+            waypointsNm: [
+              ...activeSession.waypointsNm,
+              snapWireWaypointNm(
+                worldNm,
+                activeSession.waypointsNm.at(-1) ?? sourcePin.worldPositionNm,
+                gridNm,
+                cameraRef.current?.zoom ?? 1,
+              ),
+            ],
           });
           return;
         }
@@ -2659,6 +2705,7 @@ export const SchematicCanvas = forwardRef<
 
           armDrag(event, worldNm, {
             kind: "move",
+            originNm: initialPartPositionsNm.get(partId) ?? worldNm,
             initialPartPositionsNm,
             initialPrimitivePositionsNm,
           });
@@ -2780,6 +2827,7 @@ export const SchematicCanvas = forwardRef<
 
           armDrag(event, worldNm, {
             kind: "move",
+            originNm: initialPrimitivePositionsNm.get(primitiveId) ?? worldNm,
             initialPartPositionsNm,
             initialPrimitivePositionsNm,
           });
@@ -2997,7 +3045,6 @@ export const SchematicCanvas = forwardRef<
                 kind: "action",
                 id: "rotate-cw",
                 label: "Rotate 90° clockwise",
-                shortcut: "R",
                 onSelect: () => {
                   if (!primitive) return;
                   const next = ((((primitive.rotationDeg + 90) % 360) + 360) %
@@ -3019,7 +3066,6 @@ export const SchematicCanvas = forwardRef<
                 kind: "action",
                 id: "rotate-ccw",
                 label: "Rotate 90° counter-clockwise",
-                shortcut: "Shift+R",
                 onSelect: () => {
                   if (!primitive) return;
                   const next = ((((primitive.rotationDeg - 90) % 360) + 360) %
@@ -3073,7 +3119,7 @@ export const SchematicCanvas = forwardRef<
                   kind: "action",
                   id: "select-all",
                   label: "Select all",
-                  shortcut: "Ctrl+A",
+                  shortcut: formatShortcut("Mod+A"),
                   onSelect: () => {
                     setSelection({
                       partIds: new Set(projection.parts.map((p) => p.id)),
@@ -3165,6 +3211,7 @@ export const SchematicCanvas = forwardRef<
 
         openContextMenu({
           scope: "schematic",
+          ownerId: menuOwnerId,
           position: { x: event.screenPoint.x, y: event.screenPoint.y },
           groups,
         });
@@ -3174,20 +3221,14 @@ export const SchematicCanvas = forwardRef<
         if (componentId && componentId !== draggingComponentId) {
           void actions.beginDragComponent(componentId).catch(() => {});
         }
-        actions.setDragGhostNm({
-          x: Math.round(event.snappedPoint.x),
-          y: Math.round(event.snappedPoint.y),
-        });
+        actions.setDragGhostNm(snap(event.worldPoint));
       },
       onDragOver(event) {
         const componentId = event.getData(COMPONENT_DND_MIME);
         if (componentId && !dragPlacementDetail && !dragPlacementLoading) {
           void actions.beginDragComponent(componentId).catch(() => {});
         }
-        actions.setDragGhostNm({
-          x: Math.round(event.snappedPoint.x),
-          y: Math.round(event.snappedPoint.y),
-        });
+        actions.setDragGhostNm(snap(event.worldPoint));
       },
       onDragLeave() {
         actions.setDragGhostNm(null);
@@ -3211,8 +3252,8 @@ export const SchematicCanvas = forwardRef<
         }
 
         const snapped = snap({
-          x: Math.round(event.snappedPoint.x),
-          y: Math.round(event.snappedPoint.y),
+          x: Math.round(event.worldPoint.x),
+          y: Math.round(event.worldPoint.y),
         });
 
         void actions
@@ -3252,6 +3293,7 @@ export const SchematicCanvas = forwardRef<
       hitPrimitiveId,
       hitWire,
       labelDraftText,
+      menuOwnerId,
       marquee,
       onCreateComment,
       onSelectCommentThread,
@@ -3261,6 +3303,8 @@ export const SchematicCanvas = forwardRef<
       scheduleHover,
       selection,
       setHoverNet,
+      snap,
+      gridNm,
       wireSession,
     ],
   );
@@ -3299,7 +3343,15 @@ export const SchematicCanvas = forwardRef<
     if (!sourcePin) {
       return null;
     }
-    const target = snap(cursorNm);
+    const target =
+      hitPin(cursorNm)?.worldPositionNm ??
+      hitWire(cursorNm)?.projectedNm ??
+      snapWireWaypointNm(
+        cursorNm,
+        wireSession.waypointsNm.at(-1) ?? sourcePin.worldPositionNm,
+        gridNm,
+        cameraRef.current?.zoom ?? 1,
+      );
     // Preview parity with the commit path: a session without user waypoints
     // commits through the backend's obstacle-aware router, so preview with
     // the same shared router. Waypointed sessions preview the exact polyline
@@ -3327,7 +3379,15 @@ export const SchematicCanvas = forwardRef<
       targetPinId: "cursor",
       pointsNm,
     } satisfies DesignerWire;
-  }, [cursorNm, gridVisible, pinById, effectiveProjection, wireSession]);
+  }, [
+    cursorNm,
+    gridNm,
+    hitPin,
+    hitWire,
+    pinById,
+    effectiveProjection,
+    wireSession,
+  ]);
 
   // Live connect-by-touch indicator while dragging (Altium-style): a dragged
   // pin (or primitive connection point) landing on a non-dragged wire's path
@@ -3420,7 +3480,7 @@ export const SchematicCanvas = forwardRef<
 
   const primitiveGhost: DesignerPrimitive | null = useMemo(() => {
     if (!armedPrimitive || !cursorNm) return null;
-    const snapped = snap(cursorNm);
+    const snapped = hitPin(cursorNm)?.worldPositionNm ?? snap(cursorNm);
     const id = "primitive-ghost";
     if (armedPrimitive.kind === "gnd") {
       return { id, kind: "gnd", positionNm: snapped, rotationDeg: 0 };
@@ -3441,20 +3501,23 @@ export const SchematicCanvas = forwardRef<
       rotationDeg: 0,
       portalText: armedPrimitive.portalText,
     };
-  }, [armedPrimitive, cursorNm]);
+  }, [armedPrimitive, cursorNm, snap, hitPin]);
 
   return (
     <section
       ref={wrapperRef}
+      tabIndex={0}
+      aria-label="Schematic canvas"
       className="relative h-full w-full min-h-0 rounded-none"
     >
       <EdaCanvas
+        themeMode={mode}
         readOnly={false}
         interactionHandler={interactionHandler}
         className="h-full w-full"
         initialZoom={DEFAULT_SCHEMATIC_ZOOM}
         enableDragDrop
-        gridSize={SCHEMATIC_GRID_NM}
+        gridSize={gridNm}
         backgroundColor={canvasBackground}
       >
         <CameraRefBridge

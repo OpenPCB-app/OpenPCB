@@ -1,3 +1,4 @@
+import { formatShortcut } from "@shared/frontend/ui/shortcut";
 import { useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import type { PcbLayerCount, PcbLayerId } from "../../../../sdks";
 import {
@@ -434,7 +435,7 @@ function AddDropdown({
       label: "Text",
       hotkey: "T",
       title:
-        "Add silkscreen text (T) — click on the board, then type the label",
+        "Add silkscreen text (T while not routing) — click on the board, then type the label",
       Icon: Type,
       active: textMode,
       onToggle: onToggleTextMode,
@@ -693,14 +694,14 @@ export function PcbTopToolbar({
     <Toolbar aria-label="PCB tools">
       <ToolbarButton
         label="Undo"
-        title="Undo (⌘/Ctrl+Z)"
+        title={`Undo (${formatShortcut("Mod+Z")})`}
         icon={<Undo2 />}
         onClick={onUndo}
         disabled={!canUndo}
       />
       <ToolbarButton
         label="Redo"
-        title="Redo (⌘/Ctrl+Shift+Z)"
+        title={`Redo (${formatShortcut("Mod+Shift+Z")})`}
         icon={<Redo2 />}
         onClick={onRedo}
         disabled={!canRedo}
