@@ -99,7 +99,8 @@ function useConversationProjection(chatId: string | null, chat: Chat, run: Run, 
     lastError: run.error?.message ?? chat.error?.message ?? (failure?.type === "run.failed" ? failure.data.errorMessage : null), userMessageContent: "", startedAt: latestAssistant.createdAt, lastEventAt: run.events.at(-1)?.timestamp ?? latestAssistant.createdAt
   } : null;
   const verification = [...run.events].reverse().find(event => event.type === "run.verification");
-  return { messages, toolEventsByMessage, writeProposals, selectedRun, verification, loading };
+  const notices = run.events.flatMap(event => event.type === "run.warning" && event.data.code === "mention_images_omitted" ? [event.data.message] : []);
+  return { messages, toolEventsByMessage, writeProposals, selectedRun, verification, notices, loading };
 }
 
 type Selection = ReturnType<typeof useConversationSelection>;

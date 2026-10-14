@@ -65,7 +65,7 @@ export function DesignerChatDock(props: DesignerConversationProps): ReactElement
 
 function AvailableDesignerChatDock(props: DesignerConversationProps): ReactElement {
   const state = useDesignerConversation(props);
-  const { backendURL, designId, onClose, onOpenFull, onDesignChanged, selectedChatId, setSelectedChatId, selectedChat, chats, menuOpen, setMenuOpen, navigateToModule, createDesignChat, submit, renameChat, deleteChat, assistantBase, providers, providerId, setProviderId, model, setModel, models, refreshChatModels, presets, promptPresetId, setPromptPresetId, selectedProvider, toolCount, input, setInput, loading, canSend, error, setError, scroll, messages, toolEventsByMessage, writeProposals, selectedRun, stopRun, refreshMessages, settings, verification, chat } = state;
+  const { backendURL, designId, onClose, onOpenFull, onDesignChanged, selectedChatId, setSelectedChatId, selectedChat, chats, menuOpen, setMenuOpen, navigateToModule, createDesignChat, submit, renameChat, deleteChat, assistantBase, providers, providerId, setProviderId, model, setModel, models, refreshChatModels, presets, promptPresetId, setPromptPresetId, selectedProvider, toolCount, input, setInput, loading, canSend, error, setError, scroll, messages, toolEventsByMessage, writeProposals, selectedRun, stopRun, refreshMessages, settings, verification, notices, chat } = state;
   if (!designId) {
     return (
       <EmptyDock
@@ -200,7 +200,7 @@ function AvailableDesignerChatDock(props: DesignerConversationProps): ReactEleme
             {error}
           </div>
         ) : null}
-        <RunVerification event={verification} truncated={chat.truncated} finishReason={chat.finishReason} />
+        <RunVerification event={verification} truncated={chat.truncated} finishReason={chat.finishReason} notices={notices} />
         {messages.length === 0 ? (
           <div className="p-4 text-sm text-slate-500">
             Ask about the active design, components, nets, ERC, or PCB layout.

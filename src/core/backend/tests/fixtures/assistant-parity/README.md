@@ -31,10 +31,13 @@ remain present but their old runtime tables receive no active engine writes.
 `e752f2a9a5c28beaff7d8d213e6c9371012906831f2ad8f6eb50cd7d4a381b40`.
 
 `catalog.current.json` captures the reviewed canonical composition, SHA-256
-`473f1eaf94f6eaaf0b3fd932b581bc97108edff789c6b1e831fe1453b025a438`.
+`580ecaff6bf742ad993af2563168177a3d6e73c8624ce8d37a31fa70509e2ae8`.
 It includes 15 native tools, 14 read-only and 22 write-enabled MCP tools, four prompts, five concrete
 resource types and the current migrated SQLite DDL. The tests compare the complete current snapshot
 and independently require every historical native name/input schema to remain unchanged.
+
+The 2026-10 refresh only adds the shared untrusted-reference-data rule to the MCP prompt bodies
+(`CORE_TOOL_INSTRUCTIONS`); tools, schemas, resources and DDL are unchanged.
 
 AgentKit's accepted public resource extension has no resource-template listing hook. The current
 capture records this explicit gap; it does not silently claim historical template advertisement.

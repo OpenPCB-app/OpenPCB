@@ -67,7 +67,7 @@ export function AssistantSpace(props: ModuleSpaceProps): ReactElement {
 
 function AvailableAssistantSpace(props: ModuleSpaceProps): ReactElement {
   const state = useAssistantSpace(props);
-  const { backendURL, base, selectedChatId, filter, contextMenu, navigateToModule, renameChat, deleteChat, submit, selectedProvider, chatOnly, toolFixBusy, reprobeTools, enableToolsAnyway, toolCount, input, setInput, loading, canSend, error, setError, scroll, showNewMessagesPill, setShowNewMessagesPill, messages, toolEventsByMessage, writeProposals, selectedRun, stopRun, continueRun, refreshMessages, verification, chat, settings } = state;
+  const { backendURL, base, selectedChatId, filter, contextMenu, navigateToModule, renameChat, deleteChat, submit, selectedProvider, chatOnly, toolFixBusy, reprobeTools, enableToolsAnyway, toolCount, input, setInput, loading, canSend, error, setError, scroll, showNewMessagesPill, setShowNewMessagesPill, messages, toolEventsByMessage, writeProposals, selectedRun, stopRun, continueRun, refreshMessages, verification, notices, chat, settings } = state;
   return (
     <ProposalActionsProvider value={state.proposalActions}><div className="flex h-full min-h-0 bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <AssistantSidebar state={state} />
@@ -127,7 +127,7 @@ function AvailableAssistantSpace(props: ModuleSpaceProps): ReactElement {
                 </button>
               </div>
             ) : null}
-            <RunVerification event={verification} truncated={chat.truncated} finishReason={chat.finishReason} />
+            <RunVerification event={verification} truncated={chat.truncated} finishReason={chat.finishReason} notices={notices} />
             {messages.length === 0 ? (
               <div className="px-4">
                 <EmptyState onPrompt={setInput} />

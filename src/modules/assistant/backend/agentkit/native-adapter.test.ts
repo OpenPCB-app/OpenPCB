@@ -5,7 +5,7 @@ import type { AiTool, AiToolExecutionContext } from "agentkit/core";
 import { isolatedDomain, UI_SESSION, type ParityDomain } from "../../../../core/backend/tests/fixtures/assistant-parity/domain";
 import { ContextResolver } from "../context-resolver";
 import { NativeContextStore } from "./native-context-store";
-import { createNativeToolContributor } from "./native-tools";
+import { createNativeToolContributor, nativeUnboundToolNames } from "./native-tools";
 import { createNativeProposalApplier } from "./native-applier";
 import { commandRisk, argumentFingerprint, authorizeNativeProposal } from "./native-identity";
 import { nativeScope } from "./native-stage";
@@ -406,5 +406,30 @@ describe("real native domain through AgentKit proposal pipeline", () => {
     const after = await verification.verify({ runId: context.runId, chatId, toolCallCount: 1, finalContent: "done" });
     expect(after?.checks.find((item) => item.id === "bom_placed")?.ok).toBe(true);
     expect(after?.checks.slice(0, 4).map((item) => item.id)).toEqual(["bom_placed", "nets_wired", "no_dangling_power", "erc_clean"]);
+  });
+
+  test("failing DoD check maps to a failed VerificationCheck and deficiency, not a pass", async () => {
+    const verification = createNativeVerification({ context: domain.ctx, contextResolver: resolver, contextStore: appContext, store });
+    appContext.saveBuildIntent({ chatId, taskId: context.runId, goal: "Decoupled rail",
+      items: [{ role: "capacitor", componentId: domain.componentId, quantity: 2, requiredNets: ["GND"] }] });
+    await tool("designer_place_components").execute(context, placeInput());
+    const report = await verification.verify({ runId: context.runId, chatId, toolCallCount: 1, finalContent: "All wired." });
+    const wired = report?.checks.find((item) => item.id === "nets_wired");
+    expect(report?.status).toBe("partial");
+    expect(wired?.ok).toBe(false);
+    expect(report?.deficiencies).toContain(wired!.message);
+    expect(report?.checks.find((item) => item.id === "native_mutations")?.ok).toBe(true);
+  });
+
+  test("unbound staging exposes reads and design creation only", async () => {
+    const contributor = createNativeToolContributor({ context: domain.ctx, store, proposals, actorScope: "desktop",
+      contextResolver: resolver, contextStore: appContext });
+    const unbound = contributor.unboundToolNames!();
+    expect(unbound).toEqual(nativeUnboundToolNames(tools));
+    expect(unbound).toContain("designer_create_design");
+    for (const item of tools) {
+      const expected = item.definition.effect !== "write" || item.definition.name === "designer_create_design";
+      expect(unbound.includes(item.definition.name)).toBe(expected);
+    }
   });
 });

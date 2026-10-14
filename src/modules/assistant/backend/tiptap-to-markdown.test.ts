@@ -156,6 +156,23 @@ describe("extractImagesFromTiptap", () => {
     expect(extractImagesFromTiptap(doc)).toEqual([]);
   });
 
+  it("refuses data images outside the PNG/JPEG/GIF/WebP allow-list and reports them", () => {
+    const image = (src: string) => ({ type: "image", attrs: { src, alt: "x" } });
+    const doc = {
+      type: "doc",
+      content: [
+        image("data:image/svg+xml;base64,PHN2Zy8+"),
+        image("data:text/html;base64,PGI+"),
+        image("https://example.com/img.png"),
+        image("data:image/webp;base64,UklGRg=="),
+      ],
+    };
+    let unsupported = 0;
+    const images = extractImagesFromTiptap(doc, () => unsupported++);
+    expect(images.map((item) => item.mimeType)).toEqual(["image/webp"]);
+    expect(unsupported).toBe(3);
+  });
+
   it("extracts images from nested content", () => {
     const base64 = "data:image/jpeg;base64,/9j/4AAQ";
     const doc = {

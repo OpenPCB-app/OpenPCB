@@ -15,10 +15,13 @@ import {
 } from "./mention-content-resolver";
 import type {
   MentionImage,
+  MentionImageOmission,
   ResolvedMentionContent,
 } from "./mention-resolver-types";
 import type { PromptService } from "./prompt-service";
+import type { ProviderMessageContext } from "./agentkit/provider-messages";
 import type { SettingsStore } from "./settings-store";
+import { ALLOWED_IMAGE_MIME_TYPES } from "./tiptap-to-markdown";
 
 const PROMPT_KEY = "__openpcbPromptPreset";
 const PRESETS = [
@@ -46,6 +49,8 @@ export async function snapshotPrompt(
   return { [PROMPT_KEY]: preset };
 }
 
+export const MENTION_IMAGES_OMITTED_WARNING = "mention_images_omitted";
+
 /** Adapt only app context; AgentKit retains branch assembly and correction passes. */
 export async function providerContextMessages(input: {
   request: AiChatRequest;
@@ -53,25 +58,21 @@ export async function providerContextMessages(input: {
   resolver: ContextResolver;
   prompts: PromptService;
   readOnly: boolean;
-}): Promise<AiChatMessage[]> {
+}): Promise<ProviderMessageContext> {
   const { request, store, resolver, prompts } = input;
   request.signal?.throwIfAborted();
   const task = await store.tasks.getTask(request.runId);
   if (!task || typeof task.payload.chatId !== "string")
     throw new Error("Prompt run snapshot is missing");
   const preset = await runPreset(store, task.payload);
-  const bindings = resolver
-    .listBindings(task.payload.chatId)
-    .filter((binding) => binding.status === "active");
-  const blocks = bindings.map((binding, index) => ({
-    id: `binding-${binding.id}`,
-    title: `Bound ${binding.kind} (${binding.role})`,
-    content: `${binding.label} (refId=${binding.refId})`,
-    priority: 10 + index,
-  }));
-  const system = prompts.composeSystem(preset, blocks, {
-    includeWriteTools: !input.readOnly,
-  });
+  const system = systemPrompt(
+    prompts,
+    preset,
+    resolver,
+    task.payload.chatId,
+    request,
+    input.readOnly,
+  );
   const messages = request.messages.map((message, index) =>
     index === 0 && message.role === "system"
       ? { ...message, content: system }
@@ -79,7 +80,51 @@ export async function providerContextMessages(input: {
   );
   const resolved = await boundedMentions(messages, request.signal);
   request.signal?.throwIfAborted();
-  return addMentionContext(messages, resolved);
+  const context = addMentionContext(messages, resolved);
+  if (!context.notice) return { messages: context.messages, warnings: [] };
+  // Every provider call in a run re-resolves mentions; the user needs the notice once.
+  const warned = (await store.tasks.listEvents(request.runId)).some(
+    (event) => event.type === "run.warning" &&
+      (event as { data?: { code?: unknown } }).data?.code === MENTION_IMAGES_OMITTED_WARNING,
+  );
+  return {
+    messages: context.messages,
+    warnings: warned ? [] : [{ code: MENTION_IMAGES_OMITTED_WARNING, message: context.notice }],
+  };
+}
+
+const UNBOUND_NOTE =
+  "This chat has no design yet, so only read tools and designer_create_design are available in this turn. " +
+  "If the user asked to build a circuit, resolve the BOM and create the design, then end the turn saying the design is ready; " +
+  "placement and wiring tools become available on the user's next message.";
+
+/** Write guidance follows the tools AgentKit actually staged for this run, not the full catalog. */
+function systemPrompt(
+  prompts: PromptService,
+  preset: AssistantPromptPresetId,
+  resolver: ContextResolver,
+  chatId: string,
+  request: AiChatRequest,
+  readOnly: boolean,
+): string {
+  const bindings = resolver
+    .listBindings(chatId)
+    .filter((binding) => binding.status === "active");
+  const blocks = bindings.map((binding, index) => ({
+    id: `binding-${binding.id}`,
+    title: `Bound ${binding.kind} (${binding.role})`,
+    content: `${binding.label} (refId=${binding.refId})`,
+    priority: 10 + index,
+  }));
+  const tools = request.tools ?? [];
+  const editsStaged = tools.some(
+    (tool) => tool.effect === "write" && tool.name !== "designer_create_design",
+  );
+  if (!readOnly && !editsStaged && tools.some((tool) => tool.name === "designer_create_design"))
+    blocks.unshift({ id: "unbound-design", title: "No design bound", content: UNBOUND_NOTE, priority: 1 });
+  return prompts.composeSystem(preset, blocks, {
+    includeWriteTools: !readOnly && editsStaged,
+  });
 }
 
 async function runPreset(
@@ -154,10 +199,14 @@ async function boundedMentions(
   }
 }
 
+/**
+ * Referenced documents ride on the latest user turn as untrusted data, never as
+ * system authority. Images that cannot be sent are named in an app notice.
+ */
 function addMentionContext(
   messages: AiChatMessage[],
   resolved: ResolvedMentionContent[],
-): AiChatMessage[] {
+): { messages: AiChatMessage[]; notice: string | null } {
   const unique = [
     ...new Map(
       resolved.map((mention) => [
@@ -166,49 +215,81 @@ function addMentionContext(
       ]),
     ).values(),
   ].slice(0, 10);
-  const text = new MentionContentResolver()
-    .formatAsContextSection(unique)
-    .slice(0, MENTION_LIMITS.MAX_TOTAL_CONTEXT_CHARS);
-  const images = boundedImages(unique.flatMap((mention) => mention.images));
-  const lastUser = messages.map((message) => message.role).lastIndexOf("user");
-  const result = messages.map((message, index) =>
-    index !== lastUser || !images.length
-      ? message
-      : {
-          ...message,
-          content: [
-            ...(typeof message.content === "string"
-              ? [{ type: "text" as const, text: message.content }]
-              : message.content),
-            ...images.map((image) => ({
-              type: "image" as const,
-              source: imageSource(image),
-            })),
-          ],
-        },
+  const text = new MentionContentResolver().formatAsContextSection(unique);
+  const omitted = unique.flatMap((mention) => mention.omittedImages ?? []);
+  const images = boundedImages(
+    unique.flatMap((mention) => mention.images),
+    omitted,
   );
-  if (text) result.splice(1, 0, { role: "system", content: text });
-  return result;
+  const notice = imageOmissionNotice(omitted);
+  const extra = [text, notice].filter((item): item is string => !!item);
+  const lastUser = messages.map((message) => message.role).lastIndexOf("user");
+  if (lastUser < 0 || (!extra.length && !images.length))
+    return { messages, notice };
+  const result = messages.map((message, index) =>
+    index !== lastUser
+      ? message
+      : { ...message, content: withMentionContent(message.content, extra, images) },
+  );
+  return { messages: result, notice };
 }
 
-function boundedImages(images: MentionImage[]): MentionImage[] {
+function withMentionContent(
+  content: AiChatMessage["content"],
+  extra: string[],
+  images: Array<{ source: AiImageSource }>,
+): AiChatMessage["content"] {
+  if (typeof content === "string" && !images.length)
+    return [content, ...extra].join("\n\n");
+  return [
+    ...(typeof content === "string"
+      ? [{ type: "text" as const, text: content }]
+      : content),
+    ...extra.map((text) => ({ type: "text" as const, text })),
+    ...images.map((image) => ({ type: "image" as const, source: image.source })),
+  ];
+}
+
+function boundedImages(
+  images: MentionImage[],
+  omitted: MentionImageOmission[],
+): Array<{ source: AiImageSource }> {
   let remaining = 20 * 1024 * 1024;
-  return images
-    .filter((image) => {
-      if (
-        image.byteSize > MENTION_LIMITS.MAX_IMAGE_BYTE_SIZE ||
-        image.byteSize > remaining
-      )
-        return false;
+  const sent: Array<{ source: AiImageSource }> = [];
+  for (const image of images) {
+    const source = imageSource(image);
+    if (!source) omitted.push("unsupported");
+    else if (image.byteSize > MENTION_LIMITS.MAX_IMAGE_BYTE_SIZE) omitted.push("too_large");
+    else if (image.byteSize > remaining || sent.length >= MENTION_LIMITS.MAX_TOTAL_IMAGES)
+      omitted.push("over_limit");
+    else {
       remaining -= image.byteSize;
-      return true;
-    })
-    .slice(0, MENTION_LIMITS.MAX_TOTAL_IMAGES);
+      sent.push({ source });
+    }
+  }
+  return sent;
 }
 
-function imageSource(image: MentionImage): AiImageSource {
+/** Fail closed: only allow-listed inline data images, never a URL the provider would fetch. */
+function imageSource(image: MentionImage): AiImageSource | null {
   const match = /^data:([^;,]+);base64,(.*)$/s.exec(image.src);
-  return match
-    ? { kind: "data", mediaType: match[1]!, base64: match[2]! }
-    : { kind: "url", url: image.src };
+  const mediaType = match?.[1]?.toLowerCase();
+  if (!match || !mediaType || !ALLOWED_IMAGE_MIME_TYPES.includes(mediaType)) return null;
+  return { kind: "data", mediaType, base64: match[2]! };
+}
+
+function imageOmissionNotice(omitted: MentionImageOmission[]): string | null {
+  if (!omitted.length) return null;
+  const count = (reason: MentionImageOmission) =>
+    omitted.filter((item) => item === reason).length;
+  const reasons = [
+    [count("unsupported"), "unsupported type or source (only inline PNG, JPEG, GIF and WebP are sent)"],
+    [count("too_large"), "larger than the 5 MiB per-image limit"],
+    [count("over_limit"), "over the per-message image budget"],
+  ] as const;
+  const detail = reasons
+    .filter(([n]) => n > 0)
+    .map(([n, reason]) => `${n} ${reason}`)
+    .join("; ");
+  return `Image notice: ${omitted.length} referenced image(s) were not sent to the model (${detail}). Do not describe or infer their contents.`;
 }

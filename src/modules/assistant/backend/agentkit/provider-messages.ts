@@ -1,8 +1,14 @@
 import type { AiChatMessage, AiProviderConfig } from "agentkit/contracts";
-import type { AiChatRequest, AiProviderClient } from "agentkit/core";
+import { createEventStamper, type AiChatRequest, type AiProviderClient } from "agentkit/core";
 import { awaitProviderSnapshot } from "./await-snapshot";
 
-export type ProviderMessageTransform = (request: AiChatRequest) => Promise<AiChatMessage[]>;
+export interface ProviderMessageContext {
+  messages: AiChatMessage[];
+  /** Surfaced as durable `run.warning` events so the user sees what the model was not given. */
+  warnings: Array<{ code: string; message: string }>;
+}
+
+export type ProviderMessageTransform = (request: AiChatRequest) => Promise<ProviderMessageContext>;
 
 /** App prompt/mention adaptation cannot replace pinned model or transport credentials. */
 export function providerFactoryWithMessages(
@@ -18,10 +24,14 @@ export function providerFactoryWithMessages(
       capabilities: (signal, model) => client.capabilities(signal, model),
       listModels: (signal) => client.listModels(signal),
       async *streamChat(request) {
-        const messages = await awaitProviderSnapshot(() => transform(request), request.signal,
+        const context = await awaitProviderSnapshot(() => transform(request), request.signal,
           "Provider message preparation timed out");
         request.signal?.throwIfAborted();
-        yield* client.streamChat({ ...request, messages });
+        const stamp = createEventStamper();
+        for (const warning of context.warnings) {
+          yield stamp({ type: "run.warning", runId: request.runId, timestamp: new Date().toISOString(), data: warning });
+        }
+        yield* client.streamChat({ ...request, messages: context.messages });
       },
     };
   };

@@ -17,7 +17,7 @@ function Probe({ chatId }: { chatId: string }) {
   view = useAssistantConversation(chatId, "new", changed);
   return <><div data-testid="content">{view.messages.map(message => message.content).join("|")}</div>
     <div data-testid="phase">{view.selectedRun?.status}</div>
-    <RunVerification event={view.verification} truncated={view.chat.truncated} finishReason={view.chat.finishReason} />
+    <RunVerification event={view.verification} truncated={view.chat.truncated} finishReason={view.chat.finishReason} notices={view.notices} />
     {view.writeProposals.map(proposal => <ProposalOutcome key={proposal.id} outcome={proposal.applyResult} />)}</>;
 }
 async function mount(chatId = "chat-a", visible = true) {
@@ -126,6 +126,16 @@ describe("canonical Assistant conversation transport", () => {
     await until(() => container.textContent?.includes("Persisted final answer") === true && container.textContent.includes("Unconnected capacitor pin"));
     expect(container.textContent).not.toContain("Streamed draft");
     expect(fixture.submissions.size).toBe(1);
+  });
+  test("omitted mention images are shown as a run notice", async () => {
+    await mount(); await submit(); await until(() => (fixture.connections.get("run-1")?.size ?? 0) >= 1);
+    await act(async () => {
+      fixture.append("run-1", "run.warning", { code: "mention_images_omitted", message: "Image notice: 2 referenced image(s) were not sent to the model" });
+      fixture.append("run-1", "run.warning", { code: "truncated", message: "Unrelated provider warning" });
+      fixture.settle("run-1", "completed", "Answer without images");
+    });
+    await until(() => container.textContent?.includes("Image notice: 2 referenced image(s) were not sent") === true);
+    expect(container.textContent).not.toContain("Unrelated provider warning");
   });
   test("rapid switch ignores delayed old-chat read and retains drafts by chat", async () => {
     let release!: () => void;

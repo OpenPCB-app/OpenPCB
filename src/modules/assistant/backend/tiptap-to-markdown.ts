@@ -276,10 +276,14 @@ export interface ExtractedImage {
   byteSize: number;
 }
 
+/** Raster formats every supported provider accepts; anything else (SVG, PDF, …) is refused. */
+export const ALLOWED_IMAGE_MIME_TYPES: readonly string[] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+
 function parseDataUri(src: string): { mimeType: string; byteSize: number } | null {
-  const match = /^data:([^;]+);base64,(.*)$/.exec(src);
+  const match = /^data:([^;,]+);base64,(.*)$/s.exec(src);
   if (!match) return null;
-  const mimeType = match[1] ?? "";
+  const mimeType = (match[1] ?? "").toLowerCase();
+  if (!ALLOWED_IMAGE_MIME_TYPES.includes(mimeType)) return null;
   const base64 = match[2] ?? "";
   try {
     const byteSize = Math.floor((base64.length * 3) / 4) - (base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0);
@@ -289,31 +293,32 @@ function parseDataUri(src: string): { mimeType: string; byteSize: number } | nul
   }
 }
 
-function collectImagesFromNode(node: TiptapNode, out: ExtractedImage[]): void {
+function collectImagesFromNode(node: TiptapNode, out: ExtractedImage[], onUnsupported?: () => void): void {
   if (node.type === "image") {
-    const src = (node.attrs?.src as string) ?? "";
-    if (src.startsWith("data:")) {
-      const parsed = parseDataUri(src);
-      if (parsed) {
-        out.push({
-          src,
-          alt: (node.attrs?.alt as string) || "image",
-          mimeType: parsed.mimeType,
-          byteSize: parsed.byteSize,
-        });
-      }
+    const src = typeof node.attrs?.src === "string" ? node.attrs.src : "";
+    // Only inline data images are sent: a URL or path would need a fetch or file read.
+    const parsed = src.startsWith("data:") ? parseDataUri(src) : null;
+    if (parsed) {
+      out.push({
+        src,
+        alt: (node.attrs?.alt as string) || "image",
+        mimeType: parsed.mimeType,
+        byteSize: parsed.byteSize,
+      });
+    } else {
+      onUnsupported?.();
     }
     return;
   }
 
   if (node.content) {
     for (const child of node.content) {
-      collectImagesFromNode(child, out);
+      collectImagesFromNode(child, out, onUnsupported);
     }
   }
 }
 
-export function extractImagesFromTiptap(json: unknown): ExtractedImage[] {
+export function extractImagesFromTiptap(json: unknown, onUnsupported?: () => void): ExtractedImage[] {
   if (!json || typeof json !== "object") return [];
 
   const doc = json as TiptapDoc;
@@ -321,7 +326,7 @@ export function extractImagesFromTiptap(json: unknown): ExtractedImage[] {
 
   const images: ExtractedImage[] = [];
   for (const node of doc.content) {
-    collectImagesFromNode(node, images);
+    collectImagesFromNode(node, images, onUnsupported);
   }
   return images;
 }

@@ -18,11 +18,21 @@ export interface NativeToolContributorOptions extends NativeStageDeps {
   contextStore?: NativeContextStore;
 }
 
+/** Tools staged before the chat has a primary design: reads plus the call that creates one. */
+export function nativeUnboundToolNames(tools: AiTool[]): string[] {
+  return tools.filter((tool) => tool.definition.effect !== "write" || tool.definition.name === "designer_create_design")
+    .map((tool) => tool.definition.name);
+}
+
 export function createNativeToolContributor(options: NativeToolContributorOptions): ToolSetContributor {
   options = { ...options, contextStore: options.contextStore ?? new NativeContextStore(options.context) };
   const catalog = buildOpenpcbToolRegistry(options.context, options.contextResolver, undefined, { allowRawToolData: false });
+  // Unbound chats never see design writes: an explicit designId must not reach an
+  // unrelated design. AgentKit stages tools once per run, so edits follow on the next run.
+  const unbound = nativeUnboundToolNames(catalog.list());
   return {
     namespace: "openpcb",
+    unboundToolNames: () => [...unbound],
     async contribute(): Promise<AiTool[]> {
       return catalog.list().map((tool) => ({ definition: tool.definition,
         execute: (context, input) => executeNativeTool(options, tool, context, input) }));

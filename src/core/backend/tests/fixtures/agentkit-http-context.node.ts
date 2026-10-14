@@ -106,8 +106,17 @@ test("real knowledge mention resolves text and image in AgentKit assembled histo
   );
   const request = domain.provider.requests[0]!;
   assert.ok(JSON.stringify(request.messages).includes("Fixture source facts"));
+  assert.equal(
+    request.messages.some(
+      (message) =>
+        message.role === "system" &&
+        JSON.stringify(message.content).includes("Fixture source facts"),
+    ),
+    false,
+  );
   const user = request.messages.find((message) => message.role === "user");
   assert.ok(Array.isArray(user?.content));
+  assert.ok(JSON.stringify(user.content).includes("<untrusted_reference_data>"));
   assert.ok(
     user.content.some(
       (part) =>
@@ -120,6 +129,75 @@ test("real knowledge mention resolves text and image in AgentKit assembled histo
     request.runId,
     (await domain.service.host.store.tasks.listByScope(chatId))[0]!.taskId,
   );
+});
+
+test("omitted mention images are reported once to the model and the run log", async () => {
+  domain = await isolatedHttpDomain([
+    {
+      calls: [
+        { id: "inspect", name: "designer_get_schematic_connectivity", arguments: {} },
+      ],
+    },
+    { content: "Read with notice" },
+  ]);
+  const image = (src: string) => ({ type: "image", attrs: { src, alt: "img" } });
+  const small = "data:image/png;base64,aGVsbG8=";
+  const pageId = crypto.randomUUID();
+  await domain.knowledge.create({
+    id: pageId,
+    workspace_id: "default",
+    title: "Images",
+    order_key: "a",
+    created_at: new Date(),
+    updated_at: new Date(),
+    content_json: {
+      engine: "tiptap",
+      version: 1,
+      data: {
+        type: "doc",
+        content: [
+          image(`data:image/png;base64,${"A".repeat(8 * 1024 * 1024)}`),
+          image("data:image/svg+xml;base64,PHN2Zy8+"),
+          image("https://example.invalid/remote.png"),
+          ...Array.from({ length: 12 }, () => image(small)),
+        ],
+      },
+    },
+  });
+  const { chatId } = await boundChat(domain);
+  const result = await submit(
+    domain,
+    chatId,
+    "images",
+    `Read @[knowledge-page:${pageId}|Images]`,
+  );
+  assert.ok(domain.provider.requests.length >= 2);
+  for (const request of domain.provider.requests) {
+    const user = [...request.messages].reverse().find((message) => message.role === "user")!;
+    assert.ok(Array.isArray(user.content));
+    const parts = user.content;
+    assert.equal(parts.filter((part) => part.type === "image").length, 10);
+    assert.ok(
+      parts.every((part) => part.type !== "image" || part.source.kind === "data"),
+    );
+    assert.ok(
+      JSON.stringify(parts).includes(
+        "Image notice: 5 referenced image(s) were not sent",
+      ),
+    );
+  }
+  const warnings = (
+    await domain.service.host.store.tasks.listEvents(result.runId)
+  ).filter(
+    (event) =>
+      event.type === "run.warning" &&
+      JSON.stringify(event).includes("mention_images_omitted"),
+  );
+  assert.equal(warnings.length, 1);
+  const message = JSON.stringify(warnings[0]);
+  assert.ok(message.includes("2 unsupported type or source"));
+  assert.ok(message.includes("1 larger than the 5 MiB per-image limit"));
+  assert.ok(message.includes("2 over the per-message image budget"));
 });
 
 test("read-only HTTP run cannot place native components", async () => {
@@ -246,7 +324,7 @@ test("HTTP regenerate requires key and preserves original answer and immutable r
   assert.equal(domain.provider.requests.length, count);
 });
 
-test("unbound creation and autoedit use real domain receipts in one run", async () => {
+test("unbound chat stages only reads and creation; edits follow on the bound run", async () => {
   const place = {
     id: "create-place",
     name: "designer_place_components",
@@ -264,8 +342,9 @@ test("unbound creation and autoedit use real domain receipts in one run", async 
         },
       ],
     },
-    { calls: [place] },
-    { content: "Created and placed" },
+    { content: "Design created" },
+    { newRun: true, calls: [place] },
+    { content: "Placed" },
   ]);
   place.arguments.components.push({
     componentId: domain.componentId,
@@ -276,10 +355,30 @@ test("unbound creation and autoedit use real domain receipts in one run", async 
     body: JSON.stringify({ title: "Unbound" }),
   });
   const chat = (await response.json()) as { id: string };
-  const result = await submit(domain, chat.id, "create-place");
+  const created = await submit(domain, chat.id, "create");
+  const unboundTools = domain.provider.requests[0]!.tools!.map((tool) => tool.name);
+  assert.ok(unboundTools.includes("designer_create_design"));
+  assert.ok(unboundTools.includes("library_resolve_bom"));
+  for (const name of [
+    "designer_place_components",
+    "designer_propose_schematic_deletions",
+    "compile_circuit",
+  ])
+    assert.equal(unboundTools.includes(name), false, name);
+  assert.ok(
+    JSON.stringify(domain.provider.requests[0]!.messages[0]).includes(
+      "This chat has no design yet",
+    ),
+  );
   const binding = domain.service.contextResolver.getPrimaryDesign(chat.id)!;
   assert.ok(binding);
   assert.equal(binding.label, "Created from HTTP");
+  const placed = await submit(domain, chat.id, "place");
+  const boundTools = domain.provider.requests
+    .find((request) => request.runId === placed.runId)!
+    .tools!.map((tool) => tool.name);
+  assert.ok(boundTools.includes("designer_place_components"));
+  assert.notEqual(placed.runId, created.runId);
   assert.equal(
     (await domain.designer.getSchematicProjection(binding.refId))?.parts.length,
     1,
@@ -298,7 +397,7 @@ test("unbound creation and autoedit use real domain receipts in one run", async 
       "applied",
     );
   const verification = (
-    await domain.service.host.store.tasks.listEvents(result.runId)
+    await domain.service.host.store.tasks.listEvents(placed.runId)
   )
     .filter((event) => event.type === "run.verification")
     .at(-1);

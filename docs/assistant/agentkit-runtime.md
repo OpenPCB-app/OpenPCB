@@ -35,6 +35,20 @@ consulting current configuration. Trusted submission metadata captures app promp
 provider message adapter supplies app prompt/mention content without replacing pinned model,
 transport credentials, cancellation, or dispatch budget callbacks.
 
+Referenced documents (knowledge mentions) reach the model on the latest user turn inside an
+`<untrusted_reference_data>` block, never as a system message; the block's delimiters are neutralized
+inside document text. Only inline PNG/JPEG/GIF/WebP data images are sent — no URL or path is ever
+fetched. Images that are unsupported, over 5 MiB, or over the per-page/per-message budget are dropped,
+the turn continues, and an "Image notice" goes both to the model (in that user turn) and to the user
+(one `run.warning` with code `mention_images_omitted` per run, shown under the run status).
+
+The native contributor declares `unboundToolNames`: until a chat has an active primary design binding,
+only read tools and `designer_create_design` are staged, so an explicit `designId` cannot reach an
+unrelated design. AgentKit stages tools once per run, so placing and wiring into a design created in
+the same run follows on the user's next message; the system prompt states this for unbound turns. A
+binding whose design was deleted is marked `missing` at turn start and never falls back to another or
+the UI-active design.
+
 Boot uses manual recovery. Queued work becomes interrupted; crashed running work waits for its
 lease to expire. A serialized 10-second app lifecycle sweep calls the framework's manual recovery
 method so a lease that was fresh at boot is eventually interrupted. It never redispatches inference
