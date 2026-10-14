@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { AlertTriangle, Download, X } from "lucide-react";
 import { useFeatureFlag } from "@/feature-flags";
+import { useEscapeLayer } from "@shared/frontend/keyboard/use-escape-layer";
 import { Button } from "@shared/frontend/ui/button";
 import {
   Dialog,
@@ -73,14 +74,7 @@ function PcbExportDialogFull({
     [backendURL, moduleId],
   );
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+  useEscapeLayer(onClose, { enabled: open });
 
   // Run DRC when the dialog opens (also persists the result → design card).
   useEffect(() => {

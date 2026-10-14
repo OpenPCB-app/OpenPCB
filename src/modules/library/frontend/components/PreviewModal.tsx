@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
-import { useEffect, type ReactElement, type ReactNode } from "react";
+import { type ReactElement, type ReactNode } from "react";
+import { useEscapeLayer } from "@shared/frontend/keyboard/use-escape-layer";
 
 interface PreviewModalProps {
   title: string;
@@ -13,15 +14,7 @@ export function PreviewModal({
   onClose,
   children,
 }: PreviewModalProps): ReactElement {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useEscapeLayer(onClose);
 
   return (
     <div

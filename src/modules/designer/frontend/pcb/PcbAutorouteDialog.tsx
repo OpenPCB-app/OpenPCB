@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { AlertTriangle, X } from "lucide-react";
+import { useEscapeLayer } from "@shared/frontend/keyboard/use-escape-layer";
 import { createDesignerApi, type CloudHeadersProvider } from "../api";
 import type {
   RouteOperation,
@@ -103,15 +104,7 @@ export function PcbAutorouteDialog({
     [backendURL, moduleId, cloudHeaders],
   );
 
-  // Escape closes.
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+  useEscapeLayer(onClose, { enabled: open });
 
   // Reset + submit each time the dialog opens.
   useEffect(() => {

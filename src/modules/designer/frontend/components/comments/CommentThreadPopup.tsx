@@ -19,6 +19,7 @@ import type {
   DesignerCommentThreadStatus,
   DesignerCommentTodoStatus,
 } from "@sdks/designer";
+import { useEscapeLayer } from "@shared/frontend/keyboard/use-escape-layer";
 import { IconButton } from "@shared/frontend/ui/icon-button";
 import { Textarea } from "@shared/frontend/ui/textarea";
 import {
@@ -190,12 +191,11 @@ export function CommentThreadPopup({
     setPos({ left, top });
   }, [screen.x, screen.y, rect.width, rect.height, messages.length]);
 
-  // Esc + click-away close (defer the click-away listener one tick so the
-  // opening click doesn't immediately dismiss the popup).
+  useEscapeLayer(onClose);
+
+  // Click-away close (defer the listener one tick so the opening click doesn't
+  // immediately dismiss the popup).
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
@@ -203,11 +203,9 @@ export function CommentThreadPopup({
       () => document.addEventListener("mousedown", onDown),
       0,
     );
-    document.addEventListener("keydown", onKey);
     return () => {
       window.clearTimeout(timer);
       document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
     };
   }, [onClose]);
 

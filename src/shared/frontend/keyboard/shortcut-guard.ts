@@ -224,14 +224,30 @@ function hasBlockingOverlay(
   return false;
 }
 
+/**
+ * True when the key already belongs to someone else: an earlier handler
+ * consumed it, an IME is composing (legacy keyCode 229 included), or it is
+ * an auto-repeat the caller did not opt into. The first check of every
+ * shortcut and Escape-layer handler.
+ */
+export function isKeyEventConsumed(
+  event: Pick<
+    ShortcutGuardEvent,
+    "defaultPrevented" | "isComposing" | "keyCode" | "repeat"
+  >,
+  options: Pick<ShortcutGuardOptions, "allowRepeat"> = {},
+): boolean {
+  if (event.defaultPrevented || event.isComposing || event.keyCode === 229)
+    return true;
+  return Boolean(event.repeat && !options.allowRepeat);
+}
+
 /** Shared gate for global and intentionally focused editor commands. */
 export function isShortcutBlocked(
   event: ShortcutGuardEvent,
   options: ShortcutGuardOptions = {},
 ): boolean {
-  if (event.defaultPrevented || event.isComposing || event.keyCode === 229)
-    return true;
-  if (event.repeat && !options.allowRepeat) return true;
+  if (isKeyEventConsumed(event, options)) return true;
   const doc =
     options.doc ?? (typeof document === "undefined" ? null : document);
   const targets = event.composedPath?.() ?? [event.target];

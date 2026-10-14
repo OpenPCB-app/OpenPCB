@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isEditableTarget,
   isInsideOverlay,
+  isKeyEventConsumed,
   isModalOpen,
   isShortcutBlocked,
 } from "./shortcut-guard";
@@ -491,5 +492,18 @@ describe("focused editor ownership", () => {
         { scopeRoot, doc, allowRepeat: true },
       ),
     ).toBe(true);
+  });
+});
+
+describe("isKeyEventConsumed (shared with the Escape layer)", () => {
+  it("flags consumed, composing and unrequested repeat keys only", () => {
+    expect(isKeyEventConsumed({})).toBe(false);
+    expect(isKeyEventConsumed({ defaultPrevented: true })).toBe(true);
+    expect(isKeyEventConsumed({ isComposing: true })).toBe(true);
+    expect(isKeyEventConsumed({ keyCode: 229 })).toBe(true);
+    expect(isKeyEventConsumed({ repeat: true })).toBe(true);
+    expect(isKeyEventConsumed({ repeat: true }, { allowRepeat: true })).toBe(
+      false,
+    );
   });
 });

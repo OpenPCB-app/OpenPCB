@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { AlertTriangle, X } from "lucide-react";
+import { useEscapeLayer } from "@shared/frontend/keyboard/use-escape-layer";
 
 import type { AutoLayoutConfig, PcbPlacedPart } from "../../../../../sdks/designer";
 import type { CloudHeadersProvider } from "../../api";
@@ -100,15 +101,7 @@ export function AutoLayoutDialog({
   const job = useAutoLayoutJob({ api, sessionId, onApplied });
   const { state } = job;
 
-  // Escape closes.
-  useEffect(() => {
-    if (!open) return;
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+  useEscapeLayer(onClose, { enabled: open });
 
   // A board edit during a run invalidates the candidates — inspectable, not appliable.
   useEffect(() => {

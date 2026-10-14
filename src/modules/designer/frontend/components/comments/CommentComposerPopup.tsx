@@ -5,6 +5,7 @@ import {
   useState,
   type ReactElement,
 } from "react";
+import { useEscapeLayer } from "@shared/frontend/keyboard/use-escape-layer";
 import { Button } from "@shared/frontend/ui/button";
 import { Textarea } from "@shared/frontend/ui/textarea";
 
@@ -43,14 +44,14 @@ export function CommentComposerPopup({
     setPos({ left, top });
   }, [screen.x, screen.y, rect.width, rect.height]);
 
+  // Before the autofocus effect, so the layer records the canvas as opener.
+  useEscapeLayer(onCancel);
+
   useEffect(() => {
     textRef.current?.focus();
   }, []);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onCancel();
     };
@@ -58,11 +59,9 @@ export function CommentComposerPopup({
       () => document.addEventListener("mousedown", onDown),
       0,
     );
-    document.addEventListener("keydown", onKey);
     return () => {
       window.clearTimeout(timer);
       document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
     };
   }, [onCancel]);
 

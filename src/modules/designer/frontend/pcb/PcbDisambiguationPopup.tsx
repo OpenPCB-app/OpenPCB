@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactElement } from "react";
+import { useEscapeLayer } from "@shared/frontend/keyboard/use-escape-layer";
 import type { PcbHitCandidate } from "./pcb-hit";
 
 /**
@@ -34,13 +35,10 @@ export function PcbDisambiguationPopup({
 }): ReactElement | null {
   const ref = useRef<HTMLDivElement | null>(null);
 
+  useEscapeLayer(onClose);
+
   useEffect(() => {
     const handleKey = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-        return;
-      }
       if (event.key === "ArrowDown") {
         event.preventDefault();
         onCycle(1);
