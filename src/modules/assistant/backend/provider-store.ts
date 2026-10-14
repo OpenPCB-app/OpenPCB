@@ -3,6 +3,7 @@ import { AgentKitHostError } from "agentkit/host";
 import { providerSnapshotIdentity } from "./providers/provider-snapshot";
 import { ProviderCredentials } from "./providers/provider-credentials";
 import { CredentialError } from "../../../core/contracts/credentials/secret-store";
+import { RETIRED_PROVIDER_KINDS } from "./providers/provider-selection";
 import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
 import type {
   AssistantProviderConfig,
@@ -165,12 +166,22 @@ export class ProviderStore {
     this.ensureDefaults();
     return this.rawSql(
       "SELECT * FROM assistant_provider_config ORDER BY is_builtin DESC, label ASC",
-    ).map((row) => this.rowToPublic(row));
+    )
+      .filter((row) => !RETIRED_PROVIDER_KINDS.has(String(row.kind)))
+      .map((row) => this.rowToPublic(row));
   }
 
+  /** Retired rows stay on disk untouched but are never offered as public providers. */
   getProvider(idValue: string): AssistantProviderConfig | null {
     const internal = this.getProviderInternal(idValue);
-    return internal ? this.publicView(internal) : null;
+    return internal && !RETIRED_PROVIDER_KINDS.has(internal.kind)
+      ? this.publicView(internal) : null;
+  }
+
+  retiredProvider(idValue: string): { id: string; label: string } | null {
+    const internal = this.getProviderInternal(idValue);
+    return internal && RETIRED_PROVIDER_KINDS.has(internal.kind)
+      ? { id: internal.id, label: internal.label } : null;
   }
 
   getProviderInternal(idValue: string): InternalProviderConfig | null {

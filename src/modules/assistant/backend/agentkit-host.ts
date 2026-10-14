@@ -31,6 +31,7 @@ import { SUBMISSION_FINGERPRINT_KEY, assertReplayMatches, submissionFingerprint 
 import {
   assertSafeSubmissionMetadata, buildAgentKitProviderClient, pinProviderGeneration,
 } from "./agentkit/providers";
+import { ProviderSelectionError, retiredProviderError } from "./providers/provider-selection";
 
 export interface AgentKitContributorServices {
   store: AssistantStore;
@@ -240,9 +241,8 @@ async function submitPinned(
         { store: services.store, providers: services.providers, settings: services.settings, regenerate, signal }),
         signal, "Submission preparation timed out");
     }
-    const settings = services.settings.getSettings();
     const provider = await pinProviderGeneration(services.providers, services.store,
-      input.providerId ?? settings.defaultProviderId, input.model, signal);
+      selectedProviderId(services.settings, input.providerId), input.model, signal);
     providerId = provider.id;
     model = provider.defaultModel;
     kind = isLocalProvider(provider.kind, provider.baseUrl) ? LOCAL_TURN_KIND : "chat.turn";
@@ -253,4 +253,12 @@ async function submitPinned(
   const turns = kind === LOCAL_TURN_KIND ? services.localTurns : services.turns;
   return regenerate ? turns.regenerate(pinned as RegenerateMessageInput)
     : turns.submitMessage(pinned as SubmitMessageInput);
+}
+
+function selectedProviderId(settings: SettingsStore, requested: string | undefined): string {
+  const providerId = requested || settings.getSettings().defaultProviderId;
+  if (providerId) return providerId;
+  const retired = settings.retiredDefaultProvider();
+  if (retired) throw retiredProviderError(retired.label);
+  throw new ProviderSelectionError("provider_not_selected", "No default assistant provider is selected");
 }

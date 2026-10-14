@@ -45,12 +45,21 @@ export function providerPreferenceDto(provider: AssistantProviderConfig): Canoni
 
 export function settingsPreferenceDto(settings: SettingsStore, providers: ProviderStore): SettingsDto {
   const app = settings.getSettings();
-  return {
-    defaultProviderId: app.defaultProviderId,
-    defaultModel: providers.getProvider(app.defaultProviderId)?.defaultModel,
+  const common = {
     contextSizePreference: app.contextSizePreference,
     writePolicyMode: app.toolExecutionPolicy,
     allowRawToolData: app.allowRawToolData,
+  };
+  if (!app.defaultProviderId) {
+    const retired = settings.retiredDefaultProvider();
+    return { ...common, metadata: retired
+      ? { defaultProviderState: "retired", retiredProviderId: retired.id, retiredProviderLabel: retired.label }
+      : { defaultProviderState: "unset" } };
+  }
+  return {
+    ...common,
+    defaultProviderId: app.defaultProviderId,
+    defaultModel: providers.getProvider(app.defaultProviderId)?.defaultModel,
     toolCalling: providers.getToolCallingMode(app.defaultProviderId),
     metadata: {},
   };

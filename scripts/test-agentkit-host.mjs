@@ -11,6 +11,7 @@ try {
   await symlink(join(root, 'node_modules'), join(directory, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
   const files = [
     'src/modules/assistant/backend/agentkit/host.node-test',
+    'src/modules/assistant/backend/agentkit/host-providers.node-test',
     'src/modules/assistant/backend/agentkit/redaction.node-test',
     'src/modules/designer/backend/comments/attachment-response.node-test',
   ];

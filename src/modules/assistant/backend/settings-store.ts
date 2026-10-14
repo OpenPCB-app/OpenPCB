@@ -7,6 +7,7 @@ import type {
   AssistantToolExecutionPolicy,
 } from "../../../sdks/assistant";
 import type { ProviderStore } from "./provider-store";
+import { retiredProviderError } from "./providers/provider-selection";
 
 type RawSqlFn = (q: string, p?: unknown[]) => Record<string, unknown>[];
 
@@ -82,7 +83,18 @@ export class SettingsStore {
     }
   }
 
+  /** A default that points at a retired provider reads as cleared, never as a fallback. */
   getSettings(): AssistantSettings {
+    const settings = this.storedSettings();
+    return this.providerStore.retiredProvider(settings.defaultProviderId)
+      ? { ...settings, defaultProviderId: "" } : settings;
+  }
+
+  retiredDefaultProvider(): { id: string; label: string } | null {
+    return this.providerStore.retiredProvider(this.storedSettings().defaultProviderId);
+  }
+
+  private storedSettings(): AssistantSettings {
     this.ensureDefaults();
     const row = this.rawSql(
       "SELECT * FROM assistant_settings WHERE id='default'",
@@ -92,11 +104,15 @@ export class SettingsStore {
   }
 
   updateSettings(input: Partial<AssistantSettings>): AssistantSettings {
-    this.ensureDefaults();
-    const current = this.getSettings();
-    const defaultProviderId =
-      input.defaultProviderId ?? current.defaultProviderId;
-    if (!this.providerStore.getProviderInternal(defaultProviderId)) {
+    const current = this.storedSettings();
+    const requested = input.defaultProviderId || undefined;
+    const defaultProviderId = requested ?? current.defaultProviderId;
+    const retired = this.providerStore.retiredProvider(defaultProviderId);
+    // Unrelated edits keep the stored (retired) default rather than inventing a new one.
+    if (retired && requested !== undefined) {
+      throw retiredProviderError(retired.label);
+    }
+    if (!retired && !this.providerStore.getProviderInternal(defaultProviderId)) {
       throw new ValidationError(`Provider not found: ${defaultProviderId}`);
     }
     const promptPreset =

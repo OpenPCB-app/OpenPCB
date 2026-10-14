@@ -8,6 +8,7 @@ import {
   refreshPreferenceCapabilities, refreshPreferenceModels, requirePreferenceProvider,
   settingsPreferenceDto, testPreferenceProvider,
 } from "./agentkit/provider-preferences";
+import { retiredProviderError } from "./providers/provider-selection";
 
 const ProviderInput = Type.Object({
   label: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
@@ -65,7 +66,11 @@ async function updateCanonicalSettings(service: AgentKitHttpService, req: Reques
   const input = await readInput(req, CanonicalSettingsInput, Object.keys(CanonicalSettingsInput.properties));
   const { providers, settings } = service.host;
   const providerId = input.defaultProviderId ?? settings.getSettings().defaultProviderId;
-  requirePreferenceProvider(providers, providerId);
+  const retired = providers.retiredProvider(providerId) ?? (providerId ? null : settings.retiredDefaultProvider());
+  const providerScoped = input.defaultProviderId !== undefined || input.defaultModel !== undefined
+    || input.toolCalling !== undefined;
+  if (retired && providerScoped) throw retiredProviderError(retired.label);
+  if (providerId || providerScoped) requirePreferenceProvider(providers, providerId);
   if (input.defaultModel !== undefined) await providers.updateProvider(providerId, { defaultModel: input.defaultModel });
   if (input.toolCalling !== undefined) providers.setToolCallingMode(providerId, input.toolCalling);
   settings.updateSettings({

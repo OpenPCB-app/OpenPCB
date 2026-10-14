@@ -7,6 +7,10 @@ import { ValidationError } from "../../../../core/contracts/errors";
 import { isSecretReference } from "../../../../core/contracts/credentials/secret-store";
 import type { ProviderStore } from "../provider-store";
 import { redactCredentialClient } from "./redaction";
+import { isLocalProvider } from "./budgets";
+import {
+  ProviderSelectionError, RETIRED_PROVIDER_KINDS, isConnectionRefused, retiredProviderError,
+} from "../providers/provider-selection";
 
 const SUPPORTED_KINDS = new Set([
   "openai", "openrouter", "openai-compatible", "lmstudio", "omlx",
@@ -38,8 +42,14 @@ export async function pinProviderGeneration(
   signal?.throwIfAborted();
   const snapshot = await awaitProviderSnapshot(() => providers.snapshotProvider(providerId), signal);
   signal?.throwIfAborted();
-  if (!SUPPORTED_KINDS.has(snapshot.kind) || !snapshot.enabled) {
-    throw new ValidationError("Provider is not available for AgentKit");
+  if (RETIRED_PROVIDER_KINDS.has(snapshot.kind)) throw retiredProviderError(snapshot.label);
+  if (!SUPPORTED_KINDS.has(snapshot.kind)) {
+    throw new ProviderSelectionError("provider_unsupported",
+      `Provider type '${snapshot.kind}' is not supported by the assistant`);
+  }
+  if (!snapshot.enabled) {
+    throw new ProviderSelectionError("provider_disabled",
+      `Provider '${snapshot.label}' is disabled. Enable it in Assistant settings or choose another provider.`);
   }
   const url = new URL(snapshot.baseUrl);
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
@@ -47,6 +57,12 @@ export async function pinProviderGeneration(
   }
   const selectedModel = model ?? snapshot.defaultModel;
   if (!selectedModel.trim()) throw new ValidationError("Default model is required");
+  // Endpoints that never listed models (custom servers, oMLX before discovery) stay open-ended.
+  const discovered = providers.listModels(snapshot.id).map((entry) => entry.modelId);
+  if (discovered.length && !discovered.includes(selectedModel)) {
+    throw new ProviderSelectionError("model_not_available",
+      `Model '${selectedModel}' is not offered by provider '${snapshot.label}'. Refresh its models or choose a listed model.`);
+  }
   const config: AiProviderConfig = {
     id: "",
     label: snapshot.label,
@@ -90,6 +106,21 @@ export function buildAgentKitProviderClient(config: AiProviderConfig): AiProvide
   if ((reference || config.kind === "openai" || config.kind === "openrouter") && !config.apiKey) {
     throw new ValidationError("Provider credential is unavailable");
   }
-  const client = OpenAiCompatibleClient.fromConfig(config);
+  const client = OpenAiCompatibleClient.fromConfig(config, offlineAwareFetch(config));
   return config.apiKey ? redactCredentialClient(client, config.apiKey) : client;
+}
+
+/** A refused local socket means the model server is not running, not a provider fault. */
+function offlineAwareFetch(config: AiProviderConfig): typeof fetch | undefined {
+  if (!isLocalProvider(config.kind, config.baseUrl)) return undefined;
+  const guarded = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    try {
+      return await globalThis.fetch(input, init);
+    } catch (error) {
+      if (!isConnectionRefused(error)) throw error;
+      throw new ProviderSelectionError("provider_offline",
+        `Local provider '${config.label}' is offline: nothing accepted the connection at ${new URL(config.baseUrl).origin}. Start the local model server and retry.`);
+    }
+  };
+  return guarded as typeof fetch;
 }
