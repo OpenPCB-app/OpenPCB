@@ -20,6 +20,14 @@ export const normalizedTitle = (title: string): string =>
 const token = (page: Page): string => new Date(page.updated_at).toISOString();
 const sameContent = (a: EditorContent, b: EditorContent): boolean =>
   JSON.stringify(a) === JSON.stringify(b);
+export const OFFLINE_SAVE_ERROR =
+  "You are offline. Your draft is retained; retry when you are back online.";
+// Saves are still attempted offline: the backend is loopback and usually stays reachable.
+const isOfflineFailure = (error: unknown): boolean =>
+  error instanceof KnowledgeApiError &&
+  error.status === 0 &&
+  typeof navigator !== "undefined" &&
+  navigator.onLine === false;
 
 /** Pending fields survive navigation; the optional native journal also survives renderer restart. */
 export class PageSaveCoordinator {
@@ -210,11 +218,16 @@ export class PageSaveCoordinator {
   remoteChanged(id: string): void {
     const entry = this.entries.get(id);
     if (!entry) return;
+    // Clean pages have nothing to protect: invalidate in-flight fetches and let the caller refresh.
+    if (!this.isDirty(id)) {
+      this.update(entry, { version: entry.snapshot.version + 1 });
+      return;
+    }
     this.cancelTimer(entry);
     this.update(entry, {
       version: entry.snapshot.version + 1,
       conflict: true,
-      status: entry.saving ? "saving" : this.isDirty(id) ? "error" : "idle",
+      status: entry.saving ? "saving" : "error",
       error: "This page changed remotely. Your draft is retained.",
     });
   }
@@ -397,7 +410,9 @@ export class PageSaveCoordinator {
         conflict: entry.snapshot.conflict || conflict,
         error: conflict
           ? "This page changed remotely. Your draft is retained."
-          : "Could not save. Your draft is retained; retry when the service is available.",
+          : isOfflineFailure(error)
+            ? OFFLINE_SAVE_ERROR
+            : "Could not save. Your draft is retained; retry when the service is available.",
       });
     } finally {
       entry.saving = false;

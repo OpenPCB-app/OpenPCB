@@ -8,6 +8,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { Button } from "@shared/frontend/ui/button";
+import { confirmDialog } from "@shared/frontend/ui/dialog-host-store";
 import { useTreeStore, isDescendant } from "../../stores/tree-store";
 import { useKnowledgeApi } from "../../hooks";
 import { deletePageWithDrafts } from "../../lib/delete-page-with-drafts";
@@ -83,7 +84,13 @@ export const TreeItem = memo(function TreeItem({
     async (e: React.MouseEvent) => {
       e.stopPropagation();
       if (node.is_project_root) return;
-      if (!window.confirm(`Delete "${node.title}"?`)) return;
+      const confirmed = await confirmDialog({
+        title: `Delete "${node.title}"?`,
+        description: "This page and its subpages will be deleted.",
+        confirmLabel: "Delete",
+        tone: "danger",
+      });
+      if (!confirmed) return;
       setIsDeleting(true);
       try {
         await deletePageWithDrafts(api, tree, node.id);

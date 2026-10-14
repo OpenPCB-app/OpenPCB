@@ -9,6 +9,7 @@ import { PageEditor } from "../components/Editor/PageEditor";
 import type { EditorContent, Page } from "../../shared/types";
 import { getPageSaveCoordinator } from "../lib/page-save-coordinator";
 import { createKnowledgeApi } from "../hooks/useKnowledgeApi";
+import { useDialogHostStore } from "@shared/frontend/ui/dialog-host-store";
 
 let api = createKnowledgeApi("http://test", "knowledge");
 let testId = 0;
@@ -305,6 +306,54 @@ describe("real Docs editor lifecycle", () => {
     expect(host.textContent).toContain("Saved");
     expect(host.querySelector('[role="alert"]')).toBeNull();
   });
+  it.each([
+    [false, "You are offline."],
+    [true, "Could not save."],
+  ])(
+    "network failure with navigator.onLine=%s shows its own retained-draft state",
+    async (onLine, message) => {
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(onLine);
+      const fetchMock = vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      await renderPage(page("a", "Alpha"));
+      await act(async () => {
+        currentEditor().commands.insertContent("kept ");
+        getPageSaveCoordinator(api).flush("a");
+      });
+      await settle();
+      const alert = host.querySelector('[role="alert"]')?.textContent ?? "";
+      expect(host.textContent).toContain("Not saved");
+      expect(alert).toContain(message);
+      expect(alert).toContain("Draft retained");
+      expect(alert.includes("You are offline.")).toBe(!onLine);
+      expect(currentEditor().getText()).toBe("kept Alpha");
+      expect(
+        [...host.querySelectorAll("button")].some(
+          (button) => button.textContent === "Retry save",
+        ),
+      ).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("page deletion asks through the kit dialog and cancel sends nothing", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ page: page("a", "") }));
+    vi.stubGlobal("fetch", fetchMock);
+    await renderPage(page("a", "Alpha"));
+    await act(async () =>
+      (
+        host.querySelector('button[title="Delete page"]') as HTMLElement
+      ).click(),
+    );
+    const [request] = useDialogHostStore.getState().queue;
+    expect(request?.kind).toBe("confirm");
+    expect(request?.options.title).toBe('Delete "a"?');
+    await act(async () => request!.settle(false));
+    await settle();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(useDialogHostStore.getState().queue).toHaveLength(0);
+  });
   it("refresh response started before typing cannot overwrite the live editor", async () => {
     let release!: (response: Response) => void;
     let delayed = false;
@@ -389,7 +438,7 @@ describe("real Docs editor lifecycle", () => {
     expect(server.content_json.data).toEqual(currentEditor().getJSON());
     expect(server.title).toBe("local title");
   });
-  it("merged remote PDF replaces stale isolated text-page props", async () => {
+  it("clean remote PDF change refreshes silently over stale text-page props", async () => {
     const remote: Page = {
       ...page("a", ""),
       content_engine: "pdf",
@@ -414,11 +463,13 @@ describe("real Docs editor lifecycle", () => {
     await act(async () => {
       coordinator.remoteChanged("a");
     });
-    const keep = [...host.querySelectorAll("button")].find(
-      (button) => button.textContent === "Keep draft and retry",
-    )!;
-    await act(async () => keep.click());
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    // Space refreshes a clean page after the event; the refresh lands here.
+    await act(async () => {
+      coordinator.acceptRemote(remote);
+    });
     await settle();
+    expect(host.querySelector('[role="alert"]')).toBeNull();
     expect(host.textContent).toContain("PDF");
     expect(host.querySelector(".tiptap")).toBeNull();
     expect(host.querySelector('button[title="Undo"]')).toBeNull();

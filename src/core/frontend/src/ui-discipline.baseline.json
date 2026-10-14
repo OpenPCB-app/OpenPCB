@@ -258,7 +258,6 @@
       "whiteBlack": 1
     },
     "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx": {
-      "nativeDialog": 1,
       "palette": 8
     },
     "src/modules/knowledge/frontend/components/Editor/PdfViewer.tsx": {
@@ -272,7 +271,6 @@
       "palette": 8
     },
     "src/modules/knowledge/frontend/components/Sidebar/TreeItem.tsx": {
-      "nativeDialog": 1,
       "palette": 4
     },
     "src/modules/library/frontend/Space.tsx": {

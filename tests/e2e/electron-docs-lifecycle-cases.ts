@@ -53,9 +53,12 @@ export function registerNativeDocsLifecycleTests(
     await expect(
       current.page.getByRole("button", { name: "Undo", exact: true }),
     ).toBeDisabled();
-    current.page.once("dialog", (dialog) => dialog.accept());
     await current.page
       .getByRole("button", { name: "Delete page", exact: true })
+      .click();
+    await current.page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Delete", exact: true })
       .click();
     await expect(current.page.getByText(a.title, { exact: true })).toHaveCount(
       0,

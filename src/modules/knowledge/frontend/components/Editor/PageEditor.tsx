@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plus, Trash2, AlertCircle, FileText } from "lucide-react";
 import type { Editor } from "@tiptap/react";
 import { Button } from "@shared/frontend/ui/button";
+import { confirmDialog } from "@shared/frontend/ui/dialog-host-store";
 import { useKnowledgeApi } from "../../hooks";
 import { usePageDraft } from "../../hooks/usePageDraft";
 import { useTreeStore } from "../../stores/tree-store";
@@ -142,7 +143,13 @@ export function PageEditor({
 
   const handleDeletePage = useCallback(async () => {
     if (!pageId || !page || page.is_project_root) return;
-    if (!window.confirm("Delete this page?")) return;
+    const confirmed = await confirmDialog({
+      title: `Delete "${page.title}"?`,
+      description: "This page and its subpages will be deleted.",
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     try {
       await deletePageWithDrafts(api, tree, pageId);
       onPageDeleted?.(pageId);

@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createKnowledgeApi } from "../hooks/useKnowledgeApi";
-import { PageSaveCoordinator } from "../lib/page-save-coordinator";
+import {
+  OFFLINE_SAVE_ERROR,
+  PageSaveCoordinator,
+} from "../lib/page-save-coordinator";
 import type { EditorContent, Page } from "../../shared/types";
 
 const content = (text: string): EditorContent => ({
@@ -197,6 +200,63 @@ describe("page-scoped title/body save coordination", () => {
     await coordinator.reload("a", false);
     expect(coordinator.snapshot("a")?.content).toEqual(content("remote"));
   });
+  it("remote change to a clean page invalidates fetches without a conflict", async () => {
+    respond(async () => Response.json({ page: page("a", "remote", 2) }));
+    const beforeEvent = coordinator.version("a");
+    coordinator.remoteChanged("a");
+    expect(coordinator.snapshot("a")).toMatchObject({
+      conflict: false,
+      error: null,
+      status: "idle",
+      version: beforeEvent + 1,
+    });
+    expect(
+      coordinator.acceptRemote(page("a", "stale fetch", 2), beforeEvent),
+    ).toBe(false);
+    expect(coordinator.acceptRemote(page("a", "remote", 2))).toBe(true);
+    expect(coordinator.snapshot("a")?.content).toEqual(content("remote"));
+    await tick();
+    expect(requests).toHaveLength(0);
+  });
+  it.each([
+    ["offline", false, OFFLINE_SAVE_ERROR],
+    [
+      "connection refused",
+      true,
+      "Could not save. Your draft is retained; retry when the service is available.",
+    ],
+  ])(
+    "%s save failure keeps the draft and sends nothing until explicit retry",
+    async (_label, onLine, message) => {
+      vi.stubGlobal("navigator", { onLine });
+      respond(async () => {
+        throw new TypeError("Failed to fetch");
+      });
+      coordinator.setContent("a", content("draft"));
+      await tick();
+      await tick();
+      expect(requests).toHaveLength(1);
+      expect(coordinator.snapshot("a")).toMatchObject({
+        status: "error",
+        conflict: false,
+        error: message,
+        content: content("draft"),
+      });
+      coordinator.setContent("a", content("draft more"));
+      await tick();
+      expect(requests).toHaveLength(1);
+      vi.stubGlobal("navigator", { onLine: true });
+      respond(async () => Response.json({ page: page("a", "draft more", 2) }));
+      coordinator.retry("a");
+      await tick();
+      expect(requests).toHaveLength(2);
+      expect(coordinator.snapshot("a")).toMatchObject({
+        status: "saved",
+        error: null,
+        content: content("draft more"),
+      });
+    },
+  );
   it("ignores fetch started before edits, acknowledgements or newer remote event", async () => {
     const beforeEdit = coordinator.version("a");
     coordinator.setContent("a", content("local"));
