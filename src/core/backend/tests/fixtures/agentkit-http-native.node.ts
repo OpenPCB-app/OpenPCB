@@ -1,6 +1,7 @@
 import "./agentkit-http-context.node";
 import "./agentkit-http-security.node";
 import "./agentkit-http-edits.node";
+import "./agentkit-http-routes.node";
 import {
   boundChat,
   placement,

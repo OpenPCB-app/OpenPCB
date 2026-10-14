@@ -54,5 +54,14 @@ export function createLocalApiClient(bootstrap: LocalApiBootstrap, transport: Fe
 }
 
 export async function localApiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return createLocalApiClient(await getBootstrap())(input, init);
+  const client = createLocalApiClient(await getBootstrap());
+  const used = bootstrapPromise;
+  try {
+    return await client(input, init);
+  } catch (error) {
+    // fetch rejects with TypeError when the connection fails: the backend may have restarted on a
+    // new ephemeral port, so the next call asks trusted IPC again. Aborts and refusals keep the cache.
+    if (error instanceof TypeError && bootstrapPromise === used) bootstrapPromise = null;
+    throw error;
+  }
 }

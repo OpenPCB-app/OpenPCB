@@ -43,6 +43,91 @@ The app provider DTO and SQLite rows have no persisted custom-header field. Hist
 were transient managed-cloud attribution, not ordinary API-key/local settings. The desktop host
 excludes that managed-cloud path and does not add a persisted header feature.
 
+## Route ownership
+
+Every route the assistant module registers, with its owner and the guard that runs before any body
+read or handler. `agentkit-http-routes.node.ts` (run by `agentkit-http-native.test.ts`) enumerates the
+real registrations, requires this table to match exactly, and sends hostile-Origin, foreign-Host,
+wrong-token and missing-token requests to each route. The tasks module registers no HTTP routes; its
+monitor is `GET /v1/runs` below. Legacy, encoded and alternate prefixes (`/api/assistant`, `/assistant`,
+`/api/tasks`, `/tasks`) hit the same prefix guard (`local-api-security.test.ts`). An idempotency-key
+reuse with a different payload is refused with `422` (`idempotency_key_mismatch`), not `409`: the key
+names one immutable request, so a changed body is an unprocessable request rather than a conflict
+with current state, as in the IETF Idempotency-Key draft.
+
+<!-- route-ownership:start -->
+| Method | Path | Owner | Guard |
+| --- | --- | --- | --- |
+| DELETE | `/api/modules/assistant/mcp` | AgentKit MCP server adapter | Host + Origin, own MCP bearer (app token ignored) |
+| GET | `/api/modules/assistant/mcp` | AgentKit MCP server adapter | Host + Origin, own MCP bearer (app token ignored) |
+| POST | `/api/modules/assistant/mcp` | AgentKit MCP server adapter | Host + Origin, own MCP bearer (app token ignored) |
+| GET | `/api/modules/assistant/prompt-presets` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/providers` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/providers` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| DELETE | `/api/modules/assistant/providers/:id` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/providers/:id` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| PATCH | `/api/modules/assistant/providers/:id` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| PUT | `/api/modules/assistant/providers/:id` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/providers/:id/capabilities` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/providers/:id/capabilities/refresh` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/providers/:id/models` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/providers/:id/models/refresh` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/providers/:id/test` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/providers/:id/tool-calling` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| PUT | `/api/modules/assistant/providers/:id/tool-calling` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/settings` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| PATCH | `/api/modules/assistant/settings` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| PUT | `/api/modules/assistant/settings` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/chats` | AgentKit REST `listChats` | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/v1/chats` | AgentKit REST `createChat` | Host + Origin + app token, before body or handler |
+| DELETE | `/api/modules/assistant/v1/chats/:chatId` | AgentKit REST `deleteChat` | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/chats/:chatId` | AgentKit REST `getChat` | Host + Origin + app token, before body or handler |
+| PATCH | `/api/modules/assistant/v1/chats/:chatId` | AgentKit REST `updateChat` | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/chats/:chatId/context-bindings` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/v1/chats/:chatId/context-bindings` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| DELETE | `/api/modules/assistant/v1/chats/:chatId/context-bindings/:bindingId` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/v1/chats/:chatId/fork` | AgentKit REST `forkChat` | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/chats/:chatId/messages` | AgentKit REST `listMessages` | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/v1/chats/:chatId/messages` | OpenPCB adapter over AgentKit `submitMessage` | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/v1/chats/:chatId/messages/:messageId/regenerate` | OpenPCB adapter over AgentKit `regenerateMessage` | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/chats/:chatId/native-write-allowances` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| DELETE | `/api/modules/assistant/v1/chats/:chatId/native-write-allowances/:key` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/chats/:chatId/proposals` | AgentKit REST `listProposals` | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/chats/:chatId/tool-events` | AgentKit REST `listToolEvents` | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/v1/messages/:messageId/activate` | AgentKit REST `activateBranch` | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/messages/:messageId/siblings` | AgentKit REST `listSiblings` | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/prompt-presets` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/v1/proposals/:proposalId/allow-session` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/v1/proposals/:proposalId/apply` | AgentKit REST `applyProposal` | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/v1/proposals/:proposalId/approve` | AgentKit REST `approveProposal` | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/proposals/:proposalId/presentation` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/v1/proposals/:proposalId/reject` | AgentKit REST `rejectProposal` | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/providers` | OpenPCB adapter over AgentKit `listProviders` | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/v1/providers` | OpenPCB adapter over AgentKit `createProvider` | Host + Origin + app token, before body or handler |
+| DELETE | `/api/modules/assistant/v1/providers/:providerId` | OpenPCB adapter over AgentKit `deleteProvider` | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/providers/:providerId` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| PATCH | `/api/modules/assistant/v1/providers/:providerId` | OpenPCB adapter over AgentKit `updateProvider` | Host + Origin + app token, before body or handler |
+| PUT | `/api/modules/assistant/v1/providers/:providerId` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/providers/:providerId/capabilities` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/v1/providers/:providerId/capabilities/refresh` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/providers/:providerId/models` | OpenPCB adapter over AgentKit `listModels` | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/v1/providers/:providerId/models/refresh` | OpenPCB adapter over AgentKit `refreshProviderModels` | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/v1/providers/:providerId/test` | OpenPCB adapter over AgentKit `testProvider` | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/providers/:providerId/tool-calling` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| PUT | `/api/modules/assistant/v1/providers/:providerId/tool-calling` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/runs` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/runs/:runId` | AgentKit REST `getRun` | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/v1/runs/:runId/cancel` | AgentKit REST `cancelRun` | Host + Origin + app token, before body or handler |
+| POST | `/api/modules/assistant/v1/runs/:runId/resume` | AgentKit REST `resumeRun` | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/runs/:runId/stream` | AgentKit REST `streamRun` | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/search` | AgentKit REST `searchMessages` | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/settings` | OpenPCB adapter over AgentKit `getSettings` | Host + Origin + app token, before body or handler |
+| PATCH | `/api/modules/assistant/v1/settings` | OpenPCB adapter over AgentKit `updateSettings` | Host + Origin + app token, before body or handler |
+| PUT | `/api/modules/assistant/v1/settings` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/tools` | AgentKit REST `listTools` | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/version` | AgentKit REST `getVersion` | Host + Origin + app token, before body or handler |
+<!-- route-ownership:end -->
+
 ## Intentional retirement and gaps
 
 Desktop managed-cloud provider seeding, paid Copilot orchestration, remote plan editing/resume,
