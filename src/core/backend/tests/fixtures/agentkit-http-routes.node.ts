@@ -4,10 +4,9 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { REST_ROUTES } from "agentkit/contracts";
 import type { ModuleRouterHandle } from "../../../contracts/modules/backend-module";
-import {
-  GENERIC_AGENTKIT_OPERATIONS,
-  registerAgentKitRoutes,
-} from "../../../../modules/assistant/backend/agentkit-routes";
+import { GENERIC_AGENTKIT_OPERATIONS } from "../../../../modules/assistant/backend/agentkit-routes";
+import { createAssistantModuleDefinition } from "../../../../modules/assistant/backend";
+import { definition as tasksDefinition } from "../../../../modules/tasks/backend";
 import {
   isolatedHttpDomain,
   TOKEN,
@@ -55,7 +54,7 @@ async function readFrames(response: Response, stop?: (frames: Frame[]) => boolea
   return frames;
 }
 
-test("SSE reconnect from a cursor replays identical ordered events through final verification", async () => {
+test("SSE reconnect from a cursor mid-run replays then tails identical ordered events through final verification", async () => {
   const place = placement("replay-place", 2);
   domain = await isolatedHttpDomain([{ calls: [place] }, { content: "Placed for replay" }]);
   place.arguments.components.push({ componentId: domain.componentId, quantity: 2 });
@@ -79,9 +78,12 @@ test("SSE reconnect from a cursor replays identical ordered events through final
     frames.some((frame) => frame.event === "run.tool.requested"));
   assert.ok(before.length > 0);
   assert.equal(before.some((frame) => frame.event === "run.verification"), false);
+  // Reconnect while the run is still held: the stream must hand off from replay to the live tail.
+  const live = readFrames(await stream({ "Last-Event-ID": before.at(-1)!.id }));
+  assert.notEqual((await domain.service.host.store.tasks.getTask(runId))?.status, "completed");
   release();
+  const resumed = await live;
   await waitUntil(async () => (await domain!.service.host.store.tasks.getTask(runId))?.status === "completed");
-  const resumed = await readFrames(await stream({ "Last-Event-ID": before.at(-1)!.id }));
   const full = await readFrames(await stream());
   const replay = await readFrames(await stream());
 
@@ -110,7 +112,8 @@ interface RouteRow {
 const MCP_GUARD = "Host + Origin, own MCP bearer (app token ignored)";
 const APP_GUARD = "Host + Origin + app token, before body or handler";
 
-function recordRoutes(current: HttpDomain): RouteRow[] {
+/** Records what the module definitions register, so routes added outside the AgentKit adapter count too. */
+async function recordRoutes(current: HttpDomain): Promise<RouteRow[]> {
   const contract = new Map<string, string>(Object.entries(REST_ROUTES).map(([operation, route]) =>
     [`${route.method} ${route.path}`, operation]));
   const generic = new Set<string>(GENERIC_AGENTKIT_OPERATIONS);
@@ -129,7 +132,16 @@ function recordRoutes(current: HttpDomain): RouteRow[] {
   const recorder: ModuleRouterHandle = {
     get: record("GET"), post: record("POST"), put: record("PUT"), patch: record("PATCH"), delete: record("DELETE"),
   };
-  registerAgentKitRoutes(recorder, current.service);
+  assert.equal(tasksDefinition.registerRoutes, undefined, "tasks module registers no routes");
+  const assistant = createAssistantModuleDefinition({
+    agentkit: { ...current.options, databasePath: path.join(current.directory, "agentkit-routes.sqlite") },
+  });
+  await assistant.onActivate!(current.ctx);
+  try {
+    await assistant.registerRoutes!(recorder, current.ctx);
+  } finally {
+    await assistant.onDeactivate?.(current.ctx);
+  }
   return rows;
 }
 
@@ -141,7 +153,7 @@ function renderTable(rows: RouteRow[]): string {
 
 test("every registered assistant/tasks route is owner-classified in docs and guarded before work", async () => {
   domain = await isolatedHttpDomain();
-  const rows = recordRoutes(domain);
+  const rows = await recordRoutes(domain);
   const keys = rows.map((row) => `${row.method} ${row.path}`);
   assert.equal(new Set(keys).size, keys.length, "no duplicate or shadow route registrations");
   for (const operation of GENERIC_AGENTKIT_OPERATIONS)
@@ -166,18 +178,30 @@ test("every registered assistant/tasks route is owner-classified in docs and gua
   assert.equal(domain.provider.requests.length, 0);
 });
 
+const OVERSIZED = JSON.stringify({ content: "x".repeat(2 * 1024 * 1024) });
+
 async function assertRoutesGuarded(current: HttpDomain, rows: RouteRow[]): Promise<void> {
   for (const row of rows) {
     const target = row.path.replace(/:[A-Za-z]+/g, "x");
-    const send = (origin: string, headers: Record<string, string>) => current.server.fetch(new Request(`${origin}${target}`, {
+    const send = (origin: string, headers: Record<string, string>, body = "{}") => current.server.fetch(new Request(`${origin}${target}`, {
       method: row.method, headers: { "content-type": "application/json", ...headers },
-      ...(row.method === "GET" ? {} : { body: "{}" }),
+      ...(row.method === "GET" ? {} : { body }),
     }));
     const label = `${row.method} ${row.path}`;
     assert.equal((await send("http://127.0.0.1:3000", { "X-OpenPCB-Token": TOKEN, Origin: "https://evil.example" })).status, 403, label);
     assert.equal((await send("http://evil.example:3000", { "X-OpenPCB-Token": TOKEN })).status, 403, label);
     assert.equal((await send("http://127.0.0.1:3000", { "X-OpenPCB-Token": "b".repeat(64) })).status, 401, label);
     assert.equal((await send("http://127.0.0.1:3000", {})).status, 401, label);
+    if (row.method !== "GET" && row.guard === APP_GUARD) {
+      // A body the handler would reject (400) or cap (413) proves nothing unless the guard answers first.
+      assert.equal((await send("http://127.0.0.1:3000", {}, "{")).status, 401, label);
+      assert.equal((await send("http://127.0.0.1:3000", {}, OVERSIZED)).status, 401, label);
+    }
+    if (row.method !== "GET" && row.guard === MCP_GUARD) {
+      // MCP keeps the shared bounded-body guard ahead of its own bearer check; both refuse.
+      assert.equal((await send("http://127.0.0.1:3000", {}, "{")).status, 400, label);
+      assert.equal((await send("http://127.0.0.1:3000", {}, OVERSIZED)).status, 413, label);
+    }
     if (row.guard === MCP_GUARD)
       assert.equal((await send("http://127.0.0.1:3000", { "X-OpenPCB-Token": TOKEN })).status, 401, label);
   }

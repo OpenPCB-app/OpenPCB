@@ -46,10 +46,14 @@ excludes that managed-cloud path and does not add a persisted header feature.
 ## Route ownership
 
 Every route the assistant module registers, with its owner and the guard that runs before any body
-read or handler. `agentkit-http-routes.node.ts` (run by `agentkit-http-native.test.ts`) enumerates the
-real registrations, requires this table to match exactly, and sends hostile-Origin, foreign-Host,
-wrong-token and missing-token requests to each route. The tasks module registers no HTTP routes; its
-monitor is `GET /v1/runs` below. Legacy, encoded and alternate prefixes (`/api/assistant`, `/assistant`,
+read or handler. `agentkit-http-routes.node.ts` (run by `agentkit-http-native.test.ts`) records what the
+assistant module definition's `registerRoutes` registers, requires this table to match exactly, and
+sends hostile-Origin, foreign-Host, wrong-token and missing-token requests to each route, plus a
+malformed and an oversized body without a token (still `401`). It also asserts the tasks module
+definition registers no HTTP routes; its monitor is `GET /v1/runs` below. The MCP endpoint is the one
+exception to body-after-credential order: it keeps the shared 1 MiB / valid-JSON body guard (`413` /
+`400`) ahead of its own bearer check, and no handler work runs either way. The owner column is derived
+from the AgentKit REST contract, so the check catches registration drift, not a misclassified owner. Legacy, encoded and alternate prefixes (`/api/assistant`, `/assistant`,
 `/api/tasks`, `/tasks`) hit the same prefix guard (`local-api-security.test.ts`). An idempotency-key
 reuse with a different payload is refused with `422` (`idempotency_key_mismatch`), not `409`: the key
 names one immutable request, so a changed body is an unprocessable request rather than a conflict

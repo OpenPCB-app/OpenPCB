@@ -53,8 +53,22 @@ export function createLocalApiClient(bootstrap: LocalApiBootstrap, transport: Fe
   };
 }
 
+function targetsOtherOrigin(input: RequestInfo | URL, bootstrap: LocalApiBootstrap): boolean {
+  try {
+    const origin = new URL(bootstrap.url).origin;
+    return new URL(input instanceof Request ? input.url : String(input), origin).origin !== origin;
+  } catch { return false; }
+}
+
 export async function localApiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const client = createLocalApiClient(await getBootstrap());
+  let bootstrap = await getBootstrap();
+  // Callers learn a restarted backend's URL from backend-ready before this cache does: ask trusted
+  // IPC once more, and let the client refuse if the target still is not the current backend.
+  if (!developmentBootstrap && targetsOtherOrigin(input, bootstrap)) {
+    bootstrapPromise = null;
+    bootstrap = await getBootstrap();
+  }
+  const client = createLocalApiClient(bootstrap);
   const used = bootstrapPromise;
   try {
     return await client(input, init);

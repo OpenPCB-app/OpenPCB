@@ -39,6 +39,29 @@ describe("localApiFetch bootstrap cache", () => {
     ]);
   });
 
+  it("refreshes once when an absolute target names the restarted backend's new port", async () => {
+    const bootstrap = preload(["http://127.0.0.1:40004", "http://127.0.0.1:40005", "http://127.0.0.1:40005"]);
+    const localApiFetch = await freshFetch();
+    const targets: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: Request | URL) => {
+      targets.push(input instanceof Request ? input.url : String(input));
+      return Response.json({ ok: true });
+    }));
+
+    await localApiFetch("http://127.0.0.1:40004/api/modules/assistant/v1/chats");
+    expect((await localApiFetch("http://127.0.0.1:40005/api/modules/assistant/v1/chats")).status).toBe(200);
+    await localApiFetch("http://127.0.0.1:40005/api/modules/tasks/v1/runs");
+    await expect(localApiFetch("http://evil.example/api/modules/assistant/v1/chats"))
+      .rejects.toThrow("Local API target refused");
+
+    expect(bootstrap).toHaveBeenCalledTimes(3);
+    expect(targets).toEqual([
+      "http://127.0.0.1:40004/api/modules/assistant/v1/chats",
+      "http://127.0.0.1:40005/api/modules/assistant/v1/chats",
+      "http://127.0.0.1:40005/api/modules/tasks/v1/runs",
+    ]);
+  });
+
   it("keeps the cached bootstrap for HTTP errors, aborts and refused targets", async () => {
     const bootstrap = preload(["http://127.0.0.1:40003"]);
     const localApiFetch = await freshFetch();
