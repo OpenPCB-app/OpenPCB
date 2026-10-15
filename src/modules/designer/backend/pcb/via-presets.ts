@@ -10,7 +10,6 @@
  *   Standard 4L : default for 4-layer designs (matches JLCPCB 4L minimum).
  *   Fine        : dense / HDI-adjacent boards.
  *   Power-S/L   : wider PDN / high-current rails.
- *   Microvia    : forward-compat for HDI laser-drilled vias (Phase C).
  */
 
 export interface PcbViaPreset {
@@ -63,13 +62,5 @@ export const VIA_PRESETS: ReadonlyArray<PcbViaPreset> = [
     diameterMm: 1.6,
     annularRingMm: 0.3,
     description: "High-current power rail",
-  },
-  {
-    id: "microvia",
-    name: "Microvia",
-    drillMm: 0.1,
-    diameterMm: 0.3,
-    annularRingMm: 0.1,
-    description: "HDI / BGA laser-drilled (Phase C)",
   },
 ];

@@ -1012,8 +1012,8 @@ export type PcbViaProtection =
   | "capped";
 
 /**
- * Via topology. v1 ships only `through`; the schema is forward-compat for HDI
- * (blind/buried/microvia) when inner layers land in Phase C.
+ * Via topology. Only `through` is routable and exportable today; the other
+ * values are schema-level forward-compat for HDI (blind/buried/micro).
  */
 export type PcbViaType = "through" | "blind" | "buried" | "micro";
 
