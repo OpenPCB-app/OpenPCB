@@ -19,9 +19,12 @@
  * snake_case as stored, rows ordered by primary key. Ids/timestamps are random
  * per capture, so re-running does not reproduce bytes; commit the output.
  */
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { getSharedSqlite } from "../src/core/backend/db/sqlite-client";
+import {
+  getSharedSqlite,
+  resetSharedSqliteForTesting,
+} from "../src/core/backend/db/sqlite-client";
 import {
   bootDesignerRuntime,
   dispatchOk,
@@ -105,7 +108,7 @@ async function padMm(c: Ctx, partIndex: number, pinNumber: "1" | "2"): Promise<P
   const partId = (await schematic(c)).parts[partIndex]!.id;
   const placement = (await pcb(c)).placements.find((pl) => pl.partId === partId);
   if (!placement) throw new Error("no placement for part");
-  const pad = placement.footprint.preview.pads.find((p) => p.number === pinNumber);
+  const pad = placement.footprint.preview?.pads.find((p) => p.number === pinNumber);
   if (!pad) throw new Error("no pad");
   return {
     x: placement.positionMm.x + pad.centerMm.x,
@@ -202,7 +205,49 @@ async function newCtx(label_: string, caps: number): Promise<Ctx> {
   await placeCapacitors(s, design.id, componentId, caps);
   // Materialise the PCB placements through the projection read (legacy behaviour).
   await s.getPcbProjection(design.id);
-  return { sdk: s, designId: design.id, componentId };
+  const ctx = { sdk: s, designId: design.id, componentId };
+  await layoutInsideOutline(ctx);
+  return ctx;
+}
+
+/**
+ * Auto-placement stacks parts at x~31 mm, outside the default 50x30 mm outline
+ * centred on the origin. Stack them at x=0, 4 mm pitch, centred on y=0 so all
+ * pads/copper sit on the board. Pins: pad 1 at x-0.775, pad 2 at x+0.775.
+ */
+async function layoutInsideOutline(c: Ctx): Promise<void> {
+  const parts = (await schematic(c)).parts;
+  const placements = (await pcb(c)).placements;
+  const updates = parts.map((part, i) => {
+    const pl = placements.find((p) => p.partId === part.id);
+    if (!pl) throw new Error("no placement for part");
+    return {
+      placementId: pl.id,
+      positionMm: { x: 0, y: (i - (parts.length - 1) / 2) * 4 },
+    };
+  });
+  await send(c, { type: "pcb_move_placements", updates });
+}
+
+const FORBIDDEN_DRC = new Set([
+  "COPPER_OFF_BOARD",
+  "NET_SHORT_CIRCUIT",
+  "ZONE_EMPTY_FILL",
+  "VIA_DANGLING",
+]);
+
+/** Refuse to capture a fixture whose geometry is degenerate (off-board / shorted). */
+async function assertDrcSane(c: Ctx, name: string, allow: string[]): Promise<void> {
+  const report = await c.sdk.runDrc(c.designId);
+  if (!report) throw new Error(`${name}: no DRC report`);
+  const bad = report.violations.filter(
+    (v) => FORBIDDEN_DRC.has(v.code) && !allow.includes(v.code),
+  );
+  if (bad.length > 0) {
+    throw new Error(
+      `${name}: degenerate geometry: ${bad.map((v) => `${v.code} (${v.message})`).join("; ")}`,
+    );
+  }
 }
 
 // ───────────────────────────── scenarios ─────────────────────────────
@@ -227,8 +272,13 @@ async function buildF1(c: Ctx): Promise<void> {
   await trace(c, await padMm(c, 0, "2"), await padMm(c, 1, "2"), gnd.id);
   await trace(c, await padMm(c, 1, "2"), await padMm(c, 2, "2"), gnd.id);
   await trace(c, await padMm(c, 2, "1"), await padMm(c, 3, "1"), anon.id);
-  const mid = await padMm(c, 2, "1");
-  await via(c, { x: mid.x + 2, y: mid.y }, anon.id);
+  // On the Net_2 trace, midway between the two pads (clear of every pad).
+  const m0 = await padMm(c, 2, "1");
+  const m1 = await padMm(c, 3, "1");
+  const viaAt = { x: m0.x, y: (m0.y + m1.y) / 2 };
+  await via(c, viaAt, anon.id);
+  // B.Cu stub so the via joins two layers of Net_2 copper.
+  await trace(c, viaAt, { x: viaAt.x, y: viaAt.y + 0.5 }, anon.id, "B.Cu");
 
   const hull = await hullMm(c, 4);
   await zone(c, "F.Cu", await uiZoneNet(c, anon.id), hull); // {null, "Net_k"}
@@ -263,12 +313,31 @@ async function buildF1(c: Ctx): Promise<void> {
 
 async function buildF2(c: Ctx): Promise<void> {
   await buildF1(c);
-  const part = (await schematic(c)).parts[2]!;
+  await assertDrcSane(c, "f2 (pre-move)", []);
+  // C2.p2 holds the GND union-find root and C4.p1 the Net_2 root; moving C2
+  // changes the GND root id, so persisted GND refs go stale (T-132).
+  const idsBefore = new Set((await schematic(c)).nets.map((n) => n.id));
+  const part = (await schematic(c)).parts[1]!;
   await send(c, {
     type: "move_part",
     partId: part.id,
     positionNm: { x: part.positionNm.x + 5_000_000, y: part.positionNm.y },
   });
+  const idsAfter = new Set((await schematic(c)).nets.map((n) => n.id));
+  const changed = [...idsBefore].filter((id) => !idsAfter.has(id));
+  if (changed.length === 0) throw new Error("F2: no legacy net id changed");
+  const persisted = new Set<string>();
+  for (const row of getSharedSqlite()
+    .query(
+      "SELECT payload_json FROM designer_pcb_entities WHERE design_id = ? AND kind IN ('trace','via')",
+    )
+    .all(c.designId) as Array<{ payload_json: string }>) {
+    const id = (JSON.parse(row.payload_json) as { netId?: string | null }).netId;
+    if (id) persisted.add(id);
+  }
+  if (![...persisted].some((id) => !idsAfter.has(id))) {
+    throw new Error("F2: no persisted copper net id is stale");
+  }
 }
 
 /** Rewrite one copper row's payload the way a KiCad importer leaves it. */
@@ -280,7 +349,7 @@ function setImporterHint(
 ): void {
   const db = getSharedSqlite();
   const rows = db
-    .prepare(
+    .query(
       "SELECT id, payload_json FROM designer_pcb_entities WHERE design_id = ? AND kind = ? ORDER BY id",
     )
     .all(designId, kind) as Array<{ id: string; payload_json: string }>;
@@ -289,7 +358,7 @@ function setImporterHint(
   const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
   payload.netId = null;
   payload.netName = netName;
-  db.prepare("UPDATE designer_pcb_entities SET payload_json = ? WHERE id = ?").run(
+  db.query("UPDATE designer_pcb_entities SET payload_json = ? WHERE id = ?").run(
     JSON.stringify(payload),
     row.id,
   );
@@ -330,7 +399,7 @@ async function buildF3(c: Ctx): Promise<void> {
 
   // Importer-style trace/via hints: no netId, only a name.
   await trace(c, await padMm(c, 0, "1"), await padMm(c, 1, "1"), null);
-  await via(c, { x: 20, y: 20 }, null);
+  await via(c, { x: 8, y: 8 }, null);
   setImporterHint("trace", 0, c.designId, "VCC");
   setImporterHint("via", 0, c.designId, "vcc");
 }
@@ -343,13 +412,15 @@ async function buildF9(c: Ctx): Promise<void> {
   // Pour-only: a board zone hinted "GND", stitching vias carry the GND root,
   // and there is deliberately no GND trace.
   await zone(c, "B.Cu", { netId: null, netName: "GND" }, "board");
+  await zone(c, "F.Cu", { netId: null, netName: "GND" }, "board"); // vias join both pours
+  // Clear of every pad (pads at x +-0.775, 0.9 mm wide) and inside the pour.
   const a = await padMm(c, 0, "2");
   const b = await padMm(c, 1, "2");
   for (const centerMm of [
-    { x: a.x - 2, y: a.y },
-    { x: a.x + 2, y: a.y },
-    { x: b.x - 2, y: b.y },
-    { x: b.x + 2, y: b.y },
+    { x: a.x + 3, y: a.y },
+    { x: a.x + 5, y: a.y },
+    { x: b.x + 3, y: b.y },
+    { x: b.x + 5, y: b.y },
   ]) {
     await via(c, centerMm, gnd.id);
   }
@@ -373,7 +444,7 @@ function dumpDesign(designId: string): Record<string, unknown[]> {
   const out: Record<string, unknown[]> = {};
   for (const { table, key } of DESIGN_TABLES) {
     out[table] = db
-      .prepare(`SELECT * FROM ${table} WHERE ${key} = ? ORDER BY id`)
+      .query(`SELECT * FROM ${table} WHERE ${key} = ? ORDER BY id`)
       .all(designId) as unknown[];
   }
   return out;
@@ -384,6 +455,8 @@ interface Scenario {
   caps: number;
   description: string;
   build: (c: Ctx) => Promise<void>;
+  /** DRC codes this scenario intentionally provokes. */
+  allowDrc?: string[];
 }
 
 const SCENARIOS: Scenario[] = [
@@ -400,6 +473,8 @@ const SCENARIOS: Scenario[] = [
     description:
       "f1 followed by move_part of C3: schematic roots changed, persisted copper/settings still hold the old roots (T-132).",
     build: buildF2,
+    // Stale roots make persisted copper disagree with the live nets by design.
+    allowDrc: ["NET_SHORT_CIRCUIT"],
   },
   {
     name: "f3-name-hints",
@@ -407,6 +482,8 @@ const SCENARIOS: Scenario[] = [
     description:
       "Importer-style hints with no netId: zones 'VCC','vcc','NO_SUCH_NET','Net_1' (label on one net AND legacy auto name of another => ambiguous); trace hint 'VCC'; via hint 'vcc'.",
     build: buildF3,
+    // Unresolved/ambiguous zone names and the lone hint via are intentional.
+    allowDrc: ["ZONE_EMPTY_FILL", "VIA_DANGLING"],
   },
   {
     name: "f9-pour-only-gnd",
@@ -434,6 +511,7 @@ async function main(): Promise<void> {
   for (const scenario of SCENARIOS) {
     const ctx = await newCtx(scenario.name, scenario.caps);
     await scenario.build(ctx);
+    await assertDrcSane(ctx, scenario.name, scenario.allowDrc ?? []);
     const head = await ctx.sdk.getSchematicProjection(ctx.designId);
     const dump = {
       format: FORMAT,
@@ -451,6 +529,13 @@ async function main(): Promise<void> {
     const file = path.join(outDir, `${scenario.name}.json`);
     writeFileSync(file, `${JSON.stringify(dump, null, 2)}\n`);
     console.log(`wrote ${file}`);
+    const dbPath = process.env.OPENPCB_DB_PATH;
+    resetSharedSqliteForTesting();
+    if (dbPath) {
+      for (const suffix of ["", "-wal", "-shm"]) {
+        rmSync(`${dbPath}${suffix}`, { force: true });
+      }
+    }
   }
   process.exit(0);
 }
