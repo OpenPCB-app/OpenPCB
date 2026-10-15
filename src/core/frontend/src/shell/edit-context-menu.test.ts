@@ -3,7 +3,11 @@ import type { BrowserWindow, ContextMenuParams, Event } from "electron";
 import { registerEditContextMenu } from "../../../../../electron/src/main/edit-context-menu";
 
 const menu = vi.hoisted(() => ({ build: vi.fn(), popup: vi.fn() }));
-vi.mock("electron", () => ({ Menu: { buildFromTemplate: menu.build } }));
+// The module under test resolves `electron` from the electron workspace, not
+// from this test's root, so the mock must target that resolved path.
+vi.mock("../../../../../electron/node_modules/electron", () => ({
+  Menu: { buildFromTemplate: menu.build },
+}));
 
 function setup() {
   const on = vi.fn();
