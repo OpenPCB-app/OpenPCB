@@ -16,3 +16,16 @@ export function norm360(deg: number): number {
   const wrapped = rem < 0 ? rem + 360 : rem;
   return wrapped === 360 || wrapped === 0 ? 0 : wrapped;
 }
+
+/** Below KiCad's angle resolution; equal to the snap tolerance above. */
+const ANGLE_GRID = 1e9;
+
+/**
+ * `norm360` on a 1e-9° grid, for angles computed as sums/differences
+ * (`θ + 180`, `α − θ`): `−179.9 + 180` is 0.09999999999999432, not 0.1.
+ * Fractional angles survive (E2); only float noise is removed.
+ */
+export function norm360Grid(deg: number): number {
+  const q = Math.round(norm360(deg) * ANGLE_GRID) / ANGLE_GRID;
+  return q >= 360 || q === 0 ? 0 : q;
+}

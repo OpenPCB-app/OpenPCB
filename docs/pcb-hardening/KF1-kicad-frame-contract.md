@@ -101,8 +101,15 @@ The library footprint local frame is canonical and front-side: `p_c = N * p_K,fr
   `world_C = N * at_K + R(theta) * p_s` (verified 91/92 pins on USBtoUART, versus 79/92 for the old
   importer). The `(mirror ...)` mapping is fixed by the corpus pin oracle (OP11,
   `kicad-sch-mirror-oracle.test.ts`) and recorded here when it runs; the USBtoUART schematic has no
-  mirrors and says nothing about mirror composition. Initial expectation: `y` gives
-  `mirrored: true`; `x` gives `mirrored: true` with rotation + 180. **The oracle decides.**
+  mirrors and says nothing about mirror composition. **The oracle decides.**
+  - OP9 implements the mapping derived from KiCad 8.0.4 source (`sch_io_kicad_sexpr_parser.cpp`
+    `(at)`/`(mirror)` → `sch_symbol.cpp` `SetOrientation`, mirror applied after rotation in the
+    Y-down frame): `(mirror y)` → `rotationDeg = norm360(-theta)`, `mirrored = true`;
+    `(mirror x)` → `rotationDeg = norm360(180 - theta)`, `mirrored = true` (OpenPCB `mirrored` =
+    negate local x, then rotate). The earlier expectation (`x` → `theta + 180`, `y` → `theta`)
+    agrees only at theta = 0. A scratch pin count over the 16 mirrored corpus schematics landed
+    x@90 35/36 and x@270 43/43 with the source mapping versus 33/36 and 37/43 with the expectation;
+    OP11's oracle remains the binding check.
 
 ## 4. Exactly-once rule
 
@@ -119,8 +126,24 @@ converts again.
 | Snapshots, projections, undo, save/reopen, cloud sync, export | **none** | C |
 
 Guard (test, OP9): `kicad-frame-boundary.test.ts` reads the source of the designer import planner
-files and fails if `.yMm` is dereferenced outside `kicad-frame.ts`, `frame-port.ts` or an allowlist
-of parser files.
+files and fails if `.yMm` (or a bbox `.minYMm` / `.maxYMm`) is dereferenced outside `kicad-frame.ts`,
+`frame-port.ts` or an allowlist of parser files. The pre-H14 importer files (`commit.ts`,
+`insert-pcb.ts`, `insert-schematic.ts`) sit on a shrink-only list until H14 routes them through
+`frame-port.ts`.
+
+**Un-placing a board footprint** (`src/shared/kicad-frame/board-footprint-unplace.ts`, K to K):
+pad/text `(at)` angles in a board file are absolute, so the library angle is `alpha - theta`, negated
+on the back side together with local `y`; `fp_text_box` `(angle)` is already footprint-relative.
+Back-side pads follow KiCad `PAD::Flip` (8.0.4): drill offset and `rect_delta` y negated, chamfer
+top/bottom swapped, layers mapped without inner-layer remap (`FlipLayerMask`); graphics and texts
+flip inner layers only with the board copper count. Equal-number pads re-sort into front order so
+pad ids `${number}:${index}` match the front form. Flipped graphics and texts are spelled
+differently across KiCad versions: 8.0.4 `EDA_SHAPE::flip` swaps segment endpoints and
+`PCB_TEXT::Flip` maps a text angle to `180 - a`, while the Chickadee corpus board (back footprints
+flipped before KiCad 8, KiCad 5-era timestamps) shows neither. The library form uses pointwise `y`
+negation and the pad angle rule for texts, so a text may come out 180 degrees off its KiCad 8
+display (copper-irrelevant, H13 E6). `contentKey` ignores those spellings, field texts, uuids and
+child order.
 
 ## 5. Provenance
 
