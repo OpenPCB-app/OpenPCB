@@ -426,6 +426,84 @@ export const commentOutbox = sqliteTable(
   }),
 );
 
+// --- Durable net identity (H08, migration 0021) -------------------------------
+
+/** One row per migrated design; absent ⇒ unmigrated (legacy mode). */
+export const netIdentityState = sqliteTable("designer_net_identity_state", {
+  designId: text("design_id").primaryKey(),
+  schemaVersion: integer("schema_version").notNull(),
+  status: text("status").notNull(),
+  nextSeq: integer("next_seq").notNull(),
+  activeJson: text("active_json").notNull(),
+  provenanceJson: text("provenance_json").notNull(),
+  lastError: text("last_error"),
+  updatedAt: text("updated_at").notNull(),
+});
+
+/** Retirement ledger: every retired durable id, so its seq is never reused. */
+export const netIdentityRetired = sqliteTable(
+  "designer_net_identity_retired",
+  {
+    designId: text("design_id").notNull(),
+    netId: text("net_id").notNull(),
+    seq: integer("seq").notNull(),
+    reason: text("reason").notNull(),
+    successorIdsJson: text("successor_ids_json").notNull(),
+    displayName: text("display_name"),
+    retiredAtRevision: integer("retired_at_revision").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.designId, table.netId] }),
+    seqIdx: index("designer_net_identity_retired_seq_idx").on(
+      table.designId,
+      table.seq,
+    ),
+  }),
+);
+
+/** Immutable provenance of legacy references the migration could not prove. */
+export const netIdentityQuarantine = sqliteTable(
+  "designer_net_identity_quarantine",
+  {
+    designId: text("design_id").notNull(),
+    refKind: text("ref_kind").notNull(),
+    refId: text("ref_id").notNull(),
+    legacyValue: text("legacy_value").notNull(),
+    reason: text("reason").notNull(),
+    candidatesJson: text("candidates_json").notNull(),
+    suggestedNetId: text("suggested_net_id"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({
+      columns: [
+        table.designId,
+        table.refKind,
+        table.refId,
+        table.legacyValue,
+      ],
+    }),
+  }),
+);
+
+/** Logical pre-migration backup (schematic + PCB + histories), sha256-verified. */
+export const netIdentityBackups = sqliteTable(
+  "designer_net_identity_backups",
+  {
+    designId: text("design_id").notNull(),
+    schemaVersion: integer("schema_version").notNull(),
+    revision: integer("revision").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    sha256: text("sha256").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.designId, table.schemaVersion] }),
+  }),
+);
+
 // --- Dataset capture (WP-D4, migration 0017) ---------------------------------
 
 export const captureSessions = sqliteTable(

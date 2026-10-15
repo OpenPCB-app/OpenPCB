@@ -31,7 +31,7 @@ remain present but their old runtime tables receive no active engine writes.
 `e752f2a9a5c28beaff7d8d213e6c9371012906831f2ad8f6eb50cd7d4a381b40`.
 
 `catalog.current.json` captures the reviewed canonical composition, SHA-256
-`1a7bc96f6d6a96893d6f3b0014f93acf5630e995a2988eeada306e77dccf1aa2`.
+`9fb905cdb38372974ecc6c51b91c655d564cbc740ea03f61ac2cef5e978eb432`.
 It includes 15 native tools, 14 read-only and 22 write-enabled MCP tools, four prompts, five concrete
 resource types and the current migrated SQLite DDL. The tests compare the complete current snapshot
 and independently require every historical native name/input schema to remain unchanged.
@@ -40,7 +40,9 @@ The 2026-10 refreshes only change MCP prompt bodies (`CORE_TOOL_INSTRUCTIONS`): 
 untrusted-reference-data rule, then the one-run build directive made conditional on placement/wiring
 tools being available; tools, schemas, resources and DDL are unchanged. A later refresh rewrites only
 the MCP-only `designer_use_design` description to state the refuse-ambiguous targeting and that an
-unknown id is refused (`DESIGN_NOT_FOUND`); its input schema is unchanged.
+unknown id is refused (`DESIGN_NOT_FOUND`); its input schema is unchanged. The H08 net-identity refresh adds
+only the designer `0021_net_identity.sql` migration name, its four tables and one index to the DDL;
+tools, schemas, prompts and resources are unchanged.
 
 AgentKit's accepted public resource extension has no resource-template listing hook. The current
 capture records this explicit gap; it does not silently claim historical template advertisement.

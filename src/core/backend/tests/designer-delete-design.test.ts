@@ -60,6 +60,10 @@ const DESIGN_TABLES: ReadonlyArray<readonly [string, string]> = [
   ["designer_comment_attachments", "design_id"],
   ["designer_comment_reactions", "design_id"],
   ["designer_comment_outbox", "design_id"],
+  ["designer_net_identity_state", "design_id"],
+  ["designer_net_identity_retired", "design_id"],
+  ["designer_net_identity_quarantine", "design_id"],
+  ["designer_net_identity_backups", "design_id"],
 ];
 
 function countRowsForDesign(
@@ -79,7 +83,8 @@ function countRowsForDesign(
 }
 
 // Seed one row into each table that deleteDesign must clear — focused on the
-// previously-orphaned set (drc, primitives, cloud link, all comment tables).
+// previously-orphaned set (drc, primitives, cloud link, all comment tables)
+// plus the four net-identity tables.
 function seedDesignRows(
   sqlite: SharedSqliteDatabase,
   designId: string,
@@ -152,6 +157,38 @@ function seedDesignRows(
        values (?,?,?,?,?,?)`,
     )
     .run(`cmd-${suffix}`, designId, "comment_create", "{}", ts, ts);
+
+  sqlite
+    .query(
+      `insert into designer_net_identity_state
+       (design_id, schema_version, status, next_seq, active_json, provenance_json, updated_at)
+       values (?,?,?,?,?,?,?)`,
+    )
+    .run(designId, 1, "active", 1, "[]", "{}", ts);
+
+  sqlite
+    .query(
+      `insert into designer_net_identity_retired
+       (design_id, net_id, seq, reason, successor_ids_json, retired_at_revision, created_at, updated_at)
+       values (?,?,?,?,?,?,?,?)`,
+    )
+    .run(designId, `net-${suffix}`, 1, "removed", "[]", 0, ts, ts);
+
+  sqlite
+    .query(
+      `insert into designer_net_identity_quarantine
+       (design_id, ref_kind, ref_id, legacy_value, reason, candidates_json, created_at)
+       values (?,?,?,?,?,?,?)`,
+    )
+    .run(designId, "trace", `trace-${suffix}`, "pt:0:0", "no_evidence", "[]", ts);
+
+  sqlite
+    .query(
+      `insert into designer_net_identity_backups
+       (design_id, schema_version, revision, payload_json, sha256, created_at)
+       values (?,?,?,?,?,?)`,
+    )
+    .run(designId, 1, 0, "{}", "0", ts);
 }
 
 describe("designer delete-design endpoint", () => {
@@ -169,12 +206,12 @@ describe("designer delete-design endpoint", () => {
     seedDesignRows(sqlite, target.id, "target");
     seedDesignRows(sqlite, survivor.id, "survivor");
 
-    // Both designs have the same shape: head + createDesign's own rows + the 8
+    // Both designs have the same shape: head + createDesign's own rows + the 12
     // seeded rows. Exact count is an implementation detail of createDesign; what
-    // matters is it's well above the 8 seeds and identical for both designs.
+    // matters is it's well above the 12 seeds and identical for both designs.
     const targetBefore = countRowsForDesign(sqlite, target.id);
     const survivorBefore = countRowsForDesign(sqlite, survivor.id);
-    expect(targetBefore).toBeGreaterThanOrEqual(9);
+    expect(targetBefore).toBeGreaterThanOrEqual(13);
     expect(survivorBefore).toBe(targetBefore);
 
     const response = await server.fetch(

@@ -76,6 +76,10 @@ import {
   commentAttachments,
   commentReactions,
   commentOutbox,
+  netIdentityBackups,
+  netIdentityQuarantine,
+  netIdentityRetired,
+  netIdentityState,
 } from "./schema";
 import {
   ensurePcbBoardSettings,
@@ -648,6 +652,18 @@ export function createDesignerStore(
           .where(eq(sessionHistoryRows.designId, designId))
           .run();
         tx.delete(cloudLink).where(eq(cloudLink.designId, designId)).run();
+        tx.delete(netIdentityQuarantine)
+          .where(eq(netIdentityQuarantine.designId, designId))
+          .run();
+        tx.delete(netIdentityRetired)
+          .where(eq(netIdentityRetired.designId, designId))
+          .run();
+        tx.delete(netIdentityBackups)
+          .where(eq(netIdentityBackups.designId, designId))
+          .run();
+        tx.delete(netIdentityState)
+          .where(eq(netIdentityState.designId, designId))
+          .run();
         tx.delete(designHeads).where(eq(designHeads.id, designId)).run();
       });
     },
