@@ -24,6 +24,9 @@ export function CapabilityFixture() {
           onImported={() => {
             throw new Error("Quarantined import cannot succeed");
           }}
+          onOpenDesign={() => {
+            throw new Error("Quarantined import cannot succeed");
+          }}
         />
       )}
     </>

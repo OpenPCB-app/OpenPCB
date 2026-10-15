@@ -1715,10 +1715,12 @@ function DesignerSpaceInner({
           backendURL={backendURL ?? null}
           moduleId={moduleId}
           onClose={() => setKicadImportOpen(false)}
-          onImported={(result) => {
+          onImported={() => {
             void actions.refreshDesigns();
-            openTab(result.designId);
-            navigateToModule("designer", result.designId);
+          }}
+          onOpenDesign={(designId) => {
+            openTab(designId);
+            navigateToModule("designer", designId);
             setKicadImportOpen(false);
           }}
         />

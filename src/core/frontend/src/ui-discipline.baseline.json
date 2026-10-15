@@ -137,11 +137,6 @@
     "src/modules/designer/frontend/components/DesignerBomView.tsx": {
       "nativeSelect": 2
     },
-    "src/modules/designer/frontend/components/KicadProjectImportWizard.tsx": {
-      "palette": 60,
-      "heavyShadow": 1,
-      "whiteBlack": 3
-    },
     "src/modules/designer/frontend/components/LabelPicker.tsx": {
       "whiteBlack": 1,
       "heavyShadow": 1
