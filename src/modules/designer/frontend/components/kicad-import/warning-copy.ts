@@ -218,6 +218,9 @@ const COPY: Record<string, ImportWarningCopy> = {
   },
 };
 
+/** Codes this table covers; the backend catalog test checks each is mapped there. */
+export const IMPORT_WARNING_COPY_CODES: readonly string[] = Object.keys(COPY);
+
 const FALLBACK: ImportWarningCopy = {
   group: "source",
   summary: "Other notes from the project files.",
