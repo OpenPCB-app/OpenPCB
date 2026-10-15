@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import renderingPackage from "../../../../../node_modules/@openpcb/rendering-core/package.json";
-import { AppError } from "../../../../core/contracts/errors";
+import { buildFootprintRenderModel } from "../../../../shared/rendering/footprint-preview-builder";
 import {
   ALL_FAMILIES,
   generateFootprint,
@@ -13,11 +13,21 @@ import {
   hashParams,
   validateParams,
 } from "../../../../shared/rendering/parametric";
-import {
-  generatorUnavailableReason,
-  type IpcGeneratorIdentity,
-  type TemplateGeneratorIdentity,
+import type {
+  IpcGeneratorIdentity,
+  TemplateGeneratorIdentity,
 } from "../../shared/generator-policy";
+import {
+  acceptedIpcFingerprint,
+  ipcFamilyAvailability,
+  type InstalledIpcQualification,
+} from "../../shared/generator-qualification";
+import type { QualifiedIpcFingerprintTable } from "../../shared/qualified-ipc-fingerprints.generated";
+import { padGeometryFingerprint } from "../qualification/pad-fingerprint";
+import { assertGeneratedGeometry } from "./generated-geometry";
+import { UnqualifiedGeneratorError } from "./unqualified-generator-error";
+
+export { UnqualifiedGeneratorError };
 
 export interface FootprintPayload {
   source: FootprintRenderSource;
@@ -30,16 +40,14 @@ export interface GeneratedFootprintInput {
   metadata?: GeneratedFootprintMetadata;
 }
 
-export class UnqualifiedGeneratorError extends AppError {
-  constructor(message: string) {
-    super(
-      message,
-      422,
-      "Footprint generator unavailable",
-      "https://openpcb.dev/problems/unqualified-generator",
-      { code: "UNQUALIFIED_GENERATOR" },
-    );
-  }
+/**
+ * Test seam for the qualification inputs: `installed` overrides the installed
+ * rendering-core manifest (null = none), `accepted` the accepted-fingerprint
+ * table. Production callers pass nothing.
+ */
+export interface GeneratorQualificationInputs {
+  installed?: InstalledIpcQualification | null;
+  accepted?: QualifiedIpcFingerprintTable;
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -52,7 +60,7 @@ const packageIdentity = {
   version: renderingPackage.version,
 };
 
-function resolvePreset(value: unknown) {
+function resolvePreset(value: unknown, inputs: GeneratorQualificationInputs) {
   if (
     !record(value) ||
     value.kind !== "ipc7351b" ||
@@ -72,15 +80,21 @@ function resolvePreset(value: unknown) {
       "Choose an available IPC preset and density, then regenerate the footprint.",
     );
   }
-  const reason = generatorUnavailableReason(family.id);
-  if (reason) throw new UnqualifiedGeneratorError(reason);
+  const availability = ipcFamilyAvailability(
+    family.id,
+    inputs.installed,
+    inputs.accepted,
+  );
+  if (!availability.available) {
+    throw new UnqualifiedGeneratorError(availability.reason);
+  }
   const generator: IpcGeneratorIdentity = {
     kind: "ipc7351b",
     family: family.id,
     size: size.label,
     density,
   };
-  return { generator, parameters: size.params };
+  return { generator, parameters: size.params, revision: availability.revision };
 }
 
 /** Parametric templates are re-materialized server-side, like IPC presets. */
@@ -107,6 +121,7 @@ function resolveTemplate(value: Record<string, unknown>) {
     );
   }
   const generated = template.generate(validated.values);
+  assertGeneratedGeometry(generated.source);
   const generator: TemplateGeneratorIdentity = {
     kind: "template",
     templateId: template.id,
@@ -129,13 +144,34 @@ function resolveTemplate(value: Record<string, unknown>) {
   };
 }
 
-function resolveIpc(value: unknown) {
-  const { generator, parameters } = resolvePreset(value);
+function resolveIpc(value: unknown, inputs: GeneratorQualificationInputs) {
+  const { generator, parameters, revision } = resolvePreset(value, inputs);
   const result = generateFootprint(
     generator.family,
     generator.size,
     generator.density,
   );
+  assertGeneratedGeometry(result.source);
+  // The preview pads are what a placement snapshots and the Gerber writes; a
+  // re-pinned or linked generator whose output moved without re-qualification
+  // stops here instead of persisting unqualified geometry.
+  const padFingerprint = padGeometryFingerprint(
+    buildFootprintRenderModel(result.source).pads,
+  );
+  if (
+    padFingerprint !==
+    acceptedIpcFingerprint(
+      generator.family,
+      revision,
+      generator.size,
+      generator.density,
+      inputs.accepted,
+    )
+  ) {
+    throw new UnqualifiedGeneratorError(
+      "The installed generator's output differs from its qualification evidence.",
+    );
+  }
   return {
     ...result,
     provenance: {
@@ -145,6 +181,9 @@ function resolveIpc(value: unknown) {
       generatedSourceSha256: createHash("sha256")
         .update(JSON.stringify(result.source))
         .digest("hex"),
+      // Diagnostic only: qualification is re-derived from geometry, never read from here.
+      ipcRevision: revision,
+      padFingerprint,
     },
   };
 }
@@ -155,12 +194,13 @@ function asJson(value: unknown): unknown {
 
 export function resolveGeneratedFootprint(
   input: GeneratedFootprintInput | undefined,
+  inputs: GeneratorQualificationInputs = {},
 ) {
   const value = input?.generator;
   const result =
     record(value) && value.kind === "template"
       ? resolveTemplate(value)
-      : resolveIpc(value);
+      : resolveIpc(value, inputs);
   // Client payloads crossed JSON; compare against the same normalization.
   if (
     (input?.source !== undefined &&

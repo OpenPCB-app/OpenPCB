@@ -82,6 +82,7 @@ import {
   type CommitDrawnRequest,
 } from "./import/commit-drawn";
 import { buildInspectResponse } from "./import/inspect-kicad";
+import { assertGeneratedGeometry } from "./import/generated-geometry";
 import type { CommitKicadRequest, InspectKicadRequest } from "./import/types";
 import {
   getOrRenderSymbolPreview,
@@ -1356,6 +1357,8 @@ export function registerRoutes(
       );
     }
     const result = template.generate(validated.values);
+    // Same output check as the commit path: never preview what cannot be committed.
+    assertGeneratedGeometry(result.source);
     return success({
       templateId: template.id,
       generatorVersion: template.generatorVersion,
