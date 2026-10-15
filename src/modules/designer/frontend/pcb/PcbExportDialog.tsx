@@ -46,7 +46,6 @@ function PcbExportDialogFull({
 }: PcbExportDialogProps): ReactElement | null {
   const [includeBom, setIncludeBom] = useState(true);
   const [includePnp, setIncludePnp] = useState(true);
-  const [includeInner, setIncludeInner] = useState(true);
   const [status, setStatus] = useState<ExportStatus>({ state: "idle" });
   // Pre-export DRC gate: errors block the download until acknowledged.
   const [drcGate, setDrcGate] = useState<{
@@ -118,7 +117,6 @@ function PcbExportDialogFull({
       .fetchExportSummary(designId, {
         includeBom,
         includePickAndPlace: includePnp,
-        includeInnerLayers: includeInner,
       })
       .then((s) => {
         if (cancelled) return;
@@ -133,7 +131,7 @@ function PcbExportDialogFull({
     return () => {
       cancelled = true;
     };
-  }, [open, api, designId, includeBom, includePnp, includeInner]);
+  }, [open, api, designId, includeBom, includePnp]);
 
   const drcBlocks = drcGate.state === "ok" && drcGate.errors > 0 && !ackErrors;
 
@@ -147,8 +145,7 @@ function PcbExportDialogFull({
         {
           includeBom,
           includePickAndPlace: includePnp,
-          includeInnerLayers: includeInner,
-        },
+          },
       );
       // Trigger browser download.
       const url = URL.createObjectURL(blob);
@@ -258,14 +255,6 @@ function PcbExportDialogFull({
               onChange={(e) => setIncludePnp(e.target.checked)}
             />
             Include pick-and-place CSV
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={includeInner}
-              onChange={(e) => setIncludeInner(e.target.checked)}
-            />
-            Include inner copper layers (4-layer boards only)
           </label>
 
           {summaryState === "loading" ? (

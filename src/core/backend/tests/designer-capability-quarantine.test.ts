@@ -207,7 +207,7 @@ test("SDK manufacturing summary cannot bypass refusal with export options", asyn
   let error: unknown;
   try {
     await sdk.getManufacturingExportSummary("any-design", {
-      includeInnerLayers: false,
+      includeBom: false,
     });
   } catch (failure) {
     error = failure;

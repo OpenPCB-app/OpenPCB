@@ -8,14 +8,14 @@ import { registerExtendedReadTools } from "../../../modules/assistant/backend/to
 // that is an answer about the design, not a tool crash.
 
 type RegisteredTool = {
-  definition: { name: string };
+  definition: { name: string; description: string; inputSchema: unknown };
   execute(execCtx: unknown, input: unknown): Promise<{
     ok: boolean;
     warnings: string[];
   }>;
 };
 
-function exportTool(summary: () => Promise<unknown>): RegisteredTool {
+function exportTool(summary: (...args: unknown[]) => Promise<unknown>): RegisteredTool {
   const tools: RegisteredTool[] = [];
   const registry = { register: (tool: RegisteredTool) => tools.push(tool) };
   const ctx = {
@@ -45,5 +45,25 @@ describe("designer_export_manufacturing", () => {
     await expect(
       tool.execute({ limits: {} }, { designId: "d1" }),
     ).rejects.toThrow("boom");
+  });
+
+  test("schema has no includeInnerLayers; a stale input key is accepted and not forwarded", async () => {
+    let seen: unknown;
+    const tool = exportTool((_id, opts) => {
+      seen = opts;
+      return Promise.resolve({ bundleName: "b", files: [], warnings: [] });
+    });
+    expect(JSON.stringify(tool.definition.inputSchema)).not.toContain(
+      "includeInnerLayers",
+    );
+    expect(tool.definition.description).not.toContain(
+      "openpcb://design/{id}/export/gerber",
+    );
+    const result = await tool.execute(
+      { limits: {} },
+      { designId: "d1", includeInnerLayers: false },
+    );
+    expect(result.ok).toBe(true);
+    expect(seen as object).not.toHaveProperty("includeInnerLayers");
   });
 });

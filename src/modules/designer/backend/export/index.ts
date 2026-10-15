@@ -84,8 +84,7 @@ export function buildExportBundle(
   }
 
   const bundleName = exportBundleName(pcb.designId, designName);
-  const includeInner =
-    options.includeInnerLayers !== false && pcb.board.layerCount === 4;
+  const includeInner = pcb.board.layerCount === 4;
   const includeBom = options.includeBom !== false;
   const includePnp = options.includePickAndPlace !== false;
 

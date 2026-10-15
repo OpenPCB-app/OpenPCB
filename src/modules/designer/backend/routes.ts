@@ -359,9 +359,6 @@ function parseExportOptions(raw: unknown): GerberExportOptions {
   if (typeof rec.includePickAndPlace === "boolean") {
     opts.includePickAndPlace = rec.includePickAndPlace;
   }
-  if (typeof rec.includeInnerLayers === "boolean") {
-    opts.includeInnerLayers = rec.includeInnerLayers;
-  }
   return opts;
 }
 

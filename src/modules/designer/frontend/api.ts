@@ -49,7 +49,6 @@ export interface ExportSummary {
 export interface GerberExportRequestOptions {
   includeBom?: boolean;
   includePickAndPlace?: boolean;
-  includeInnerLayers?: boolean;
 }
 
 function buildModuleUrl(
@@ -657,7 +656,6 @@ export function createDesignerApi(params: {
       options?: {
         includeBom?: boolean;
         includePickAndPlace?: boolean;
-        includeInnerLayers?: boolean;
       },
     ): Promise<{ bundleName: string; warnings: number; blob: Blob }> {
       const url = `${buildModuleUrl(

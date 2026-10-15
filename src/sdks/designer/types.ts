@@ -3101,7 +3101,6 @@ export interface GerberArtifact {
 export interface GerberExportOptions {
   includeBom?: boolean;
   includePickAndPlace?: boolean;
-  includeInnerLayers?: boolean;
 }
 
 export interface GerberExportRequest {

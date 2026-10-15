@@ -1,5 +1,5 @@
 {
-  "sha256": "1a7bc96f6d6a96893d6f3b0014f93acf5630e995a2988eeada306e77dccf1aa2",
+  "sha256": "aca1514857624df838fc21556737de13ed0605b958ae5b2d6867d788d9c8d801",
   "data": {
     "formatVersion": 2,
     "scope": "Canonical AgentKit desktop contracts; pure native domain and separate MCP store; no inference or packaged qualification",
@@ -1212,7 +1212,7 @@
       "tools": [
         {
           "name": "designer_export_manufacturing",
-          "description": "Generate the manufacturing bundle (Gerbers, Excellon drills, optional BOM and pick-and-place) and return its manifest: bundle name, per-file names and byte sizes, and any preflight warnings. File contents are NOT returned — read the openpcb://design/{id}/export/gerber resource for the ZIP.",
+          "description": "Generate the manufacturing bundle (Gerbers, Excellon drills, optional BOM and pick-and-place) and return its manifest: bundle name, per-file names and byte sizes, and any preflight warnings. File contents are not returned; export the ZIP from the OpenPCB app.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -1224,9 +1224,6 @@
                 "type": "boolean"
               },
               "includePickAndPlace": {
-                "type": "boolean"
-              },
-              "includeInnerLayers": {
                 "type": "boolean"
               }
             }
@@ -1769,7 +1766,7 @@
         },
         {
           "name": "designer_export_manufacturing",
-          "description": "Generate the manufacturing bundle (Gerbers, Excellon drills, optional BOM and pick-and-place) and return its manifest: bundle name, per-file names and byte sizes, and any preflight warnings. File contents are NOT returned — read the openpcb://design/{id}/export/gerber resource for the ZIP.",
+          "description": "Generate the manufacturing bundle (Gerbers, Excellon drills, optional BOM and pick-and-place) and return its manifest: bundle name, per-file names and byte sizes, and any preflight warnings. File contents are not returned; export the ZIP from the OpenPCB app.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -1781,9 +1778,6 @@
                 "type": "boolean"
               },
               "includePickAndPlace": {
-                "type": "boolean"
-              },
-              "includeInnerLayers": {
                 "type": "boolean"
               }
             }

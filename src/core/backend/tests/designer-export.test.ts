@@ -1954,6 +1954,18 @@ describe("export orchestrator", () => {
     );
   });
 
+  test("a 4-layer board always exports In1/In2 (no inner-layer opt-out)", () => {
+    const four = fixtureProjection();
+    four.board.layerCount = 4;
+    // A retired `includeInnerLayers:false` from an old client must be inert.
+    const artifacts = buildExportBundle(four, null, {
+      includeInnerLayers: false,
+    } as never).artifacts;
+    const kinds = artifacts.map((x) => x.kind);
+    expect(kinds).toContain("gerber.inner1_copper");
+    expect(kinds).toContain("gerber.inner2_copper");
+  });
+
   test("job file reports the board's own thickness", () => {
     // It used to report the 1.6 mm default for every board, so a 0.8 mm
     // stackup reached the fab mislabelled (contract 10 §5.4).

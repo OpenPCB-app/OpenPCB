@@ -300,14 +300,13 @@ function makeExportManufacturingTool(ctx: CoreBackendModuleContext): AiTool {
       effect: "read",
       capability: "designer.read.export",
       description:
-        "Generate the manufacturing bundle (Gerbers, Excellon drills, optional BOM and pick-and-place) and return its manifest: bundle name, per-file names and byte sizes, and any preflight warnings. File contents are NOT returned — read the openpcb://design/{id}/export/gerber resource for the ZIP.",
+        "Generate the manufacturing bundle (Gerbers, Excellon drills, optional BOM and pick-and-place) and return its manifest: bundle name, per-file names and byte sizes, and any preflight warnings. File contents are not returned; export the ZIP from the OpenPCB app.",
       inputSchema: {
         type: "object",
         properties: {
           ...DESIGN_INPUT_SCHEMA.properties,
           includeBom: { type: "boolean" },
           includePickAndPlace: { type: "boolean" },
-          includeInnerLayers: { type: "boolean" },
         },
       },
     },
@@ -315,7 +314,6 @@ function makeExportManufacturingTool(ctx: CoreBackendModuleContext): AiTool {
       const args = (input ?? {}) as DesignInput & {
         includeBom?: boolean;
         includePickAndPlace?: boolean;
-        includeInnerLayers?: boolean;
       };
       const designer = designerOf(ctx);
       if (!designer) return { ...NO_DESIGNER, limits: execCtx.limits };
@@ -327,7 +325,6 @@ function makeExportManufacturingTool(ctx: CoreBackendModuleContext): AiTool {
           ? await designer.getManufacturingExportSummary(args.designId, {
               includeBom: args.includeBom,
               includePickAndPlace: args.includePickAndPlace,
-              includeInnerLayers: args.includeInnerLayers,
             })
           : null;
       } catch (error) {
