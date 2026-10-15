@@ -3,7 +3,12 @@ export interface DraftJournalRecord {
   readonly value: string;
 }
 
-/** Opaque JSON records scoped by the native host to one profile and database. */
+/**
+ * Opaque JSON records scoped by the native host to one profile and database.
+ * Two independent namespaces implement it: Docs drafts (`electronAPI.draftJournal`,
+ * `knowledge-drafts-<dbhash>`) and Designer edit recovery (`electronAPI.designerRecoveryJournal`,
+ * `designer-recovery-<dbhash>`). Neither can list or touch the other's records.
+ */
 export interface DraftJournal {
   read(key: string): Promise<DraftJournalRecord | null>;
   write(

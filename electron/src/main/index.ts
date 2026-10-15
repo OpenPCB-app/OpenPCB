@@ -2,7 +2,9 @@
 // before any window opens or any child process spawns. electron-log is
 // initialized first so the rest of bootstrap is captured to disk.
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
+import { realpathSync } from "node:fs";
 import { join } from "node:path";
+import { AtomicRecordStore } from "../../../src/core/backend/storage/atomic-record-store";
 import { initLogger, log } from "./logger.js";
 import { initCrashReporter } from "./crash.js";
 import { initSentry } from "./sentry.js";
@@ -23,6 +25,12 @@ import {
 } from "./secure-storage.js";
 import { registerEditContextMenu } from "./edit-context-menu.js";
 import { registerDraftJournalIpc } from "./draft-journal-ipc.js";
+import {
+  DESIGNER_RECOVERY_JOURNAL,
+  registerRecordJournalIpc,
+  sweepStaleTemporaries,
+  type RecordJournalDeps,
+} from "./record-journal-ipc.js";
 import { getTelemetryOptIn, setTelemetryOptIn } from "./preferences.js";
 import { registerCredentialIpc } from "./credential-ipc.js";
 import { registerLocalApiIpc } from "./local-api-ipc.js";
@@ -58,7 +66,6 @@ initUpdater();
 initDeepLink(() => mainWindow);
 
 let mainWindow: BrowserWindow | null = null;
-registerDraftJournalIpc(() => mainWindow, isAllowedAppUrl);
 
 function installSecurityPolicy(): void {
   session.defaultSession.setPermissionRequestHandler(
@@ -310,6 +317,17 @@ const rendererTrust = {
     mainContents: () => mainWindow?.webContents ?? null,
     rendererOrigin: () => app.isPackaged ? getBackendPayload()?.url ?? null : "http://127.0.0.1:1420",
 };
+const recordJournalDeps: RecordJournalDeps = {
+  ipc: ipcMain,
+  trust: rendererTrust,
+  backendReady: () => !!getBackendPayload(),
+  env: () => ({ root: process.env.APP_DATA_DIR, dbPath: process.env.OPENPCB_DB_PATH }),
+  realpath: realpathSync,
+  createStore: (directory) => new AtomicRecordStore(directory),
+  sweep: sweepStaleTemporaries,
+};
+registerDraftJournalIpc(recordJournalDeps);
+registerRecordJournalIpc(recordJournalDeps, DESIGNER_RECOVERY_JOURNAL);
 registerLocalApiIpc(ipcMain, rendererTrust, getLocalApiBootstrap);
 registerCredentialIpc(
   ipcMain,

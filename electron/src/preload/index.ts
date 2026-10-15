@@ -57,6 +57,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     remove: (input) => ipcRenderer.invoke("draft-journal:remove", input),
     list: () => ipcRenderer.invoke("draft-journal:list"),
   } satisfies DraftJournal,
+  designerRecoveryJournal: {
+    read: (key: string) => ipcRenderer.invoke("designer-recovery-journal:read", key),
+    write: (input) => ipcRenderer.invoke("designer-recovery-journal:write", input),
+    remove: (input) => ipcRenderer.invoke("designer-recovery-journal:remove", input),
+    list: () => ipcRenderer.invoke("designer-recovery-journal:list"),
+  } satisfies DraftJournal,
   // Dev-only marketing-capture flag (M0.2). Renderer-side capture hooks mount
   // only when this is true (OPENPCB_CAPTURE=1); false/absent in normal runs.
   captureMode: process.env.OPENPCB_CAPTURE === "1",
