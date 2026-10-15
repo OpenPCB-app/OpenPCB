@@ -9,6 +9,13 @@ export function isTroikaFontResolver(url: string): boolean {
   return url.startsWith(TROIKA_FONT_RESOLVER);
 }
 
+export function isRemoteFontRequest(url: string): boolean {
+  return isTroikaFontResolver(url) || /\.(?:woff2?|[ot]tf)$/i.test(new URL(url).pathname);
+}
+
+/** Off-host requests seen by the browser fixture: aborted, or let through while the re-pin is pending. */
+export interface OffHostRequests { denied: string[]; tolerated: string[] }
+
 export interface CanvasPackage {
   version: string;
   /** The package ships configureEdaText (bundled font, no remote fallback). */

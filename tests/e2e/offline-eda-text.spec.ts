@@ -7,9 +7,9 @@ import { expectCanvasGeometry, installedCanvasPackage, repinPending } from "./su
 
 /*
  * OPENPCB-53 (H05) browser-mode acceptance on the isolated runtime. The fixture
- * aborts every off-host request (and records it), so EDA text must come from
- * the bundled same-origin font. Expectations that need the offline text runtime
- * are fixme'd while the installed r3f-eda-canvas predates it.
+ * aborts and records every off-host request except, until the r3f-eda-canvas
+ * re-pin, Troika's font resolver (recorded as tolerated). Expectations that need
+ * the offline text runtime are fixme'd while the installed package predates it.
  */
 
 test.use({ trace: "off", video: "off" });
@@ -90,21 +90,25 @@ async function attachScreenshot(page: Page, name: string): Promise<void> {
   await test.info().attach(`${name}.png`, { body: await page.screenshot(), contentType: "image/png" });
 }
 
-test("every EDA canvas surface mounts with all off-host requests denied", async ({ page, agentkit, deniedRequests }) => {
+test("every EDA canvas surface renders geometry with off-host requests recorded", async ({ page, agentkit, offHostRequests }) => {
   const s = await openDesign(page, agentkit.origin, agentkit.bootstrap.url, agentkit.componentId);
-  await visitCanvasSurfaces(s, async (_canvas, surface) => { await attachScreenshot(page, surface); });
-  // Denied requests are recorded and constrained by the fixture; this only reports them.
-  test.info().annotations.push({ type: "r3f-eda-canvas", description: `${canvasPackage.version}, denied ${deniedRequests.length}` });
+  await visitCanvasSurfaces(s, async (canvas, surface) => {
+    await expectCanvasGeometry(page, canvas, surface);
+    await attachScreenshot(page, surface);
+  });
+  // The fixture constrains the off-host requests; this only reports them.
+  test.info().annotations.push({ type: "r3f-eda-canvas", description:
+    `${canvasPackage.version}, denied ${offHostRequests.denied.length}, tolerated ${offHostRequests.tolerated.length}` });
 });
 
-test("every EDA canvas renders geometry offline and makes zero off-host requests", async ({ page, agentkit, deniedRequests }) => {
+test("every EDA canvas renders geometry offline and makes zero off-host requests", async ({ page, agentkit, offHostRequests }) => {
   test.fixme(!canvasPackage.offlineText, repinPending(canvasPackage));
   const s = await openDesign(page, agentkit.origin, agentkit.bootstrap.url, agentkit.componentId);
   await visitCanvasSurfaces(s, async (canvas, surface) => {
     await expectCanvasGeometry(page, canvas, surface);
     await attachScreenshot(page, surface);
   });
-  expect(deniedRequests, "Cold-offline canvases must not contact any font CDN").toEqual([]);
+  expect([...offHostRequests.denied, ...offHostRequests.tolerated], "Cold-offline canvases must not go off-host").toEqual([]);
 });
 
 const FONT_FAILURES: Array<{ name: string; respond: (route: Route) => Promise<void> }> = [
@@ -117,7 +121,7 @@ const FONT_FAILURES: Array<{ name: string; respond: (route: Route) => Promise<vo
 ];
 
 for (const failure of FONT_FAILURES) {
-  test(`bundled font ${failure.name}: geometry still renders with fallback markers`, async ({ page, agentkit, deniedRequests }) => {
+  test(`bundled font ${failure.name}: geometry still renders with fallback markers`, async ({ page, agentkit, offHostRequests }) => {
     test.fixme(!canvasPackage.offlineText, repinPending(canvasPackage));
     const fontRequests: string[] = [];
     await page.route(FONT_ROUTE, async (route) => { fontRequests.push(route.request().url()); await failure.respond(route); });
@@ -128,11 +132,11 @@ for (const failure of FONT_FAILURES) {
     });
     // One verified font generation: a failed font is not retried, and nothing falls back to a CDN.
     expect(fontRequests).toHaveLength(1);
-    expect(deniedRequests).toEqual([]);
+    expect([...offHostRequests.denied, ...offHostRequests.tolerated]).toEqual([]);
   });
 }
 
-test("Unicode and transformed labels render offline and survive save/reopen verbatim", async ({ page, agentkit, deniedRequests }) => {
+test("Unicode and transformed labels render offline and survive save/reopen verbatim", async ({ page, agentkit, offHostRequests }) => {
   test.fixme(!canvasPackage.offlineText, repinPending(canvasPackage));
   const s = await openDesign(page, agentkit.origin, agentkit.bootstrap.url, agentkit.componentId);
   // Greek, Cyrillic, micro and ohm are covered by the bundled font; CJK must show the replacement glyph.
@@ -169,5 +173,5 @@ test("Unicode and transformed labels render offline and survive save/reopen verb
   expect(schematicAfter.parts.find((part) => part.id === rotated)?.value).toBe("4.7µF Ω");
   const pcbAfter = await projection<DesignerPcbProjection>(s, "pcb");
   expect(pcbAfter.overlayTexts.map((text) => text.text)).toEqual(expect.arrayContaining(silk.map((item) => item.text)));
-  expect(deniedRequests).toEqual([]);
+  expect([...offHostRequests.denied, ...offHostRequests.tolerated]).toEqual([]);
 });

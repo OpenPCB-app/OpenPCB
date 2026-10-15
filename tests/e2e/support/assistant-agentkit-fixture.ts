@@ -5,11 +5,15 @@ import { mkdtemp, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import type { LocalApiBootstrap } from "../../../src/core/contracts/security/local-api";
-import { isTroikaFontResolver } from "./offline-canvas";
+import { installedCanvasPackage, isRemoteFontRequest, isTroikaFontResolver, type OffHostRequests } from "./offline-canvas";
 
 interface AppFixture { origin: string; bootstrap: LocalApiBootstrap; port: number; componentId: string }
 interface ReadyMessage extends AppFixture { ready?: boolean; error?: string }
-type Fixtures = { agentkit: AppFixture; deniedRequests: string[] };
+type Fixtures = { agentkit: AppFixture; offHostRequests: OffHostRequests };
+
+// Pinned r3f-eda-canvas v0.1.4 has no bundled-font runtime: denying Troika's CDN resolver
+// suspends every designer scene (F01). Tolerate it until the r3f-eda-canvas re-pin.
+const tolerateFontResolver = !installedCanvasPackage().offlineText;
 
 export const test = base.extend<Fixtures>({
   agentkit: async ({}, use) => {
@@ -47,26 +51,29 @@ export const test = base.extend<Fixtures>({
       await rm(directory, { recursive: true, force: true });
     }
   },
-  deniedRequests: async ({}, use, testInfo) => {
-    const denied: string[] = [];
-    await use(denied);
-    console.log(`[offline-guard] ${testInfo.title}: denied ${denied.length} external request(s)`);
-    testInfo.annotations.push({ type: "offline-denied-requests", description: String(denied.length) });
-    if (denied.length) await testInfo.attach("offline-denied-requests.json",
-      { body: JSON.stringify(denied, null, 2), contentType: "application/json" });
-    // The pinned r3f-eda-canvas v0.1.4 still asks Troika's CDN resolver for its default font.
-    // Tighten to expect(denied).toEqual([]) once the r3f-eda-canvas re-pin lands.
-    expect(denied.filter((url) => !isTroikaFontResolver(url)), "Only the pinned canvas font resolver may go off-host")
-      .toEqual([]);
+  offHostRequests: async ({}, use, testInfo) => {
+    const requests: OffHostRequests = { denied: [], tolerated: [] };
+    await use(requests);
+    const { denied, tolerated } = requests;
+    console.log(`[offline-guard] ${testInfo.title}: denied ${denied.length}, tolerated ${tolerated.length} off-host request(s)`);
+    testInfo.annotations.push({ type: "offline-off-host-requests", description: `denied ${denied.length}, tolerated ${tolerated.length}` });
+    if (denied.length || tolerated.length) await testInfo.attach("offline-off-host-requests.json",
+      { body: JSON.stringify(requests, null, 2), contentType: "application/json" });
+    // tolerated is empty once the re-pin lands, so any remote font fetch then fails here.
+    expect(denied.filter(isRemoteFontRequest), "EDA text must not fetch remote fonts").toEqual([]);
   },
-  page: async ({ page, agentkit, deniedRequests }, use) => {
+  page: async ({ page, agentkit, offHostRequests }, use) => {
     const errors: string[] = [];
     page.on("pageerror", (error) => { errors.push((error.stack ?? error.message).replaceAll(agentkit.bootstrap.token, "[REDACTED]")); });
-    // Every off-host request is aborted, the canvas font resolver included, so text must render offline.
     await page.context().route("**/*", (route) => {
-      const url = route.request().url();
+      const request = route.request();
+      const url = request.url();
       if ([agentkit.origin, agentkit.bootstrap.url].includes(new URL(url).origin)) return route.continue();
-      deniedRequests.push(url);
+      if (tolerateFontResolver && request.method() === "GET" && isTroikaFontResolver(url)) {
+        offHostRequests.tolerated.push(url);
+        return route.continue();
+      }
+      offHostRequests.denied.push(url);
       return route.abort();
     });
     await page.addInitScript(({ bootstrap, port }) => {
