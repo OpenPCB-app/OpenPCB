@@ -305,10 +305,14 @@ describe("A6 — per-net outcomes from a scripted session", () => {
 
     // Undo + redo the delete — registry must end back at 'deleted'.
     for (const action of ["undo", "redo"] as const) {
+      // HTTP history requires the revision the caller saw (OPENPCB-103).
+      const head = (await (
+        await server.fetch(new Request(`${BASE}/designs/${design.id}/recovery-head`))
+      ).json()) as { data: { head: { headRevision: number } } };
       const response = await post(
         server,
         `${BASE}/designs/${design.id}/history/${action}`,
-        { sessionId: SESSION },
+        { sessionId: SESSION, expectedRevision: head.data.head.headRevision },
       );
       expect(response.status).toBe(200);
     }

@@ -29,6 +29,8 @@ export type AutoLayoutErrorCode =
   | "AUTO_LAYOUT_OPERATION_INVALID"
   /** Optimistic-concurrency conflict at dispatch. */
   | "AUTO_LAYOUT_REVISION_CONFLICT"
+  /** The applyRequestId was already used for a different apply request. */
+  | "AUTO_LAYOUT_REQUEST_CONFLICT"
   /** The service answered with something this desktop cannot parse. */
   | "AUTO_LAYOUT_CONTRACT_MISMATCH"
   /** Network failure, timeout, or a 5xx from the service. */
@@ -79,6 +81,7 @@ function statusForCode(code: AutoLayoutErrorCode): number {
       return 404;
     case "AUTO_LAYOUT_STALE":
     case "AUTO_LAYOUT_REVISION_CONFLICT":
+    case "AUTO_LAYOUT_REQUEST_CONFLICT":
       return 409;
     case "AUTO_LAYOUT_SNAPSHOT_INVALID":
     case "AUTO_LAYOUT_CANDIDATE_NOT_APPLICABLE":

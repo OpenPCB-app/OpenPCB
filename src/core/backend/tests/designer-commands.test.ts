@@ -385,13 +385,34 @@ describe("designer commands hardening", () => {
     expect(historyBody.data?.history?.canUndo).toBe(true);
     expect(historyBody.data?.history?.canRedo).toBe(false);
 
+    // HTTP history requires expectedRevision (OPENPCB-103): without it the
+    // request is a 400 and no history entry is consumed.
+    for (const direction of ["undo", "redo"]) {
+      const missing = await server.fetch(
+        new Request(
+          `http://localhost/api/modules/designer/designs/${design.id}/history/${direction}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ sessionId: "http-history" }),
+          },
+        ),
+      );
+      expect(missing.status).toBe(400);
+    }
+    expect(await designerSdk.getHistory(design.id, "http-history")).toMatchObject({
+      undoDepth: 1,
+      redoDepth: 0,
+    });
+    expect((await designerSdk.getSchematicProjection(design.id))?.revision).toBe(1);
+
     const undoResponse = await server.fetch(
       new Request(
         `http://localhost/api/modules/designer/designs/${design.id}/history/undo`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ sessionId: "http-history" }),
+          body: JSON.stringify({ sessionId: "http-history", expectedRevision: 1 }),
         },
       ),
     );
@@ -405,7 +426,7 @@ describe("designer commands hardening", () => {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ sessionId: "http-history" }),
+          body: JSON.stringify({ sessionId: "http-history", expectedRevision: 2 }),
         },
       ),
     );

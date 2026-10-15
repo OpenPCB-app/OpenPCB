@@ -154,6 +154,7 @@ import { cancelRoute, getRouteStatus, submitRoute } from "./autoroute/client";
 import { cancelPlace, getPlaceStatus, submitPlace } from "./autoplace/client";
 import { getAutoLayoutVersion, resolveSerializePours } from "./autolayout/client";
 import { asNumber, asRecord, asString } from "./value-guards";
+import { designerRecoveryCompat } from "./recovery-compat";
 
 function success<T>(data: T, status = 200): Response {
   return Response.json({ ok: true, data }, { status });
@@ -189,6 +190,40 @@ function drcRunCancelled(error: DrcRunCancelledError): AppError {
     "DRC run cancelled",
     "https://openpcb.dev/problems/drc-run-cancelled",
   );
+}
+
+/**
+ * The ONLY 404 a recovery client reads as "the design is gone" (OPENPCB-103).
+ * A generic not-found (unmatched route, older backend) stays "unavailable",
+ * so a rollback can never make journaled edits look orphaned. Used by the
+ * recovery routes only.
+ */
+class DesignNotFoundError extends AppError {
+  constructor(designId: string) {
+    super(
+      `Design '${designId}' not found`,
+      404,
+      "Design Not Found",
+      "https://openpcb.dev/problems/designer/design-not-found",
+    );
+  }
+}
+
+function bomBindingChanged(refdes: string): AppError {
+  return new AppError(
+    `Reference '${refdes}' now refers to a different part`,
+    409,
+    "BOM Binding Changed",
+    "https://openpcb.dev/problems/designer/bom-binding-changed",
+  );
+}
+
+/** A recovery lookup key: 1..128 characters, compared verbatim (never trimmed). */
+function recoveryKey(value: string | null | undefined, name: string): string {
+  if (typeof value !== "string" || value.length < 1 || value.length > 128) {
+    throw new ValidationError(`${name} must be 1 to 128 characters`);
+  }
+  return value;
 }
 
 /** Cloud auto-layout proxy routes require a signed-in user (R0.4): reject
@@ -408,6 +443,21 @@ function parseBomOverridePatch(raw: unknown): BomOverridePatch {
   return patch;
 }
 
+/**
+ * Optional top-level `expectedPartId` of a BOM PATCH: the part the user edited.
+ * Absent = legacy (unguarded). `null` = the line had no schematic part.
+ */
+function parseExpectedPartId(raw: unknown): string | null | undefined {
+  const rec = asRecord(raw);
+  if (!rec || !("expectedPartId" in rec)) return undefined;
+  const value = rec.expectedPartId;
+  if (value === null) return null;
+  if (typeof value === "string" && value.length > 0 && value.length <= 128) {
+    return value;
+  }
+  throw new ValidationError("expectedPartId must be a non-empty string or null");
+}
+
 function parseOptionalString(
   rec: Record<string, unknown>,
   key: string,
@@ -520,9 +570,14 @@ function parseUpdateDesignBody(body: unknown): { name: string } {
   return { name };
 }
 
+/**
+ * `expectedRevision` is REQUIRED over HTTP (OPENPCB-103): a renderer undo
+ * without the revision it saw could consume an entry another writer just
+ * moved. The SDK keeps it optional for in-process callers.
+ */
 function parseHistoryBody(body: unknown): {
   sessionId: string;
-  expectedRevision?: number;
+  expectedRevision: number;
 } {
   const record = asRecord(body);
   if (!record) {
@@ -534,10 +589,9 @@ function parseHistoryBody(body: unknown): {
   }
   const expectedRevision = record.expectedRevision;
   if (
-    expectedRevision !== undefined &&
-    (typeof expectedRevision !== "number" ||
-      !Number.isSafeInteger(expectedRevision) ||
-      expectedRevision < 0)
+    typeof expectedRevision !== "number" ||
+    !Number.isSafeInteger(expectedRevision) ||
+    expectedRevision < 0
   )
     throw new ValidationError("expectedRevision must be a non-negative integer");
   return { sessionId, expectedRevision };
@@ -3367,8 +3421,15 @@ export function registerRoutes(
     async ({ params, req }) => {
       const designId = params.getOrThrow("designId");
       const refdes = params.getOrThrow("refdes");
-      const patch = parseBomOverridePatch(await parseJsonBody<unknown>(req));
-      const override = await store.updateBomOverride(designId, refdes, patch);
+      const body = await parseJsonBody<unknown>(req);
+      const patch = parseBomOverridePatch(body);
+      const override = await store.updateBomOverride(
+        designId,
+        refdes,
+        patch,
+        parseExpectedPartId(body),
+      );
+      if (override === "binding-changed") throw bomBindingChanged(refdes);
       if (!override) {
         throw new NotFoundError(`Design '${designId}' not found`);
       }
@@ -3678,6 +3739,39 @@ export function registerRoutes(
     return success({ result });
   });
 
+  // ── Crash-recovery evidence (OPENPCB-103): reads only, typed design 404 ──
+  router.get(
+    "/designs/:designId/commands/:commandId",
+    async ({ params, query }) => {
+      const designId = params.getOrThrow("designId");
+      const commandId = recoveryKey(params.getOrThrow("commandId"), "commandId");
+      const sessionId = recoveryKey(query.get("sessionId"), "sessionId");
+      const commandType = recoveryKey(query.get("commandType"), "commandType");
+      const lookup = await store.lookupCommand(
+        designId,
+        commandId,
+        sessionId,
+        commandType,
+      );
+      if (!lookup) throw new DesignNotFoundError(designId);
+      return success({ lookup });
+    },
+  );
+
+  router.get("/designs/:designId/recovery-head", async ({ params, query }) => {
+    const designId = params.getOrThrow("designId");
+    const refdesRaw = query.get("refdes");
+    const refdes =
+      refdesRaw === null ? undefined : recoveryKey(refdesRaw, "refdes");
+    const head = await store.getRecoveryHead(designId, refdes);
+    if (!head) throw new DesignNotFoundError(designId);
+    return success({ head });
+  });
+
+  router.get("/recovery/compat", async () =>
+    success({ compat: designerRecoveryCompat() }),
+  );
+
   // ── Cloud auto-router: submit snapshot → review ops → apply ─────────────
   // Proxies the user's GoTrue bearer to the routing service; the desktop stays
   // the authoritative DRC engine (re-validated on apply). Gated dev-only via
@@ -3953,6 +4047,7 @@ export function registerRoutes(
       loadProjection: (designId) => store.getPcbProjection(designId),
       dispatch: (designId, envelope) =>
         store.dispatchCommand(designId, envelope, {}, { actor: "autolayout_apply" }),
+      findPriorApply: (applyRequestId) => store.getLoggedUiCommand(applyRequestId),
       runDrc: (designId) => drcAfterApply(designId),
       notFound: (message) => new NotFoundError(message),
       success: (data, status) => success(data, status),

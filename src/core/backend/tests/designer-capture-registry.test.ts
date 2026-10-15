@@ -111,11 +111,18 @@ async function history(
   designId: string,
   action: "undo" | "redo",
 ): Promise<void> {
+  // HTTP history requires the revision the caller saw (OPENPCB-103).
+  const head = (await (
+    await server.fetch(new Request(`${BASE}/designs/${designId}/recovery-head`))
+  ).json()) as { data: { head: { headRevision: number } } };
   const response = await server.fetch(
     new Request(`${BASE}/designs/${designId}/history/${action}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sessionId: SESSION }),
+      body: JSON.stringify({
+        sessionId: SESSION,
+        expectedRevision: head.data.head.headRevision,
+      }),
     }),
   );
   expect(response.status).toBe(200);

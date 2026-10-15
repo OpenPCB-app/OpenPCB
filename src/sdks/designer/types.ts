@@ -2332,6 +2332,49 @@ export type DesignerOperationReceiptLookup =
   | { status: "conflict" }
   | { status: "found"; receipt: DesignerOperationReceipt };
 
+/**
+ * UI command lookup over `designer_command_log` (OPENPCB-103): what the server
+ * recorded under one command id, judged against the design, session and
+ * command type the caller sent it with. Read-only evidence for crash recovery.
+ */
+export type DesignerCommandLookup =
+  | { status: "missing"; headRevision: number }
+  /** The id belongs to another design / session / type, or to an operation identity. */
+  | { status: "mismatch" }
+  | {
+      status: "found";
+      commandType: string;
+      appliedRevision: number;
+      committedAt: string;
+      headRevision: number;
+      result: DesignerDispatchResult;
+    }
+  /** Logged, but this build cannot rebuild the result; `rawOk` decides saved vs rejected. */
+  | {
+      status: "found-unparsed";
+      commandType: string;
+      appliedRevision: number;
+      committedAt: string;
+      headRevision: number;
+      rawOk: boolean;
+      rawCode: string | null;
+    };
+
+/**
+ * Design head for recovery classification. `refdesPartId` is present iff a
+ * refdes was asked about; `null` means no schematic part carries it.
+ */
+export interface DesignerRecoveryHead {
+  headRevision: number;
+  refdesPartId?: string | null;
+}
+
+/** Server half of a recovery record's compatibility stamp. */
+export interface DesignerRecoveryCompat {
+  schemaHead: string;
+  commandEpoch: number;
+}
+
 export interface DesignerDesignCreationReceipt {
   identity: DesignerOperationIdentity;
   input: CreateDesignerDesignInput;

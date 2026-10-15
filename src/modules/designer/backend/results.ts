@@ -8,6 +8,239 @@ import type {
 import { isCopperLayerId } from "../../../sdks/designer";
 import { asNumber, asRecord, asString, parseJsonRecord } from "./value-guards";
 
+export type DesignerDispatchFailure = Extract<DesignerDispatchResult, { ok: false }>;
+export type DesignerDispatchFailureCode = DesignerDispatchFailure["code"];
+type FailureOf<C extends DesignerDispatchFailureCode> = Extract<
+  DesignerDispatchFailure,
+  { code: C }
+>;
+type LoggedRecord = Record<string, unknown>;
+
+/** A non-empty string field, or null — the presence check every branch makes. */
+function text(rec: LoggedRecord, key: string): string | null {
+  return asString(rec[key]) || null;
+}
+
+function isNetSummary(value: unknown): boolean {
+  const net = asRecord(value);
+  return (
+    !!net &&
+    (net.name === null || typeof net.name === "string") &&
+    asNumber(net.pinCount) !== null
+  );
+}
+
+/**
+ * One parser per failure code. The mapped type makes this table exhaustive:
+ * a result code added to `DesignerDispatchResult` without a parser here fails
+ * typecheck, instead of replaying as an unparseable row (OPENPCB-103).
+ */
+const FAILURE_PARSERS: {
+  [C in DesignerDispatchFailureCode]: (rec: LoggedRecord) => FailureOf<C> | null;
+} = {
+  NET_MERGE_REQUIRES_CONFIRM: (rec) => {
+    const message = text(rec, "message");
+    const nets = rec.nets;
+    return message && Array.isArray(nets) && nets.every(isNetSummary)
+      ? {
+          ok: false,
+          code: "NET_MERGE_REQUIRES_CONFIRM",
+          message,
+          nets: nets as FailureOf<"NET_MERGE_REQUIRES_CONFIRM">["nets"],
+        }
+      : null;
+  },
+  OPERATION_IDENTITY_CONFLICT: (rec) => {
+    const commandId = text(rec, "commandId");
+    return commandId
+      ? { ok: false, code: "OPERATION_IDENTITY_CONFLICT", commandId }
+      : null;
+  },
+  PCB_COPPER_ILLEGAL: (rec) => {
+    const detail = text(rec, "detail");
+    // The row was written by `pcbCopperIllegal` from this process's own DRC
+    // report, so the array is structurally trusted; only its presence is
+    // checked, as every other branch here checks its fields' presence.
+    const violations = rec.violations;
+    if (!detail || !Array.isArray(violations)) return null;
+    // `violations` is capped, so the count is a field of its own; a row written
+    // before the cap existed has none, and its array IS the whole truth.
+    const refusedCount = asNumber(rec.refusedCount) ?? violations.length;
+    return {
+      ok: false,
+      code: "PCB_COPPER_ILLEGAL",
+      detail,
+      violations: violations as DrcViolation[],
+      refusedCount,
+    };
+  },
+  REVISION_CONFLICT: (rec) => {
+    const conflict = asRecord(rec.conflict);
+    const actual = asNumber(conflict?.actual);
+    const expectedRaw = conflict?.expected;
+    const expected = expectedRaw === null ? null : asNumber(expectedRaw);
+    if (actual === null || (expectedRaw !== null && expected === null)) {
+      return null;
+    }
+    return { ok: false, code: "REVISION_CONFLICT", conflict: { expected, actual } };
+  },
+  COMPONENT_NOT_FOUND: (rec) => {
+    const componentId = text(rec, "componentId");
+    return componentId ? { ok: false, code: "COMPONENT_NOT_FOUND", componentId } : null;
+  },
+  COMPONENT_NOT_WIREABLE: (rec) => {
+    const componentId = text(rec, "componentId");
+    return componentId && rec.reason === "NO_PINS"
+      ? { ok: false, code: "COMPONENT_NOT_WIREABLE", componentId, reason: "NO_PINS" }
+      : null;
+  },
+  FOOTPRINT_PIN_MISMATCH: (rec) => {
+    const partId = text(rec, "partId");
+    const missing = rec.missingPinNumbers;
+    return partId &&
+      Array.isArray(missing) &&
+      missing.every((n) => typeof n === "string")
+      ? {
+          ok: false,
+          code: "FOOTPRINT_PIN_MISMATCH",
+          partId,
+          missingPinNumbers: missing as string[],
+        }
+      : null;
+  },
+  PIN_NOT_FOUND: (rec) => {
+    const pinId = text(rec, "pinId");
+    return pinId ? { ok: false, code: "PIN_NOT_FOUND", pinId } : null;
+  },
+  ENTITY_NOT_FOUND: (rec) => {
+    const entityId = text(rec, "entityId");
+    const entityKind = rec.entityKind;
+    return entityId && isEntityKind(entityKind)
+      ? { ok: false, code: "ENTITY_NOT_FOUND", entityId, entityKind }
+      : null;
+  },
+  INVALID_WIRE_PATH: (rec) => {
+    const detail = text(rec, "detail");
+    return detail ? { ok: false, code: "INVALID_WIRE_PATH", detail } : null;
+  },
+  DUPLICATE_REFERENCE: (rec) => {
+    const reference = text(rec, "reference");
+    return reference ? { ok: false, code: "DUPLICATE_REFERENCE", reference } : null;
+  },
+  INVALID_LABEL: (rec) => {
+    const detail = text(rec, "detail");
+    return detail ? { ok: false, code: "INVALID_LABEL", detail } : null;
+  },
+  INVALID_PRIMITIVE: (rec) => {
+    const detail = text(rec, "detail");
+    return detail ? { ok: false, code: "INVALID_PRIMITIVE", detail } : null;
+  },
+  PRIMITIVE_NOT_FOUND: (rec) => {
+    const primitiveId = text(rec, "primitiveId");
+    return primitiveId ? { ok: false, code: "PRIMITIVE_NOT_FOUND", primitiveId } : null;
+  },
+  INVALID_PCB_BOARD_SETTINGS: (rec) => {
+    const detail = text(rec, "detail");
+    return detail ? { ok: false, code: "INVALID_PCB_BOARD_SETTINGS", detail } : null;
+  },
+  PCB_PLACEMENT_NOT_FOUND: (rec) => {
+    const placementId = text(rec, "placementId");
+    return placementId
+      ? { ok: false, code: "PCB_PLACEMENT_NOT_FOUND", placementId }
+      : null;
+  },
+  INVALID_PCB_TRACE: (rec) => {
+    const detail = text(rec, "detail");
+    return detail ? { ok: false, code: "INVALID_PCB_TRACE", detail } : null;
+  },
+  INVALID_PCB_VIA: (rec) => {
+    const detail = text(rec, "detail");
+    return detail ? { ok: false, code: "INVALID_PCB_VIA", detail } : null;
+  },
+  PCB_TRACE_NOT_FOUND: (rec) => {
+    const traceId = text(rec, "traceId");
+    return traceId ? { ok: false, code: "PCB_TRACE_NOT_FOUND", traceId } : null;
+  },
+  PCB_VIA_NOT_FOUND: (rec) => {
+    const viaId = text(rec, "viaId");
+    return viaId ? { ok: false, code: "PCB_VIA_NOT_FOUND", viaId } : null;
+  },
+  PCB_NET_CLASS_NOT_FOUND: (rec) => {
+    const netClassId = text(rec, "netClassId");
+    return netClassId
+      ? { ok: false, code: "PCB_NET_CLASS_NOT_FOUND", netClassId }
+      : null;
+  },
+  INVALID_PCB_FREE_HOLE: (rec) => {
+    const detail = text(rec, "detail");
+    return detail ? { ok: false, code: "INVALID_PCB_FREE_HOLE", detail } : null;
+  },
+  PCB_FREE_HOLE_NOT_FOUND: (rec) => {
+    const freeHoleId = text(rec, "freeHoleId");
+    return freeHoleId
+      ? { ok: false, code: "PCB_FREE_HOLE_NOT_FOUND", freeHoleId }
+      : null;
+  },
+  INVALID_PCB_FREE_PAD: (rec) => {
+    const detail = text(rec, "detail");
+    return detail ? { ok: false, code: "INVALID_PCB_FREE_PAD", detail } : null;
+  },
+  PCB_FREE_PAD_NOT_FOUND: (rec) => {
+    const freePadId = text(rec, "freePadId");
+    return freePadId ? { ok: false, code: "PCB_FREE_PAD_NOT_FOUND", freePadId } : null;
+  },
+  INVALID_PCB_OVERLAY: (rec) => {
+    const detail = text(rec, "detail");
+    return detail ? { ok: false, code: "INVALID_PCB_OVERLAY", detail } : null;
+  },
+  PCB_OVERLAY_NOT_FOUND: (rec) => {
+    const overlayId = text(rec, "overlayId");
+    return overlayId ? { ok: false, code: "PCB_OVERLAY_NOT_FOUND", overlayId } : null;
+  },
+  INVALID_PCB_ZONE: (rec) => {
+    const detail = text(rec, "detail");
+    return detail ? { ok: false, code: "INVALID_PCB_ZONE", detail } : null;
+  },
+  PCB_ZONE_NOT_FOUND: (rec) => {
+    const zoneId = text(rec, "zoneId");
+    return zoneId ? { ok: false, code: "PCB_ZONE_NOT_FOUND", zoneId } : null;
+  },
+  PCB_ZONE_BOARD_EXISTS: (rec) => {
+    const layer = asString(rec.layer);
+    return isCopperLayerId(layer)
+      ? { ok: false, code: "PCB_ZONE_BOARD_EXISTS", layer }
+      : null;
+  },
+  INVALID_PCB_KEEPOUT: (rec) => {
+    const detail = text(rec, "detail");
+    return detail ? { ok: false, code: "INVALID_PCB_KEEPOUT", detail } : null;
+  },
+  PCB_KEEPOUT_NOT_FOUND: (rec) => {
+    const keepoutId = text(rec, "keepoutId");
+    return keepoutId ? { ok: false, code: "PCB_KEEPOUT_NOT_FOUND", keepoutId } : null;
+  },
+  INVALID_DRC_RULE: (rec) => {
+    const ruleId = text(rec, "ruleId");
+    const detail = text(rec, "detail");
+    return ruleId && detail
+      ? { ok: false, code: "INVALID_DRC_RULE", ruleId, detail }
+      : null;
+  },
+};
+
+function isEntityKind(value: unknown): value is DesignerEntityKind {
+  return (
+    value === "part" ||
+    value === "wire" ||
+    value === "label" ||
+    value === "primitive"
+  );
+}
+
+function isFailureCode(code: string): code is DesignerDispatchFailureCode {
+  return Object.prototype.hasOwnProperty.call(FAILURE_PARSERS, code);
+}
+
 export function parseDispatchResultJson(
   payloadJson: string,
 ): DesignerDispatchResult | null {
@@ -42,177 +275,53 @@ export function parseDispatchResultJson(
   }
 
   const code = asString(parsed.code);
-  if (!code) {
+  if (!code || !isFailureCode(code)) {
     return null;
   }
+  const parse = FAILURE_PARSERS[code] as (
+    rec: LoggedRecord,
+  ) => DesignerDispatchFailure | null;
+  return parse(parsed);
+}
 
-  if (code === "REVISION_CONFLICT") {
-    const conflict = asRecord(parsed.conflict);
-    const actual = asNumber(conflict?.actual);
-    const expectedRaw = conflict?.expected;
-    const expected = expectedRaw === null ? null : asNumber(expectedRaw);
-    if (actual === null || (expectedRaw !== null && expected === null)) {
-      return null;
-    }
-    return { ok: false, code, conflict: { expected, actual } };
-  }
+/**
+ * What a logged result says about itself when this build cannot rebuild it:
+ * `rawOk` is null when the row is not even a result-shaped JSON object.
+ */
+export function inspectLoggedResult(resultJson: string): {
+  rawOk: boolean | null;
+  rawCode: string | null;
+} {
+  const parsed = parseJsonRecord(resultJson);
+  return {
+    rawOk: typeof parsed.ok === "boolean" ? parsed.ok : null,
+    rawCode: asString(parsed.code),
+  };
+}
 
-  if (code === "COMPONENT_NOT_FOUND") {
-    const componentId = asString(parsed.componentId);
-    return componentId ? { ok: false, code, componentId } : null;
-  }
-
-  if (code === "COMPONENT_NOT_WIREABLE") {
-    const componentId = asString(parsed.componentId);
-    const reason = asString(parsed.reason);
-    return componentId && reason === "NO_PINS"
-      ? { ok: false, code, componentId, reason }
-      : null;
-  }
-
-  if (code === "FOOTPRINT_PIN_MISMATCH") {
-    const partId = asString(parsed.partId);
-    const missing = parsed.missingPinNumbers;
-    return partId &&
-      Array.isArray(missing) &&
-      missing.every((n) => typeof n === "string")
-      ? { ok: false, code, partId, missingPinNumbers: missing as string[] }
-      : null;
-  }
-
-  if (code === "PIN_NOT_FOUND") {
-    const pinId = asString(parsed.pinId);
-    return pinId ? { ok: false, code, pinId } : null;
-  }
-
-  if (code === "ENTITY_NOT_FOUND") {
-    const entityId = asString(parsed.entityId);
-    const entityKind = asString(parsed.entityKind) as DesignerEntityKind | null;
-    if (!entityId || !entityKind) {
-      return null;
-    }
-    if (
-      entityKind !== "part" &&
-      entityKind !== "wire" &&
-      entityKind !== "label" &&
-      entityKind !== "primitive"
-    ) {
-      return null;
-    }
-    return { ok: false, code, entityId, entityKind };
-  }
-
-  if (code === "INVALID_PRIMITIVE") {
-    const detail = asString(parsed.detail);
-    return detail ? { ok: false, code, detail } : null;
-  }
-
-  if (code === "PRIMITIVE_NOT_FOUND") {
-    const primitiveId = asString(parsed.primitiveId);
-    return primitiveId ? { ok: false, code, primitiveId } : null;
-  }
-
-  if (code === "INVALID_WIRE_PATH") {
-    const detail = asString(parsed.detail);
-    return detail ? { ok: false, code, detail } : null;
-  }
-
-  if (code === "DUPLICATE_REFERENCE") {
-    const reference = asString(parsed.reference);
-    return reference ? { ok: false, code, reference } : null;
-  }
-
-  if (code === "INVALID_LABEL") {
-    const detail = asString(parsed.detail);
-    return detail ? { ok: false, code, detail } : null;
-  }
-
-  if (code === "INVALID_PCB_BOARD_SETTINGS") {
-    const detail = asString(parsed.detail);
-    return detail ? { ok: false, code, detail } : null;
-  }
-
-  if (code === "PCB_PLACEMENT_NOT_FOUND") {
-    const placementId = asString(parsed.placementId);
-    return placementId ? { ok: false, code, placementId } : null;
-  }
-
-  if (code === "INVALID_PCB_TRACE") {
-    const detail = asString(parsed.detail);
-    return detail ? { ok: false, code, detail } : null;
-  }
-
-  if (code === "INVALID_PCB_VIA") {
-    const detail = asString(parsed.detail);
-    return detail ? { ok: false, code, detail } : null;
-  }
-
-  if (code === "PCB_TRACE_NOT_FOUND") {
-    const traceId = asString(parsed.traceId);
-    return traceId ? { ok: false, code, traceId } : null;
-  }
-
-  if (code === "PCB_VIA_NOT_FOUND") {
-    const viaId = asString(parsed.viaId);
-    return viaId ? { ok: false, code, viaId } : null;
-  }
-
-  if (code === "PCB_NET_CLASS_NOT_FOUND") {
-    const netClassId = asString(parsed.netClassId);
-    return netClassId ? { ok: false, code, netClassId } : null;
-  }
-
-  if (code === "INVALID_PCB_ZONE") {
-    const detail = asString(parsed.detail);
-    return detail ? { ok: false, code, detail } : null;
-  }
-
-  if (code === "PCB_ZONE_NOT_FOUND") {
-    const zoneId = asString(parsed.zoneId);
-    return zoneId ? { ok: false, code, zoneId } : null;
-  }
-
-  if (code === "PCB_ZONE_BOARD_EXISTS") {
-    const layer = asString(parsed.layer);
-    return isCopperLayerId(layer) ? { ok: false, code, layer } : null;
-  }
-
-  if (code === "INVALID_PCB_KEEPOUT") {
-    const detail = asString(parsed.detail);
-    return detail ? { ok: false, code, detail } : null;
-  }
-
-  if (code === "PCB_KEEPOUT_NOT_FOUND") {
-    const keepoutId = asString(parsed.keepoutId);
-    return keepoutId ? { ok: false, code, keepoutId } : null;
-  }
-
-  if (code === "PCB_COPPER_ILLEGAL") {
-    const detail = asString(parsed.detail);
-    // The row was written by `pcbCopperIllegal` from this process's own DRC
-    // report, so the array is structurally trusted; only its presence is
-    // checked, as every other branch here checks its fields' presence.
-    const violations = parsed.violations;
-    if (!detail || !Array.isArray(violations)) return null;
-    // `violations` is capped, so the count is a field of its own; a row written
-    // before the cap existed has none, and its array IS the whole truth.
-    const refusedCount = asNumber(parsed.refusedCount) ?? violations.length;
+/**
+ * The result a duplicate command id replays. An unparseable row must never
+ * replay as a REVISION_CONFLICT with `actual >= 0`: that reads as an ordinary
+ * conflict and invites a fresh-id reapply of a command that already applied.
+ * A logged success replays as success at its applied revision; anything else
+ * replays as "not applied" (`actual: -1`).
+ */
+export function replayLoggedResult(
+  resultJson: string,
+  appliedRevision: number,
+  baseRevision: number | null,
+): DesignerDispatchResult {
+  const parsed = parseDispatchResultJson(resultJson);
+  if (parsed) return parsed;
+  if (inspectLoggedResult(resultJson).rawOk === true) {
     return {
-      ok: false,
-      code,
-      detail,
-      violations: violations as DrcViolation[],
-      refusedCount,
+      ok: true,
+      revision: appliedRevision,
+      createdEntityId: null,
+      idempotent: true,
     };
   }
-
-  if (code === "INVALID_DRC_RULE") {
-    const ruleId = asString(parsed.ruleId);
-    const detail = asString(parsed.detail);
-    return ruleId && detail ? { ok: false, code, ruleId, detail } : null;
-  }
-
-  return null;
+  return conflict(baseRevision, -1);
 }
 
 export function conflict(

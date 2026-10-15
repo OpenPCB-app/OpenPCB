@@ -15,6 +15,7 @@ import {
   type BomOverridePatch,
   type BomProjection,
   type DesignerCommandEnvelope,
+  type DesignerCommandLookup,
   type DesignerDesignRecord,
   type DesignerDesignSummary,
   type DesignerDispatchResult,
@@ -27,6 +28,7 @@ import {
   type DesignerHistoryActionResult,
   type DesignerHistorySnapshot,
   type DesignerPcbProjection,
+  type DesignerRecoveryHead,
   type DrcReport,
   type DesignerSchematicPreview,
   type DesignerSchematicProjection,
@@ -121,9 +123,18 @@ import {
   PREVIEW_SCHEMA_VERSION,
   toDesignRecordFromProjection,
 } from "./projection-read";
-import { conflict, parseDispatchResultJson } from "./results";
+import {
+  conflict,
+  inspectLoggedResult,
+  parseDispatchResultJson,
+  replayLoggedResult,
+} from "./results";
 import { commandTouchesPcb } from "./commands/batch";
-import { listBomOverrides, upsertBomOverride } from "./bom-overrides";
+import {
+  listBomOverrides,
+  resolveBomPartId,
+  upsertBomOverride,
+} from "./bom-overrides";
 import { buildBomProjection } from "./export/bom/writer";
 import {
   canonicalJson,
@@ -231,11 +242,17 @@ export interface DesignerStore {
   /** Latest persisted DRC report, or null if never run. */
   getDrcResult(designId: string): Promise<StoredDrcResult | null>;
   listBomOverrides(designId: string): Promise<BomOverride[]>;
+  /**
+   * `expectedPartId` (when not undefined) is the part the caller edited: the
+   * write is refused with `"binding-changed"` if `refdes` now resolves to
+   * another part (or none). Absent = legacy, binds whatever carries `refdes`.
+   */
   updateBomOverride(
     designId: string,
     refdes: string,
     patch: BomOverridePatch,
-  ): Promise<BomOverride | null>;
+    expectedPartId?: string | null,
+  ): Promise<BomOverride | null | "binding-changed">;
   searchLibraryComponents(
     params: DesignerSearchLibraryParams,
   ): Promise<LibraryComponent[]>;
@@ -258,6 +275,20 @@ export interface DesignerStore {
   ): Promise<DesignerDispatchResult>;
   getOperationReceipt(commandId: string, identity: DesignerOperationIdentity): Promise<DesignerOperationReceiptLookup>;
   listOperationReceipts(actorScope: string, operationId: string): Promise<DesignerOperationReceipt[]>;
+  /** UI command lookup for crash recovery (OPENPCB-103); null = design missing. Read-only. */
+  lookupCommand(
+    designId: string,
+    commandId: string,
+    sessionId: string,
+    commandType: string,
+  ): Promise<DesignerCommandLookup | null>;
+  /** Head revision (+ the part `refdes` binds to, when asked); null = design missing. */
+  getRecoveryHead(
+    designId: string,
+    refdes?: string,
+  ): Promise<DesignerRecoveryHead | null>;
+  /** Raw command-log row for one id (autolayout apply replay); null = never logged. */
+  getLoggedUiCommand(commandId: string): LoggedUiCommand | null;
   linkDesignToCloud(
     designId: string,
     cloud: {
@@ -291,6 +322,27 @@ export interface DesignerStore {
     sessionId: string,
     expectedRevision?: number,
   ): Promise<DesignerHistoryActionResult>;
+}
+
+/** One `designer_command_log` row, as the autolayout apply replay reads it. */
+export interface LoggedUiCommand {
+  designId: string;
+  sessionId: string;
+  commandType: string;
+  /** Parsed `command_json`; null when the logged JSON is unreadable. */
+  command: unknown;
+  resultJson: string;
+  appliedRevision: number;
+  /** True for an operation-identity (assistant) row — never a UI request. */
+  operationIdentity: boolean;
+}
+
+function parseLoggedCommand(commandJson: string): unknown {
+  try {
+    return JSON.parse(commandJson) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 export function createDesignerStore(
@@ -705,13 +757,21 @@ export function createDesignerStore(
       return listBomOverrides(db, designId);
     },
 
-    async updateBomOverride(designId, refdes, patch) {
+    async updateBomOverride(designId, refdes, patch, expectedPartId) {
       const head = db
         .select()
         .from(designHeads)
         .where(eq(designHeads.id, designId))
         .get();
       if (!head) return null;
+      // Guard and write run in one synchronous stretch (no await between),
+      // so the part checked is the part `upsertBomOverride` binds to.
+      if (
+        expectedPartId !== undefined &&
+        resolveBomPartId(db, designId, refdes) !== expectedPartId
+      ) {
+        return "binding-changed";
+      }
       return upsertBomOverride(db, designId, refdes, patch, nowIso());
     },
 
@@ -749,6 +809,79 @@ export function createDesignerStore(
       return listOperationReceipts(db, actorScope, operationId);
     },
 
+    async lookupCommand(designId, commandId, sessionId, commandType) {
+      // Synchronous reads, no await between them: one consistent snapshot.
+      const head = db
+        .select({ revision: designHeads.revision })
+        .from(designHeads)
+        .where(eq(designHeads.id, designId))
+        .get();
+      if (!head) return null;
+      const row = db
+        .select()
+        .from(commandLog)
+        .where(eq(commandLog.commandId, commandId))
+        .get();
+      if (!row) return { status: "missing", headRevision: head.revision };
+      if (
+        row.operationIdentityJson !== null ||
+        row.designId !== designId ||
+        row.sessionId !== sessionId ||
+        row.commandType !== commandType
+      ) {
+        return { status: "mismatch" };
+      }
+      const logged = {
+        commandType: row.commandType,
+        appliedRevision: row.appliedRevision,
+        committedAt: row.createdAt,
+        headRevision: head.revision,
+      };
+      const result = parseDispatchResultJson(row.resultJson);
+      if (result) return { status: "found", ...logged, result };
+      // Logged by a build that knew a result this one cannot rebuild. Still
+      // evidence of the outcome — never a mismatch.
+      const raw = inspectLoggedResult(row.resultJson);
+      return {
+        status: "found-unparsed",
+        ...logged,
+        rawOk: raw.rawOk === true,
+        rawCode: raw.rawCode,
+      };
+    },
+
+    async getRecoveryHead(designId, refdes) {
+      const head = db
+        .select({ revision: designHeads.revision })
+        .from(designHeads)
+        .where(eq(designHeads.id, designId))
+        .get();
+      if (!head) return null;
+      if (refdes === undefined) return { headRevision: head.revision };
+      return {
+        headRevision: head.revision,
+        refdesPartId: resolveBomPartId(db, designId, refdes),
+      };
+    },
+
+    getLoggedUiCommand(commandId) {
+      const row = db
+        .select()
+        .from(commandLog)
+        .where(eq(commandLog.commandId, commandId))
+        .get();
+      if (!row) return null;
+      return {
+        designId: row.designId,
+        sessionId: row.sessionId,
+        commandType: row.commandType,
+        command: parseLoggedCommand(row.commandJson),
+        resultJson: row.resultJson,
+        appliedRevision: row.appliedRevision,
+        operationIdentity: row.operationIdentityJson !== null,
+      };
+    },
+
     async dispatchCommand(designId, envelope, cloud, captureMeta, identity) {
       const replay = (row: typeof commandLog.$inferSelect): DesignerDispatchResult => {
         if (identity || row.operationIdentityJson) {
@@ -762,7 +895,11 @@ export function createDesignerStore(
           row.commandJson !== JSON.stringify(envelope.command)) {
           return conflict(envelope.baseRevision, row.appliedRevision);
         }
-        return parseDispatchResultJson(row.resultJson) ?? conflict(envelope.baseRevision, row.appliedRevision);
+        return replayLoggedResult(
+          row.resultJson,
+          row.appliedRevision,
+          envelope.baseRevision,
+        );
       };
       if (identity && !identityMatchesEnvelope(designId, envelope, identity)) {
         return identityConflict(envelope.commandId);

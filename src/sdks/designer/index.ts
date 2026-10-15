@@ -36,6 +36,9 @@ export type {
   DesignerOperationIdentity,
   DesignerOperationReceipt,
   DesignerOperationReceiptLookup,
+  DesignerCommandLookup,
+  DesignerRecoveryHead,
+  DesignerRecoveryCompat,
   CreateDesignerDesignInput,
   DesignerAutoArrangeSchematicCommand,
   DesignerCommand,
@@ -321,11 +324,17 @@ export interface DesignerSDK {
     designId: string,
     sessionId: string,
   ): Promise<DesignerHistorySnapshot>;
+  /**
+   * `expectedRevision` is optional for in-process callers only. The HTTP
+   * history routes require it (OPENPCB-103): a renderer undo without the
+   * revision it saw could consume an entry another writer just moved.
+   */
   undo(
     designId: string,
     sessionId: string,
     expectedRevision?: number,
   ): Promise<DesignerHistoryActionResult>;
+  /** See {@link DesignerSDK.undo} for the `expectedRevision` contract. */
   redo(
     designId: string,
     sessionId: string,

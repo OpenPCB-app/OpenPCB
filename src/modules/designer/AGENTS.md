@@ -38,7 +38,7 @@ code.
 - **Projection** — read-only `DesignerSchematicProjection` / `DesignerPcbProjection`.
 - **ECS world** — schematic parts, wires and labels as entities + components; patches drive undo.
 - **Revision-based OCC** — `baseRevision` on the envelope; `REVISION_CONFLICT` on mismatch.
-- Command log provides idempotency: a duplicate `commandId` is rejected.
+- Command log provides idempotency: a duplicate `commandId` replays the logged result (success, rejection or conflict) without re-executing; a different payload under the same id returns `REVISION_CONFLICT`.
 
 ## IDENTITY — read this before persisting anything
 

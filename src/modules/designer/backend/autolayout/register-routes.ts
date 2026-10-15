@@ -17,7 +17,7 @@ import type {
 } from "../../../../sdks/designer";
 import { computeBoardContentDigest } from "../pcb/board-content-digest";
 import { buildBoardSnapshot } from "../pcb/board-snapshot";
-import { applyCandidate } from "./apply-candidate";
+import { applyCandidate, type PriorApply } from "./apply-candidate";
 import { getAutoLayoutCapabilities, supportsLayout } from "./capabilities";
 import { AutoLayoutError } from "./errors";
 import {
@@ -38,6 +38,8 @@ export interface AutolayoutRouteDeps {
     designId: string,
     envelope: DesignerCommandEnvelope,
   ) => Promise<import("../../../../sdks/designer").DesignerDispatchResult>;
+  /** The command-log row already written under an applyRequestId, if any. */
+  findPriorApply: (applyRequestId: string) => PriorApply | null;
   /** Post-apply report, by design id — the run service owns execution (09 §7). */
   runDrc: (
     designId: string,
@@ -215,6 +217,7 @@ export function registerAutolayoutRoutes(
         request,
         loadProjection: () => deps.loadProjection(designId),
         dispatch: (envelope) => deps.dispatch(designId, envelope),
+        findPriorApply: deps.findPriorApply,
         runDrc: deps.runDrc,
       });
       return success(result);

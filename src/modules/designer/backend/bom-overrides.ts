@@ -46,17 +46,7 @@ export function upsertBomOverride(
   patch: BomOverridePatch,
   timestamp: string,
 ): BomOverride {
-  const partId =
-    db
-      .select({ id: schematicParts.id })
-      .from(schematicParts)
-      .where(
-        and(
-          eq(schematicParts.designId, designId),
-          eq(schematicParts.reference, refdes),
-        ),
-      )
-      .get()?.id ?? null;
+  const partId = resolveBomPartId(db, designId, refdes);
   const existing = findOverrideRow(db, designId, partId, refdes);
   const next = {
     id: existing?.id ?? crypto.randomUUID(),
@@ -101,6 +91,30 @@ export function upsertBomOverride(
     db.insert(bomOverrides).values(next).run();
   }
   return toDto(next);
+}
+
+/**
+ * The schematic part a BOM write under `refdes` binds to right now, or null
+ * when no part carries it. The ONE resolution — the binding guard and the
+ * recovery head compare against exactly what `upsertBomOverride` would bind.
+ */
+export function resolveBomPartId(
+  db: DbClient,
+  designId: string,
+  refdes: string,
+): string | null {
+  return (
+    db
+      .select({ id: schematicParts.id })
+      .from(schematicParts)
+      .where(
+        and(
+          eq(schematicParts.designId, designId),
+          eq(schematicParts.reference, refdes),
+        ),
+      )
+      .get()?.id ?? null
+  );
 }
 
 function partReferences(
