@@ -66,6 +66,15 @@ describe("AgentKit authenticated native HTTP workflow", () => {
     });
     assert.equal(chatResponse.status, 201);
     const chat = (await chatResponse.json()) as { id: string };
+    const chatTools = async () => {
+      const response = await domain!.request(`/v1/chats/${chat.id}/tools`);
+      assert.equal(response.status, 200);
+      return ((await response.json()) as Array<{ name: string }>).map((tool) => tool.name);
+    };
+    const unboundTools = await chatTools();
+    assert.deepEqual(unboundTools, catalog.map((tool) => tool.name));
+    assert.ok(!unboundTools.includes("designer_place_components"));
+    assert.equal((await domain.request("/v1/chats/no-such-chat/tools")).status, 404);
     const bound = await domain.request(
       `/v1/chats/${chat.id}/context-bindings`,
       {
@@ -74,6 +83,10 @@ describe("AgentKit authenticated native HTTP workflow", () => {
       },
     );
     assert.equal(bound.status, 201);
+    const boundTools = await chatTools();
+    assert.ok(boundTools.includes("designer_place_components"));
+    assert.ok(boundTools.length > unboundTools.length);
+    assert.equal(domain.provider.requests.length, 0);
     const placed = await submit(domain, chat.id, "place-key");
     const projection = await domain.designer.getSchematicProjection(design.id);
     assert.deepEqual(projection?.parts.map((part) => part.reference).sort(), [

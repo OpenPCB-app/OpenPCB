@@ -48,7 +48,9 @@ shorten the first-byte budget).
 
 The native contributor declares `unboundToolNames`: until a chat has an active primary design binding,
 only read tools and `designer_create_design` are staged, so an explicit `designId` cannot reach an
-unrelated design. AgentKit stages tools once per run, so placing and wiring into a design created in
+unrelated design. The generic `GET /v1/tools` has no chat and always answers with that unbound set;
+the app route `GET /v1/chats/:chatId/tools` returns what the chat's next turn would be staged, and the
+Assistant space/dock tool count reads it for the selected chat. AgentKit stages tools once per run, so placing and wiring into a design created in
 the same run follows on the user's next message; the system prompt states this for unbound turns. A
 run staged unbound is not checked against Definition of Done (its correction passes could not place
 anything). Only when such a run created a design that is now the chat's primary binding is its BOM build

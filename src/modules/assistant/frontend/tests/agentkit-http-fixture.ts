@@ -102,6 +102,11 @@ export class AgentKitHttpFixture {
     if (path.endsWith("/native-write-allowances")) return Response.json([...this.allowances.values()]);
     const allowanceMatch = /\/native-write-allowances\/(.+)$/.exec(path);
     if (allowanceMatch && method === "DELETE") { this.allowances.delete(decodeURIComponent(allowanceMatch[1]!)); return new Response(null, { status: 204 }); }
+    const chatToolsMatch = /^\/v1\/chats\/([^/]+)\/tools$/.exec(path);
+    if (chatToolsMatch) {
+      const bound = Boolean(this.chats.get(chatToolsMatch[1]!)?.metadata.designId);
+      return Response.json(Array.from({ length: bound ? 15 : 0 }, (_, index) => ({ name: `bound_tool_${index}` })));
+    }
     const toolMatch = /^\/v1\/chats\/([^/]+)\/tool-events$/.exec(path);
     if (toolMatch) return Response.json(this.tools.get(toolMatch[1]!) ?? []);
     const proposalsMatch = /^\/v1\/chats\/([^/]+)\/proposals$/.exec(path);

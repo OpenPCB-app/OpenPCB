@@ -157,6 +157,22 @@ function useConversationActions(cache: Cache, chat: Chat, proposals: Proposals, 
   return { apply, reject, refreshChatModels, toolFixBusy, reprobeTools: () => fixTools(false), enableToolsAnyway: () => fixTools(true) };
 }
 
+/** A bound chat stages more tools than the chat-independent catalog, so count the chat's own set. */
+function useChatToolCount(cache: Cache, chatId: string | null, phase: unknown): number | null {
+  const [count, setCount] = useState<{ chatId: string; value: number } | null>(null);
+  const boundDesign = cache.chats.find(item => item.id === chatId)?.metadata.designId;
+  useEffect(() => {
+    if (!chatId) return;
+    const controller = new AbortController();
+    void assistantRequest<unknown[]>(cache.base, `/v1/chats/${encodeURIComponent(chatId)}/tools`, { signal: controller.signal })
+      .then(tools => { if (!controller.signal.aborted && Array.isArray(tools)) setCount({ chatId, value: tools.length }); })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [cache.base, chatId, phase, boundDesign]);
+  if (!chatId) return cache.toolCount;
+  return count?.chatId === chatId ? count.value : cache.toolCount;
+}
+
 export function useAssistantConversation(chatId: string | null, draftKey = "new", onChanged?: (change: Change) => void) {
   const cache = useAssistantCache();
   const chat = useChat(chatId);
@@ -173,6 +189,7 @@ export function useAssistantConversation(chatId: string | null, draftKey = "new"
   const submission = useConversationSubmission(cache, chat, chatId, selection, projection.loading);
   const actions = useConversationActions(cache, chat, proposals, chatId, activeChat, details, selection, setLocalError, onChanged);
   const allowances = useNativeAllowances(cache.base, chatId, details.visiblePresentations);
+  const toolCount = useChatToolCount(cache, chatId, chat.phase);
   useEffect(() => { setLocalError(null); }, [chatId]);
   useEffect(() => { if (runId && run.phase && terminal.has(run.phase)) { void run.drain(); void cache.reloadChats(); } }, [runId, run.phase, run.drain, cache.reloadChats]);
   return {
@@ -184,7 +201,7 @@ export function useAssistantConversation(chatId: string | null, draftKey = "new"
     stopRun: async () => chat.cancel(), continueRun: async () => chat.resume(),
     refreshMessages: async () => { await chat.reload(); await details.readDetails(); await proposals.reload(); },
     error: localError ?? chat.error?.message ?? run.error?.message ?? proposals.error?.message ?? allowances.error ?? cache.error,
-    setError: setLocalError, chatOnly: selection.selectedProvider?.capabilities?.toolCalling === false, toolCount: cache.toolCount,
+    setError: setLocalError, chatOnly: selection.selectedProvider?.capabilities?.toolCalling === false, toolCount,
     proposalActions: { busy: proposals.busy || allowances.busy, apply: actions.apply, reject: actions.reject, allow: allowances.allow, revoke: allowances.revoke, isAllowed: allowances.isAllowed }
   };
 }

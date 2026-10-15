@@ -99,6 +99,7 @@ with current state, as in the IETF Idempotency-Key draft.
 | DELETE | `/api/modules/assistant/v1/chats/:chatId/native-write-allowances/:key` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
 | GET | `/api/modules/assistant/v1/chats/:chatId/proposals` | AgentKit REST `listProposals` | Host + Origin + app token, before body or handler |
 | GET | `/api/modules/assistant/v1/chats/:chatId/tool-events` | AgentKit REST `listToolEvents` | Host + Origin + app token, before body or handler |
+| GET | `/api/modules/assistant/v1/chats/:chatId/tools` | OpenPCB app adapter | Host + Origin + app token, before body or handler |
 | POST | `/api/modules/assistant/v1/messages/:messageId/activate` | AgentKit REST `activateBranch` | Host + Origin + app token, before body or handler |
 | GET | `/api/modules/assistant/v1/messages/:messageId/siblings` | AgentKit REST `listSiblings` | Host + Origin + app token, before body or handler |
 | GET | `/api/modules/assistant/v1/prompt-presets` | OpenPCB app adapter | Host + Origin + app token, before body or handler |

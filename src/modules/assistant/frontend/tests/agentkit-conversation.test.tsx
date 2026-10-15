@@ -243,6 +243,14 @@ describe("canonical Assistant conversation transport", () => {
     expect(container.textContent).toContain("command-real"); expect(container.textContent).toContain("part-real");
     expect(view.writeProposals[0]?.status).toBe("partial");
   });
+  test("tool count follows the selected chat's own staged set, not the unbound catalog", async () => {
+    fixture.addChat("chat-bound", { designId: "design-real" });
+    await mount("chat-bound");
+    await until(() => view.toolCount === 15);
+    expect(fixture.requests.some(request => request.url.pathname.endsWith("/v1/chats/chat-bound/tools"))).toBe(true);
+    await mount("chat-a");
+    await until(() => view.toolCount === 0);
+  });
   test("an already approved proposal shows as pending but applies without a second approve", async () => {
     fixture.proposals.set("proposal-approved", { id: "proposal-approved", chatId: "chat-a", scopeKey: "design:design-real", toolName: "designer_schematic_edits", kind: "designer_schematic_edits", risk: "medium", status: "approved", warnings: [], truncated: false, createdAt: "2026-10-07" });
     fixture.presentations.set("proposal-approved", { proposalId: "proposal-approved", envelope: { id: "proposal-approved", designId: "design-real", baseRevision: 6, kind: "designer_schematic_edits", toolName: "designer_schematic_edits", title: "Place capacitor", summary: "Native placement", riskLevel: "medium", operations: [], payload: {}, sources: [], warnings: [] }, outcome: null });

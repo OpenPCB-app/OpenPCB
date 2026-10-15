@@ -341,6 +341,16 @@ function registerContextRoutes(
       return json(service.contextStore.listBindings(id));
     }),
   );
+  // Generic GET /v1/tools has no chat, so it always answers with the unbound set.
+  router.get(
+    "/v1/chats/:chatId/tools",
+    safeRoute(async ({ params }) => {
+      const id = params.getOrThrow("chatId");
+      await requireChat(id);
+      const tools = await service.host.toolCatalog.listTools({ chatId: id });
+      return json(tools.map((entry) => entry.definition));
+    }),
+  );
   router.post(
     "/v1/chats/:chatId/context-bindings",
     safeRoute(async ({ req, params }) => {
