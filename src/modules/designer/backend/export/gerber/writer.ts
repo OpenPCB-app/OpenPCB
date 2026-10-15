@@ -6,7 +6,6 @@ import type {
   PcbPointMm,
 } from "../../../../../sdks/designer/types";
 import { copperLayersForCount } from "../../../../../sdks/designer/stackup";
-import { copperToHoleClearanceMm } from "../../../../../shared/drc/rule-resolver";
 import { freePadCopperLayers } from "../../../../../shared/rendering/pad-copper-layers";
 import { ApertureTable, type AperFunction } from "../apertures";
 // The artwork MODEL (DFM contract 11 §1): the silkscreen strokes / regions and
@@ -55,18 +54,12 @@ import {
 // pure geometry (clipper2 + math; no React/R3F) and runs under Bun. Lives in
 // shared/ so backend and canvas import one implementation.
 import {
-  buildCopperFillIslands,
   sortCopperFillIslands,
   unionPourIslands,
 } from "../../../../../shared/rendering/copper-fill/copper-fill-geometry";
 import { AppError } from "../../../../../core/contracts/errors";
-import {
-  collectCopperZones,
-  collectKeepouts,
-  pourParamsForZone,
-  zonePourNets,
-  type EffectiveKeepout,
-} from "../../../../../shared/pcb-areas";
+import { zonePourNets } from "../../../../../shared/pcb-areas";
+import { buildProjectionPours } from "../../../../../shared/rendering/copper-fill/projection-pours";
 
 /**
  * Build a complete Gerber X2 file for one fabrication layer.
@@ -112,12 +105,6 @@ interface BuildContext {
    * without a `%TO.N` — two answers to one question.
    */
   padNetIds: ReadonlyMap<string, string>;
-  /**
-   * The effective keepouts of this projection, derived ONCE per build: every
-   * `copperPour` keepout is subtracted from every pour on its layers (contract
-   * §4), so the artwork carves exactly what the canvas and DRC do.
-   */
-  keepouts: readonly EffectiveKeepout[];
   /**
    * The S1 copper records of this projection, built ONCE per layer build and
    * shared by the copper / mask / paste pad loops AND the pour (contract 10
@@ -179,10 +166,6 @@ export function buildGerberLayer(
     proj,
     warnings,
     padNetIds,
-    keepouts: collectKeepouts({
-      keepouts: proj.keepouts ?? [],
-      layerCount: proj.board.layerCount,
-    }).keepouts,
     records,
     padShapes,
     referenceById: new Map(proj.placements.map((p) => [p.id, p.reference])),
@@ -437,44 +420,24 @@ function emitCopperPour(
   out: string[],
   layer: PcbCopperLayerId,
 ): void {
-  const board = ctx.proj.board;
-  const dr = board.designRules;
-  const common = {
-    layerCount: board.layerCount,
-    outline: board.outline,
-    // The SAME records the pad loops flash from — built once per layer build,
-    // never a second resolution of the same copper (contract 10 §6.1).
-    records: ctx.records,
-    placements: ctx.proj.placements,
-    traces: ctx.proj.traces,
-    vias: ctx.proj.vias,
-    padNetIds: ctx.padNetIds,
-    copperToBoardEdgeMm: dr.clearance.copperToBoardEdgeMm,
-    copperToHoleMm: copperToHoleClearanceMm(dr),
-    cutouts: board.cutouts,
-    freeHoles: ctx.proj.freeHoles,
-    freePads: ctx.proj.freePads,
-  };
-
   // ONE loop over the effective copper areas on this layer (zone/keepout
-  // contract §3.1 / §7) — board zones and explicit zones are the same thing to
-  // the fill kernel, so artwork can no longer disagree with the canvas.
-  const { zones } = collectCopperZones({
-    zones: ctx.proj.zones,
-    layerCount: board.layerCount,
-    knownNetIds: new Set(Object.keys(ctx.proj.netNames)),
-  });
-  const nets = zonePourNets(board, ctx.proj.netNames);
+  // contract §3.1 / §7), filled with the ONE argument set every consumer
+  // passes (`pourBaseParams`, OPENPCB-67 §3.8): ALL traces and vias, the full
+  // board settings and the SAME records the pad loops flash from (contract 10
+  // §6.1) — so artwork can no longer disagree with the canvas.
+  const pours = buildProjectionPours(
+    { ...ctx.proj, padNets: ctx.proj.padNets ?? {} },
+    {
+      nets: zonePourNets(ctx.proj.board, ctx.proj.netNames),
+      records: ctx.records,
+      layer,
+    },
+  );
   // Rings grouped by pour net: same-net pours are unioned (their overlaps are
   // one copper, contract §9), different-net pours never overlap after the §3.3
   // precedence carve, so each union keeps its own `%TO.N`.
   const ringsByNet = new Map<string | null, PcbPointMm[][][]>();
-  for (const zone of zones) {
-    if (zone.layer !== layer) continue;
-    const result = buildCopperFillIslands({
-      ...common,
-      ...pourParamsForZone(zone, dr, ctx.keepouts, zones, nets),
-    });
+  for (const { zone, result } of pours) {
     // Fail the export rather than ship a layer that silently lost a plane
     // (contract §8/§9): a bailed fill is not "this zone pours nothing".
     if (result.status === "failed") {

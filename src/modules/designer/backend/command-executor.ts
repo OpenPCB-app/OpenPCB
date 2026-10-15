@@ -170,21 +170,13 @@ import {
   refusedViolations,
 } from "../../../shared/drc/legality";
 import {
-  copperToHoleClearanceMm,
   createRuleResolver,
   type RuleResolver,
 } from "../../../shared/drc/rule-resolver";
 import { defaultNetClassId, effectiveNetClassId } from "../../../shared/pcb-areas/net-class-resolver";
-import {
-  buildCopperFillIslands,
-  isTraceCoveredByPour,
-} from "../../../shared/rendering/copper-fill/copper-fill-geometry";
-import {
-  collectCopperZones,
-  collectKeepouts,
-  pourParamsForZone,
-  zonePourNets,
-} from "../../../shared/pcb-areas";
+import { isTraceCoveredByPour } from "../../../shared/rendering/copper-fill/copper-fill-geometry";
+import { buildProjectionPours } from "../../../shared/rendering/copper-fill/projection-pours";
+import { zonePourNets } from "../../../shared/pcb-areas";
 import {
   validateTraceAgainstFab,
   validateViaAgainstFab,
@@ -1514,24 +1506,15 @@ export function executeDesignerCommand(
 
   if (command.type === "pcb_cleanup_pour_traces") {
     const proj = loadPcbProjection({ db: tx, designId, revision, timestamp });
-    const dr = proj.board.designRules;
-    const padNetIds = new Map(Object.entries(proj.padNets ?? {}));
     // EVERY effective zone on the trace's layer, board plane and polygon zone
     // alike (copper-pour contract §9 — widened from S3a's board-only): a trace
     // buried in an explicit zone's copper is just as redundant as one buried in
     // a plane, and the S4 rule that a trace must lie strictly inside a SINGLE
-    // island is what keeps the widening conservative.
-    const effectiveZones = collectCopperZones({
-      zones: proj.zones,
-      layerCount: proj.board.layerCount,
-      knownNetIds: new Set(Object.keys(proj.netNames ?? {})),
-    }).zones;
-    // Same keepouts every other fill site subtracts (§13.3): a trace lying in a
-    // `copperPour` keepout is NOT covered by the pour, so it must survive.
-    const { keepouts } = collectKeepouts({
-      keepouts: proj.keepouts ?? [],
-      layerCount: proj.board.layerCount,
-    });
+    // island is what keeps the widening conservative. The fill is the ONE
+    // argument set every consumer passes (OPENPCB-67 §3.8), including the same
+    // `copperPour` keepouts (§13.3): a trace lying in a keepout is NOT covered
+    // by the pour, so it must survive.
+    const nets = zonePourNets(proj.board, proj.netNames ?? {});
     // Which of `candidates` a pour covers when the fill is computed with
     // `removed` already deleted — the fill the board would actually have.
     const coveredTraces = (
@@ -1543,29 +1526,19 @@ export function executeDesignerCommand(
           ? proj.traces
           : proj.traces.filter((trace) => !removed.has(trace.id));
       const covered = new Set<string>();
-      for (const zone of effectiveZones) {
+      const pours = buildProjectionPours(
+        {
+          ...proj,
+          traces: fillTraces,
+          padNets: proj.padNets ?? {},
+          netNames: proj.netNames ?? {},
+          keepouts: proj.keepouts ?? [],
+        },
+        { nets },
+      );
+      for (const { zone, result: fill } of pours) {
         const pourNetId = zone.netId;
         if (!pourNetId) continue;
-        const fill = buildCopperFillIslands({
-          layerCount: proj.board.layerCount,
-          outline: proj.board.outline,
-          placements: proj.placements,
-          traces: fillTraces,
-          vias: proj.vias,
-          padNetIds,
-          copperToBoardEdgeMm: dr.clearance.copperToBoardEdgeMm,
-          copperToHoleMm: copperToHoleClearanceMm(dr),
-          cutouts: proj.board.cutouts,
-          freeHoles: proj.freeHoles,
-          freePads: proj.freePads,
-          ...pourParamsForZone(
-            zone,
-            dr,
-            keepouts,
-            effectiveZones,
-            zonePourNets(proj.board, proj.netNames ?? {}),
-          ),
-        });
         // A bailed fill ships no copper (contract §8), so nothing it "covers"
         // may be deleted — skip the zone rather than reason about `[]`.
         if (fill.status === "failed" || fill.islands.length === 0) continue;

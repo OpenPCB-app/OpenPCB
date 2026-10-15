@@ -9,8 +9,7 @@
 // docs/pcb-hardening/01-connectivity-contract.md §1–§3.
 
 import type {
-  PcbBoardCutout,
-  PcbBoardOutline,
+  PcbBoardSettings,
   PcbCopperLayerId,
   PcbDesignRules,
   PcbFreeHole,
@@ -20,7 +19,6 @@ import type {
   PcbTrace,
   PcbVia,
 } from "../../sdks/designer";
-import { copperToHoleClearanceMm } from "../drc/rule-resolver";
 import {
   pourParamsForZone,
   type EffectiveCopperZone,
@@ -41,6 +39,7 @@ import {
   buildCopperFillIslands,
   type CopperFillResult,
 } from "../rendering/copper-fill/copper-fill-geometry";
+import { pourBaseParams } from "../rendering/copper-fill/projection-pours";
 
 /**
  * One net-bound pour to fill: exactly the zone tier `pourParamsForZone` composed
@@ -83,11 +82,13 @@ export function boardPourSpecs(
   return specs;
 }
 
-/** The board-wide half of a pour — everything that is not per-zone. */
+/**
+ * The board-wide half of a pour — everything that is not per-zone. `board` is
+ * the FULL settings (OPENPCB-67 §3.8): the kernel's argument set comes from
+ * `pourBaseParams`, the same builder every other fill site uses.
+ */
 export interface BoardFillInput {
-  outline: PcbBoardOutline;
-  designRules: PcbDesignRules;
-  cutouts?: ReadonlyArray<PcbBoardCutout>;
+  board: PcbBoardSettings;
   freeHoles?: ReadonlyArray<PcbFreeHole>;
   pours: ReadonlyArray<BoardPourSpec>;
 }
@@ -134,24 +135,26 @@ export function buildBoardPourFills(
   records?: CopperRecords,
 ): BoardPourFill[] {
   const fills: BoardPourFill[] = [];
+  if (fill.pours.length === 0) return fills;
+  const base = pourBaseParams(
+    {
+      board: fill.board,
+      placements: copper.placements,
+      traces: copper.traces,
+      vias: copper.vias,
+      freeHoles: fill.freeHoles ?? [],
+      freePads: copper.freePads,
+      padNets: Object.fromEntries(copper.padNetIds),
+    },
+    records,
+  );
   for (const pour of fill.pours) {
     const { netId, ...zoneParams } = pour;
     fills.push({
       layer: pour.layer,
       netId,
       result: buildCopperFillIslands({
-        layerCount: copper.layerCount,
-        outline: fill.outline,
-        placements: copper.placements,
-        traces: copper.traces,
-        vias: copper.vias,
-        padNetIds: copper.padNetIds,
-        copperToBoardEdgeMm: fill.designRules.clearance.copperToBoardEdgeMm,
-        copperToHoleMm: copperToHoleClearanceMm(fill.designRules),
-        cutouts: fill.cutouts ?? [],
-        freeHoles: fill.freeHoles ?? [],
-        freePads: copper.freePads,
-        ...(records ? { records } : {}),
+        ...base,
         ...zoneParams,
         pourNetId: netId,
       }),

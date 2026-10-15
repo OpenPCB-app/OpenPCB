@@ -175,9 +175,7 @@ export function fixtureToProjection(fixture: any): DesignerPcbProjection {
     };
     // One kernel run per net-bound zone, exactly as DRC does it (contract §9).
     const pours = buildBoardPourFills(copper, {
-      outline: board.outline,
-      designRules: board.designRules,
-      cutouts: board.cutouts ?? [],
+      board,
       freeHoles: fixture.freeHoles ?? [],
       pours: boardPourSpecs(
         collectCopperZones({

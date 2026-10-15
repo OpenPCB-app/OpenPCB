@@ -506,8 +506,7 @@ describe("copperPour keepouts and connectivity", () => {
       netNames: new Map([["gnd", "GND"]]),
       netClasses: settings.netClasses,
       pours: buildBoardPourFills(copper, {
-        outline: settings.outline,
-        designRules: settings.designRules,
+        board: settings,
         pours: boardPourSpecs(
           collectCopperZones({
             zones: ZONES,

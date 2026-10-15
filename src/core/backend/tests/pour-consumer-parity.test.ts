@@ -11,6 +11,7 @@
  * `padConnection: "none"`, a keepout, an NPTH and free pads.
  */
 import { describe, expect, test } from "bun:test";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { buildDrcContext } from "../../../modules/designer/backend/drc/drc-context";
 import { buildGerberLayer } from "../../../modules/designer/backend/export/gerber/writer";
@@ -23,8 +24,10 @@ import {
   buildCopperFillIslands,
   unionPourIslands,
 } from "../../../shared/rendering/copper-fill/copper-fill-geometry";
+import { buildProjectionPours } from "../../../shared/rendering/copper-fill/projection-pours";
 import type { DesignerPcbProjection, PcbPointMm } from "../../../sdks/designer";
 import { fixtureToProjection } from "./helpers/drc-golden";
+import { insidePrimitives, parseGerber } from "./helpers/gerber-parse";
 
 const FIXTURE = path.resolve(
   import.meta.dir,
@@ -574,5 +577,317 @@ describe("S6 — the pour resolves through the rule resolver (§6)", () => {
     expect(
       ctx.copperItems().filter((item) => item.kind === "pour").length,
     ).toBe(rings.length);
+  });
+});
+
+// --- OPENPCB-67 §3.8: one physical pour result -------------------------------
+
+/** Even-odd point-in-ring, independent of the code under test. */
+function inRing(ring: ReadonlyArray<{ xMm: number; yMm: number }>, x: number, y: number): boolean {
+  let hit = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i]!;
+    const b = ring[j]!;
+    if (
+      a.yMm > y !== b.yMm > y &&
+      x < ((b.xMm - a.xMm) * (y - a.yMm)) / (b.yMm - a.yMm) + a.xMm
+    ) {
+      hit = !hit;
+    }
+  }
+  return hit;
+}
+
+/**
+ * Is `(x, y)` dark in a PARSED copper layer? The writer emits the pour regions
+ * first (dark outer contours, clear holes, in order) and every flash and
+ * stroke after them in `%LPD%`, so the image is "the last region that contains
+ * the point decides, then any flash or stroke darkens".
+ */
+function isDarkAt(gerber: string, x: number, y: number): boolean {
+  const parsed = parseGerber(gerber);
+  let dark = false;
+  for (const region of parsed.regions) {
+    if (inRing(region.points, x, y)) dark = region.polarity === "dark";
+  }
+  if (dark) return true;
+  for (const flash of parsed.flashes) {
+    const ap = parsed.apertures.get(flash.code);
+    if (ap && insidePrimitives(ap.primitives, x - flash.xMm, y - flash.yMm)) {
+      return true;
+    }
+  }
+  for (const stroke of parsed.strokes) {
+    const tool = parsed.apertures.get(stroke.apertureCode)?.primitives[0];
+    if (!tool || tool.kind !== "circle") continue;
+    for (let i = 1; i < stroke.points.length; i += 1) {
+      const a = stroke.points[i - 1]!;
+      const b = stroke.points[i]!;
+      const dx = b.xMm - a.xMm;
+      const dy = b.yMm - a.yMm;
+      const len2 = dx * dx + dy * dy;
+      const t =
+        len2 === 0
+          ? 0
+          : Math.max(0, Math.min(1, ((x - a.xMm) * dx + (y - a.yMm) * dy) / len2));
+      if (Math.hypot(x - (a.xMm + t * dx), y - (a.yMm + t * dy)) <= tool.diameterMm / 2) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+const gndBoardZone = {
+  id: "board:F.Cu",
+  name: null,
+  enabled: true,
+  lockedAt: null,
+  layer: "F.Cu",
+  netId: "gnd",
+  netName: null,
+  region: { kind: "board" },
+  priority: 0,
+  padConnection: "solid",
+};
+
+const netClass = (id: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  name: id,
+  traceWidthMm: 0.25,
+  clearanceMm: 0.2,
+  viaDiameterMm: 0.8,
+  viaDrillMm: 0.4,
+  color: "#ccc",
+  defaultViaProtection: "tented",
+  ...extra,
+});
+
+const VIA_R = 0.4;
+
+/**
+ * (a) An UNASSIGNED via at the origin, joined by a B.Cu trace to a pad of a
+ * 230 V net, under an F.Cu GND board zone. The via's tier net is HV only
+ * through the B.Cu trace, so only a fill that sees EVERY trace — not the
+ * poured layer's own — keeps the F.Cu plane at the IPC-2221B 171–250 V
+ * external-uncoated (B2) spacing of 1.25 mm from it.
+ */
+function tierViaFixture(withBottomTrace: boolean): DesignerPcbProjection {
+  return fixtureToProjection({
+    schemaVersion: 2,
+    layerCount: 2,
+    outline: { kind: "rect", widthMm: 30, heightMm: 20, centerMm: { x: 0, y: 0 } },
+    netNames: { gnd: "GND", hv: "HV" },
+    netClasses: [netClass("default"), netClass("hv", { voltageV: 230 })],
+    perNetClassAssignments: { hv: "hv" },
+    freePads: [
+      {
+        id: "p_hv",
+        padType: "smd",
+        shape: "rect",
+        centerMm: { x: 6, y: 0 },
+        widthMm: 1.5,
+        heightMm: 1.5,
+        rotationDeg: 0,
+        drillMm: null,
+        layer: "B.Cu",
+        netId: "hv",
+        lockedAt: null,
+      },
+    ],
+    traces: withBottomTrace
+      ? [
+          {
+            id: "t_b",
+            netId: null,
+            layer: "B.Cu",
+            widthMm: 0.3,
+            pointsNm: [
+              [0, 0],
+              [6_000_000, 0],
+            ],
+          },
+        ]
+      : [],
+    vias: [{ id: "v_u", netId: null, centerMm: [0, 0], diameterMm: 2 * VIA_R, drillMm: 0.4 }],
+    zones: [gndBoardZone],
+  });
+}
+
+/** A same-net (GND) via inside the F.Cu GND board zone. */
+function gndViaFixture(): DesignerPcbProjection {
+  return fixtureToProjection({
+    schemaVersion: 2,
+    layerCount: 2,
+    outline: { kind: "rect", widthMm: 30, heightMm: 20, centerMm: { x: 0, y: 0 } },
+    netNames: { gnd: "GND" },
+    vias: [{ id: "v_g", netId: "gnd", centerMm: [0, 0], diameterMm: 2 * VIA_R, drillMm: 0.4 }],
+    zones: [gndBoardZone],
+  });
+}
+
+/**
+ * (b) Board clearances AND the pour tier at 0.2 mm; the WIDE net class asks
+ * 0.4 mm. Two 2×2 mm F.Cu pads under a GND board zone: `p_wide` at x = 10 (a
+ * WIDE net), `p_sig` at x = −10 (default class).
+ */
+function netClassFixture(): DesignerPcbProjection {
+  const pad = (id: string, x: number, netId: string) => ({
+    id,
+    padType: "smd",
+    shape: "rect",
+    centerMm: { x, y: 0 },
+    widthMm: 2,
+    heightMm: 2,
+    rotationDeg: 0,
+    drillMm: null,
+    layer: "F.Cu",
+    netId,
+    lockedAt: null,
+  });
+  return fixtureToProjection({
+    schemaVersion: 2,
+    layerCount: 2,
+    outline: { kind: "rect", widthMm: 40, heightMm: 30, centerMm: { x: 0, y: 0 } },
+    minimums: { traceWidthMm: 0.05 },
+    clearance: {
+      traceToTraceMm: 0.2,
+      traceToPadMm: 0.2,
+      padToPadMm: 0.2,
+      traceToViaMm: 0.2,
+      viaToViaMm: 0.2,
+      copperToBoardEdgeMm: 0.5,
+      pourToCopperMm: 0.2,
+    },
+    netNames: { gnd: "GND", sig: "SIG", wide: "WIDE" },
+    netClasses: [
+      netClass("default", { clearanceMm: 0.2 }),
+      netClass("wide", { clearanceMm: 0.4 }),
+    ],
+    perNetClassAssignments: { wide: "wide" },
+    freePads: [pad("p_wide", 10, "wide"), pad("p_sig", -10, "sig")],
+    zones: [gndBoardZone],
+  });
+}
+
+describe("OPENPCB-67 §3.8 — one physical pour result (oracles on the parsed Gerber)", () => {
+  test("(a) an unassigned via keeps the clearance its B.Cu-joined tier net asks", () => {
+    const top = buildGerberLayer(tierViaFixture(true), "copper.top", []);
+    // Inside the 1.25 mm B2 band: clear on both axes.
+    expect(isDarkAt(top, -(VIA_R + 1.0), 0)).toBe(false);
+    expect(isDarkAt(top, 0, VIA_R + 1.0)).toBe(false);
+    expect(isDarkAt(top, 0, VIA_R + 1.2)).toBe(false);
+    // Beyond it: the plane is back.
+    expect(isDarkAt(top, -(VIA_R + 1.4), 0)).toBe(true);
+    // Discriminating: without the B.Cu trace the via is plain unassigned copper
+    // and the plane comes much closer — a fill that dropped other layers'
+    // traces would draw THIS board for the fixture above.
+    const alone = buildGerberLayer(tierViaFixture(false), "copper.top", []);
+    expect(isDarkAt(alone, -(VIA_R + 0.6), 0)).toBe(true);
+  });
+
+  test("(a') a same-net via has no clearance ring in the plane", () => {
+    const top = buildGerberLayer(gndViaFixture(), "copper.top", []);
+    for (const [x, y] of [
+      [VIA_R + 0.05, 0],
+      [-(VIA_R + 0.05), 0],
+      [0, VIA_R + 0.05],
+      [0, -(VIA_R + 0.05)],
+    ] as const) {
+      expect(isDarkAt(top, x, y)).toBe(true);
+    }
+  });
+
+  test("(b) a net-class clearance reaches the fill (full board settings, no Pick)", () => {
+    const top = buildGerberLayer(netClassFixture(), "copper.top", []);
+    // 0.3 mm off the WIDE pad's right / top edge: inside its 0.4 mm class halo.
+    expect(isDarkAt(top, 11 + 0.3, 0)).toBe(false);
+    expect(isDarkAt(top, 10, 1 + 0.3)).toBe(false);
+    expect(isDarkAt(top, 11 + 0.45, 0)).toBe(true);
+    // The default-class pad at the same offset IS poured up to (0.2 mm tier).
+    expect(isDarkAt(top, -11 - 0.3, 0)).toBe(true);
+  });
+
+  test("(c) grep gate: one kernel argument builder", () => {
+    const root = path.resolve(import.meta.dir, "../../..");
+    const allowedFill = new Set([
+      "shared/rendering/copper-fill/copper-fill-geometry.ts",
+      "shared/rendering/copper-fill/projection-pours.ts",
+      "shared/pcb-connectivity/board-connectivity.ts",
+    ]);
+    const offenders: string[] = [];
+    let scanned = 0;
+    const walk = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === "node_modules" || entry.name === "generated") continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+          continue;
+        }
+        if (!/\.tsx?$/.test(entry.name) || /\.(test|spec)\.tsx?$/.test(entry.name)) {
+          continue;
+        }
+        const rel = path.relative(root, full).split(path.sep).join("/");
+        scanned += 1;
+        const text = fs.readFileSync(full, "utf8");
+        if (/\bbuildCopperFill(Islands|PourPaths)\(/.test(text) && !allowedFill.has(rel)) {
+          offenders.push(`${rel}: calls the pour kernel`);
+        }
+        if (
+          /copperToBoardEdgeMm:\s*[\w.?]*clearance\.copperToBoardEdgeMm/.test(text) &&
+          rel !== "shared/rendering/copper-fill/projection-pours.ts"
+        ) {
+          offenders.push(`${rel}: builds the kernel's board-wide params`);
+        }
+      }
+    };
+    walk(root);
+    // Not vacuous: the walk really reached the consumers it guards.
+    expect(scanned).toBeGreaterThan(500);
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("OPENPCB-67 §3.8 — regression guards (consumers vs buildProjectionPours)", () => {
+  test("DRC's pourResults deep-equal buildProjectionPours of the same projection", async () => {
+    const proj = await loadProjection();
+    const ctx = buildDrcContext(proj);
+    const pours = buildProjectionPours(
+      { ...proj, padNets: proj.padNets ?? {} },
+      { nets: zonePourNets(proj.board, proj.netNames) },
+    );
+    expect(pours.length).toBeGreaterThan(3);
+    expect(ctx.pourResults().map((p) => ({ id: p.zone.id, result: p.result }))).toEqual(
+      pours.map((p) => ({ id: p.zone.id, result: p.result })),
+    );
+  });
+
+  test("snapshot islands carry exactly the buildProjectionPours copper per layer", async () => {
+    const proj = await loadProjection();
+    const pours = buildProjectionPours(
+      { ...proj, padNets: proj.padNets ?? {} },
+      { nets: zonePourNets(proj.board, proj.netNames) },
+    );
+    const expected = new Map<string, { count: number; area: number }>();
+    for (const { zone, result } of pours) {
+      if (result.status !== "ok") continue;
+      const entry = expected.get(zone.layer) ?? { count: 0, area: 0 };
+      entry.count += result.islands.length;
+      entry.area += islandsArea(result.islands.map((island) => island.rings));
+      expected.set(zone.layer, entry);
+    }
+    const actual = new Map<string, { count: number; area: number }>();
+    for (const island of buildSnapshotPourIslands(proj)) {
+      const entry = actual.get(island.layer) ?? { count: 0, area: 0 };
+      entry.count += 1;
+      entry.area += islandsArea([island.rings]);
+      actual.set(island.layer, entry);
+    }
+    expect([...actual.keys()].sort()).toEqual([...expected.keys()].sort());
+    for (const [layer, { count, area }] of expected) {
+      expect(actual.get(layer)!.count).toBe(count);
+      expect(actual.get(layer)!.area).toBeCloseTo(area, 6);
+    }
   });
 });

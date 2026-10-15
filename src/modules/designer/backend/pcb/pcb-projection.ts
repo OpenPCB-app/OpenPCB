@@ -265,9 +265,7 @@ export function loadPcbProjection(params: {
   // ONE kernel run per net-bound zone (contract §9) — the ratsnest reasons
   // about the very islands the fill produced, never a second fill of its own.
   const pours = buildBoardPourFills(copper, {
-    outline: board.outline,
-    designRules: board.designRules,
-    cutouts: board.cutouts ?? [],
+    board,
     freeHoles,
     pours: boardPourSpecs(
       copperAreas.zones,

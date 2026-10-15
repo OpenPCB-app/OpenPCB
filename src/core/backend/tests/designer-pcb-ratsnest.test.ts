@@ -146,8 +146,7 @@ function run(input: {
     ...(input.pours
       ? {
           pours: buildBoardPourFills(copper, {
-            outline: OUTLINE,
-            designRules: settings.designRules,
+            board: { ...settings, outline: OUTLINE },
             pours: input.pours.map(pourSpec),
           }),
         }
@@ -499,8 +498,7 @@ describe("computeRatsnest — overlapping same-net zones", () => {
     const { items } = computeBoardConnectivity({
       ...copper,
       pours: buildBoardPourFills(copper, {
-        outline: OUTLINE,
-        designRules: board().designRules,
+        board: { ...board(), outline: OUTLINE },
         pours: [
           pourSpec({ layer: "F.Cu", netId: "gnd", clipPolygonMm: zone(1, 10) }),
           pourSpec({ layer: "F.Cu", netId: "gnd", clipPolygonMm: zone(12, 18) }),

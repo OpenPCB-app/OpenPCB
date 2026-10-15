@@ -2,16 +2,9 @@ import { useEffect, useMemo, type ReactElement } from "react";
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import type { DesignerPcbProjection } from "../../../../../sdks";
-import { copperToHoleClearanceMm } from "../../../../../shared/drc/rule-resolver";
-import {
-  collectCopperZones,
-  collectKeepouts,
-} from "../../../../../shared/pcb-areas/copper-zones";
-import {
-  pourParamsForZone,
-  zonePourNets,
-} from "../../../../../shared/pcb-areas/pour-params";
-import { buildCopperFillIslands } from "../../pcb/layers/copper-fill-geometry";
+import { zonePourNets } from "../../../../../shared/pcb-areas/pour-params";
+import { buildCopperRecords } from "../../../../../shared/pcb-connectivity/copper-records";
+import { buildProjectionPours } from "../../../../../shared/rendering/copper-fill/projection-pours";
 import { islandsToShapes } from "../../../../../shared/rendering/copper-fill/copper-fill-shapes";
 import {
   COPPER_RELIEF_HEIGHT_MM,
@@ -67,7 +60,8 @@ function PourLayer({
 
 /**
  * Copper pour on the two outer faces, mirroring the 2D `CopperFillLayer` via
- * the shared `buildCopperFillIslands` + `islandsToShapes`. Which copper areas exist comes from
+ * the shared `buildProjectionPours` + `islandsToShapes` — the ONE kernel
+ * argument set every consumer passes (OPENPCB-67 §3.8). Which copper areas exist comes from
  * `collectCopperZones` — the one derivation the canvas, DRC, the snapshot and
  * Gerber also read (zone/keepout contract §3.1 / §7) — so the preview shows
  * exactly the copper that would be manufactured: a board plane only where the
@@ -96,43 +90,35 @@ export function CopperPour({
     };
     if (!designRules) return empty;
     // The authoritative schematic pad→net map, written on every projection load.
-    const padNetIds = new Map(Object.entries(projection.padNets ?? {}));
-    const common = {
+    const padNets = projection.padNets ?? {};
+    const netNames = projection.netNames ?? {};
+    const input = {
+      ...projection,
+      padNets,
+      netNames,
+      keepouts: projection.keepouts ?? [],
+    };
+    // One rule resolver and one record set per projection (rule-semantics
+    // contract §9) — shared by both faces' fills.
+    const nets = zonePourNets(projection.board, netNames);
+    const records = buildCopperRecords({
       layerCount: projection.board.layerCount,
-      outline: projection.board.outline,
       placements: projection.placements,
+      padNetIds: new Map(Object.entries(padNets)),
+      freePads: projection.freePads,
       traces: projection.traces,
       vias: projection.vias,
-      padNetIds,
-      copperToBoardEdgeMm: designRules.clearance.copperToBoardEdgeMm,
-      copperToHoleMm: copperToHoleClearanceMm(designRules),
-      cutouts: projection.board.cutouts,
-      freeHoles: projection.freeHoles,
-      freePads: projection.freePads,
-    };
-    const { zones } = collectCopperZones({
-      zones: projection.zones,
-      layerCount: projection.board.layerCount,
-      knownNetIds: new Set(Object.keys(projection.netNames ?? {})),
     });
-    const { keepouts } = collectKeepouts({
-      keepouts: projection.keepouts ?? [],
-      layerCount: projection.board.layerCount,
-    });
-    // One rule resolver per projection (rule-semantics contract §9) — building
-    // it per zone would compile the rule table once per pour.
-    const nets = zonePourNets(projection.board, projection.netNames ?? {});
     const out = { front: [] as FacePour[], back: [] as FacePour[] };
     // Only the two outer faces are visible on the 3D board; inner-layer zones
-    // exist in the derivation but are buried in the substrate.
-    for (const zone of zones) {
-      if (zone.layer !== "F.Cu" && zone.layer !== "B.Cu") continue;
-      const shapes = islandsToShapes(
-        buildCopperFillIslands({
-          ...common,
-          ...pourParamsForZone(zone, designRules, keepouts, zones, nets),
-        }).islands,
-      );
+    // exist in the derivation but are buried in the substrate. A `failed` pour
+    // carries no islands, so it draws nothing (contract §8).
+    const pours = [
+      ...buildProjectionPours(input, { nets, records, layer: "F.Cu" }),
+      ...buildProjectionPours(input, { nets, records, layer: "B.Cu" }),
+    ];
+    for (const { zone, result } of pours) {
+      const shapes = islandsToShapes(result.islands);
       if (shapes.length === 0) continue;
       // Derivation order is fill order; the later pour on a face extrudes over
       // the earlier one, so reverse it (board plane down first, §5 precedence).
@@ -146,6 +132,8 @@ export function CopperPour({
     designRules,
     projection.board,
     projection.zones,
+    projection.keepouts,
+    projection.netNames,
     projection.padNets,
     projection.ratsnest,
     projection.placements,

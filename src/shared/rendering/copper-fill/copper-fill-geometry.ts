@@ -185,7 +185,7 @@ function dilateOrFail(paths: PathsD, deltaMm: number, what: string): PathsD {
 // --- Bare copper classification (contract §4) --------------------------------
 
 /** Resolved thermal-relief geometry (mm). Null ⇒ solid same-net flood. */
-interface ThermalConfig {
+export interface ThermalConfig {
   spokeWidthMm: number;
   gapMm: number;
   spokeCount: number;
@@ -194,7 +194,7 @@ interface ThermalConfig {
 }
 
 /** `padConnection` for ONE pad, after `"thruHoleThermal"` is resolved. */
-type ResolvedPadConnection = "solid" | "thermal" | "none";
+export type ResolvedPadConnection = "solid" | "thermal" | "none";
 
 /**
  * Resolve `padConnection` for one same-net pad (contract §4).
@@ -204,7 +204,7 @@ type ResolvedPadConnection = "solid" | "thermal" | "none";
  * clearance halo — which is the fail-safe direction (fewer connections, never
  * more). An absent override keeps `"solid"`.
  */
-function resolvePadConnection(
+export function resolvePadConnection(
   connection: PcbZonePadConnection | undefined,
   drilled: boolean,
 ): ResolvedPadConnection {
@@ -1535,7 +1535,7 @@ function buildPourExtent(
  * the per-pad decision (`thruHoleThermal` ⇒ drilled pads only) belongs to the
  * collector. Null ⇒ same-net pads flood solid.
  */
-function resolveThermalConfig(
+export function resolveThermalConfig(
   params: CopperFillPourParams,
   minThicknessMm: number,
 ): ThermalConfig | null {

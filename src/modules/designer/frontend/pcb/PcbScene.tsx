@@ -19,7 +19,6 @@ import type {
   PcbOverlayText,
   PcbPlacedPart,
   PcbPointMm,
-  PcbTrace,
   PcbVia,
   RatsnestEndpoint,
   RatsnestSegment,
@@ -48,21 +47,15 @@ import { isEditableOutline, outlineVertices } from "./pcb-outline-edit";
 import { TraceLayer } from "./layers/TraceLayer";
 import { TracePreviewLayer } from "./layers/TracePreviewLayer";
 import { CopperFillLayer } from "./layers/CopperFillLayer";
+import { useProjectionPours } from "./layers/use-projection-pours";
+import type { CopperFillIsland } from "../../../../shared/rendering/copper-fill/copper-fill-geometry";
 import { KeepoutLayer } from "./layers/KeepoutLayer";
 import { ZoneOutlineLayer } from "./layers/ZoneOutlineLayer";
-// Import the two zone/keepout modules directly, not through the
-// `shared/pcb-areas` barrel: the barrel also re-exports the keepout predicates,
-// which pull the geometry kernel in for no reason here.
-import {
-  collectCopperZones,
-  type EffectiveKeepout,
-} from "../../../../shared/pcb-areas/copper-zones";
-import {
-  pourParamsForZone,
-  zonePourNets,
-} from "../../../../shared/pcb-areas/pour-params";
+// Import the zone/keepout module directly, not through the `shared/pcb-areas`
+// barrel: the barrel also re-exports the keepout predicates, which pull the
+// geometry kernel in for no reason here.
+import type { EffectiveKeepout } from "../../../../shared/pcb-areas/copper-zones";
 import { placementSideLayer } from "../../../../shared/rendering/pad-copper-layers";
-import { viaCrossesLayer } from "./layers/copper-fill-trace-geometry";
 import { ViaLayer } from "./layers/ViaLayer";
 import { DrillHighlightLayer, DrillHoleCutoutLayer } from "./layers/DrillLayer";
 import { FreePadLayer } from "./layers/FreePadLayer";
@@ -117,7 +110,7 @@ import {
   type PcbVisualState,
 } from "./pcb-visual-state";
 
-const EMPTY_TRACES: PcbTrace[] = [];
+const NO_ISLANDS: readonly CopperFillIsland[] = [];
 
 export interface PcbCameraControls {
   zoomIn(): void;
@@ -1906,10 +1899,9 @@ export function PcbScene({
     );
   }, [projection.keepouts, selection?.keepoutIds, visibleLayers, visualState]);
 
-  // Pad → net map driving the copper-pour same-net merge and route-focus
-  // dimming. The authoritative schematic↔PCB correlation (`padNets`) is written
-  // on every projection load, so it covers every correlated pad regardless of
-  // routing state.
+  // Pad → net map driving route-focus dimming. The authoritative schematic↔PCB
+  // correlation (`padNets`) is written on every projection load, so it covers
+  // every correlated pad regardless of routing state.
   const padNetIds = useMemo<ReadonlyMap<string, string>>(
     () => new Map(Object.entries(projection.padNets ?? {})),
     [projection.padNets],
@@ -1924,90 +1916,20 @@ export function PcbScene({
     },
     [perLayerOpacity],
   );
-  // The ONE derivation of which copper areas exist (zone/keepout contract
-  // §3.1): board planes and explicit zones are the same kind of persisted row,
-  // so the canvas can no longer disagree with Gerber, DRC, the snapshot or the
-  // 3D preview.
-  // Keepouts that forbid copper pour carve every fill on their layers
-  // (contract §4 `copperPour`), exactly as the backend's Gerber/DRC pours do.
-  // The list itself arrives as a prop — `usePcbWorkspace` owns the derivation.
-  const effectiveZones = useMemo(
-    () =>
-      collectCopperZones({
-        zones: projection.zones,
-        layerCount: projection.board.layerCount,
-        knownNetIds: new Set(Object.keys(projection.netNames)),
-      }).zones,
-    [projection.zones, projection.netNames, projection.board.layerCount],
-  );
+  // The ONE physical pour result (OPENPCB-67 §3.8): `buildProjectionPours`
+  // over the committed projection — every trace and via, the full board
+  // settings, the projection's keepouts — the very islands Gerber, DRC and the
+  // snapshot read. Board planes and explicit zones are the same kind of row
+  // (zone/keepout contract §3.1).
+  const projectionPours = useProjectionPours(projection);
   // Painting order is the REVERSE of fill order: every pour on a layer shares
   // one renderOrder, so the last one mounted paints on top. Reversing puts the
   // board plane down first and the highest-priority explicit zone last, which
   // is the precedence §5 defines (S5 gives them real mutual clearance).
   const pourRenderList = useMemo(
-    () => [...effectiveZones].reverse(),
-    [effectiveZones],
+    () => [...projectionPours.values()].reverse(),
+    [projectionPours],
   );
-  // One `ZonePourParams` per zone, memoised here: `pourParamsForZone` returns
-  // a fresh `clearanceForItem` closure and fresh exclusion arrays on every
-  // call, and <CopperFillLayer>'s useMemo keys on them — spread inline in the
-  // JSX, every scene render (hover, marquee, drag) re-ran the Clipper pour.
-  const pourParamsByZone = useMemo(() => {
-    const nets = zonePourNets(projection.board, projection.netNames);
-    return new Map(
-      effectiveZones.map(
-        (zone) =>
-          [
-            zone.id,
-            pourParamsForZone(
-              zone,
-              projection.board.designRules,
-              effectiveKeepouts,
-              effectiveZones,
-              nets,
-            ),
-          ] as const,
-      ),
-    );
-  }, [effectiveZones, effectiveKeepouts, projection.board, projection.netNames]);
-  // Pre-bucket traces and vias by copper layer once per projection so each
-  // <CopperFillLayer> receives an identity-stable array slice. Without this
-  // the inner useMemo would invalidate on every render (fresh filter result
-  // each time defeats reference equality).
-  const tracesByLayer = useMemo(() => {
-    const map: Partial<Record<PcbCopperLayerId, PcbTrace[]>> = {};
-    for (const trace of projection.traces) {
-      (map[trace.layer] ??= []).push(trace);
-    }
-    return map;
-  }, [projection.traces]);
-  // Vias whose net matches a rendered same-net pour they cross. Such a via's
-  // copper ring would otherwise be invisible (same color as the pour it merges
-  // into), so ViaLayer draws a presentation-only board-color separator ring
-  // around it (Flux look). The pour fill itself keeps the electrical merge.
-  const samePourViaIds = useMemo(() => {
-    const ids = new Set<string>();
-    // Board planes only: an explicit zone is a local patch, so a via crossing
-    // one is not the "invisible ring in a plane" case the separator solves.
-    const boardPlaneNetByLayer = new Map<PcbCopperLayerId, string | null>();
-    for (const zone of effectiveZones) {
-      if (zone.sourceKind === "board") {
-        boardPlaneNetByLayer.set(zone.layer, zone.netId);
-      }
-    }
-    if (boardPlaneNetByLayer.size === 0) return ids;
-    for (const via of projection.vias) {
-      if (via.netId === null) continue;
-      for (const [layer, netId] of boardPlaneNetByLayer) {
-        if (netId !== via.netId) continue;
-        if (viaCrossesLayer(via, layer)) {
-          ids.add(via.id);
-          break;
-        }
-      }
-    }
-    return ids;
-  }, [projection.vias, effectiveZones]);
   const effectiveHighlightedNetId = visualState.routeFocusActive
     ? visualState.activeNetId
     : visualState.activeLayer === null
@@ -2015,7 +1937,7 @@ export function PcbScene({
       : null;
 
   // Real vias + uncommitted session vias for ViaLayer only (pending vias stay
-  // out of pour/samePourViaIds geometry — same-net by construction).
+  // out of the pour geometry — same-net by construction).
   const viasForRender = useMemo(
     () =>
       routePendingVias && routePendingVias.length > 0
@@ -2183,33 +2105,15 @@ export function PcbScene({
           />
         ) : null}
         {/* Every copper area — the per-layer board planes AND the explicit
-            (imported / user-drawn) zones — through one loop over the effective
-            list, each with its own overrides composed by `pourParamsForZone`. */}
-        {pourRenderList.map((zone) =>
+            (imported / user-drawn) zones — drawn from the one physical pour
+            result. A `failed` pour draws nothing (contract §8). */}
+        {pourRenderList.map(({ zone, result }) =>
           isCopperLayerVisible(visibleLayers, zone.layer) &&
           shouldRenderCopperLayer(visualState, zone.layer) ? (
             <CopperFillLayer
               key={`pour:${zone.id}`}
-              outline={projection.board.outline}
-              layerCount={projection.board.layerCount}
-              // Feed the pour COMMITTED geometry, not the per-frame drag
-              // overrides: the Clipper pour is expensive and would otherwise
-              // rebuild every frame (×N copper layers) while dragging a part /
-              // free primitive. The moat refreshes once on commit — standard
-              // EDA "pour is stale during edit" behavior.
-              placements={projection.placements}
-              traces={tracesByLayer[zone.layer] ?? EMPTY_TRACES}
-              // EVERY via, unfiltered: the kernel resolves each via's span on the
-              // real stackup (a blind via, a layer-invalid span); a canvas-side
-              // bucket by global layer index poured B.Cu across a blind F→In1
-              // via while every backend fill cleared it (Astra S5 run 2 #4).
-              vias={projection.vias}
-              padNetIds={padNetIds}
-              designRules={projection.board.designRules}
-              cutouts={projection.board.cutouts}
-              freeHoles={projection.freeHoles}
-              freePads={projection.freePads}
-              {...pourParamsByZone.get(zone.id)!}
+              layer={zone.layer}
+              islands={result.status === "ok" ? result.islands : NO_ISLANDS}
               opacity={
                 layerOpacity(visualState, zone.layer) *
                 layerOpacityFor(zone.layer)
@@ -2268,7 +2172,6 @@ export function PcbScene({
             selectedViaIds={selection?.viaIds}
             activeLayer={projection.board.activeLayer}
             focusNetAcrossLayers={visualState.routeFocusActive}
-            samePourViaIds={samePourViaIds}
           />
         ) : null}
         {/* Hole cutouts are intrinsic pad/via geometry — always rendered so a

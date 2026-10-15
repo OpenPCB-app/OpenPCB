@@ -4,16 +4,10 @@ import type {
   PourIsland,
   SnapshotCopperLayerId,
 } from "../../../../sdks/designer";
-import { copperToHoleClearanceMm } from "../../../../shared/drc/rule-resolver";
 import { ringSignedArea } from "../../../../shared/pcb-geometry/ring-utils";
-import { buildCopperFillIslands } from "../../../../shared/rendering/copper-fill/copper-fill-geometry";
-import {
-  collectCopperZones,
-  collectKeepouts,
-  pourParamsForZone,
-  zonePourNets,
-  type ZonePourParams,
-} from "../../../../shared/pcb-areas";
+import type { CopperFillResult } from "../../../../shared/rendering/copper-fill/copper-fill-geometry";
+import { buildProjectionPours } from "../../../../shared/rendering/copper-fill/projection-pours";
+import { zonePourNets } from "../../../../shared/pcb-areas";
 import {
   escapeStructuralIdSegment,
   fnv1a64,
@@ -34,8 +28,8 @@ type PourSource = {
   readonly sourceId: string;
   readonly layer: SnapshotCopperLayerId;
   readonly pourNetId: string | null;
-  /** Composed fill params for this zone (zone/keepout contract §6). */
-  readonly params: ZonePourParams;
+  /** The zone's fill — the ONE kernel argument set (OPENPCB-67 §3.8). */
+  readonly result: CopperFillResult;
 };
 
 type PendingPourIsland = PourIsland & {
@@ -54,27 +48,9 @@ export function buildSnapshotPourIslands(
   projection: DesignerPcbProjection,
   warnings: string[] = [],
 ): PourIsland[] {
-  const padNetIds = new Map(Object.entries(projection.padNets ?? {}));
-  const dr = projection.board.designRules;
-  const baseParams = {
-    layerCount: projection.board.layerCount,
-    outline: projection.board.outline,
-    placements: projection.placements,
-    traces: projection.traces,
-    vias: projection.vias,
-    padNetIds,
-    copperToBoardEdgeMm: dr.clearance.copperToBoardEdgeMm,
-    copperToHoleMm: copperToHoleClearanceMm(dr),
-    cutouts: projection.board.cutouts,
-    freeHoles: projection.freeHoles,
-    freePads: projection.freePads,
-  };
   const pending: PendingPourIsland[] = [];
   for (const source of pourSources(projection)) {
-    const result = buildCopperFillIslands({
-      ...baseParams,
-      ...source.params,
-    });
+    const { result } = source;
     if (result.status === "failed") {
       warnings.push(
         `Copper pour "${source.sourceId}" on ${source.layer} could not be filled (${result.reason}); it was not sent to the cloud service.`,
@@ -107,37 +83,32 @@ export function buildSnapshotPourIslands(
 }
 
 function pourSources(projection: DesignerPcbProjection): PourSource[] {
-  const board = projection.board;
-  // The ONE derivation (contract §3.1). `sourceId` is the effective zone's id —
-  // `board:<layer>` for a board zone, the zone id for an explicit one — so the
-  // hashed `islandId` stays byte-stable across this rewiring.
-  const { zones } = collectCopperZones({
-    zones: projection.zones,
-    layerCount: board.layerCount,
-    knownNetIds: new Set(Object.keys(projection.netNames ?? {})),
-  });
-  // The same keepouts the canvas, Gerber and DRC subtract (§13.3): a snapshot
-  // island that ignored a `copperPour` keepout would send the autorouter copper
-  // the board will never manufacture.
-  const { keepouts } = collectKeepouts({
-    keepouts: projection.keepouts ?? [],
-    layerCount: board.layerCount,
-  });
+  const netNames = projection.netNames ?? {};
+  // The ONE derivation (contract §3.1) filled with the ONE argument set
+  // (OPENPCB-67 §3.8), the same keepouts the canvas, Gerber and DRC subtract
+  // (§13.3) included: a snapshot island that ignored a `copperPour` keepout
+  // would send the autorouter copper the board will never manufacture.
+  // `sourceId` is the effective zone's id — `board:<layer>` for a board zone,
+  // the zone id for an explicit one — so the hashed `islandId` stays
+  // byte-stable across this rewiring.
+  const pours = buildProjectionPours(
+    {
+      ...projection,
+      padNets: projection.padNets ?? {},
+      netNames,
+      keepouts: projection.keepouts ?? [],
+    },
+    { nets: zonePourNets(projection.board, netNames) },
+  );
   const sources: PourSource[] = [];
-  for (const zone of zones) {
+  for (const { zone, result } of pours) {
     if (!SNAPSHOT_LAYER_SET.has(zone.layer)) continue;
     sources.push({
       kind: zone.sourceKind,
       sourceId: zone.id,
       layer: zone.layer as SnapshotCopperLayerId,
       pourNetId: zone.netId,
-      params: pourParamsForZone(
-        zone,
-        board.designRules,
-        keepouts,
-        zones,
-        zonePourNets(board, projection.netNames ?? {}),
-      ),
+      result,
     });
   }
   return sources.sort((a, b) => sourceSortKey(a).localeCompare(sourceSortKey(b)));
