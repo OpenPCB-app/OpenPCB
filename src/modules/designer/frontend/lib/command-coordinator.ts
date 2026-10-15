@@ -1,6 +1,7 @@
 import type { DesignerCommand, DesignerDispatchResult } from "../../../../sdks";
 import {
   CommandDeclinedError,
+  CommandRejectedError,
   RevisionCommandQueue,
   RevisionConflictError,
 } from "../../../../shared/frontend/commands/revision-command-queue";
@@ -112,7 +113,7 @@ export class DesignerCommandCoordinator {
       : dispatchFailureMessage("Edit", result);
     const error = conflict
       ? new RevisionConflictError(message)
-      : new Error(message);
+      : new CommandRejectedError(message);
     throw Object.assign(error, { dispatchResult: result });
   }
 
@@ -143,7 +144,7 @@ export class DesignerCommandCoordinator {
               "Design changed before history could be applied. Refresh and review; no history was consumed.",
             );
           }
-          throw new Error(`Nothing to ${kind}`);
+          throw new CommandRejectedError(`Nothing to ${kind}`);
         }
         return result;
       })

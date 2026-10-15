@@ -1,8 +1,15 @@
 import { useState } from "react";
 import { confirmDialog } from "@shared/frontend/ui/dialog-host-store";
 import { Button } from "@shared/frontend/ui/button";
-import type { CommandQueueSnapshot } from "../../../../shared/frontend/commands/revision-command-queue";
+import type {
+  CommandQueueSnapshot,
+  RetainedState,
+} from "../../../../shared/frontend/commands/revision-command-queue";
 import type { DesignerAction } from "../lib/command-coordinator";
+
+/** Only a verified conflict or a never-sent edit may be re-sent under a new command ID. */
+const reapplicable = (state: RetainedState) =>
+  state === "conflicted" || state === "cancelled";
 
 export function CommandQueueNotice({
   snapshot,
@@ -42,12 +49,20 @@ export function CommandQueueNotice({
             {snapshot.retained.map((item) => (
               <div key={item.id}>
                 <p>
-                  {item.state}: {item.message}
+                  {item.state === "unknown" ? "outcome unknown" : item.state}:{" "}
+                  {item.message}
                 </p>
+                {item.state === "unknown" && (
+                  <p>
+                    This edit may already have applied. It is not retried
+                    automatically and cannot be reapplied under a new command
+                    ID.
+                  </p>
+                )}
                 <pre className="max-h-48 overflow-auto">
                   {JSON.stringify(item.input, null, 2)}
                 </pre>
-                {item.state !== "failed" && item.input.kind === "command" && (
+                {reapplicable(item.state) && item.input.kind === "command" && (
                   <Button
                     size="sm"
                     variant="secondary"
