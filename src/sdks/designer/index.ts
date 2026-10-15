@@ -61,6 +61,7 @@ export type {
   DesignerUpdateWireGeometryCommand,
   DesignerDeleteEntityCommand,
   DesignerDerivedNet,
+  DesignerNetReferenceSite,
   DesignerDesignRecord,
   DesignerDesignSummary,
   DesignerDrcStatus,

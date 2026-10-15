@@ -1375,6 +1375,21 @@ export interface DesignerDerivedNet {
   primitiveIds: string[];
 }
 
+/**
+ * Where a persisted net reference lives: a copper item, or a board-settings
+ * entry. A `netClassAssignment` is keyed by the referenced net id itself;
+ * `scopeIndex` indexes the rule's full `scopes` array.
+ */
+export type DesignerNetReferenceSite =
+  | { kind: "trace"; traceId: string }
+  | { kind: "via"; viaId: string }
+  | { kind: "freePad"; freePadId: string }
+  | { kind: "zone"; zoneId: string }
+  | { kind: "netClassAssignment" }
+  | { kind: "lengthGroup"; groupId: string }
+  | { kind: "diffPair"; pairId: string; member: "p" | "n" }
+  | { kind: "drcRule"; ruleId: string; scopeIndex: number };
+
 export interface DesignerPin {
   id: string;
   originPinKey: string;
