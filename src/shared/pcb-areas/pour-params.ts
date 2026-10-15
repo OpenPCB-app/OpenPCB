@@ -195,6 +195,18 @@ function zoneExclusions(
 }
 
 /**
+ * The minimum copper width a zone pours with: tighten-only over the board
+ * minimum (§6). Also the floor under its thermal spokes, so anything that
+ * compares two zones' physical reliefs must use this, not the raw override.
+ */
+export function zoneMinThicknessMm(
+  zone: Pick<EffectiveCopperZone, "minWidthMm">,
+  designRules: PcbDesignRules,
+): number {
+  return Math.max(designRules.minimums.traceWidthMm, zone.minWidthMm ?? 0);
+}
+
+/**
  * `keepouts`, `zones` and `nets` have NO defaults (§13.3): a consumer that
  * assembles a pour must pass the effective keepouts, the effective zone list
  * and the board's net classes of the SAME projection, or it does not compile.
@@ -220,10 +232,7 @@ export function pourParamsForZone(
     pourNetId: zone.netId,
     clearanceMm: zone.clearanceMm ?? 0,
     clearanceForItem: zoneClearanceResolver(zone, nets),
-    minThicknessMm: Math.max(
-      designRules.minimums.traceWidthMm,
-      zone.minWidthMm ?? 0,
-    ),
+    minThicknessMm: zoneMinThicknessMm(zone, designRules),
     padConnection: zone.padConnection,
     ...(zone.islandRemoval === undefined
       ? {}

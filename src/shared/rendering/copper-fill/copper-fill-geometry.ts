@@ -1536,7 +1536,14 @@ function buildPourExtent(
  * collector. Null ⇒ same-net pads flood solid.
  */
 export function resolveThermalConfig(
-  params: CopperFillPourParams,
+  params: Pick<
+    CopperFillPourParams,
+    | "padConnection"
+    | "thermalSpokeWidthMm"
+    | "thermalReliefGapMm"
+    | "thermalSpokeCount"
+    | "thermalSpokeAngleDeg"
+  >,
   minThicknessMm: number,
 ): ThermalConfig | null {
   if (
