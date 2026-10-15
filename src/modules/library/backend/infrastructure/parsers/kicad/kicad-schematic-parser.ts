@@ -4,15 +4,17 @@
  * Reference: https://dev-docs.kicad.org/en/file-formats/sexpr-schematic/index.html
  *
  * Extracts the minimum set of entities OpenPCB's designer module consumes:
- *   - symbol instances (lib_id, refdes, value, at, rotation, unit, uuid)
+ *   - symbol instances (lib_id, lib_name, refdes, value, at, rotation,
+ *     mirror, unit, uuid, in_bom / on_board / dnp, per-project instances)
  *   - wires (point chain)
  *   - junctions
  *   - labels + global labels
  *   - power symbols (refdes prefix #PWR / lib_id `power:*`)
- *   - hierarchical sheet references (flagged for v1 flatten)
- *   - no_connect markers
+ *   - hierarchical sheet references (uuid, Sheetfile, pins, instances)
+ *   - no_connect markers, netclass_flag directive labels
+ *   - root sheet_instances / KiCad 6 symbol_instances
  *
- * Unsupported / ignored: bus, bus_entry, polyline graphics, text boxes,
+ * Unsupported / ignored: bus, bus_entry (counted only), polyline graphics, text boxes,
  * symbol body re-definitions (lib_symbols is preserved raw for the
  * library-ingestion step but not parsed here).
  *
@@ -21,6 +23,12 @@
  * than throw — partial schematics still load.
  */
 
+import {
+  parseNetclassFlag,
+  readInstancePaths,
+  readProjectInstances,
+  readYesNo,
+} from "./kicad-schematic-instances";
 import {
   type SExpr,
   findNode,
@@ -33,6 +41,8 @@ import {
 export interface ParsedKicadSchematic {
   version: number | null;
   generator: string | null;
+  /** The file's own `(uuid …)` — the root's names the instance-path root. */
+  uuid: string | null;
   symbols: ParsedKicadSchSymbol[];
   wires: ParsedKicadSchWire[];
   junctions: ParsedKicadSchJunction[];
@@ -48,6 +58,15 @@ export interface ParsedKicadSchematic {
   powerSymbols: ParsedKicadSchPowerSymbol[];
   hierarchicalSheets: ParsedKicadSchSheet[];
   noConnects: ParsedKicadSchPoint[];
+  /** `(netclass_flag …)` directive labels (H14 §3.9). */
+  netclassFlags: ParsedKicadSchNetclassFlag[];
+  /** `(bus …)` / `(bus_entry …)` tokens — unsupported, counted for the report. */
+  busCount: number;
+  busEntryCount: number;
+  /** Root `(sheet_instances (path "/…" (page "N")) …)`. */
+  sheetInstances: Array<{ path: string; page: string | null }>;
+  /** KiCad 6 root `(symbol_instances (path "/…" (reference …) (unit …)) …)`. */
+  symbolInstances: ParsedKicadSchSymbolInstance[];
   /** Raw `(lib_symbols ...)` block, for library-ingestion phase. */
   libSymbolsRaw: SExpr | null;
   warnings: ParsedKicadProjectWarning[];
@@ -56,6 +75,16 @@ export interface ParsedKicadSchematic {
 export interface ParsedKicadSchSymbol {
   uuid: string | null;
   libId: string;
+  /** KiCad 7+ `(lib_name …)`: the embedded `lib_symbols` variant this uses. */
+  libName: string | null;
+  /** `(mirror x|y)`; `null` when not mirrored. */
+  mirror: "x" | "y" | null;
+  /** KiCad defaults when absent: in BOM, on board, not DNP. */
+  inBom: boolean;
+  onBoard: boolean;
+  dnp: boolean;
+  /** KiCad 7+ per-project `(instances (project … (path … (reference) (unit))))`. */
+  instances: ParsedKicadSchSymbolInstance[];
   reference: string;
   value: string | null;
   unit: number;
@@ -74,6 +103,26 @@ export interface ParsedKicadSchPowerSymbol {
   netName: string;
   at: ParsedKicadSchPoint;
   rotationDeg: number;
+  /** The full symbol record (lib id, mirror, flags, instances). */
+  symbol: ParsedKicadSchSymbol;
+}
+
+export interface ParsedKicadSchSymbolInstance {
+  /** Project name; `null` for KiCad 6 root `symbol_instances` rows. */
+  project: string | null;
+  path: string;
+  reference: string | null;
+  unit: number | null;
+}
+
+export interface ParsedKicadSchNetclassFlag {
+  uuid: string | null;
+  /** The connection point. */
+  at: ParsedKicadSchPoint;
+  rotationDeg: number;
+  /** The `Netclass` property value; `null` when absent or empty. */
+  netclass: string | null;
+  properties: Record<string, string>;
 }
 
 export interface ParsedKicadSchWire {
@@ -101,6 +150,14 @@ export interface ParsedKicadSchSheet {
   uuid: string | null;
   sheetName: string;
   sheetFile: string;
+  /** `sheetFile` with `\\` separators as `/` (resolution is the planner's). */
+  sheetFilePath: string;
+  /** KiCad 7+ `(instances (project … (path … (page …))))`. */
+  instances: Array<{
+    project: string | null;
+    path: string;
+    page: string | null;
+  }>;
   at: ParsedKicadSchPoint;
   size: { widthMm: number; heightMm: number };
   pins: ParsedKicadSchSheetPin[];
@@ -153,6 +210,7 @@ export function parseKicadSchematic(source: string): ParsedKicadSchematic {
         netName: parsed.value ?? parsed.reference.replace(/^#PWR0*/, ""),
         at: parsed.at,
         rotationDeg: parsed.rotationDeg,
+        symbol: parsed,
       });
     } else {
       symbols.push(parsed);
@@ -196,6 +254,7 @@ export function parseKicadSchematic(source: string): ParsedKicadSchematic {
   return {
     version,
     generator,
+    uuid: getStringValue(findNode(expr, "uuid") ?? [], 1),
     symbols,
     wires,
     junctions,
@@ -205,6 +264,21 @@ export function parseKicadSchematic(source: string): ParsedKicadSchematic {
     powerSymbols,
     hierarchicalSheets,
     noConnects,
+    netclassFlags: findNodes(expr, "netclass_flag")
+      .map((node) => parseNetclassFlag(node))
+      .filter((f): f is ParsedKicadSchNetclassFlag => f !== null),
+    busCount: findNodes(expr, "bus").length,
+    busEntryCount: findNodes(expr, "bus_entry").length,
+    sheetInstances: findNodes(findNode(expr, "sheet_instances") ?? [], "path")
+      .map((node) => ({
+        path: getStringValue(node, 1) ?? "",
+        page: getStringValue(findNode(node, "page") ?? [], 1),
+      }))
+      .filter((row) => row.path !== ""),
+    symbolInstances: readInstancePaths(
+      findNode(expr, "symbol_instances") ?? [],
+      null,
+    ).map(({ page: _page, ...row }) => row),
     libSymbolsRaw: libSymbolsRaw ?? null,
     warnings,
   };
@@ -244,10 +318,17 @@ function parseSymbolInstance(
   const reference = properties["Reference"] ?? "?";
   const value = properties["Value"] ?? null;
   const isPower = reference.startsWith("#PWR") || libId.startsWith("power:");
+  const mirror = getStringValue(findNode(node, "mirror") ?? [], 1);
 
   return {
     uuid,
     libId,
+    libName: getStringValue(findNode(node, "lib_name") ?? [], 1),
+    mirror: mirror === "x" || mirror === "y" ? mirror : null,
+    inBom: readYesNo(node, "in_bom") ?? true,
+    onBoard: readYesNo(node, "on_board") ?? true,
+    dnp: readYesNo(node, "dnp") ?? false,
+    instances: readProjectInstances(node).map(({ page: _page, ...row }) => row),
     reference,
     value,
     unit,
@@ -363,6 +444,12 @@ function parseSheet(
     uuid: getStringValue(findNode(node, "uuid") ?? [], 1),
     sheetName,
     sheetFile,
+    sheetFilePath: sheetFile.replace(/\\/g, "/"),
+    instances: readProjectInstances(node).map((row) => ({
+      project: row.project,
+      path: row.path,
+      page: row.page,
+    })),
     at,
     size: { widthMm, heightMm },
     pins,

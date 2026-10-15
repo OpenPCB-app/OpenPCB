@@ -126,3 +126,144 @@ describe("parseKicadSchematic", () => {
     expect(Array.isArray(result.libSymbolsRaw)).toBe(true);
   });
 });
+
+describe("parseKicadSchematic — H14 S2 instance data", () => {
+  test("reads lib_name, mirror, board/BOM/DNP flags and per-project instances", () => {
+    const sch = `${MINIMAL_HEADER}
+      (uuid "root-uuid")
+      (symbol
+        (lib_id "Device:R")
+        (lib_name "R_1")
+        (at 50 60 90)
+        (mirror y)
+        (unit 2)
+        (in_bom no)
+        (on_board no)
+        (dnp yes)
+        (uuid "sym-uuid")
+        (property "Reference" "R1" (at 0 0 0))
+        (instances
+          (project "demo"
+            (path "/root-uuid" (reference "R1") (unit 2))
+            (path "/root-uuid/sheet-a" (reference "R101") (unit 2)))
+          (project "other" (path "/x" (reference "R7") (unit 1))))
+      )
+    )`;
+    const result = parseKicadSchematic(sch);
+    expect(result.uuid).toBe("root-uuid");
+    expect(result.symbols[0]).toMatchObject({
+      libId: "Device:R",
+      libName: "R_1",
+      mirror: "y",
+      rotationDeg: 90,
+      inBom: false,
+      onBoard: false,
+      dnp: true,
+      instances: [
+        { project: "demo", path: "/root-uuid", reference: "R1", unit: 2 },
+        {
+          project: "demo",
+          path: "/root-uuid/sheet-a",
+          reference: "R101",
+          unit: 2,
+        },
+        { project: "other", path: "/x", reference: "R7", unit: 1 },
+      ],
+    });
+  });
+
+  test("absent flags take KiCad's defaults; no mirror, no lib_name", () => {
+    const sch = `${MINIMAL_HEADER}
+      (symbol (lib_id "Device:C") (at 0 0 0) (mirror x) (property "Reference" "C1" (at 0 0 0)))
+      (symbol (lib_id "Device:C") (at 0 0 0) (property "Reference" "C2" (at 0 0 0)))
+    )`;
+    const [c1, c2] = parseKicadSchematic(sch).symbols;
+    expect(c1!.mirror).toBe("x");
+    expect(c2).toMatchObject({
+      libName: null,
+      mirror: null,
+      inBom: true,
+      onBoard: true,
+      dnp: false,
+      instances: [],
+    });
+  });
+
+  test("power symbols keep their full symbol record", () => {
+    const sch = `${MINIMAL_HEADER}
+      (symbol (lib_id "power:PWR_FLAG") (at 1 1 0) (on_board yes)
+        (property "Reference" "#FLG01" (at 0 0 0)) (property "Value" "PWR_FLAG" (at 0 0 0)))
+    )`;
+    const [flag] = parseKicadSchematic(sch).powerSymbols;
+    expect(flag!.symbol).toMatchObject({
+      libId: "power:PWR_FLAG",
+      reference: "#FLG01",
+    });
+  });
+
+  test("reads sheet uuid, Sheetfile path and sheet instances", () => {
+    const sch = `${MINIMAL_HEADER}
+      (sheet (at 10 10) (size 20 10) (uuid "sheet-a")
+        (property "Sheetname" "Power" (at 0 0 0))
+        (property "Sheetfile" "sub\\\\power.kicad_sch" (at 0 0 0))
+        (pin "VIN" input (at 10 12 180) (uuid "pin-1"))
+        (instances (project "demo" (path "/root-uuid" (page "2")))))
+    )`;
+    const [sheet] = parseKicadSchematic(sch).hierarchicalSheets;
+    expect(sheet).toMatchObject({
+      uuid: "sheet-a",
+      sheetName: "Power",
+      sheetFile: "sub\\power.kicad_sch",
+      sheetFilePath: "sub/power.kicad_sch",
+      instances: [{ project: "demo", path: "/root-uuid", page: "2" }],
+    });
+    expect(sheet!.pins[0]?.name).toBe("VIN");
+  });
+
+  test("reads netclass_flag directive labels with their class", () => {
+    const sch = `${MINIMAL_HEADER}
+      (netclass_flag "" (length 2.54) (shape round) (at 30 40 90) (uuid "f1")
+        (property "Netclass" "HighSpeed" (at 0 0 0)))
+      (netclass_flag "" (length 2.54) (shape round) (at 1 2 0) (uuid "f2"))
+    )`;
+    expect(parseKicadSchematic(sch).netclassFlags).toEqual([
+      {
+        uuid: "f1",
+        at: { xMm: 30, yMm: 40 },
+        rotationDeg: 90,
+        netclass: "HighSpeed",
+        properties: { Netclass: "HighSpeed" },
+      },
+      {
+        uuid: "f2",
+        at: { xMm: 1, yMm: 2 },
+        rotationDeg: 0,
+        netclass: null,
+        properties: {},
+      },
+    ]);
+  });
+
+  test("counts bus / bus_entry and reads root sheet_instances + KiCad 6 symbol_instances", () => {
+    const sch = `${MINIMAL_HEADER}
+      (bus (pts (xy 0 0) (xy 10 0)))
+      (bus_entry (at 1 0) (size 2.54 2.54))
+      (bus_entry (at 3 0) (size 2.54 2.54))
+      (sheet_instances (path "/" (page "1")) (path "/sheet-a" (page "2")))
+      (symbol_instances
+        (path "/sym-1" (reference "R1") (unit 1) (value "10k") (footprint "R:R_0603"))
+        (path "/sheet-a/sym-2" (reference "U1") (unit 2)))
+    )`;
+    const result = parseKicadSchematic(sch);
+    expect(result.busCount).toBe(1);
+    expect(result.busEntryCount).toBe(2);
+    expect(result.sheetInstances).toEqual([
+      { path: "/", page: "1" },
+      { path: "/sheet-a", page: "2" },
+    ]);
+    expect(result.symbolInstances).toEqual([
+      { project: null, path: "/sym-1", reference: "R1", unit: 1 },
+      { project: null, path: "/sheet-a/sym-2", reference: "U1", unit: 2 },
+    ]);
+  });
+});

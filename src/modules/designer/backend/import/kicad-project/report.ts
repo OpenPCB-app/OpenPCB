@@ -236,7 +236,7 @@ export const KICAD_IMPORT_WARNING_ENTRIES = [
   warn("multiple_projects_in_archive", "source", "The ZIP holds more than one KiCad project; the first one was imported"),
   capability("source_construct_unsupported", "source", PERMANENT, undefined, "The board file uses features this version can't import, which affect copper, mask, paste or the outline"),
   cosmetic("source_construct_unsupported_cosmetic", "source", "The board file uses silkscreen or fabrication features this version can't import"),
-  info("source_construct_ignored", "source", "Some board file entries that don't affect manufacturing were ignored"),
+  info("source_construct_ignored", "source", "Some project file entries that don't affect manufacturing were ignored"),
   capability("import_census_mismatch", "source", PERMANENT, undefined, "Some items in the project files couldn't be accounted for in the imported design"),
   capability("import_report_missing", "source", PERMANENT, "board", () =>
     "This design was imported from KiCad before import checks existed, or its import record is missing. Re-import the project."),
