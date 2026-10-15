@@ -122,6 +122,32 @@ export interface LibraryComponentFootprintVariant {
   };
   /** Explicit symbol-pin → footprint-pad map. Null means fallback to matching numbers. */
   pinMap: LibraryPinMapEntry[] | null;
+  /** Read-time generator qualification of this footprint's stored pads (H15 §3.4). */
+  qualification?: LibraryFootprintQualification;
+}
+
+export type LibraryFootprintQualificationStatus =
+  | "qualified"
+  | "unqualified-generator"
+  | "not-generated";
+
+/**
+ * Generator qualification, derived at read time from the pad geometry actually
+ * stored or placed — never from a stored verdict or a generator claim.
+ */
+export interface LibraryFootprintQualification {
+  status: LibraryFootprintQualificationStatus;
+  /** Non-null iff `status === "unqualified-generator"`. */
+  reason: string | null;
+  generatorKind: "ipc7351b" | "template" | "legacy-generated" | null;
+  /** "SOT-23 · nominal" | "pin-header" | null */
+  generatorLabel: string | null;
+}
+
+/** Stamped into placement snapshots at build time (additive; absent on snapshots built before O3). */
+export interface FootprintGenerationStamp {
+  kind: "ipc7351b" | "template" | "legacy-generated";
+  label: string | null;
 }
 
 export interface LibraryComponentDetail {
@@ -184,6 +210,14 @@ export interface LibraryFootprintPlacementSnapshot {
   /** Component-specific symbol-pin → footprint-pad map. Missing/null means fallback to matching numbers. */
   pinMap?: LibraryPinMapEntry[] | null;
   model3d?: LibraryFootprintModelDescriptor;
+  /**
+   * How the library row was generated, stamped when the snapshot is built from
+   * a generated row (absent otherwise, and on snapshots built before the
+   * stamp). It only selects claim rules; qualification itself is geometric.
+   */
+  generation?: FootprintGenerationStamp;
+  /** The row's `provenance.derivationHash` (post-processed footprints) at build time. */
+  derivationHash?: string | null;
 }
 
 export interface LibraryComponentPlacementDetail {
@@ -298,4 +332,6 @@ export interface LibraryAddComponentFootprintInput {
 export interface LibraryDefaultFootprintRef {
   footprintId: string;
   sourceHash: string | null;
+  /** `provenance.derivationHash` of the default footprint row, when post-processed. */
+  derivationHash: string | null;
 }

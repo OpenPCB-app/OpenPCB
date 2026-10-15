@@ -27,6 +27,7 @@ import { useTheme } from "../../../core/frontend/src/providers/ThemeProvider";
 import { TagTokenInput } from "./components/TagTokenInput";
 import { DetailsCard } from "./components/DetailsCard";
 import { FootprintOptionsList } from "./components/FootprintOptionsList";
+import { FootprintUnqualifiedBadge } from "./components/FootprintUnqualifiedBadge";
 import { PinsTable } from "./components/PinsTable";
 import { PreviewModal } from "./components/PreviewModal";
 import { ChangeFootprintDialog } from "./ChangeFootprintDialog";
@@ -616,6 +617,9 @@ export function ComponentDetailPage({
                       Footprint
                     </span>
                     <div className="flex items-center gap-2">
+                      <FootprintUnqualifiedBadge
+                        qualification={selectedVariant?.qualification}
+                      />
                       {hasOptions && selectedVariant ? (
                         <span className="inline-flex h-[18px] items-center gap-1.5 rounded-control border border-border-control px-1.5 font-mono text-2xs text-text-secondary">
                           <RefreshCw className="h-2.5 w-2.5" />

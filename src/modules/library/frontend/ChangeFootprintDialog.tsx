@@ -13,6 +13,10 @@ import {
   TabsTrigger,
 } from "@shared/frontend/ui";
 import { FootprintPreviewCanvas } from "../../../shared/frontend/canvas/preview";
+import {
+  FootprintUnqualifiedBadge,
+  isUnqualifiedFootprint,
+} from "./components/FootprintUnqualifiedBadge";
 import { asFootprintRender } from "./detail-helpers";
 import {
   FootprintGeneratorPanel,
@@ -91,6 +95,9 @@ export function ChangeFootprintDialog({
   );
   const defaultId = detail?.footprint.id ?? "";
   const effectiveId = selectedId ?? variants.find((v) => v.isDefault)?.footprintId ?? variants[0]?.footprintId ?? "";
+  const effectiveVariant = variants.find((v) => v.footprintId === effectiveId);
+  // Mirrors the server guard: a flagged footprint cannot become the default.
+  const effectiveUnqualified = isUnqualifiedFootprint(effectiveVariant?.qualification);
   const geometry = useFootprintGeometry({
     backendURL,
     moduleId,
@@ -209,7 +216,10 @@ export function ChangeFootprintDialog({
                                 : "border-border hover:bg-surface-hover"
                             }`}
                           >
-                            <div className="truncate font-mono">{v.variantLabel}</div>
+                            <div className="flex items-center gap-1">
+                              <span className="truncate font-mono">{v.variantLabel}</span>
+                              <FootprintUnqualifiedBadge qualification={v.qualification} />
+                            </div>
                             <div className="text-2xs text-text-tertiary">
                               {v.mountType ?? "—"} · {v.padCount} pads
                               {v.isDefault ? " · current" : ""}
@@ -232,6 +242,11 @@ export function ChangeFootprintDialog({
                       </div>
                       {geometry.status === "ready" ? (
                         <PinCoverage missing={existingMissing} />
+                      ) : null}
+                      {effectiveUnqualified && effectiveId !== defaultId ? (
+                        <p className="text-2xs text-status-danger" data-testid="change-footprint-unqualified-reason">
+                          {effectiveVariant?.qualification?.reason}
+                        </p>
                       ) : null}
                     </div>
                   </div>
@@ -269,9 +284,13 @@ export function ChangeFootprintDialog({
               type="button"
               variant="primary"
               className="cursor-pointer"
-              disabled={busy || !effectiveId || effectiveId === defaultId || existingMissing.length > 0}
+              disabled={busy || !effectiveId || effectiveId === defaultId || existingMissing.length > 0 || effectiveUnqualified}
               onClick={() => void useExisting()}
-              title="Set the selected linked footprint as the component default"
+              title={
+                effectiveUnqualified
+                  ? (effectiveVariant?.qualification?.reason ?? "This generated footprint failed qualification")
+                  : "Set the selected linked footprint as the component default"
+              }
             >
               Use selected footprint
             </Button>

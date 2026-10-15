@@ -65,6 +65,13 @@ import {
   type GeneratedFootprintInput,
 } from "./import/resolve-generated-footprint";
 import { buildIdentityPinMapJson } from "./import/pinmap";
+import { UnqualifiedGeneratorError } from "./import/unqualified-generator-error";
+import { generationFromProvenance } from "./qualification/classify";
+import {
+  classifyFootprintDataJson,
+  classifyPlacedFootprints,
+  getFootprintQualifications,
+} from "./qualification/footprint-qualifications";
 import {
   validateFootprintPads,
   validateSymbolPinsCoverFootprintPads,
@@ -451,7 +458,14 @@ function parseFootprintPlacementSnapshot(
     sourceHash: asString(provenance?.sourceHash),
     preview,
     pinMap,
+    derivationHash: asString(provenance?.derivationHash),
   };
+  // H15 §3.4 stamp: selects the claim rules for this placement even after the
+  // library row is deleted or updated in place. Qualification stays geometric.
+  const generation = generationFromProvenance(provenance);
+  if (generation) {
+    snapshot.generation = generation;
+  }
   if (modelRow) {
     snapshot.model3d = mapFootprintModelDescriptor(modelRow);
   }
@@ -985,6 +999,7 @@ async function loadComponentFootprintVariants(
         padCount: detail.padCount,
         packageCode: detail.packageCode,
         pinMap: null,
+        qualification: classifyFootprintDataJson(fpRow.dataJson),
       },
     ];
   }
@@ -1016,6 +1031,7 @@ async function loadComponentFootprintVariants(
       padCount: detail.padCount,
       packageCode: detail.packageCode,
       pinMap: parsePinMapJson(row.pinMapJson),
+      qualification: classifyFootprintDataJson(fp.dataJson),
     });
   }
   return variants;
@@ -1938,6 +1954,16 @@ export async function updateComponent(
         `Footprint "${patch.defaultFootprintId}" does not exist`,
       );
     }
+    // A flagged footprint cannot BECOME the default (H15 §3.4); an unchanged
+    // flagged default (e.g. from .opclib intake) is left to the export gate.
+    if (defaultFootprint.id !== existing.footprintId) {
+      const qualification = classifyFootprintDataJson(defaultFootprint.dataJson);
+      if (qualification.status === "unqualified-generator") {
+        throw new UnqualifiedGeneratorError(
+          qualification.reason ?? "This generated footprint failed qualification.",
+        );
+      }
+    }
     symbolRow = await db
       .select()
       .from(symbols)
@@ -2311,6 +2337,7 @@ export async function getDefaultFootprintRefs(
       componentId: components.id,
       footprintId: components.footprintId,
       sourceHash: sql<string | null>`json_extract(${footprints.dataJson}, '$.provenance.sourceHash')`,
+      derivationHash: sql<string | null>`json_extract(${footprints.dataJson}, '$.provenance.derivationHash')`,
     })
     .from(components)
     .leftJoin(footprints, eq(footprints.id, components.footprintId))
@@ -2321,6 +2348,8 @@ export async function getDefaultFootprintRefs(
     out[row.componentId] = {
       footprintId: row.footprintId,
       sourceHash: typeof row.sourceHash === "string" ? row.sourceHash : null,
+      derivationHash:
+        typeof row.derivationHash === "string" ? row.derivationHash : null,
     };
   }
   return out;
@@ -2466,5 +2495,9 @@ export function buildSdk(ctx: CoreBackendModuleContext): LibrarySDK {
       addComponentFootprint(ctx, componentId, input),
     getDefaultFootprintRefs: (componentIds) =>
       getDefaultFootprintRefs(ctx, componentIds),
+    getFootprintQualifications: async (footprintIds) =>
+      getFootprintQualifications(getDb(ctx), footprintIds),
+    classifyPlacedFootprints: async (items) =>
+      classifyPlacedFootprints(getDb(ctx), items),
   };
 }
