@@ -2,7 +2,7 @@ import type { InteractionEvent } from "../../../../../../shared/frontend/canvas/
 import type { PointMm } from "../../../../../../shared/rendering/types";
 import type { EditorTool } from "../types";
 import { useSymbolEditorStore } from "../useSymbolEditorStore";
-import { eventToMm } from "../../../../../../shared/frontend/canvas/tools/tool-utils";
+import { eventToEditorMm } from "../../grid-snap";
 
 export function createRectTool(): EditorTool {
   let startPoint: PointMm | null = null;
@@ -22,7 +22,7 @@ export function createRectTool(): EditorTool {
 
     onPointerDown(event: InteractionEvent) {
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
+      const point = eventToEditorMm(event, store);
 
       if (!startPoint) {
         startPoint = point;
@@ -54,7 +54,7 @@ export function createRectTool(): EditorTool {
     onPointerMove(event: InteractionEvent) {
       if (!startPoint) return;
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
+      const point = eventToEditorMm(event, store);
 
       const x = Math.min(startPoint.x, point.x);
       const y = Math.min(startPoint.y, point.y);

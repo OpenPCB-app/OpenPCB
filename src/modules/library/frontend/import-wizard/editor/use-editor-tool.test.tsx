@@ -25,7 +25,11 @@ function Editor(): ReactElement {
   );
 }
 
-function Page({ onWizardEscape }: { onWizardEscape?: () => void }): ReactElement {
+function Page({
+  onWizardEscape,
+}: {
+  onWizardEscape?: () => void;
+}): ReactElement {
   useEscapeLayer(() => onWizardEscape?.(), {
     enabled: Boolean(onWizardEscape),
   });
@@ -235,6 +239,21 @@ describe("symbol editor keyboard scope", () => {
     expect(useSymbolEditorStore.getState().undoStack).toHaveLength(
       undoDepth - 1,
     );
+  });
+});
+
+describe("symbol editor grid hotkey", () => {
+  it("Shift+S toggles snapping without touching grid visibility", async () => {
+    await render(<Page />);
+    await focus(el("Editor"));
+    await press("S", { shiftKey: true });
+    expect(useSymbolEditorStore.getState()).toMatchObject({
+      snapEnabled: false,
+      gridVisible: true,
+    });
+    await focus(el("Outside field"));
+    await press("S", { shiftKey: true });
+    expect(useSymbolEditorStore.getState().snapEnabled).toBe(false);
   });
 });
 

@@ -2,7 +2,7 @@ import type { InteractionEvent } from "../../../../../../shared/frontend/canvas/
 import type { PointMm } from "../../../../../../shared/rendering/types";
 import type { EditorTool } from "../types";
 import { useSymbolEditorStore } from "../useSymbolEditorStore";
-import { eventToMm } from "../../../../../../shared/frontend/canvas/tools/tool-utils";
+import { eventToEditorMm } from "../../grid-snap";
 
 export function createCircleTool(): EditorTool {
   let center: PointMm | null = null;
@@ -22,7 +22,7 @@ export function createCircleTool(): EditorTool {
 
     onPointerDown(event: InteractionEvent) {
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
+      const point = eventToEditorMm(event, store);
 
       if (!center) {
         center = point;
@@ -49,7 +49,7 @@ export function createCircleTool(): EditorTool {
     onPointerMove(event: InteractionEvent) {
       if (!center) return;
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
+      const point = eventToEditorMm(event, store);
 
       const radius = Math.sqrt(
         (point.x - center.x) ** 2 + (point.y - center.y) ** 2,

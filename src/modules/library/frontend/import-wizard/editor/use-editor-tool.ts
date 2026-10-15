@@ -65,6 +65,12 @@ export function useEditorToolHandler(
 
   const onContextualKey = useCallback((event: KeyboardEvent): boolean => {
     const state = useSymbolEditorStore.getState();
+    // Shift+S toggles grid snapping, as in the designer; visibility is separate.
+    if (matchesShortcut(event, "Shift+S")) {
+      event.preventDefault();
+      state.setSnapEnabled(!state.snapEnabled);
+      return true;
+    }
     // Shift+G toggles Figma-style alignment guides + magnetic snap.
     if (matchesShortcut(event, "Shift+G")) {
       event.preventDefault();

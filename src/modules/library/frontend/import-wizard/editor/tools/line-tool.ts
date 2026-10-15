@@ -2,7 +2,7 @@ import type { InteractionEvent } from "../../../../../../shared/frontend/canvas/
 import type { PointMm } from "../../../../../../shared/rendering/types";
 import type { EditorTool } from "../types";
 import { useSymbolEditorStore } from "../useSymbolEditorStore";
-import { eventToMm } from "../../../../../../shared/frontend/canvas/tools/tool-utils";
+import { eventToEditorMm } from "../../grid-snap";
 
 export function createLineTool(): EditorTool {
   let startPoint: PointMm | null = null;
@@ -22,7 +22,7 @@ export function createLineTool(): EditorTool {
 
     onPointerDown(event: InteractionEvent) {
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
+      const point = eventToEditorMm(event, store);
 
       if (!startPoint) {
         startPoint = point;
@@ -44,7 +44,7 @@ export function createLineTool(): EditorTool {
     onPointerMove(event: InteractionEvent) {
       if (!startPoint) return;
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
+      const point = eventToEditorMm(event, store);
 
       store.setPreviewGraphic({
         kind: "line",

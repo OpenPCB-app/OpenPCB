@@ -29,9 +29,9 @@ import {
 import { symbolViewZoom, pxToMm } from "../symbol-view-zoom";
 import {
   eventToMmRaw,
-  snapPointToGrid,
   translateGraphic,
 } from "../../../../../../shared/frontend/canvas/tools/tool-utils";
+import { snapEditorPointMm } from "../../grid-snap";
 
 /** Screen-pixel hit tolerance (converted to mm at the live zoom). */
 const HIT_PX = 7;
@@ -295,10 +295,10 @@ export function createSelectTool(): EditorTool {
 
       let dx = rawDx;
       let dy = rawDy;
-      if (store.gridVisible) {
-        const snapped = snapPointToGrid(
+      if (store.snapEnabled) {
+        const snapped = snapEditorPointMm(
           { x: dragState.anchorMm.x + rawDx, y: dragState.anchorMm.y + rawDy },
-          store.gridSizeMm,
+          store,
         );
         dx = snapped.x - dragState.anchorMm.x;
         dy = snapped.y - dragState.anchorMm.y;

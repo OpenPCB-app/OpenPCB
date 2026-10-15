@@ -24,7 +24,7 @@ describe("footprint copper draw → pads", () => {
   beforeEach(() => {
     const store = useFootprintEditorStore.getState();
     store.reset();
-    store.setGridVisible(false); // draw at exact mm coords
+    store.setSnapEnabled(false); // draw at exact mm coords
   });
 
   test("Rect on F.Cu creates a numbered rect pad (not a graphic)", () => {

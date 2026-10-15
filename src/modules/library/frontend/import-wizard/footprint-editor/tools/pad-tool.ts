@@ -1,8 +1,6 @@
 import type { InteractionEvent } from "../../../../../../shared/frontend/canvas/interaction/types";
-import {
-  eventToMm,
-  normalizeRotationDeg,
-} from "../../../../../../shared/frontend/canvas/tools/tool-utils";
+import { normalizeRotationDeg } from "../../../../../../shared/frontend/canvas/tools/tool-utils";
+import { eventToEditorMm } from "../../grid-snap";
 import type { FootprintEditorTool } from "../types";
 import { useFootprintEditorStore } from "../useFootprintEditorStore";
 
@@ -24,7 +22,7 @@ export function createPadTool(): FootprintEditorTool {
 
     onPointerDown(event: InteractionEvent) {
       const store = useFootprintEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
+      const point = eventToEditorMm(event, store);
       const defaults = store.padDefaults;
 
       // Shift+click with exactly one selected pad → symmetric mirror across Y-axis (x=0)
@@ -78,7 +76,7 @@ export function createPadTool(): FootprintEditorTool {
 
     onPointerMove(event: InteractionEvent) {
       const store = useFootprintEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
+      const point = eventToEditorMm(event, store);
       const d = store.padDefaults;
       // Preview the actual pad footprint at the cursor.
       if (d.shape === "circle") {

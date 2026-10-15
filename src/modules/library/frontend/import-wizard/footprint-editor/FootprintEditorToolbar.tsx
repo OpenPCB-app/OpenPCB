@@ -74,12 +74,22 @@ function ToolButton({
   );
 }
 
+/** Labelled on/off toggle (Grid, Snap). */
+function textToggleClass(active: boolean): string {
+  return `inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+    active
+      ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+      : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+  }`;
+}
+
 export const FootprintEditorToolbar = memo(
   function FootprintEditorToolbar(): ReactElement {
     const activeTool = useFootprintEditorStore((s) => s.activeTool);
     const undoStack = useFootprintEditorStore((s) => s.undoStack);
     const redoStack = useFootprintEditorStore((s) => s.redoStack);
     const gridVisible = useFootprintEditorStore((s) => s.gridVisible);
+    const snapEnabled = useFootprintEditorStore((s) => s.snapEnabled);
     const guidesVisible = useFootprintEditorStore((s) => s.alignmentGuidesVisible);
     const dimensionsVisible = useFootprintEditorStore((s) => s.dimensionsVisible);
     const selectionSize = useFootprintEditorStore((s) => s.selectedIds.size);
@@ -214,13 +224,24 @@ export const FootprintEditorToolbar = memo(
               .getState()
               .setGridVisible(!useFootprintEditorStore.getState().gridVisible)
           }
-          className={`inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
-            gridVisible
-              ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
-              : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-          }`}
+          className={textToggleClass(gridVisible)}
         >
           Grid
+        </button>
+
+        <button
+          type="button"
+          aria-label="Snap to grid"
+          aria-pressed={snapEnabled}
+          onClick={() =>
+            useFootprintEditorStore
+              .getState()
+              .setSnapEnabled(!useFootprintEditorStore.getState().snapEnabled)
+          }
+          title="Snap to grid (Shift+S)"
+          className={textToggleClass(snapEnabled)}
+        >
+          Snap
         </button>
       </div>
     );

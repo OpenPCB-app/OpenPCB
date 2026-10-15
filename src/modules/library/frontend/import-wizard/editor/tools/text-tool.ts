@@ -1,5 +1,5 @@
 import type { InteractionEvent } from "../../../../../../shared/frontend/canvas/interaction/types";
-import { eventToMm } from "../../../../../../shared/frontend/canvas/tools/tool-utils";
+import { eventToEditorMm } from "../../grid-snap";
 import type { EditorTool } from "../types";
 import { useSymbolEditorStore } from "../useSymbolEditorStore";
 
@@ -26,7 +26,7 @@ export function createTextTool(): EditorTool {
     onPointerDown(event: InteractionEvent) {
       const store = useSymbolEditorStore.getState();
       if (store.textEditor) return; // already editing — ignore
-      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
+      const point = eventToEditorMm(event, store);
       store.beginTextEdit(
         null,
         point,

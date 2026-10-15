@@ -1,6 +1,6 @@
 import type { InteractionEvent } from "../../../../../../shared/frontend/canvas/interaction/types";
 import type { PointMm } from "../../../../../../shared/rendering/types";
-import { eventToMm } from "../../../../../../shared/frontend/canvas/tools/tool-utils";
+import { eventToEditorMm } from "../../grid-snap";
 import type { FootprintEditorTool } from "../types";
 import { isCopperLayer } from "../types";
 import { useFootprintEditorStore } from "../useFootprintEditorStore";
@@ -23,7 +23,7 @@ export function createRectTool(): FootprintEditorTool {
 
     onPointerDown(event: InteractionEvent) {
       const store = useFootprintEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
+      const point = eventToEditorMm(event, store);
 
       if (!startPoint) {
         startPoint = point;
@@ -79,7 +79,7 @@ export function createRectTool(): FootprintEditorTool {
     onPointerMove(event: InteractionEvent) {
       if (!startPoint) return;
       const store = useFootprintEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
+      const point = eventToEditorMm(event, store);
       const x = Math.min(startPoint.x, point.x);
       const y = Math.min(startPoint.y, point.y);
       const width = Math.abs(point.x - startPoint.x);

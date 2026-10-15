@@ -62,11 +62,21 @@ function ToolButton({
   );
 }
 
+/** Labelled on/off toggle (Grid, Snap). */
+function textToggleClass(active: boolean): string {
+  return `inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+    active
+      ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+      : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+  }`;
+}
+
 export const EditorToolbar = memo(function EditorToolbar(): ReactElement {
   const activeTool = useSymbolEditorStore((s) => s.activeTool);
   const undoStack = useSymbolEditorStore((s) => s.undoStack);
   const redoStack = useSymbolEditorStore((s) => s.redoStack);
   const gridVisible = useSymbolEditorStore((s) => s.gridVisible);
+  const snapEnabled = useSymbolEditorStore((s) => s.snapEnabled);
   const guidesVisible = useSymbolEditorStore((s) => s.alignmentGuidesVisible);
   const selectionSize = useSymbolEditorStore((s) => s.selectedIds.size);
   const rotateDisabled = selectionSize === 0;
@@ -148,14 +158,25 @@ export const EditorToolbar = memo(function EditorToolbar(): ReactElement {
             .getState()
             .setGridVisible(!useSymbolEditorStore.getState().gridVisible)
         }
-        className={`inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
-          gridVisible
-            ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
-            : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-        }`}
+        className={textToggleClass(gridVisible)}
       >
         <Grid3X3 className="h-3.5 w-3.5" />
         Grid
+      </button>
+
+      <button
+        type="button"
+        aria-label="Snap to grid"
+        aria-pressed={snapEnabled}
+        onClick={() =>
+          useSymbolEditorStore
+            .getState()
+            .setSnapEnabled(!useSymbolEditorStore.getState().snapEnabled)
+        }
+        title="Snap to grid (Shift+S)"
+        className={textToggleClass(snapEnabled)}
+      >
+        Snap
       </button>
     </div>
   );

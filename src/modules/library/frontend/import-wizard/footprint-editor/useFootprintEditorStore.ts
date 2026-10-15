@@ -12,10 +12,8 @@ import {
   includePoint,
   isFiniteBoundsMm,
 } from "../../../../../shared/rendering/geometry";
-import {
-  snapPointToGrid,
-  translateGraphic,
-} from "../../../../../shared/frontend/canvas/tools/tool-utils";
+import { translateGraphic } from "../../../../../shared/frontend/canvas/tools/tool-utils";
+import { snapEditorPointMm } from "../grid-snap";
 import type {
   AlignmentGuide,
   SpacingGuide,
@@ -117,6 +115,8 @@ export interface FootprintEditorState {
   // Grid
   gridSizeMm: number;
   gridVisible: boolean;
+  /** Independent of `gridVisible`: a hidden grid still snaps. */
+  snapEnabled: boolean;
 
   // Alignment guides (Figma-style; updated live during a drag)
   alignmentGuidesVisible: boolean;
@@ -184,6 +184,7 @@ export interface FootprintEditorState {
   // Actions — grid
   setGridSizeMm: (size: number) => void;
   setGridVisible: (visible: boolean) => void;
+  setSnapEnabled: (enabled: boolean) => void;
 
   // Actions — alignment guides
   toggleAlignmentGuidesVisible: () => void;
@@ -235,6 +236,7 @@ const INITIAL_STATE = {
   textEditor: null as FootprintEditorTextEditorState | null,
   gridSizeMm: 0.635,
   gridVisible: true,
+  snapEnabled: true,
   alignmentGuidesVisible: true,
   alignmentGuides: [] as AlignmentGuide[],
   alignmentSpacing: [] as SpacingGuide[],
@@ -513,6 +515,7 @@ export const useFootprintEditorStore = create<FootprintEditorState>(
 
     setGridSizeMm: (size) => set({ gridSizeMm: size }),
     setGridVisible: (visible) => set({ gridVisible: visible }),
+    setSnapEnabled: (enabled) => set({ snapEnabled: enabled }),
 
     // ── Alignment guides ──────────────────────────────────────────────
 
@@ -674,9 +677,7 @@ function pasteInternal(
   } else if (targetMm) {
     target = targetMm;
   } else if (state.cursorMm) {
-    target = state.gridVisible
-      ? snapPointToGrid(state.cursorMm, state.gridSizeMm)
-      : state.cursorMm;
+    target = snapEditorPointMm(state.cursorMm, state);
   } else {
     target = {
       x: clipboard.anchorMm.x + DUPLICATE_OFFSET_MM,

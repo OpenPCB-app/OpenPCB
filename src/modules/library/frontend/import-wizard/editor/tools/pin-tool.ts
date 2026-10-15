@@ -1,7 +1,7 @@
 import type { InteractionEvent } from "../../../../../../shared/frontend/canvas/interaction/types";
 import type { EditorTool } from "../types";
 import { useSymbolEditorStore } from "../useSymbolEditorStore";
-import { eventToMm } from "../../../../../../shared/frontend/canvas/tools/tool-utils";
+import { eventToEditorMm } from "../../grid-snap";
 
 /**
  * Pin tool — click to place a pin at the snapped location.
@@ -27,7 +27,7 @@ export function createPinTool(): EditorTool {
 
     onPointerDown(event: InteractionEvent) {
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
+      const point = eventToEditorMm(event, store);
       const defaults = store.pinDefaults;
 
       store.pushSnapshot();
@@ -44,7 +44,7 @@ export function createPinTool(): EditorTool {
 
     onPointerMove(event: InteractionEvent) {
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
+      const point = eventToEditorMm(event, store);
 
       // Show a preview dot at the cursor position
       store.setPreviewGraphic({

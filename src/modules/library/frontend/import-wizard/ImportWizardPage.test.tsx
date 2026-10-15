@@ -185,7 +185,12 @@ describe("ImportWizardPage Escape", () => {
     useFootprintEditorStore
       .getState()
       .addGraphic(
-        { kind: "line", a: { x: 0, y: 0 }, b: { x: 1, y: 0 }, strokeWidthMm: 0.15 },
+        {
+          kind: "line",
+          a: { x: 0, y: 0 },
+          b: { x: 1, y: 0 },
+          strokeWidthMm: 0.15,
+        },
         "F.SilkS",
       );
     await press("Escape");

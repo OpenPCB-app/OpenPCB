@@ -14,10 +14,8 @@ import {
   includePoint,
   isFiniteBoundsMm,
 } from "../../../../../shared/rendering/geometry";
-import {
-  snapPointToGrid,
-  translateGraphic,
-} from "../../../../../shared/frontend/canvas/tools/tool-utils";
+import { translateGraphic } from "../../../../../shared/frontend/canvas/tools/tool-utils";
+import { snapEditorPointMm } from "../grid-snap";
 import type {
   AlignmentGuide,
   SpacingGuide,
@@ -100,6 +98,8 @@ export interface SymbolEditorState {
   // Grid
   gridSizeMm: number;
   gridVisible: boolean;
+  /** Independent of `gridVisible`: a hidden grid still snaps. */
+  snapEnabled: boolean;
 
   // Pin tool defaults (session-only; applied on each Pin placement)
   pinDefaults: PinDefaults;
@@ -157,6 +157,7 @@ export interface SymbolEditorState {
   // Actions — grid
   setGridSizeMm: (size: number) => void;
   setGridVisible: (visible: boolean) => void;
+  setSnapEnabled: (enabled: boolean) => void;
 
   // Actions — pin defaults
   setPinDefaults: (patch: Partial<PinDefaults>) => void;
@@ -193,6 +194,7 @@ const INITIAL_STATE = {
   textEditor: null as EditorTextEditorState | null,
   gridSizeMm: 1.27,
   gridVisible: true,
+  snapEnabled: true,
   pinDefaults: {
     electricalType: "passive",
     lengthMm: 2.54,
@@ -476,6 +478,7 @@ export const useSymbolEditorStore = create<SymbolEditorState>((set, get) => ({
 
   setGridSizeMm: (size) => set({ gridSizeMm: size }),
   setGridVisible: (visible) => set({ gridVisible: visible }),
+  setSnapEnabled: (enabled) => set({ snapEnabled: enabled }),
 
   setPinDefaults: (patch) =>
     set((state) => ({ pinDefaults: { ...state.pinDefaults, ...patch } })),
@@ -581,7 +584,7 @@ function pasteInternal(
 
   // Resolve paste target (anchor lands here):
   //   - duplicate: always clipboard.anchor + offset (keep near origin)
-  //   - paste: explicit targetMm, else cursor (grid-snapped if visible),
+  //   - paste: explicit targetMm, else cursor (grid-snapped if snap is on),
   //            else clipboard.anchor + offset as fallback
   let target: PointMm;
   if (isDuplicate) {
@@ -592,9 +595,7 @@ function pasteInternal(
   } else if (targetMm) {
     target = targetMm;
   } else if (state.cursorMm) {
-    target = state.gridVisible
-      ? snapPointToGrid(state.cursorMm, state.gridSizeMm)
-      : state.cursorMm;
+    target = snapEditorPointMm(state.cursorMm, state);
   } else {
     target = {
       x: clipboard.anchorMm.x + DUPLICATE_OFFSET_MM,
