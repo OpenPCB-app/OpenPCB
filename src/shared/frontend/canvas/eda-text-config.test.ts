@@ -7,9 +7,10 @@ import {
   bundledEdaTextConfiguration,
   configureBundledEdaText,
   disposeBundledEdaText,
+  installBundledEdaText,
 } from "./eda-text-config";
 
-const fontDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../public/fonts/eda");
+const fontDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../core/frontend/public/fonts/eda");
 const publicManifest = JSON.parse(readFileSync(path.join(fontDir, "manifest.json"), "utf8")) as {
   filename: string;
   sha256: string;
@@ -48,6 +49,14 @@ describe("bundled EDA text configuration", () => {
   it("is a no-op for a canvas package without the offline text runtime", () => {
     expect(configureBundledEdaText({ EDAText: () => null })).toBe(false);
     expect(() => disposeBundledEdaText({})).not.toThrow();
+  });
+
+  it("configures once however many canvas module entries install it", () => {
+    const canvas = { configureEdaText: vi.fn(), disposeEdaText: vi.fn() };
+    installBundledEdaText(canvas);
+    installBundledEdaText(canvas);
+    expect(canvas.configureEdaText).toHaveBeenCalledTimes(1);
+    expect(canvas.disposeEdaText).not.toHaveBeenCalled();
   });
 
   it("is accepted by the installed canvas package when it has the offline text runtime", async () => {

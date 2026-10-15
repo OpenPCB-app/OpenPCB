@@ -1,5 +1,6 @@
-// Byte-identical copy of public/fonts/eda/manifest.json: Vite refuses JS imports
-// from public/, while the font + licence + manifest must still ship side by side.
+// Byte-identical copy of src/core/frontend/public/fonts/eda/manifest.json: Vite
+// refuses JS imports from public/, while the font + licence + manifest must still
+// ship side by side.
 import fontManifest from "./eda-font-manifest.json";
 
 type GlyphCoverage = readonly (readonly [number, number])[];
@@ -58,4 +59,21 @@ export function configureBundledEdaText(canvasModule: object): boolean {
 export function disposeBundledEdaText(canvasModule: object): void {
   const api = canvasModule as EdaTextModule;
   if (typeof api.disposeEdaText === "function") api.disposeEdaText();
+}
+
+let installed = false;
+
+/**
+ * Called by the canvas-hosting module entries, which already load the package
+ * root. Not from app startup: loading the root of pinned v0.1.4 runs its
+ * import-time remote font preload on every launch, even with no canvas open.
+ * Idempotent because reconfiguring discards the loaded font generation.
+ */
+export function installBundledEdaText(canvasModule: object): void {
+  if (installed) return;
+  installed = true;
+  if (!configureBundledEdaText(canvasModule) || typeof window === "undefined") return;
+  window.addEventListener("pagehide", (event) => {
+    if (!event.persisted) disposeBundledEdaText(canvasModule);
+  });
 }
