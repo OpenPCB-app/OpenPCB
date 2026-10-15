@@ -32,6 +32,7 @@ function reconcile(
     previousActive,
     currentComponents,
     allocateId: allocate(),
+    successorPolicy: "retire",
   });
 }
 function snapshot(result: ElectricalIdentityResult): string {
@@ -141,6 +142,7 @@ describe("electrical identity continuity", () => {
         createdIds: [],
         preservedIds: [],
         retirements: [],
+        transitions: [],
       }),
     );
   });
@@ -222,6 +224,7 @@ describe("explicit electrical retirement", () => {
         currentComponents: [current("unrelated", pin("c"))],
         retiredIds: split.retirements.map((row) => row.id),
         allocateId: () => "retired-net",
+        successorPolicy: "retire",
       }),
     ).toThrow("Allocated ID collision");
   });
@@ -233,6 +236,7 @@ describe("validation and deterministic allocation", () => {
       previousActive: [old("old", pin("a"))],
       currentComponents: [current("new", pin("b"))],
       allocateId: allocate(),
+      successorPolicy: "retire",
     };
     const malformed: unknown[] = [
       {
@@ -310,6 +314,7 @@ describe("validation and deterministic allocation", () => {
           ],
           retiredIds: ["historical"],
           allocateId: () => collision,
+          successorPolicy: "retire",
         }),
       ).toThrow("Allocated ID collision");
     }
@@ -318,6 +323,7 @@ describe("validation and deterministic allocation", () => {
         previousActive: [],
         currentComponents: [current("one", pin("a")), current("two", pin("b"))],
         allocateId: () => "duplicate",
+        successorPolicy: "retire",
       }),
     ).toThrow("Allocated ID collision");
     for (const invalid of ["", " ", 1, null]) {
@@ -326,6 +332,7 @@ describe("validation and deterministic allocation", () => {
           previousActive: [],
           currentComponents: [current("one", pin("a"))],
           allocateId: () => invalid,
+          successorPolicy: "retire",
         } as unknown as ElectricalIdentityInput),
       ).toThrow("Allocated ID must be a nonempty string");
     }
@@ -343,6 +350,7 @@ describe("validation and deterministic allocation", () => {
         requests.push(request);
         return `allocated-${requests.length}`;
       },
+      successorPolicy: "retire",
     });
     expect(requests).toEqual([
       { componentKey: "Z", members: [pin("a"), pin("b")] },

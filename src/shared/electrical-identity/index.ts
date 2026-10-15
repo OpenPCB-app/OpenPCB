@@ -8,6 +8,11 @@ export type {
   ElectricalMemberKind,
   ElectricalNetAllocation,
   ElectricalNetAllocator,
+  ElectricalNetInheritance,
   ElectricalNetRetirement,
   ElectricalNetRetirementReason,
+  ElectricalNetTransition,
+  ElectricalNetTransitionKind,
+  ElectricalPredecessorComparator,
+  ElectricalSuccessorPolicy,
 } from "./types";
