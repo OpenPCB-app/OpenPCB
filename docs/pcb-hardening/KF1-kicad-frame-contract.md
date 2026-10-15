@@ -86,9 +86,17 @@ The library footprint local frame is canonical and front-side: `p_c = N * p_K,fr
   equals `R_z(theta + 180) * diag(-1,1,-1)`. In C the model group gets rotation `phi` and
   **scale `(-1, 1, -1)`**, a proper rotation (det = +1), placed at `z = -thickness`. The flat 2D
   overlay keeps `(-1,1,1)`.
-- **KiCad 3D model `(offset)`** is taken to be in the 3D Y-up frame (applied after KiCad's board to
-  3D Y negation) and is copied unchanged. **Unverified**: the `(offset)` frame and the `(rotate)`
-  sign and order. OP6 verifies against cited KiCad source or records "unverified" here.
+- **KiCad 3D model `(offset)` / `(rotate)` / `(scale)`** (verified in OP6 against KiCad 8.0.4
+  `3d-viewer/3d_rendering/opengl/render_3d_opengl.cpp`, `get3dModelsFromFootprint`, lines 966-1037,
+  sha256 `1b8836a4…92eebee`): the footprint matrix is `T(x, −y, zpos) * R_z(theta)`, then
+  `R_y(180) * R_z(180)` when flipped, then scale to mm; the model matrix is
+  `T(offset) * R_z(-rz) * R_y(-ry) * R_x(-rx) * S(scale)`. So `(offset)` is mm
+  (`FP_3DMODEL::m_Offset`, `pcbnew/footprint.h:98`) in the Y-up 3D frame and is copied unchanged,
+  and `(rotate)` is negated and applied in Z·Y·X order. The render path
+  (`three-d/transform-helpers.ts`) applies exactly this to refs carrying `resolvedFileName` (KiCad
+  `(model)` blocks); CoreLibrary refs are baked (`transformBaked`, zero rotations) and unaffected.
+  The STEP to GLB bake in `@openpcb/step-to-glb` 0.1.3 still applies `(rotate)` un-negated in XYZ
+  order; that is a shared-package follow-up.
 - **Schematic:** `.kicad_sch` positions are K and `.kicad_sym` locals are Ks (Y-up).
   `world_C = N * at_K + R(theta) * p_s` (verified 91/92 pins on USBtoUART, versus 79/92 for the old
   importer). The `(mirror ...)` mapping is fixed by the corpus pin oracle (OP11,
