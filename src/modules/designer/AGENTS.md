@@ -283,8 +283,9 @@ its name in the serializer's known-key list (a missing name fails `tsc`).
 Courtyard availability depends on **how the footprint entered the library**:
 
 - **KiCad import whitelists SilkS + Fab only.** `F.CrtYd` / `B.CrtYd` are dropped from the preview
-  **before persistence**, so a KiCad-imported placement has no courtyard geometry. The Fab outline
-  survives and is the only in-projection fallback.
+  **before persistence** by the pinned `@openpcb/kicad-import` (0.1.2); the courtyard is admitted
+  from kicad-import 0.2.0. Until that is pinned, a KiCad-imported placement has no courtyard
+  geometry. The Fab outline survives and is the only in-projection fallback.
 - **The generated / drawn path does not filter.** IPC-7351B preset and drawn-editor footprints call
   the render-model builder with no options, so **all layers survive, including CrtYd**.
 - The full all-layer parsed footprint does survive for KiCad parts, in
@@ -293,6 +294,21 @@ Courtyard availability depends on **how the footprint entered the library**:
 
 Price courtyard work per provenance. A mapper change covers generated parts; KiCad parts need either
 an import-whitelist change or a library re-query.
+
+### Footprint frame (KF1)
+
+Contract: `docs/pcb-hardening/KF1-kicad-frame-contract.md`. Canonical frame is Y-up integer nm.
+
+- KiCad data is Y-down (K). It is converted **once**, at import, in `@openpcb/kicad-import`
+  (footprints) or `KicadBoardFrame` (board items / schematic). Never convert again downstream, and
+  never re-flip placed copper.
+- `library_footprints.data_json.raw` is **K** by contract; `preview` is C once converted. Compare the
+  two only through the KF1 geometry relation of the preview's stamped transform version.
+- Library rows carry a frame class (`kicad-converted`, `authored`, `placeholder`,
+  `legacy-kicad-ydown`, `ambiguous`). A `provenance.frame` stamp is a claim, not evidence: trust is
+  re-derived from signature or geometry. Legacy/ambiguous footprints in a design block
+  manufacturing export; they are resolved by `refresh_part_footprint` or re-import, never silently.
+- Imported back-side parts are stored `rotationDeg = theta_K + 180`, `mirrored = true`.
 
 ## PCB CAPABILITY BOUNDARIES
 

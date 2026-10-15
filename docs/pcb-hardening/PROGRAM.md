@@ -313,6 +313,16 @@ If quota becomes tight, the non-negotiable Astra sessions are **S1, S2, S5, S8, 
 S18** — where a false pass translates most directly into an electrically incorrect or
 unmanufacturable board.
 
+## Cross-item contracts
+
+Contracts owned by cross-program items rather than a numbered session. They carry a non-numeric
+prefix so session numbering is unaffected.
+
+| Contract | Owner | Subject |
+|---|---|---|
+| `KF1-kicad-frame-contract.md` | H13 (OPENPCB-61) | KiCad K to canonical Y-up frame: conversion, placement composition, exactly-once rule, footprint frame provenance and qualification |
+| H19 manufacturing-output contract (file name chosen by H19, non-numeric prefix) | H19 (OPENPCB-67) | Export routes, dialog and gates; consumes the KF1 frame-status blocker |
+
 ## Cross-cutting decisions and open items
 
 - **`integ/trace-drag`** (6 commits, +1905/−7, trace-segment drag + 555-blinker fab fixture) must
