@@ -266,7 +266,7 @@ Frontend/shared specs: `copper-fill-geometry.test.ts` (23), `copper-fill-trace-g
 - **Consumers of `projection.ratsnest`** [a, spot-checked]: `checks/connectivity.ts`;
   `PcbScene.tsx` (airwire render, 4 sites); `PcbCanvas.tsx` (3); `tools/route-target.ts`
   (`nearestRatsnestPad`); `pcb/board-snapshot.ts` (cloud autoroute targets); assistant
-  `context-summary.ts`, `tools/read-tools.ts`, `tools/designer-tools.ts` ("unrouted" counts);
+  `tools/read-tools.ts`, `tools/designer-tools.ts` ("unrouted" counts);
   `CopperPour.tsx` fallback; `drc-context.ts` passthrough. Any ratsnest false negative is a route
   the autorouter never attempts and an "unrouted" count the assistant never reports.
 - **Consumers of `shared/drc/rule-resolver.ts`**: `drc-context.ts` only.

@@ -243,4 +243,15 @@ describe("canonical Assistant conversation transport", () => {
     expect(container.textContent).toContain("command-real"); expect(container.textContent).toContain("part-real");
     expect(view.writeProposals[0]?.status).toBe("partial");
   });
+  test("an already approved proposal shows as pending but applies without a second approve", async () => {
+    fixture.proposals.set("proposal-approved", { id: "proposal-approved", chatId: "chat-a", scopeKey: "design:design-real", toolName: "designer_schematic_edits", kind: "designer_schematic_edits", risk: "medium", status: "approved", warnings: [], truncated: false, createdAt: "2026-10-07" });
+    fixture.presentations.set("proposal-approved", { proposalId: "proposal-approved", envelope: { id: "proposal-approved", designId: "design-real", baseRevision: 6, kind: "designer_schematic_edits", toolName: "designer_schematic_edits", title: "Place capacitor", summary: "Native placement", riskLevel: "medium", operations: [], payload: {}, sources: [], warnings: [] }, outcome: null });
+    await mount(); await until(() => view.writeProposals[0]?.designId === "design-real");
+    expect(view.writeProposals[0]?.status).toBe("pending");
+    expect(view.writeProposals[0]?.canonicalStatus).toBe("approved");
+    await act(async () => { await view.proposalActions.apply("proposal-approved"); });
+    const actions = fixture.requests.filter(request => /\/(approve|apply)$/.test(request.url.pathname));
+    expect(actions.map(request => request.url.pathname.split("/").at(-1))).toEqual(["apply"]);
+    expect(fixture.mutationCount).toBe(1);
+  });
 });

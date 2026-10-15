@@ -147,10 +147,6 @@ export type AssistantWriteProposalKind =
   | "designer_schematic_wires"
   | "designer_schematic_updates"
   | "designer_schematic_deletions"
-  // Cloud-copilot PCB batches (S5/S8): staged by the auto-layout orchestration
-  // tools; always high-risk, never auto-applied (desktop stays DRC authority).
-  | "designer_pcb_place_batch"
-  | "designer_pcb_route_batch"
   | (string & {});
 export type AssistantWriteProposalStatus =
   | "pending"

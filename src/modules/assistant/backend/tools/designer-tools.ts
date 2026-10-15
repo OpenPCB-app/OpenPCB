@@ -84,9 +84,7 @@ export interface SchematicProposalEnvelope {
     | "designer_schematic_edits"
     | "designer_schematic_wires"
     | "designer_schematic_updates"
-    | "designer_schematic_deletions"
-    | "designer_pcb_place_batch"
-    | "designer_pcb_route_batch";
+    | "designer_schematic_deletions";
   toolName:
     | "designer_propose_schematic_edits"
     | "designer_propose_schematic_wires"
