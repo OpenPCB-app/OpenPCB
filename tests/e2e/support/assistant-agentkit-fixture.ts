@@ -5,10 +5,11 @@ import { mkdtemp, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import type { LocalApiBootstrap } from "../../../src/core/contracts/security/local-api";
+import { isTroikaFontResolver } from "./offline-canvas";
 
 interface AppFixture { origin: string; bootstrap: LocalApiBootstrap; port: number; componentId: string }
 interface ReadyMessage extends AppFixture { ready?: boolean; error?: string }
-type Fixtures = { agentkit: AppFixture };
+type Fixtures = { agentkit: AppFixture; deniedRequests: string[] };
 
 export const test = base.extend<Fixtures>({
   agentkit: async ({}, use) => {
@@ -46,16 +47,27 @@ export const test = base.extend<Fixtures>({
       await rm(directory, { recursive: true, force: true });
     }
   },
-  page: async ({ page, agentkit }, use) => {
+  deniedRequests: async ({}, use, testInfo) => {
+    const denied: string[] = [];
+    await use(denied);
+    console.log(`[offline-guard] ${testInfo.title}: denied ${denied.length} external request(s)`);
+    testInfo.annotations.push({ type: "offline-denied-requests", description: String(denied.length) });
+    if (denied.length) await testInfo.attach("offline-denied-requests.json",
+      { body: JSON.stringify(denied, null, 2), contentType: "application/json" });
+    // The pinned r3f-eda-canvas v0.1.4 still asks Troika's CDN resolver for its default font.
+    // Tighten to expect(denied).toEqual([]) once the r3f-eda-canvas re-pin lands.
+    expect(denied.filter((url) => !isTroikaFontResolver(url)), "Only the pinned canvas font resolver may go off-host")
+      .toEqual([]);
+  },
+  page: async ({ page, agentkit, deniedRequests }, use) => {
     const errors: string[] = [];
     page.on("pageerror", (error) => { errors.push((error.stack ?? error.message).replaceAll(agentkit.bootstrap.token, "[REDACTED]")); });
+    // Every off-host request is aborted, the canvas font resolver included, so text must render offline.
     await page.context().route("**/*", (route) => {
-      const request = route.request();
-      const origin = new URL(request.url()).origin;
-      const publicFont = request.method() === "GET" && request.url().startsWith(
-        "https://cdn.jsdelivr.net/gh/lojjic/unicode-font-resolver@v1.0.1/packages/data/",
-      );
-      return [agentkit.origin, agentkit.bootstrap.url].includes(origin) || publicFont ? route.continue() : route.abort();
+      const url = route.request().url();
+      if ([agentkit.origin, agentkit.bootstrap.url].includes(new URL(url).origin)) return route.continue();
+      deniedRequests.push(url);
+      return route.abort();
     });
     await page.addInitScript(({ bootstrap, port }) => {
       Object.defineProperty(window, "electronAPI", { configurable: true, value: {

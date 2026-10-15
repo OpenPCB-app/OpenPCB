@@ -403,10 +403,34 @@ export async function nativeScreenshot(
   });
 }
 
+/** External URLs the offline guard has denied so far, in request order. */
+export async function nativeDeniedRequests(
+  session: NativeSession,
+): Promise<string[]> {
+  const requests = await session.app.evaluate(
+    () =>
+      (globalThis as unknown as { __openpcbNativeNetwork: NetworkRecord[] })
+        .__openpcbNativeNetwork,
+  );
+  return requests
+    .filter((request) => request.blocked)
+    .map((request) => request.url);
+}
+
+export type CloseNativeSessionOptions = {
+  /** Denied URLs (and their console errors) a spec knowingly tolerates; default none. */
+  toleratedDenied?: (url: string) => boolean;
+};
+
 export async function closeNativeSession(
   session: NativeSession,
+  options: CloseNativeSessionOptions = {},
 ): Promise<void> {
   const { app, page, info, label } = session;
+  const tolerated = options.toleratedDenied ?? (() => false);
+  const toleratedConsole = (entry: { text: string; url: string }) =>
+    tolerated(entry.url) ||
+    (entry.text.match(/https?:\/\/[^\s"')]+/g) ?? []).some(tolerated);
   let requests: NetworkRecord[] | null = null;
   let evidenceError: unknown = null;
   try {
@@ -459,6 +483,7 @@ export async function closeNativeSession(
   const unexpectedConsole = session.console.filter(
     (entry) =>
       entry.type === "error" &&
+      !toleratedConsole(entry) &&
       !session.expectedResourceFailures.some(
         (failure) => entry.url === failure.url && entry.text === failure.text,
       ),
@@ -469,7 +494,7 @@ export async function closeNativeSession(
   ).toEqual([]);
   expect(requests, "Native network evidence is required").not.toBeNull();
   expect(
-    requests?.filter((request) => request.blocked),
+    requests?.filter((request) => request.blocked && !tolerated(request.url)),
     "External renderer/session requests must never be attempted",
   ).toEqual([]);
 }
