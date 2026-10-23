@@ -78,6 +78,7 @@ import {
   type EffectiveNets,
 } from "../pcb-connectivity/effective-nets";
 import { copperDrcItems } from "../pcb-connectivity/copper-drc-items";
+import { freePadItemKey, padItemKey } from "../pcb-connectivity/copper-items";
 import type {
   ConnectivityResult,
   CopperItem,
@@ -249,6 +250,8 @@ export interface DrcHole {
   kind: "via" | "pth" | "npth";
   /** Net the hole's copper belongs to (null for mechanical / NPTH holes). */
   netId: string | null;
+  /** Plated copper owner; its effective tier can change during a live edit. */
+  copper?: DrcPad | DrcViaGeom;
   center: PcbPointMm;
   /** Tool diameter (mm) — the slot WIDTH for a routed slot. */
   drillMm: number;
@@ -334,8 +337,9 @@ export interface LegalityContext {
   /**
    * The effective copper areas (zone/keepout contract §3.1) — explicit zones
    * then the synthesized board zones, with every view-state default resolved.
-   * The ONLY zone list a check may read; `projection.zones` is the persisted
-   * shape, which says nothing about what actually pours.
+   * Geometry checks read this list; `projection.zones` is the persisted shape,
+   * which says nothing about what actually pours. The net-binding check reads
+   * raw references so rejected geometry or unknown nets cannot hide orphans.
    */
   copperZones: readonly EffectiveCopperZone[];
   /** The effective keepouts (contract §3.1); `checks/keepouts.ts` consumes them. */
@@ -655,6 +659,7 @@ export function itemsFromRecords(
     validCopperLayers,
     layerCount,
   );
+  const padByKey = new Map(pads.map((pad) => [pad.key, pad]));
 
   // Holes are derived from the DRILLED OBJECTS, never from the copper records
   // (contract 10 §1.3): a drilled pad yields exactly one hole whether it has
@@ -700,6 +705,9 @@ export function itemsFromRecords(
         kind: drill.plated ? "pth" : "npth",
         // Unplated copper carries no net through the hole (§2.4).
         netId: drill.plated ? (padNetByAnchor.get(anchorKey) ?? null) : null,
+        ...(drill.plated
+          ? { copper: padByKey.get(padItemKey(placement.id, pad.number, occurrence)) }
+          : {}),
         center: { ...drill.centerMm },
         drillMm: drill.drillMm,
         ...(drill.slot ? { slot: drill.slot } : {}),
@@ -726,6 +734,7 @@ export function itemsFromRecords(
       anchor: { kind: "freePad", freePadId: freePad.id },
       kind: drill.plated ? "pth" : "npth",
       netId: drill.plated ? freePad.netId : null,
+      ...(drill.plated ? { copper: padByKey.get(freePadItemKey(freePad.id)) } : {}),
       center: freePad.centerMm,
       drillMm: drill.drillMm,
       ...(drill.slot ? { slot: drill.slot } : {}),
@@ -760,6 +769,7 @@ export function itemsFromRecords(
       anchor: { kind: "via", viaId: vg.via.id },
       kind: "via",
       netId: vg.netId,
+      copper: vg,
       center: vg.center,
       drillMm: vg.via.drillMm,
     });
@@ -962,7 +972,7 @@ export function buildDrcItems(
     input.placements,
   );
 
-  const netNames = input.netNames ?? {};
+  const netNames = Object.assign(Object.create(null) as Record<string, string>, input.netNames ?? {});
   // The solder-mask artwork and the exposure verdicts derived from it (11 §1.3,
   // 13 §1.2), lazy for the same reason the pour is: a run that reaches neither
   // the DFM checks nor a coated board's voltage constituent pays nothing.

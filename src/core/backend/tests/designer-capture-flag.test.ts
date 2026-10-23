@@ -14,6 +14,28 @@ import { MentionRegistry } from "../mentions";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
 
+async function seedNet(
+  sdk: DesignerSDK,
+  designId: string,
+  name: string,
+  y: number,
+): Promise<string> {
+  const result = await sdk.dispatchCommand(designId, {
+    commandId: crypto.randomUUID(),
+    sessionId: "capture-fixture-setup",
+    aggregateId: designId,
+    baseRevision: null,
+    issuedAt: Date.now(),
+    command: { type: "upsert_label", text: name, positionNm: { x: 0, y } },
+  });
+  expect(result.ok).toBe(true);
+  const projection = await sdk.getSchematicProjection(designId);
+  const net = projection?.nets.find((candidate) => candidate.name === name);
+  if (!net) throw new Error(`Missing schematic net ${name}`);
+  expect(net.id).toMatch(/^net:[a-z2-7]{10}:[1-9][0-9]*$/);
+  return net.id;
+}
+
 const SESSION = "designer-pcb-session";
 
 function isolateTestDb(label: string): void {
@@ -129,18 +151,27 @@ describe("dataset capture flag", () => {
     isolateTestDb("capture-flag-on");
     const captureDir = mkdtempSync(path.join(os.tmpdir(), "capture-on-"));
     process.env.OPENPCB_CAPTURE_DIR = captureDir;
-    process.env.OPENPCB_FEATURE_DATASET_CAPTURE = "1";
+    process.env.OPENPCB_FEATURE_DATASET_CAPTURE = "0";
     resetCaptureRuntimeForTesting();
 
+    const { moduleRuntime: setupRuntime } = await createRuntime();
+    const setupSdk = setupRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    const design = await setupSdk.createDesign({ name: "Flag On" });
+    const netId = await seedNet(setupSdk, design.id, "net-42", 0);
+
+    // Setup must not become the first captured command under test.
+    process.env.OPENPCB_FEATURE_DATASET_CAPTURE = "1";
+    resetCaptureRuntimeForTesting();
     const { moduleRuntime } = await createRuntime();
     const sdk = moduleRuntime
       .getSdkRegistry()
       .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
-    const design = await sdk.createDesign({ name: "Flag On" });
     const cls = await netClassId(sdk, design.id);
     const result = await sdk.dispatchCommand(
       design.id,
-      envelope(design.id, "cmd-on-1", addTraceCommand("net-42", cls)),
+      envelope(design.id, "cmd-on-1", addTraceCommand(netId, cls)),
     );
     expect(result.ok).toBe(true);
 
@@ -154,7 +185,7 @@ describe("dataset capture flag", () => {
     expect(command?.envelope?.commandId).toBe("cmd-on-1");
     expect(command?.result?.ok).toBe(true);
     expect(command?.tags?.opKinds).toEqual({ pcb_add_trace: 1 });
-    expect(command?.tags?.touchedNetIds).toEqual(["net-42"]);
+    expect(command?.tags?.touchedNetIds).toEqual([netId]);
     expect(command?.tags?.touchesAutoCopper).toBe(false);
   });
 

@@ -20,6 +20,7 @@ import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
+import { dispatchOk } from "./helpers/designer-runtime";
 
 function isolateTestDb(label: string): void {
   resetSharedSqliteForTesting();
@@ -51,6 +52,13 @@ async function createRuntime(label: string) {
 
 const SESSION = "zones-session";
 let commandSeq = 0;
+
+async function namedGround(sdk: DesignerSDK, designId: string): Promise<string> {
+  const named = await dispatchOk(sdk, designId, {
+    type: "upsert_label", text: "GND", positionNm: { x: 0, y: 0 },
+  });
+  return (await sdk.getSchematicProjection(designId))!.nets.find((net) => net.labelIds.includes(named.createdEntityId!))!.id;
+}
 
 function envelope(
   designId: string,
@@ -224,12 +232,13 @@ describe("designer PCB zones — add", () => {
   test("a board region takes the derived id and refuses a second row", async () => {
     const { sdk } = await createRuntime("zone-board-region");
     const design = await sdk.createDesign({ name: "Board zone" });
+    const netId = await namedGround(sdk, design.id);
     const first = await sdk.dispatchCommand(
       design.id,
       envelope(design.id, {
         type: "pcb_add_zone",
         layer: "F.Cu",
-        net: { netId: null, netName: "GND" },
+        net: { netId, netName: null },
         region: { kind: "board" },
       }),
     );
@@ -242,7 +251,7 @@ describe("designer PCB zones — add", () => {
       envelope(design.id, {
         type: "pcb_add_zone",
         layer: "F.Cu",
-        net: { netId: null, netName: "GND" },
+        net: { netId, netName: null },
         region: { kind: "board" },
       }),
     );
@@ -337,6 +346,7 @@ describe("designer PCB zones — update and delete", () => {
   test("a board zone rejects layer and region but takes net, enabled and padConnection", async () => {
     const { sdk } = await createRuntime("zone-update-board");
     const design = await sdk.createDesign({ name: "Board update" });
+    const netId = await namedGround(sdk, design.id);
     const add = await sdk.dispatchCommand(
       design.id,
       envelope(design.id, {
@@ -373,7 +383,7 @@ describe("designer PCB zones — update and delete", () => {
       envelope(design.id, {
         type: "pcb_update_zone",
         zoneId: "board:F.Cu",
-        net: { netId: null, netName: "GND" },
+        net: { netId, netName: null },
         enabled: false,
         padConnection: "thruHoleThermal",
       }),
@@ -381,7 +391,8 @@ describe("designer PCB zones — update and delete", () => {
     expect(accepted.ok).toBe(true);
     expect((await sdk.getPcbProjection(design.id))?.zones[0]).toMatchObject({
       id: "board:F.Cu",
-      netName: "GND",
+      netId,
+      netName: null,
       enabled: false,
       padConnection: "thruHoleThermal",
       region: { kind: "board" },

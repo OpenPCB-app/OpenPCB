@@ -1,4 +1,6 @@
 import type { CommandEnvelope } from "../../shared/domain/commands/command-envelope";
+import type { DesignerNetIdentityOutcome, DesignerNetIdentitySummary } from "./net-identity";
+import type { NetRebindReceipt } from "./net-rebind";
 import type {
   LibraryComponent,
   LibraryComponentPlacementDetail,
@@ -72,6 +74,14 @@ export interface DesignerSchematicProjection {
   primitives: DesignerPrimitive[];
   junctions: DesignerJunction[];
   nets: DesignerDerivedNet[];
+  /** Derived naming diagnostics; absent on projections from older clients. */
+  netDiagnostics?: DesignerNetDiagnostic[];
+}
+
+export interface DesignerNetDiagnostic {
+  code: "PWR_RAIL_CONFLICT" | "LABEL_OVERRIDDEN_BY_GND";
+  netRoot: string;
+  detail: string;
 }
 
 export type DesignerCommentSurface = "schematic" | "pcb" | "design";
@@ -1306,10 +1316,22 @@ export interface RatsnestSegment {
   to: RatsnestEndpoint;
 }
 
+/** Stored rules or required board fields this reader dropped or defaulted. */
+export interface PcbRuleReadDiagnostic {
+  path: string;
+  ruleId?: string;
+  reason: "malformed" | "unsupported";
+  message: string;
+}
+
 export interface DesignerPcbProjection {
   designId: string;
   revision: number;
   board: PcbBoardSettings;
+  /** Authored reference qualification; absent on older projections. */
+  netIdentity?: DesignerNetIdentitySummary;
+  /** Read-time evidence only; never persisted in board settings. */
+  ruleReadDiagnostics?: PcbRuleReadDiagnostic[];
   placements: PcbPlacedPart[];
   traces: PcbTrace[];
   vias: PcbVia[];
@@ -1369,11 +1391,14 @@ export interface DesignerJunction {
 export interface DesignerDerivedNet {
   id: string;
   name: string;
+  autoNamed?: boolean;
   pinIds: string[];
   wireIds: string[];
   labelIds: string[];
   primitiveIds: string[];
 }
+
+export type DesignerPinElectricalIntent = "no_connect" | "power_source";
 
 export interface DesignerPin {
   id: string;
@@ -1381,6 +1406,8 @@ export interface DesignerPin {
   number: string | null;
   name: string;
   electricalType: string;
+  /** Pin-bound design intent. Unknown future values remain stored, never interpreted. */
+  electricalIntent?: string;
   unit: number;
   localPositionNm: {
     x: number;
@@ -1519,6 +1546,15 @@ export interface DesignerPlacePartCommand {
   };
   rotationDeg?: number;
   mirrored?: boolean;
+  confirmMerge?: boolean;
+}
+
+/** Copy the placed snapshot and pin intent without consulting the library. */
+export interface DesignerDuplicatePartCommand {
+  type: "duplicate_part";
+  partId: string;
+  positionNm: { x: number; y: number };
+  confirmMerge?: boolean;
 }
 
 export interface DesignerCreateWireCommand {
@@ -1557,6 +1593,7 @@ export interface DesignerUpdateWireGeometryCommand {
     x: number;
     y: number;
   }>;
+  confirmMerge?: boolean;
 }
 
 export interface DesignerMovePartCommand {
@@ -1566,18 +1603,21 @@ export interface DesignerMovePartCommand {
     x: number;
     y: number;
   };
+  confirmMerge?: boolean;
 }
 
 export interface DesignerRotatePartCommand {
   type: "rotate_part";
   partId: string;
   rotationDeg: 0 | 90 | 180 | 270;
+  confirmMerge?: boolean;
 }
 
 export interface DesignerMirrorPartCommand {
   type: "mirror_part";
   partId: string;
   mirrored: boolean;
+  confirmMerge?: boolean;
 }
 
 export interface DesignerUpdatePartPropertiesCommand {
@@ -1651,12 +1691,14 @@ export interface DesignerMovePrimitiveCommand {
   type: "move_primitive";
   primitiveId: string;
   positionNm: { x: number; y: number };
+  confirmMerge?: boolean;
 }
 
 export interface DesignerRotatePrimitiveCommand {
   type: "rotate_primitive";
   primitiveId: string;
   rotationDeg: 0 | 90 | 180 | 270;
+  confirmMerge?: boolean;
 }
 
 export interface DesignerUpdatePrimitiveTextCommand {
@@ -1664,6 +1706,7 @@ export interface DesignerUpdatePrimitiveTextCommand {
   primitiveId: string;
   /** Applies to railText (pwr) or portalText (net_portal). Ignored for gnd. */
   text: string;
+  confirmMerge?: boolean;
 }
 
 /**
@@ -1679,6 +1722,7 @@ export interface DesignerAutoArrangeSchematicCommand {
   originNm?: { x: number; y: number };
   /** Reserved for a future selection-scoped arrange. v1 always re-lays all. */
   scope?: "all";
+  confirmMerge?: boolean;
 }
 
 export interface DesignerPcbSetBoardSettingsCommand {
@@ -2077,10 +2121,9 @@ export interface DesignerPcbDeleteOverlayShapeCommand {
 }
 
 /**
- * The net a zone pours, as the pair the record persists. Net ids are ephemeral
- * (`designer/AGENTS.md`): a named net is persisted as `{ netId: null, netName }`
- * and re-bound by name on every projection, an unnamed net as
- * `{ netId, netName: null }`, and "no net" as both null.
+ * The net a zone pours. In durable mode, command boundaries resolve a display
+ * name once and persist `{ netId, netName: null }`. Legacy mode preserves name
+ * hints for projection binding. Both null means unassigned.
  */
 export interface PcbZoneNetRef {
   netId: string | null;
@@ -2193,6 +2236,11 @@ export interface DesignerBatchCommandsCommand {
   commands: DesignerBatchableCommand[];
 }
 
+export interface DesignerPcbRebindNetReferencesCommand {
+  type: "pcb_rebind_net_references";
+  bindings: Array<{ fromNetId: string | null; fromNetName?: string | null; toNetId: string | null }>;
+}
+
 export type DesignerBatchableCommand = Exclude<
   DesignerCommand,
   | DesignerBatchCommandsCommand
@@ -2200,6 +2248,7 @@ export type DesignerBatchableCommand = Exclude<
   | DesignerPcbSetViewStateCommand
   | DesignerPcbApplyAutolayoutCandidateCommand
   | DesignerRefreshPartFootprintCommand
+  | DesignerPcbRebindNetReferencesCommand
 >;
 
 export const DESIGNER_BATCH_MAX_COMMANDS = 5000;
@@ -2241,8 +2290,17 @@ export interface DesignerPcbUpdateViaCommand {
   legality?: PcbCommitLegality;
 }
 
+export interface DesignerSetPinElectricalIntentCommand {
+  type: "set_pin_electrical_intent";
+  pinId: string;
+  intent: DesignerPinElectricalIntent | null;
+}
+
 export type DesignerCommand =
+  | DesignerPcbRebindNetReferencesCommand
   | DesignerPlacePartCommand
+  | DesignerDuplicatePartCommand
+  | DesignerSetPinElectricalIntentCommand
   | DesignerCreateWireCommand
   | DesignerCreateWireJunctionCommand
   | DesignerUpdateWireGeometryCommand
@@ -2359,6 +2417,7 @@ export interface DesignerHistoryActionOkResult {
   ok: true;
   revision: number;
   history: DesignerHistorySnapshot;
+  netIdentity?: DesignerNetIdentityOutcome;
 }
 
 export type DesignerHistoryActionResult =
@@ -2378,9 +2437,11 @@ export type DesignerHistoryActionResult =
     };
 
 export interface DesignerCommandOkResult {
+  netRebind?: NetRebindReceipt;
   ok: true;
   revision: number;
   createdEntityId: string | null;
+  netIdentity?: DesignerNetIdentityOutcome;
   idempotent?: boolean;
   /**
    * Reference-DRC verdict counts for the copper a gated command committed
@@ -2392,8 +2453,30 @@ export interface DesignerCommandOkResult {
   legality?: { refused: number; warnings: number };
 }
 
+export interface DesignerNetReferenceDanglingResult {
+  ok: false;
+  code: "NET_REFERENCE_DANGLING";
+  field: string;
+  netId: string | null;
+  netName?: string;
+  reason: "unknown" | "retired" | "pending" | "foreign" | "foreign-design" | "unknown-name";
+  successorIds: string[];
+  detail: string;
+}
+
+export interface DesignerNetReferenceAmbiguousResult {
+  ok: false;
+  code: "NET_REFERENCE_AMBIGUOUS";
+  field: string;
+  netName: string;
+  candidates: string[];
+  detail: string;
+}
+
 export type DesignerDispatchResult =
   | DesignerCommandOkResult
+  | DesignerNetReferenceDanglingResult
+  | DesignerNetReferenceAmbiguousResult
   | {
       ok: false;
       code: "NET_MERGE_REQUIRES_CONFIRM";
@@ -2447,6 +2530,18 @@ export type DesignerDispatchResult =
       ok: false;
       code: "PIN_NOT_FOUND";
       pinId: string;
+    }
+  | {
+      ok: false;
+      code: "INVALID_PIN_ELECTRICAL_INTENT";
+      pinId: string;
+      detail: string;
+    }
+  | {
+      ok: false;
+      code: "INVALID_PART_POSITION";
+      partId: string;
+      detail: string;
     }
   | {
       ok: false;
@@ -2589,7 +2684,9 @@ export type DesignerDispatchResult =
 export type ErcAnchor =
   | { kind: "pin"; pinId: string }
   | { kind: "net"; netId: string }
-  | { kind: "part"; partId: string };
+  | { kind: "part"; partId: string }
+  | { kind: "label"; labelId: string }
+  | { kind: "primitive"; primitiveId: string };
 
 export type ErcSeverity = "error" | "warning" | "info";
 
@@ -2698,6 +2795,7 @@ export type DrcRuleCode =
   | "TRACE_TO_PAD_CLEARANCE"
   | "TRACE_TO_VIA_CLEARANCE"
   | "UNCONNECTED_NET"
+  | "NET_ORPHANED_COPPER"
   | "NET_SHORT_CIRCUIT"
   | "TRACE_LAYER_MISMATCH"
   | "PAD_LAYER_MISMATCH"
@@ -2858,6 +2956,25 @@ export interface DrcReport {
   summary: { errors: number; warnings: number; infos: number };
   /** Per-code counts of all emitted violations (incl. waived) for grouping. */
   countsByCode: Partial<Record<DrcRuleCode, number>>;
+  /** Batch execution evidence; absent on older or live/pending reports. */
+  evidence?: DrcRunEvidence;
+}
+
+/** Records execution and requested suppressions, not full standards coverage. */
+export interface DrcRunEvidence {
+  version: 1;
+  scope: "batch";
+  executedStages: string[];
+  ignoredRuleClasses: DrcRuleClass[];
+  ignoredRuleCodes: DrcRuleCode[];
+  severityOverrides: Partial<Record<DrcRuleCode, DrcSeverity | "ignore">>;
+  waivedIds: string[];
+  /** Assessment limitations collected before class/severity/waiver filtering. */
+  limitations: Array<{
+    code: DrcRuleCode;
+    message: string;
+    anchors: DrcAnchor[];
+  }>;
 }
 
 /**

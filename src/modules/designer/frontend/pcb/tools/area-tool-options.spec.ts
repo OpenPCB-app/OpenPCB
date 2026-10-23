@@ -14,7 +14,7 @@ describe("defaultZoneToolOptions", () => {
       netNames: { "net-1": "VCC", "net-2": "GND" },
     });
     expect(opts.layer).toBe("F.Cu");
-    expect(opts.net).toEqual({ netId: null, netName: "GND" });
+    expect(opts.net).toEqual({ netId: "net-2", netName: null });
     expect(opts.padConnection).toBe("solid");
   });
 
@@ -45,22 +45,30 @@ describe("netRefForPick", () => {
   const nets = [
     { id: "net-1", name: "VCC" },
     { id: "net-2", name: "" },
+    { id: "net-3", name: "Net_3" },
   ];
 
   test("empty pick means no net", () => {
     expect(netRefForPick(nets, "")).toEqual({ netId: null, netName: null });
   });
 
-  test("a named net persists by name", () => {
+  test("a named net persists by id", () => {
     expect(netRefForPick(nets, "net-1")).toEqual({
-      netId: null,
-      netName: "VCC",
+      netId: "net-1",
+      netName: null,
     });
   });
 
   test("an unnamed net persists by id", () => {
     expect(netRefForPick(nets, "net-2")).toEqual({
       netId: "net-2",
+      netName: null,
+    });
+  });
+
+  test("an auto-named net persists by id", () => {
+    expect(netRefForPick(nets, "net-3")).toEqual({
+      netId: "net-3",
       netName: null,
     });
   });
@@ -106,12 +114,39 @@ describe("reconcileZoneToolOptions", () => {
     expect(opts.net).toEqual({ netId: null, netName: "GND" });
   });
 
-  test("clears an unnamed net whose id disappeared", () => {
+  test("retains an inactive id for repair", () => {
     const opts = reconcileZoneToolOptions(
       { layer: "F.Cu", net: { netId: "net-1", netName: null }, padConnection: "solid" },
       { layerCount: 2, netNames: {}, activeLayer: "F.Cu" },
     );
-    expect(opts.net).toEqual({ netId: null, netName: null });
+    expect(opts.net).toEqual({ netId: "net-1", netName: null });
+  });
+
+  test("keeps a renamed net's id despite its old name hint", () => {
+    const net = { netId: "net-1", netName: "GND" };
+    const opts = reconcileZoneToolOptions(
+      { layer: "F.Cu", net, padConnection: "solid" },
+      { layerCount: 2, netNames: { "net-1": "GROUND" }, activeLayer: "F.Cu" },
+    );
+    expect(opts.net).toEqual(net);
+  });
+
+  test("never rebinds an inactive id through a matching name hint", () => {
+    const net = { netId: "retired", netName: "GND" };
+    const opts = reconcileZoneToolOptions(
+      { layer: "F.Cu", net, padConnection: "solid" },
+      { layerCount: 2, netNames: { "net-2": "GND" }, activeLayer: "F.Cu" },
+    );
+    expect(opts.net).toEqual(net);
+  });
+
+  test("keeps the legacy name match only for a null id", () => {
+    const net = { netId: null, netName: " gnd " };
+    const opts = reconcileZoneToolOptions(
+      { layer: "F.Cu", net, padConnection: "solid" },
+      { layerCount: 2, netNames: { "net-2": "GND" }, activeLayer: "F.Cu" },
+    );
+    expect(opts.net).toEqual(net);
   });
 
   test("keeps an unnamed net whose id still resolves", () => {

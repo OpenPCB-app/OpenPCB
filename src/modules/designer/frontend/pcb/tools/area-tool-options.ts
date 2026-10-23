@@ -16,9 +16,8 @@ import { copperLayersForCount } from "../../../../../sdks/designer";
 import { findGroundNetId } from "../../../../../sdks/designer/ground-net";
 
 /**
- * A net reference the way it is persisted (contract §12.2 net persistence
- * rule): a named net is `{ netId: null, netName }` and re-bound by name; an
- * unnamed net is `{ netId, netName: null }`; "no net" is both null.
+ * New picks persist the net ID. Existing name hints remain readable only
+ * when no ID is stored; names never replace an existing identity.
  */
 export interface AreaNetRef {
   netId: string | null;
@@ -50,9 +49,7 @@ export function netRefForPick(
   if (pick === "") return NO_NET;
   const net = nets.find((n) => n.id === pick);
   if (!net) return NO_NET;
-  return net.name
-    ? { netId: null, netName: net.name }
-    : { netId: net.id, netName: null };
+  return { netId: net.id, netName: null };
 }
 
 export function defaultZoneToolOptions({
@@ -65,7 +62,7 @@ export function defaultZoneToolOptions({
   const groundId = findGroundNetId(netNames);
   const net: AreaNetRef =
     groundId !== null
-      ? { netId: null, netName: netNames[groundId] ?? null }
+      ? { netId: groundId, netName: null }
       : NO_NET;
   return { layer: activeLayer, net, padConnection: "solid" };
 }
@@ -107,15 +104,14 @@ export function reconcileZoneToolOptions(
   const stackup = copperLayersForCount(layerCount);
   const layer = stackup.includes(opts.layer) ? opts.layer : activeLayer;
   let net = opts.net;
-  if (net.netName !== null) {
-    // The projection binds names case-insensitively (trim + upper-case).
+  // Keep inactive IDs visible for explicit repair instead of silently clearing
+  // or rebinding them through an old display-name hint.
+  if (net.netId === null && net.netName !== null) {
     const key = net.netName.trim().toUpperCase();
     const stillNamed = Object.values(netNames).some(
       (name) => name.trim().toUpperCase() === key,
     );
     if (!stillNamed) net = NO_NET;
-  } else if (net.netId !== null) {
-    if (!(net.netId in netNames)) net = NO_NET;
   }
   return { ...opts, layer, net };
 }

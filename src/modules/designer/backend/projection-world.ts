@@ -15,6 +15,7 @@ import type {
   DesignerEntityKind,
   DesignerJunction,
   DesignerLabel,
+  DesignerNetDiagnostic,
   DesignerPlacedPart,
   DesignerPrimitive,
   DesignerSchematicProjection,
@@ -31,6 +32,13 @@ import type {
   PcbZone,
 } from "../../../sdks";
 import { SCHEMATIC_LABEL_ATTACH_TOLERANCE_NM } from "../../../sdks/designer";
+import type { NetReferenceSource } from "../../../shared/electrical-identity/references";
+import type { SchematicSource } from "./projection-read";
+import type { BindResult } from "./net-identity/bind";
+import type { ActiveNetRecord } from "./net-identity/types";
+import type { RawNetRebindDelta } from "./net-identity/rebind-history-types";
+import { readWorldIdentities, writeWorldIdentities } from "./net-identity/world-records";
+import { pcbStateFromWorld } from "./net-identity/world-pcb";
 import { normalizeRotationDeg } from "./commands/place-part";
 import {
   orthogonalProjection,
@@ -49,6 +57,14 @@ import {
 type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
 export type DesignerWorldComponent =
+  | {
+      type: "designer.net_reference_rebind";
+      payload: RawNetRebindDelta;
+    }
+  | {
+      type: "designer.net_identity";
+      payload: ActiveNetRecord;
+    }
   | {
       type: "designer.entity";
       kind: DesignerEntityKind;
@@ -199,11 +215,13 @@ function projectionEntityComponents(
 
 export function projectionToWorld(
   projection: DesignerSchematicProjection,
+  active?: readonly ActiveNetRecord[],
 ): EcsWorld<DesignerWorldComponent> {
   const world = new EcsWorld<DesignerWorldComponent>();
   for (const entry of projectionEntityComponents(projection)) {
     world.setComponent(entry.entityId, entry.component);
   }
+  if (active) writeWorldIdentities(world, active);
   return world;
 }
 
@@ -238,7 +256,8 @@ function worldEntityComponents(
         snapshot.components.get("designer.pcb_overlay_text") ??
         snapshot.components.get("designer.pcb_overlay_shape") ??
         snapshot.components.get("designer.pcb_zone") ??
-        snapshot.components.get("designer.pcb_keepout");
+        snapshot.components.get("designer.pcb_keepout") ??
+        snapshot.components.get("designer.net_identity");
       return component ? { entityId: snapshot.id, component } : null;
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
@@ -285,12 +304,13 @@ function buildWorldDiffPatches(
 export function buildHistoryPatchSet(
   before: DesignerSchematicProjection,
   after: DesignerSchematicProjection,
+  identities?: { before: readonly ActiveNetRecord[]; after: readonly ActiveNetRecord[] },
 ): {
   forwardPatches: EcsPatch<DesignerWorldComponent>[];
   inversePatches: EcsPatch<DesignerWorldComponent>[];
 } {
-  const beforeWorld = projectionToWorld(before);
-  const afterWorld = projectionToWorld(after);
+  const beforeWorld = projectionToWorld(before, identities?.before);
+  const afterWorld = projectionToWorld(after, identities?.after);
   const forwardPatches = buildWorldDiffPatches(beforeWorld, afterWorld);
   const applied = applyPatches(beforeWorld, forwardPatches);
   return { forwardPatches, inversePatches: invertPatchBatch(applied) };
@@ -321,12 +341,14 @@ export interface DesignerCombinedState {
   overlayShapes: PcbOverlayShape[];
   zones: PcbZone[];
   keepouts: PcbKeepout[];
+  activeNetIdentities?: ActiveNetRecord[];
+  identityBinding?: { bind: BindResult; previousActive: ActiveNetRecord[] };
 }
 
 export function combinedStateToWorld(
   state: DesignerCombinedState,
 ): EcsWorld<DesignerWorldComponent> {
-  const world = projectionToWorld(state.schematic);
+  const world = projectionToWorld(state.schematic, state.activeNetIdentities);
   world.ensureEntity(PCB_SETTINGS_ENTITY_ID);
   // Strip `viewState` from the snapshot fed into the history patch builder.
   // View state (viewSide / displayMode / fill toggles / opacities) is
@@ -429,101 +451,15 @@ export function combinedStateFromWorld(
   designId: string,
   revision: number,
   world: EcsWorld<DesignerWorldComponent>,
+  binder?: WorldIdentityBinder,
 ): DesignerCombinedState {
-  const schematic = projectionFromWorld(designId, revision, world);
-  const pcbSnapshot = world.snapshotEntity(PCB_SETTINGS_ENTITY_ID);
-  const pcbComponent = pcbSnapshot?.components.get("designer.pcb_settings");
-  const pcb = (pcbComponent?.payload ?? {}) as unknown as PcbBoardSettings;
-
-  const placements: PcbPlacedPart[] = [];
-  const traces: PcbTrace[] = [];
-  const vias: PcbVia[] = [];
-  const freeHoles: PcbFreeHole[] = [];
-  const freePads: PcbFreePad[] = [];
-  const overlayTexts: PcbOverlayText[] = [];
-  const overlayShapes: PcbOverlayShape[] = [];
-  const zones: PcbZone[] = [];
-  const keepouts: PcbKeepout[] = [];
-  for (const snapshot of world.snapshots()) {
-    const placementComp = snapshot.components.get("designer.pcb_placement");
-    if (placementComp && placementComp.type === "designer.pcb_placement") {
-      placements.push(placementComp.payload as unknown as PcbPlacedPart);
-      continue;
-    }
-    const traceComp = snapshot.components.get("designer.pcb_trace");
-    if (traceComp && traceComp.type === "designer.pcb_trace") {
-      traces.push(traceComp.payload as unknown as PcbTrace);
-      continue;
-    }
-    const viaComp = snapshot.components.get("designer.pcb_via");
-    if (viaComp && viaComp.type === "designer.pcb_via") {
-      vias.push(viaComp.payload as unknown as PcbVia);
-      continue;
-    }
-    const holeComp = snapshot.components.get("designer.pcb_free_hole");
-    if (holeComp && holeComp.type === "designer.pcb_free_hole") {
-      freeHoles.push(holeComp.payload as unknown as PcbFreeHole);
-      continue;
-    }
-    const padComp = snapshot.components.get("designer.pcb_free_pad");
-    if (padComp && padComp.type === "designer.pcb_free_pad") {
-      freePads.push(padComp.payload as unknown as PcbFreePad);
-      continue;
-    }
-    const overlayTextComp = snapshot.components.get(
-      "designer.pcb_overlay_text",
-    );
-    if (
-      overlayTextComp &&
-      overlayTextComp.type === "designer.pcb_overlay_text"
-    ) {
-      overlayTexts.push(overlayTextComp.payload as unknown as PcbOverlayText);
-      continue;
-    }
-    const overlayShapeComp = snapshot.components.get(
-      "designer.pcb_overlay_shape",
-    );
-    if (
-      overlayShapeComp &&
-      overlayShapeComp.type === "designer.pcb_overlay_shape"
-    ) {
-      overlayShapes.push(
-        overlayShapeComp.payload as unknown as PcbOverlayShape,
-      );
-      continue;
-    }
-    const zoneComp = snapshot.components.get("designer.pcb_zone");
-    if (zoneComp && zoneComp.type === "designer.pcb_zone") {
-      zones.push(zoneComp.payload as unknown as PcbZone);
-      continue;
-    }
-    const keepoutComp = snapshot.components.get("designer.pcb_keepout");
-    if (keepoutComp && keepoutComp.type === "designer.pcb_keepout") {
-      keepouts.push(keepoutComp.payload as unknown as PcbKeepout);
-    }
-  }
-  placements.sort((a, b) => a.id.localeCompare(b.id));
-  traces.sort((a, b) => a.id.localeCompare(b.id));
-  vias.sort((a, b) => a.id.localeCompare(b.id));
-  freeHoles.sort((a, b) => a.id.localeCompare(b.id));
-  freePads.sort((a, b) => a.id.localeCompare(b.id));
-  overlayTexts.sort((a, b) => a.id.localeCompare(b.id));
-  overlayShapes.sort((a, b) => a.id.localeCompare(b.id));
-  zones.sort((a, b) => a.id.localeCompare(b.id));
-  keepouts.sort((a, b) => a.id.localeCompare(b.id));
-  return {
-    schematic,
-    pcb,
-    placements,
-    traces,
-    vias,
-    freeHoles,
-    freePads,
-    overlayTexts,
-    overlayShapes,
-    zones,
-    keepouts,
-  };
+  const pcb = pcbStateFromWorld(world);
+  if (!binder) return { schematic: projectionFromWorld(designId, revision, world), ...pcb };
+  const { projection, bind, previousActive } = bindWorldIdentity(designId, revision, world, binder, {
+    board: pcb.pcb, traces: pcb.traces, vias: pcb.vias, freePads: pcb.freePads, zones: pcb.zones,
+  });
+  return { schematic: projection, ...pcb, activeNetIdentities: structuredClone(bind.nextActive),
+    identityBinding: { bind, previousActive } };
 }
 
 export function buildCombinedHistoryPatchSet(
@@ -540,11 +476,7 @@ export function buildCombinedHistoryPatchSet(
   return { forwardPatches, inversePatches: invertPatchBatch(applied) };
 }
 
-export interface NetDerivationWarning {
-  code: "PWR_RAIL_CONFLICT" | "LABEL_OVERRIDDEN_BY_GND";
-  netRoot: string;
-  detail: string;
-}
+export type NetDerivationWarning = DesignerNetDiagnostic;
 
 const LABEL_ATTACH_TOLERANCE_SQ =
   BigInt(SCHEMATIC_LABEL_ATTACH_TOLERANCE_NM) *
@@ -620,6 +552,21 @@ export interface NetDerivationResult {
   attachedPrimitiveIds: Set<string>;
 }
 
+export interface DerivedNetComponent {
+  key: string;
+  derivedName: string | null;
+  nameSource: "gnd" | "pwr" | "portal" | "label" | "auto";
+  legacyName: string;
+  pinIds: string[];
+  wireIds: string[];
+  labelIds: string[];
+  primitiveIds: string[];
+}
+
+export interface NetComponentsResult extends Omit<NetDerivationResult, "nets"> {
+  components: DerivedNetComponent[];
+}
+
 /**
  * Builds nets + junctions from schematic geometry. Net-name priority:
  *   GND port present                           -> "GND"
@@ -634,12 +581,12 @@ export interface NetDerivationResult {
  * could differ from a portal. A label also joins every wire and pin its anchor
  * touches (`attachLabels`).
  */
-export function deriveNetsAndJunctions(
+export function deriveNetComponents(
   parts: DesignerPlacedPart[],
   wires: DesignerWire[],
   labels: DesignerLabel[],
   primitives: DesignerPrimitive[] = [],
-): NetDerivationResult {
+): NetComponentsResult {
   const unionFind = new UnionFind();
 
   // ── Connectivity policy (audit §4.1 + §4.9, fixed rule) ─────────────────
@@ -919,12 +866,25 @@ export function deriveNetsAndJunctions(
 
   const warnings: NetDerivationWarning[] = [];
   let unnamedIndex = 1;
-  const nets = [...netMap.entries()]
+  const components = [...netMap.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([root, net]) => {
+      const sortedRails = [...net.pwrRails].sort((a, b) => a.localeCompare(b));
+      const namedRails = net.gndCount > 0 ? ["GND", ...sortedRails] : sortedRails;
+      const distinctRails = new Set(namedRails.map((rail) => rail.toUpperCase()));
+      // Naming precedence must not hide another rail asserted on this net.
+      if (distinctRails.size > 1) {
+        warnings.push({
+          code: "PWR_RAIL_CONFLICT",
+          netRoot: root,
+          detail: `Multiple power rail names on one net: ${namedRails.join(", ")}`,
+        });
+      }
       let name: string;
+      let nameSource: DerivedNetComponent["nameSource"] = "auto";
       if (net.gndCount > 0) {
         name = "GND";
+        nameSource = "gnd";
         // Warn if any non-GND label is on this net (likely a misnaming).
         for (const labelName of net.names) {
           if (labelName.toUpperCase() !== "GND") {
@@ -937,30 +897,22 @@ export function deriveNetsAndJunctions(
           }
         }
       } else if (net.pwrRails.size >= 1) {
-        const sortedRails = [...net.pwrRails].sort((a, b) =>
-          a.localeCompare(b),
-        );
         name = sortedRails[0] ?? `Net_${unnamedIndex++}`;
-        // Only a genuine conflict when the rails differ case-insensitively
-        // (the global union already merges "VCC" and "vcc" into one net).
-        const distinctRails = new Set(sortedRails.map((r) => r.toUpperCase()));
-        if (distinctRails.size > 1) {
-          warnings.push({
-            code: "PWR_RAIL_CONFLICT",
-            netRoot: root,
-            detail: `Multiple power rails on one net: ${sortedRails.join(", ")}`,
-          });
-        }
+        nameSource = "pwr";
       } else if (net.portalTexts.size > 0) {
         const sorted = [...net.portalTexts].sort((a, b) => a.localeCompare(b));
         name = sorted[0] ?? `Net_${unnamedIndex++}`;
+        nameSource = "portal";
       } else {
         const sortedLabels = [...net.names].sort((a, b) => a.localeCompare(b));
         name = sortedLabels[0] ?? `Net_${unnamedIndex++}`;
+        if (sortedLabels.length > 0) nameSource = "label";
       }
       return {
-        id: root,
-        name,
+        key: root,
+        derivedName: nameSource === "auto" ? null : name,
+        nameSource,
+        legacyName: name,
         pinIds: [...net.pinIds].sort((a, b) => a.localeCompare(b)),
         wireIds: [...net.wireIds].sort((a, b) => a.localeCompare(b)),
         labelIds: [...net.labelIds].sort((a, b) => a.localeCompare(b)),
@@ -997,14 +949,41 @@ export function deriveNetsAndJunctions(
     .map((point) => ({ xNm: point.x, yNm: point.y }))
     .sort((a, b) => (a.xNm === b.xNm ? a.yNm - b.yNm : a.xNm - b.xNm));
 
-  return { nets, junctions, warnings, attachedLabelIds, attachedPrimitiveIds };
+  return { components, junctions, warnings, attachedLabelIds, attachedPrimitiveIds };
 }
 
-export function projectionFromWorld(
-  designId: string,
-  revision: number,
-  world: EcsWorld<DesignerWorldComponent>,
-): DesignerSchematicProjection {
+/** Legacy identity and naming are preserved until callers explicitly opt into binding. */
+export function deriveNetsAndJunctions(
+  parts: DesignerPlacedPart[],
+  wires: DesignerWire[],
+  labels: DesignerLabel[],
+  primitives: DesignerPrimitive[] = [],
+): NetDerivationResult {
+  const result = deriveNetComponents(parts, wires, labels, primitives);
+  const nets = result.components.map((component) => ({
+    id: component.key,
+    name: component.legacyName,
+    pinIds: component.pinIds,
+    wireIds: component.wireIds,
+    labelIds: component.labelIds,
+    primitiveIds: component.primitiveIds,
+  }));
+  return {
+    nets, junctions: result.junctions, warnings: result.warnings,
+    attachedLabelIds: result.attachedLabelIds,
+    attachedPrimitiveIds: result.attachedPrimitiveIds,
+  };
+}
+
+export type WorldIdentityBinder = (
+  source: SchematicSource,
+  previousActive: readonly ActiveNetRecord[],
+  references?: NetReferenceSource,
+) => { projection: DesignerSchematicProjection; bind: BindResult };
+
+export function schematicSourceFromWorld(
+  designId: string, revision: number, world: EcsWorld<DesignerWorldComponent>,
+): SchematicSource {
   const parts: DesignerPlacedPart[] = [];
   const wires: DesignerWire[] = [];
   const labels: DesignerLabel[] = [];
@@ -1029,6 +1008,32 @@ export function projectionFromWorld(
   wires.sort((a, b) => a.id.localeCompare(b.id));
   labels.sort((a, b) => a.id.localeCompare(b.id));
   primitives.sort((a, b) => a.id.localeCompare(b.id));
+  return { designId, revision, parts, wires, labels, primitives };
+}
+
+function bindWorldIdentity(
+  designId: string, revision: number, world: EcsWorld<DesignerWorldComponent>,
+  binder: WorldIdentityBinder, references?: NetReferenceSource,
+): { projection: DesignerSchematicProjection; bind: BindResult; previousActive: ActiveNetRecord[] } {
+  const source = schematicSourceFromWorld(designId, revision, world);
+  const previousActive = readWorldIdentities(world);
+  const result = binder(source, structuredClone(previousActive),
+    references === undefined ? undefined : structuredClone(references));
+  return { ...result, previousActive };
+}
+
+export function projectionFromWorldWithIdentity(
+  designId: string, revision: number, world: EcsWorld<DesignerWorldComponent>, binder: WorldIdentityBinder,
+): { projection: DesignerSchematicProjection; bind: BindResult; previousActive: ActiveNetRecord[] } {
+  return bindWorldIdentity(designId, revision, world, binder);
+}
+
+export function projectionFromWorld(
+  designId: string,
+  revision: number,
+  world: EcsWorld<DesignerWorldComponent>,
+): DesignerSchematicProjection {
+  const { parts, wires, labels, primitives } = schematicSourceFromWorld(designId, revision, world);
   const derived = deriveNetsAndJunctions(parts, wires, labels, primitives);
   return {
     designId,
@@ -1045,6 +1050,7 @@ export function projectionFromWorld(
     })),
     nets: derived.nets,
     junctions: derived.junctions,
+    netDiagnostics: derived.warnings,
   };
 }
 
@@ -1094,6 +1100,7 @@ export function replaceSchematicProjection(
           number: pin.number,
           name: pin.name,
           electricalType: pin.electricalType,
+          electricalIntent: pin.electricalIntent ?? null,
           unit: pin.unit,
           localXNm: pin.localPositionNm.x,
           localYNm: pin.localPositionNm.y,

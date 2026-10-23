@@ -5,9 +5,14 @@ import type {
   ErcReport,
   ErcViolation,
 } from "../../../../sdks/designer";
+import { checkNetDrive } from "./drive-checks";
+import { pinDeclaresPowerSource } from "../pin-electrical-intent";
+import { checkPinElectricalIntent } from "./intent-checks";
+import { checkElectricalMetadata } from "./metadata-checks";
+import { checkDetachedAnchors, checkNetDiagnostics } from "./projection-checks";
 
 /**
- * ERC engine v1 — runs over the schematic projection's derived nets and
+ * ERC runs over the schematic projection's derived nets and
  * surfaces a small set of high-signal rules:
  *
  *  - `UNCONNECTED_INPUT_PIN`: an `input` / `bidirectional` / `tri_state` /
@@ -22,6 +27,9 @@ import type {
  *  - `NO_CONNECT_VIOLATION`: a `no_connect` pin that *is* wired up. NC pins
  *    must remain unconnected by definition; surfacing this avoids silent
  *    cap loading on internal die nodes.
+ *  - Connected inputs need a signal driver; connected power inputs need a
+ *    power output. Labels, ports and wire stubs supply neither.
+ *  - Detached labels/ports and net-naming diagnostics retain their anchors.
  *
  * The engine is pure: takes the projection, returns a report. UI consumers
  * decide whether to render live indicators, a batch panel, or both.
@@ -100,6 +108,8 @@ export function runErc(projection: DesignerSchematicProjection): ErcReport {
   for (const pin of allPins) {
     if (!STRICT_INPUT_TYPES.has(pin.electricalType)) continue;
     if (netByPinId.has(pin.id)) continue;
+    if (pin.electricalIntent === "no_connect") continue;
+    if (pin.electricalType === "power_in" && pinDeclaresPowerSource(pin)) continue;
     const partId = partOfPin.get(pin.id);
     const reference = partId ? (refsByPart.get(partId) ?? "?") : "?";
     violations.push({
@@ -153,6 +163,16 @@ export function runErc(projection: DesignerSchematicProjection): ErcReport {
       anchors: [{ kind: "pin", pinId: pin.id }],
     });
   }
+
+  for (const net of projection.nets) {
+    if (netIsConnected(net)) violations.push(...checkNetDrive(net, pinsById));
+  }
+  violations.push(
+    ...checkNetDiagnostics(projection),
+    ...checkDetachedAnchors(projection),
+    ...checkElectricalMetadata(projection),
+    ...checkPinElectricalIntent(allPins, netByPinId),
+  );
 
   return {
     designId: projection.designId,

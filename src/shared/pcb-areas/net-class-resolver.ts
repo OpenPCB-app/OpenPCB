@@ -61,7 +61,7 @@ export function resolveNetClassId(
 ): string {
   // An explicit per-net assignment wins over the name-pattern heuristic, but
   // only if it points at a class that still exists.
-  if (netId && assignments) {
+  if (netId && assignments && Object.hasOwn(assignments, netId)) {
     const assigned = assignments[netId];
     if (assigned && netClasses.some((c) => c.id === assigned)) {
       return assigned;
@@ -84,7 +84,8 @@ export function effectiveNetClassId(
   requestedClassId: string,
 ): string {
   if (!netId) return requestedClassId;
-  const assigned = board.perNetClassAssignments?.[netId];
+  const assignments = board.perNetClassAssignments;
+  const assigned = assignments && Object.hasOwn(assignments, netId) ? assignments[netId] : undefined;
   if (!assigned) return requestedClassId;
   const defaultId = defaultNetClassId(board.netClasses);
   if (requestedClassId !== defaultId) return requestedClassId;

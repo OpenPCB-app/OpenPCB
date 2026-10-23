@@ -29,6 +29,7 @@ function reconcile(
   currentComponents: readonly ElectricalComponent[],
 ): ElectricalIdentityResult {
   return reconcileElectricalIdentity({
+    successorPolicy: "retire",
     previousActive,
     currentComponents,
     allocateId: allocate(),
@@ -141,6 +142,7 @@ describe("electrical identity continuity", () => {
         createdIds: [],
         preservedIds: [],
         retirements: [],
+        transitions: [],
       }),
     );
   });
@@ -218,6 +220,7 @@ describe("explicit electrical retirement", () => {
     );
     expect(() =>
       reconcileElectricalIdentity({
+        successorPolicy: "retire",
         previousActive: split.nextActive,
         currentComponents: [current("unrelated", pin("c"))],
         retiredIds: split.retirements.map((row) => row.id),
@@ -230,6 +233,7 @@ describe("explicit electrical retirement", () => {
 describe("validation and deterministic allocation", () => {
   test("all malformed membership/IDs fail before any allocation", () => {
     const valid: ElectricalIdentityInput = {
+      successorPolicy: "retire",
       previousActive: [old("old", pin("a"))],
       currentComponents: [current("new", pin("b"))],
       allocateId: allocate(),
@@ -300,6 +304,7 @@ describe("validation and deterministic allocation", () => {
     for (const collision of ["retiring", "preserving", "historical"]) {
       expect(() =>
         reconcileElectricalIdentity({
+          successorPolicy: "retire",
           previousActive: [
             old("retiring", pin("a")),
             old("preserving", pin("b")),
@@ -315,6 +320,7 @@ describe("validation and deterministic allocation", () => {
     }
     expect(() =>
       reconcileElectricalIdentity({
+        successorPolicy: "retire",
         previousActive: [],
         currentComponents: [current("one", pin("a")), current("two", pin("b"))],
         allocateId: () => "duplicate",
@@ -323,6 +329,7 @@ describe("validation and deterministic allocation", () => {
     for (const invalid of ["", " ", 1, null]) {
       expect(() =>
         reconcileElectricalIdentity({
+          successorPolicy: "retire",
           previousActive: [],
           currentComponents: [current("one", pin("a"))],
           allocateId: () => invalid,
@@ -334,6 +341,7 @@ describe("validation and deterministic allocation", () => {
   test("allocation receives canonical members in membership order before component key", () => {
     const requests: ElectricalNetAllocation[] = [];
     const result = reconcileElectricalIdentity({
+      successorPolicy: "retire",
       previousActive: [],
       currentComponents: [
         current("A", pin("z")),

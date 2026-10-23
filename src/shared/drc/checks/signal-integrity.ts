@@ -69,7 +69,7 @@ export function checkSignalIntegrity(ctx: DrcContext): DrcViolationDraft[] {
   // What the identity refused, reported before anything is judged (§5).
   for (const conflict of conflicts) {
     out.push({
-      code: "DRC_RULE_INVALID",
+      code: conflict.reason === "unknown-net" ? "DRC_RULE_INEFFECTIVE" : "DRC_RULE_INVALID",
       message: conflictMessage(conflict, ctx.netNames),
       anchors: [{ kind: "rule", ruleId: conflictRuleId(conflict) }],
     });
@@ -306,6 +306,9 @@ export function checkSignalIntegrity(ctx: DrcContext): DrcViolationDraft[] {
  */
 function conflictRuleId(conflict: DiffPairConflict): string {
   const ids = [...conflict.ids].sort().join("+");
+  if (conflict.reason === "unknown-net") {
+    return `diffPair:unknown-net:${JSON.stringify([[...conflict.ids].sort(), [conflict.pNetId, conflict.nNetId].sort()])}`;
+  }
   return conflict.netId === null
     ? `diffPair:${conflict.reason}:${ids}`
     : `diffPair:${conflict.reason}:${conflict.netId}:${ids}`;
@@ -319,6 +322,11 @@ function conflictMessage(
   const rows = conflict.ids.map((id) => `"${id}"`).join(" and ");
   const netName = (netId: string): string => netNames[netId] ?? netId;
   switch (conflict.reason) {
+    case "unknown-net": {
+      const plural = conflict.missingNetIds.length > 1;
+      return `Diff pair ${conflict.name} has no effect: ${plural ? "nets" : "net"} ` +
+        `${conflict.missingNetIds.join(", ")} no longer ${plural ? "exist" : "exists"}. Rebind or remove it.`;
+    }
     case "self-pair":
       return (
         `Diff-pair row ${rows} cannot be applied: it names net ` +

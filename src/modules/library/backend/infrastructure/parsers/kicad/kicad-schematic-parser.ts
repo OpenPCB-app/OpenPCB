@@ -61,7 +61,7 @@ export interface ParsedKicadSchSymbol {
   unit: number;
   at: ParsedKicadSchPoint;
   rotationDeg: number;
-  /** True when refdes starts with `#PWR` (KiCad power symbol convention). */
+  /** True for a `#PWR` reference or a symbol in KiCad's `power` library. */
   isPower: boolean;
   /** Raw properties (Reference, Value, Footprint, Datasheet, custom). */
   properties: Record<string, string>;
@@ -69,8 +69,10 @@ export interface ParsedKicadSchSymbol {
 
 export interface ParsedKicadSchPowerSymbol {
   uuid: string | null;
+  /** Source identity: a PWR_FLAG is a local assertion, regardless of Value. */
+  libId: string;
   reference: string;
-  /** Net name carried in the Value property (GND, +3V3, …). */
+  /** Value property (GND, +3V3, …); not a net name for power:PWR_FLAG. */
   netName: string;
   at: ParsedKicadSchPoint;
   rotationDeg: number;
@@ -121,6 +123,7 @@ export interface ParsedKicadSchPoint {
 export interface ParsedKicadProjectWarning {
   code: string;
   message: string;
+  severity?: "info" | "warning";
 }
 
 export function parseKicadSchematic(source: string): ParsedKicadSchematic {
@@ -149,11 +152,19 @@ export function parseKicadSchematic(source: string): ParsedKicadSchematic {
     if (parsed.isPower) {
       powerSymbols.push({
         uuid: parsed.uuid,
+        libId: parsed.libId,
         reference: parsed.reference,
         netName: parsed.value ?? parsed.reference.replace(/^#PWR0*/, ""),
         at: parsed.at,
         rotationDeg: parsed.rotationDeg,
       });
+      if (parsed.libId === "power:PWR_FLAG") {
+        warnings.push({
+          code: "kicad_power_flag_unsupported",
+          severity: "warning",
+          message: `PWR_FLAG ${parsed.reference} at (${parsed.at.xMm}, ${parsed.at.yMm}) mm: local power-source assertion will be omitted because OpenPCB does not support it. Review power sources and electrical checks after import; the flag will not create a net or power rail.`,
+        });
+      }
     } else {
       symbols.push(parsed);
     }
@@ -182,6 +193,13 @@ export function parseKicadSchematic(source: string): ParsedKicadSchematic {
   const noConnects = findNodes(expr, "no_connect")
     .map((node) => readAtPoint(findNode(node, "at")))
     .filter((p): p is ParsedKicadSchPoint => p !== null);
+  if (noConnects.length > 0) {
+    warnings.push({
+      code: "kicad_no_connect_unsupported",
+      severity: "warning",
+      message: `${noConnects.length} intentional no-connect marker(s) will be omitted because OpenPCB does not support them. Review those pins and electrical-check results after import; intentional disconnection will not be preserved.`,
+    });
+  }
 
   const hierarchicalSheets = findNodes(expr, "sheet")
     .map((node) => parseSheet(node, warnings))

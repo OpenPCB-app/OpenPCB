@@ -40,6 +40,7 @@ export function nativeIdentity(proposal: ProposalRecord): NativeIdentity {
 const SAFE_COMMANDS = new Set([
   "create_design", "place_part", "create_wire", "create_wire_junction", "auto_arrange_schematic",
   "move_part", "rotate_part", "mirror_part", "update_part_properties", "update_parts_properties",
+  "duplicate_part", "set_pin_electrical_intent",
   "upsert_label", "place_gnd_port", "place_pwr_port", "place_net_portal", "move_primitive",
   "rotate_primitive", "update_primitive_text",
 ]);

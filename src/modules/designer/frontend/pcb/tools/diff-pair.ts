@@ -52,14 +52,12 @@ export function buildDiffPairIndex(
     partnerNetId: (netId) =>
       netId === null ? null : (partnerById.get(netId) ?? null),
     partnerNetName: (netId, netName) => {
-      const partnerId = netId === null ? undefined : partnerById.get(netId);
-      if (partnerId !== undefined) return netNames[partnerId] ?? null;
-      // The resolver is authoritative for every net the board names — a base
-      // it refused as ambiguous must stay refused, not be re-resolved here.
-      // Only a net the board has no id/name row for falls back to the bare
-      // suffix table (an id-less pad picked off the canvas).
-      if (netId !== null && netNames[netId] !== undefined) return null;
-      return netName === null ? null : diffPairPartnerName(netName);
+      // Only ID-less picks may use a legacy name hint.
+      if (netId === null) return netName === null ? null : diffPairPartnerName(netName);
+      const partnerId = partnerById.get(netId);
+      if (partnerId === undefined || !Object.hasOwn(netNames, partnerId)) return null;
+      const name = netNames[partnerId];
+      return typeof name === "string" ? name : null;
     },
   };
 }

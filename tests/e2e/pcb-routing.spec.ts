@@ -25,15 +25,17 @@ test("Route tool toggles via R key and toolbar button", async ({ page }) => {
   await routeButton.click();
   await expect(page.getByRole("button", { name: "45°" })).toBeVisible();
 
+  // Scoped shortcuts belong to the canvas, not the docked toolbar button.
+  await page.locator('[aria-label="PCB canvas"]').focus();
+  await expect(page.locator('[aria-label="PCB canvas"]')).toBeFocused();
   // ESC exits.
   await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "45°" })).toBeHidden();
   await expect(page.getByRole("button", { name: "Route (R)" })).toBeVisible();
 
   // R key activates again.
-  await page
-    .locator('[data-testid="designer-pcb-canvas"]')
-    .focus()
-    .catch(() => {});
+  await page.locator('[aria-label="PCB canvas"]').focus();
+  await expect(page.locator('[aria-label="PCB canvas"]')).toBeFocused();
   await page.keyboard.press("r");
   await expect(page.getByRole("button", { name: "45°" })).toBeVisible();
 
@@ -60,10 +62,10 @@ test("Tune tool toggles via U key (pcb.lengthTuning)", async ({ page }) => {
   // Tune is hotkey-only: the docked toolbar deliberately carries Route / Board /
   // Add / Export / DRC / View, and Measure, Tune and Bundle stay on their keys.
   // Dev builds have pcb.lengthTuning ON, so U enters the tool.
-  await page
-    .locator('[data-testid="designer-pcb-canvas"]')
-    .focus()
-    .catch(() => {});
+  // Focus the shortcut owner; the inner renderer's test-id element itself
+  // is not focusable.
+  await page.locator('[aria-label="PCB canvas"]').focus();
+  await expect(page.locator('[aria-label="PCB canvas"]')).toBeFocused();
   await page.keyboard.press("u");
   await expect(
     page.getByText("Tune — click a routed trace to add serpentine length", {
@@ -73,20 +75,69 @@ test("Tune tool toggles via U key (pcb.lengthTuning)", async ({ page }) => {
 
   // Escape exits back to select (idle session).
   await page.keyboard.press("Escape");
+  await expect(page.getByRole("status", { name: "Tune tool" })).toBeHidden();
   await expect(page.getByRole("button", { name: "Route (R)" })).toBeVisible();
 
   // U key re-enters; the full tune-a-trace flow needs a routed fixture board
   // (deferred with the other library-fixture-driven E2Es).
-  await page
-    .locator('[data-testid="designer-pcb-canvas"]')
-    .focus()
-    .catch(() => {});
+  await expect(page.locator('[aria-label="PCB canvas"]')).toBeFocused();
   await page.keyboard.press("u");
   await expect(
     page.getByText("Tune — click a routed trace to add serpentine length", {
       exact: false,
     }),
   ).toBeVisible();
+});
+
+test("rapid empty-space click does not leave a marquee consuming Escape", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "New Design" }).first().click();
+  await page.getByRole("tab", { name: "PCB" }).click();
+  const canvas = page.locator('[data-testid="designer-pcb-canvas"] canvas');
+  await expect(canvas).toBeVisible();
+  await page.locator('[aria-label="PCB canvas"]').focus();
+
+  // The cursor's layer chip proves the R3F hit plane is handling events.
+  await page.keyboard.press("r");
+  await expect(page.getByText("Route — click a pad to start")).toBeVisible();
+  await expect(async () => {
+    await canvas.hover({ position: { x: 40, y: 40 } });
+    await expect(page.getByText("Top", { exact: true })).toBeVisible({
+      timeout: 250,
+    });
+  }).toPass({ timeout: 5_000 });
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "45°" })).toBeHidden();
+
+  // Both native events run before React can publish the pointer-down session.
+  // This exercises the real R3F hit plane without a timing-dependent click.
+  await canvas.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const pointer = {
+      bubbles: true,
+      pointerId: 1,
+      pointerType: "mouse",
+      isPrimary: true,
+      button: 0,
+      clientX: rect.left + 40,
+      clientY: rect.top + 40,
+    };
+    element.dispatchEvent(
+      new PointerEvent("pointerdown", { ...pointer, buttons: 1 }),
+    );
+    element.dispatchEvent(
+      new PointerEvent("pointerup", { ...pointer, buttons: 0 }),
+    );
+  });
+
+  await expect(page.locator('[aria-label="PCB canvas"]')).toBeFocused();
+  await page.keyboard.press("u");
+  const tuneHud = page.getByRole("status", { name: "Tune tool" });
+  await expect(tuneHud).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(tuneHud).toBeHidden();
 });
 
 // The Bundle tool (pcb.bundleRouting) currently has NO activation surface: the

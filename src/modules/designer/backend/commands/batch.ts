@@ -43,6 +43,7 @@ const NOT_BATCHABLE: ReadonlySet<string> = new Set([
   "pcb_apply_autolayout_candidate",
   // Needs freshly resolved library detail the batch executor does not carry.
   "refresh_part_footprint",
+  "pcb_rebind_net_references",
 ]);
 
 /** The ONE list of what a batch may carry — the HTTP parser and the executor. */

@@ -41,8 +41,13 @@ import {
   buildEffectiveNetOverlay,
   type EffectiveNetOverlay,
 } from "./effective-net-overlay";
-import type { DrcSeverityOverrides } from "./severity";
+import {
+  resolveSeverity,
+  severityRank,
+  type DrcSeverityOverrides,
+} from "./severity";
 import type { DrcViolationDraft } from "./types";
+import { computeViolationId } from "./violation-id";
 
 /** The copper about to be committed. Ids are the caller's (07 §1, §4). */
 export interface PendingCopper {
@@ -228,9 +233,11 @@ export function pendingItems(
  * made the gate refuse commits over breaches the route never touched (R1 #1).
  */
 function rejudgeAffected(
+  ctx: LegalityContext,
   octx: LegalityContext,
   overlay: EffectiveNetOverlay,
   replaces: ReadonlySet<string>,
+  overrides: DrcSeverityOverrides | undefined,
   out: DrcViolationDraft[],
 ): void {
   for (const item of overlay.rejudge) {
@@ -240,15 +247,62 @@ function rejudgeAffected(
   // RETIERED items only, since a per-item verdict is a pure function of the
   // tier and no per-item form reads exposure.
   const traces: DrcTrace[] = [];
+  const pads: DrcPad[] = [];
   const vias: DrcViaGeom[] = [];
   for (const item of overlay.retiered) {
     if ("pointsMm" in item) traces.push(item);
-    else if (!("ring" in item)) vias.push(item);
+    else if ("ring" in item) pads.push(item);
+    else vias.push(item);
   }
-  if (traces.length === 0 && vias.length === 0) return;
-  const retiered: ItemSet = { traces, pads: [], vias };
+  if (overlay.retiered.length === 0) return;
+  const retiered: ItemSet = { traces, pads, vias };
   netClassItems(octx, retiered, { out });
   currentItems(octx, retiered, { out });
+  rejudgeScalarItems(ctx, octx, retiered, replaces, overrides, out);
+}
+
+/** Only new or stricter scalar failures belong to the edit that changed a tier. */
+function rejudgeScalarItems(
+  before: LegalityContext,
+  after: LegalityContext,
+  items: ItemSet,
+  replaces: ReadonlySet<string>,
+  overrides: DrcSeverityOverrides | undefined,
+  out: DrcViolationDraft[],
+): void {
+  const copper = new Set([...items.pads, ...items.vias]);
+  const holes = before.holes.filter((h) => h.copper && copper.has(h.copper));
+  const drafts = (ctx: LegalityContext): DrcViolationDraft[] => {
+    const rows: DrcViolationDraft[] = [];
+    const subjects = { ...items, holes: [] };
+    manufacturabilityItems(ctx, subjects, { out: rows });
+    boardItems(ctx, subjects, { out: rows });
+    holePairs(ctx, holes, ctx.holes, { replaces, out: rows });
+    return rows;
+  };
+  const rank = (draft: DrcViolationDraft): number => {
+    const severity = resolveSeverity(draft.code, draft.ruleSeverity, overrides);
+    return severity === "ignore" ? -1 : severityRank(severity);
+  };
+  const deficit = (draft: DrcViolationDraft): number =>
+    draft.requiredMm !== undefined && draft.measuredMm !== undefined
+      ? draft.requiredMm - draft.measuredMm
+      : -Infinity;
+  const previous = new Map<string, { deficit: number; rank: number }>();
+  for (const draft of drafts(before)) {
+    const id = computeViolationId(draft);
+    const old = previous.get(id);
+    previous.set(id, {
+      deficit: Math.max(old?.deficit ?? -Infinity, deficit(draft)),
+      rank: Math.max(old?.rank ?? -1, rank(draft)),
+    });
+  }
+  for (const draft of drafts(after)) {
+    const old = previous.get(computeViolationId(draft));
+    if (!old || deficit(draft) > old.deficit || rank(draft) > old.rank) {
+      out.push(draft);
+    }
+  }
 }
 
 /**
@@ -276,6 +330,8 @@ export function checkPendingCopper(
   // (13 §4.4): every judgement below runs on the FINAL geometry's tiers.
   const overlay = buildEffectiveNetOverlay(ctx, items, replaces);
   const octx = overlay.context;
+  const severityOverrides =
+    options.severityOverrides ?? ctx.board.drcSeverityOverrides;
 
   // Broadly the order `runDrc` dispatches in — `currentItems` is the exception,
   // hoisted here beside the other per-item form while the engine runs its
@@ -293,7 +349,7 @@ export function checkPendingCopper(
   // Two pending vias of one session are a pair after the commit (07 §4).
   holePairs(octx, items.holes, items.holes, { out: drafts });
   keepoutItems(octx, subjects, { out: drafts });
-  rejudgeAffected(octx, overlay, replaces, drafts);
+  rejudgeAffected(ctx, octx, overlay, replaces, severityOverrides, drafts);
   // A conflict component the pending copper created (§4.3): the route's short,
   // not the board's.
   chainShortDrafts(octx, overlay.newChainShorts, drafts);
@@ -307,7 +363,6 @@ export function checkPendingCopper(
     ignoredRuleClasses:
       options.ignoredRuleClasses ?? viewState?.drcIgnoredRuleClasses ?? [],
     waivedIds: options.waivedIds ?? viewState?.drcWaivedViolationIds ?? [],
-    severityOverrides:
-      options.severityOverrides ?? ctx.board.drcSeverityOverrides,
+    severityOverrides,
   }).violations;
 }

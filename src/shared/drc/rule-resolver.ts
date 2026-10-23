@@ -252,7 +252,7 @@ export function createRuleResolver(
     const cached = classIdByNet.get(netId);
     if (cached !== undefined) return cached;
     const id = resolveNetClassId(
-      netNames[netId] ?? "",
+      Object.hasOwn(netNames, netId) ? (netNames[netId] ?? "") : "",
       board.netClasses,
       board.perNetClassAssignments,
       netId,

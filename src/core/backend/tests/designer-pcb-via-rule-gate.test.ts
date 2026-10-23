@@ -17,12 +17,15 @@ import { resetSharedSqliteForTesting } from "../db/sqlite-client";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
 import { MentionRegistry } from "../mentions";
+import { dispatchOk } from "./helpers/designer-runtime";
 
 const SESSION = "designer-pcb-via-rule-gate";
 
 async function createDesigner(testLabel: string): Promise<{
   sdk: DesignerSDK;
   designId: string;
+  hvNetId: string;
+  otherNetId: string;
 }> {
   resetSharedSqliteForTesting();
   process.env.OPENPCB_DB_PATH = path.join(
@@ -39,7 +42,13 @@ async function createDesigner(testLabel: string): Promise<{
     .getSdkRegistry()
     .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
   const design = await sdk.createDesign({ name: testLabel });
-  return { sdk, designId: design.id };
+  for (const [index, text] of ["HV_RAIL", "OTHER"].entries()) {
+    await dispatchOk(sdk, design.id, { type: "upsert_label", text,
+      positionNm: { x: index * 20_000_000, y: 100_000_000 } });
+  }
+  const nets = (await sdk.getSchematicProjection(design.id))!.nets;
+  return { sdk, designId: design.id, hvNetId: nets.find((net) => net.name === "HV_RAIL")!.id,
+    otherNetId: nets.find((net) => net.name === "OTHER")!.id };
 }
 
 function envelope(
@@ -60,7 +69,7 @@ function envelope(
 
 describe("via insert gate honours scoped scalar rules", () => {
   test("a net-scoped viaDiameter rule refuses the via the board minimum accepts", async () => {
-    const { sdk, designId } = await createDesigner("via-rule-gate");
+    const { sdk, designId, hvNetId, otherNetId } = await createDesigner("via-rule-gate");
     const initial = await sdk.getPcbProjection(designId);
     const netClassId = initial!.board.netClasses[0]!.id;
 
@@ -75,7 +84,7 @@ describe("via insert gate honours scoped scalar rules", () => {
             name: "HV via diameter",
             enabled: true,
             priority: 10,
-            scopes: [{ kind: "net", netIds: ["n_hv"] }],
+            scopes: [{ kind: "net", netIds: [hvNetId] }],
             constraint: { kind: "viaDiameter", minMm: 1.0 },
           },
         ],
@@ -89,7 +98,7 @@ describe("via insert gate honours scoped scalar rules", () => {
       envelope(designId, "cmd-via-refused", afterRules!.revision, {
         type: "pcb_add_via",
         centerMm: { x: 10, y: 10 },
-        netId: "n_hv",
+        netId: hvNetId,
         netClassId,
         diameterMmOverride: 0.9,
         drillMmOverride: 0.4,
@@ -111,7 +120,7 @@ describe("via insert gate honours scoped scalar rules", () => {
       envelope(designId, "cmd-via-accepted", afterRules!.revision, {
         type: "pcb_add_via",
         centerMm: { x: 14, y: 10 },
-        netId: "n_other",
+        netId: otherNetId,
         netClassId,
         diameterMmOverride: 0.9,
         drillMmOverride: 0.4,
@@ -127,7 +136,7 @@ describe("via insert gate honours scoped scalar rules", () => {
       envelope(designId, "cmd-via-wide", after!.revision, {
         type: "pcb_add_via",
         centerMm: { x: 18, y: 10 },
-        netId: "n_hv",
+        netId: hvNetId,
         netClassId,
         diameterMmOverride: 1.0,
         drillMmOverride: 0.4,
@@ -138,7 +147,7 @@ describe("via insert gate honours scoped scalar rules", () => {
   });
 
   test("a net-scoped annularRing rule refuses a via with too thin a ring", async () => {
-    const { sdk, designId } = await createDesigner("via-rule-gate-annular");
+    const { sdk, designId, hvNetId } = await createDesigner("via-rule-gate-annular");
     const initial = await sdk.getPcbProjection(designId);
     const netClassId = initial!.board.netClasses[0]!.id;
 
@@ -152,7 +161,7 @@ describe("via insert gate honours scoped scalar rules", () => {
             name: "HV annular ring",
             enabled: true,
             priority: 10,
-            scopes: [{ kind: "net", netIds: ["n_hv"] }],
+            scopes: [{ kind: "net", netIds: [hvNetId] }],
             constraint: { kind: "annularRing", minMm: 0.35 },
           },
         ],
@@ -167,7 +176,7 @@ describe("via insert gate honours scoped scalar rules", () => {
       envelope(designId, "cmd-annular-refused", afterRules!.revision, {
         type: "pcb_add_via",
         centerMm: { x: 10, y: 10 },
-        netId: "n_hv",
+        netId: hvNetId,
         netClassId,
         diameterMmOverride: 1.0,
         drillMmOverride: 0.4,

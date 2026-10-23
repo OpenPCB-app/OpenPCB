@@ -8,9 +8,14 @@
  * exact: forward `component.set` + inverse `entity.delete` ⇒ created; forward
  * `component.set` + inverse `component.set` ⇒ modified; forward `entity.delete`
  * (inverse `entity.restore` carries the payload, incl. netId) ⇒ deleted.
+ * Reference-only repair carriers count as modifications without replacing
+ * geometry; their strict reader owns the directional reference delta.
  */
 
 import type { EcsPatch } from "../../../../shared/domain/commands";
+import { readNetRebindHistoryDelta } from "../net-identity/rebind-history-patches";
+import type { RawNetRebindDelta } from "../net-identity/rebind-history-types";
+import type { DesignerWorldComponent } from "../projection-world";
 
 const TRACE_PREFIX = "pcb:trace:";
 const VIA_PREFIX = "pcb:via:";
@@ -57,10 +62,50 @@ function netIdFromRestore(components: unknown): string | null {
   return null;
 }
 
+function ownDataField(value: unknown, key: string): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  return descriptor && Object.hasOwn(descriptor, "value") ? descriptor.value : undefined;
+}
+
+function rebindDelta(patches: readonly EcsPatch[]): RawNetRebindDelta | null {
+  for (const patch of patches) {
+    const component = ownDataField(patch, "component");
+    const entityId = ownDataField(patch, "entityId");
+    if (
+      ownDataField(component, "type") !== "designer.net_reference_rebind" &&
+      !(typeof entityId === "string" && entityId.startsWith("pcb:net-reference-rebind:"))
+    ) continue;
+    const designId = ownDataField(ownDataField(component, "payload"), "designId");
+    // The strict reader owns the carrier contract; validate the whole set so
+    // mixed or malformed repair patches cannot invent ordinary copper edits.
+    return readNetRebindHistoryDelta(
+      typeof designId === "string" ? designId : "",
+      "pcb_rebind_net_references",
+      patches as readonly EcsPatch<DesignerWorldComponent>[],
+    );
+  }
+  return null;
+}
+
+function repairedCopper(delta: RawNetRebindDelta): CopperGeometryRef[] {
+  return delta.rows.flatMap((row) => {
+    if ((row.kind !== "trace" && row.kind !== "via") || row.payloadId === null) return [];
+    const after = row.fields.find((field) => field.key === "netId")?.after;
+    return [{
+      geometryId: row.payloadId,
+      kind: row.kind,
+      netId: after?.exists && typeof after.value === "string" ? after.value : null,
+    }];
+  });
+}
+
 export function classifyCopperPatches(
   forward: readonly EcsPatch[],
   inverse: readonly EcsPatch[],
 ): ClassifiedCopperPatches {
+  const repair = rebindDelta(forward);
+  if (repair) return { created: [], modified: repairedCopper(repair), deleted: [] };
   const inverseByEntity = new Map<string, EcsPatch[]>();
   for (const patch of inverse as readonly EcsPatch[]) {
     if ("entityId" in patch) {

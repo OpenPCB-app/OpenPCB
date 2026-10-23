@@ -11,7 +11,6 @@ import { Checkbox } from "@shared/frontend/ui/checkbox";
 import { IconButton } from "@shared/frontend/ui/icon-button";
 import { SeverityDiamond } from "@shared/frontend/ui/severity-diamond";
 import type {
-  DesignerPcbProjection,
   DrcRuleCode,
   DrcRunSnapshot,
   DrcSeverity,
@@ -22,6 +21,15 @@ import { useDrcRun } from "../pcb/drc/use-drc-run";
 import { CODE_LABEL, resolveAnchorLabel } from "../pcb/drc/drc-labels";
 import { usePcbViewStore } from "../pcb/pcb-view-store";
 import { usePcbDesignRulesDialog } from "../pcb/use-pcb-design-rules-dialog";
+import { DrcEvidenceSummary } from "./DrcEvidenceSummary";
+import { NetIdentityPanel } from "../net-identity/NetIdentityPanel";
+import type { NetIdentityPanelActions } from "../net-identity/use-net-identity-panel";
+import { useIdentityPcbProjection } from "../net-identity/use-identity-pcb-projection";
+import { NON_OVERRIDABLE } from "../../../../shared/drc/severity";
+import {
+  validationReportNotice,
+  validationReportState,
+} from "./validation-report-state";
 
 const DRC_SESSION_ID = "designer-drc-session";
 
@@ -31,6 +39,8 @@ interface DesignerDrcViewProps {
   designId: string | null;
   /** Current PCB projection revision, for stale detection. */
   revision: number | null;
+  commandScope?: string;
+  netIdentityActions?: NetIdentityPanelActions;
   /** Jump to the PCB view centered on a violation location (mm). */
   onShowViolation: (locationMm: { x: number; y: number }) => void;
   /**
@@ -64,6 +74,8 @@ export function DesignerDrcView({
   moduleId,
   designId,
   revision,
+  commandScope,
+  netIdentityActions,
   onShowViolation,
   onClose,
 }: DesignerDrcViewProps): ReactElement {
@@ -71,8 +83,12 @@ export function DesignerDrcView({
     () => createDesignerApi({ backendURL, moduleId }),
     [backendURL, moduleId],
   );
-  const report = useDrcStore((s) => s.report);
-  const run = useDrcStore((s) => s.run);
+  const reportRaw = useDrcStore((s) => s.report);
+  const report = reportRaw?.designId === designId ? reportRaw : null;
+  const runRaw = useDrcStore((s) => s.run);
+  const run = runRaw?.designId === designId ? runRaw : null;
+  const starting = useDrcStore((s) => s.starting);
+  const reportIsPrevious = useDrcStore((s) => s.reportIsPrevious);
   const error = useDrcStore((s) => s.error);
   const cancelNotice = useDrcStore((s) => s.cancelNotice);
   const dismissCancelNotice = useDrcStore((s) => s.dismissCancelNotice);
@@ -80,6 +96,7 @@ export function DesignerDrcView({
   const select = useDrcStore((s) => s.select);
   const requestCenter = useDrcStore((s) => s.requestCenter);
   const running = isDrcRunActive(run);
+  const busy = starting || running;
   const { start: startRun, cancel: cancelRun } = useDrcRun({ api, designId });
   const [cancelling, setCancelling] = useState(false);
 
@@ -92,33 +109,46 @@ export function DesignerDrcView({
   const waivedIds = usePcbViewStore((s) => s.viewState.drcWaivedViolationIds);
   const toggleWaived = usePcbViewStore((s) => s.toggleDrcWaived);
 
-  const [projection, setProjection] = useState<DesignerPcbProjection | null>(
-    null,
-  );
+  const pcbRead = useIdentityPcbProjection(api, designId, revision);
+  const projection = pcbRead.projection;
   const [filter, setFilter] = useState<Set<DrcSeverity>>(
     new Set(["error", "warning", "info"]),
   );
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [showWaived, setShowWaived] = useState(false);
 
-  // Load labels (projection) + hydrate the persisted report when opening a
-  // design whose result the store doesn't already hold.
+  // Report hydration belongs to design opening, not identity/revision refreshes.
   useEffect(() => {
     if (!designId) return;
     let cancelled = false;
-    void api
-      .getPcbProjection(designId)
-      .then((p) => {
-        if (!cancelled) setProjection(p);
-      })
-      .catch(() => {});
     if (useDrcStore.getState().report?.designId !== designId) {
+      const initialReport = useDrcStore.getState().report;
+      const initialRun = useDrcStore.getState().run;
+      const canHydrate = (): boolean => {
+        const state = useDrcStore.getState();
+        return (
+          !cancelled &&
+          state.report === initialReport &&
+          state.run === initialRun &&
+          !state.starting
+        );
+      };
       void api
         .getDrcResult(designId)
         .then((r) => {
-          if (!cancelled && r) useDrcStore.getState().setReport(r);
+          if (!canHydrate() || !r) return;
+          if (r.designId !== designId) {
+            throw new Error("DRC report does not match the requested design");
+          }
+          useDrcStore.getState().setReport(r);
         })
-        .catch(() => {});
+        .catch((err: unknown) => {
+          if (canHydrate()) {
+            useDrcStore.getState().setError(
+              err instanceof Error ? err.message : "DRC report unavailable",
+            );
+          }
+        });
     }
     return () => {
       cancelled = true;
@@ -132,7 +162,7 @@ export function DesignerDrcView({
     const c = { errors: 0, warnings: 0, infos: 0 };
     const byCode = new Map<DrcRuleCode, typeof all>();
     for (const v of all) {
-      const isWaived = waivedSet.has(v.id);
+      const isWaived = !NON_OVERRIDABLE.has(v.code) && waivedSet.has(v.id);
       if (!isWaived) {
         if (v.severity === "error") c.errors += 1;
         else if (v.severity === "warning") c.warnings += 1;
@@ -159,8 +189,18 @@ export function DesignerDrcView({
     return { groups: grouped, counts: c };
   }, [report, waivedSet, filter, showWaived]);
 
-  const stale =
-    report != null && revision != null && report.revision !== revision;
+  const reportState = validationReportState({
+    report,
+    designId,
+    revision,
+    previous:
+      run?.status === "failed" ||
+      run?.status === "cancelled" ||
+      reportIsPrevious ||
+      busy ||
+      error !== null,
+  });
+  const notice = validationReportNotice("DRC", reportState);
 
   const onRun = (): void => {
     if (!designId) return;
@@ -169,16 +209,17 @@ export function DesignerDrcView({
 
   const onCancel = (): void => {
     setCancelling(true);
-    void cancelRun();
+    void cancelRun().then(() => {
+      if (useDrcStore.getState().error) setCancelling(false);
+    });
   };
 
   const handleRulesSaved = useCallback(async () => {
     if (!designId) return;
     // Pull the new board (revision bumped) then re-run DRC against it.
-    const proj = await api.getPcbProjection(designId);
-    setProjection(proj);
+    await pcbRead.refresh();
     void startRun();
-  }, [api, designId, startRun]);
+  }, [pcbRead.refresh, designId, startRun]);
 
   // Shared with the PCB Board properties panel — one envelope, one save path.
   const rules = usePcbDesignRulesDialog({
@@ -198,10 +239,10 @@ export function DesignerDrcView({
           variant="primary"
           size="sm"
           onClick={onRun}
-          disabled={running || !designId}
+          disabled={busy || !designId}
           icon={<Play className="h-3 w-3" />}
         >
-          {running ? "Running…" : "Run DRC"}
+          {starting ? "Starting…" : running ? "Running…" : "Run DRC"}
         </Button>
         <Button
           variant="secondary"
@@ -322,10 +363,9 @@ export function DesignerDrcView({
         </div>
       ) : null}
 
-      {stale ? (
-        <div className="flex h-[22px] shrink-0 items-center border-b border-border bg-status-warning-soft px-2 text-2xs text-status-warning">
-          The board changed since this DRC ran — results may be out of date.
-          Re-run DRC.
+      {notice ? (
+        <div className="shrink-0 border-b border-border bg-status-warning-soft px-2 py-1 text-2xs text-status-warning">
+          {notice}
         </div>
       ) : null}
       {error ? (
@@ -335,16 +375,30 @@ export function DesignerDrcView({
       ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {running && report ? (
-          <div className="border-b border-border px-2 py-1 text-2xs text-text-tertiary">
-            Showing the previous run
-          </div>
-        ) : null}
-        <div className={running && report ? "opacity-60" : undefined}>
+        {designId && commandScope && netIdentityActions ? <NetIdentityPanel
+          key={JSON.stringify([commandScope, designId])}
+          api={api} scope={commandScope} designId={designId} revision={revision}
+          projection={projection} projectionError={pcbRead.error}
+          refreshProjection={pcbRead.refresh} {...netIdentityActions}
+        /> : null}
+        <div className={reportState !== "current" && report ? "opacity-60" : undefined}>
           {report && counts.errors + counts.warnings + counts.infos === 0 ? (
-            <div className="m-2 rounded-control bg-status-success-soft px-2 py-1.5 text-xs text-status-success">
-              No DRC violations
+            <div className="m-2 rounded-control bg-surface-section px-2 py-1.5 text-xs text-text-secondary">
+              {reportState !== "current"
+                ? "Previous DRC report: no unwaived reported violations"
+                : report.violations.length > 0
+                  ? "No unwaived reported DRC violations"
+                  : "No reported DRC violations"}
             </div>
+          ) : null}
+          {report ? (
+            <>
+              <DrcEvidenceSummary evidence={report.evidence} />
+              {report.violations.length > 0 &&
+              counts.errors + counts.warnings + counts.infos === 0
+                ? ` ${report.violations.length} reported ${report.violations.length === 1 ? "violation is" : "violations are"} waived.`
+                : null}
+            </>
           ) : null}
 
           {groups.map((group) => {
@@ -378,7 +432,7 @@ export function DesignerDrcView({
                 </button>
                 {!isCollapsed
                   ? group.violations.map((v) => {
-                      const waived = waivedSet.has(v.id);
+                      const waived = !NON_OVERRIDABLE.has(v.code) && waivedSet.has(v.id);
                       const selected = v.id === selectedId;
                       return (
                         <div
@@ -423,14 +477,14 @@ export function DesignerDrcView({
                               {v.layer}
                             </span>
                           ) : null}
-                          <button
+                          {!NON_OVERRIDABLE.has(v.code) ? <button
                             type="button"
                             onClick={() => toggleWaived(v.id)}
                             title={waived ? "Un-waive" : "Waive (accept)"}
                             className="mt-0.5 shrink-0 cursor-pointer rounded-control px-1 text-2xs text-text-tertiary opacity-0 hover:text-text-strong group-hover:opacity-100"
                           >
                             {waived ? "↩" : "waive"}
-                          </button>
+                          </button> : null}
                         </div>
                       );
                     })

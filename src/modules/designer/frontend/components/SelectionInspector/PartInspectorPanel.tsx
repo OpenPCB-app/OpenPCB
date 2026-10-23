@@ -19,6 +19,7 @@ import { Checkbox } from "@shared/frontend/ui/checkbox";
 import { PanelSectionHeader } from "@shared/frontend/ui/panel-section-header";
 import { PropertyGrid, PropertyRow } from "@shared/frontend/ui/property-grid";
 import { TableHeaderRow, TableRow } from "@shared/frontend/ui/data-table";
+import { PinElectricalIntentEditor } from "./PinElectricalIntentEditor";
 
 const INPUT_CLASS =
   "h-[22px] w-full rounded-control border border-border-control bg-surface-input px-1.5 text-xs text-text-strong outline-none placeholder:text-text-disabled focus:border-selection";
@@ -640,26 +641,33 @@ export function PartInspectorPanel({
             <span className="text-right">Type</span>
           </TableHeaderRow>
           {pinNets.map(({ pin, net }) => (
-            <TableRow key={pin.id} cols={PIN_COLS}>
-              <span className="truncate font-mono text-2xs text-text-tertiary">
-                {pin.number ?? "·"}
-              </span>
-              <span className="flex min-w-0 items-center gap-1.5 font-mono text-2xs">
-                <span className="truncate text-text-strong">{pin.name}</span>
-                <span
-                  className={`min-w-0 truncate ${
-                    net
-                      ? netClassTextClass(classifyNet(net))
-                      : "text-text-disabled"
-                  }`}
-                >
-                  {net ?? "—"}
+            <div key={pin.id}>
+              <TableRow cols={PIN_COLS}>
+                <span className="truncate font-mono text-2xs text-text-tertiary">
+                  {pin.number ?? "·"}
                 </span>
-              </span>
-              <span className="truncate text-right text-2xs text-text-tertiary">
-                {pin.electricalType || "—"}
-              </span>
-            </TableRow>
+                <span className="flex min-w-0 items-center gap-1.5 font-mono text-2xs">
+                  <span className="truncate text-text-strong">{pin.name}</span>
+                  <span
+                    className={`min-w-0 truncate ${
+                      net
+                        ? netClassTextClass(classifyNet(net))
+                        : "text-text-disabled"
+                    }`}
+                  >
+                    {net ?? "—"}
+                  </span>
+                </span>
+                <span className="truncate text-right text-2xs text-text-tertiary">
+                  {pin.electricalType || "—"}
+                </span>
+              </TableRow>
+              <PinElectricalIntentEditor
+                pin={pin}
+                dispatchCommand={dispatchCommand}
+                setError={setError}
+              />
+            </div>
           ))}
         </>
       ) : null}

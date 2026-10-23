@@ -1,4 +1,5 @@
 import { formatShortcut } from "@shared/frontend/ui/shortcut";
+import { NetIdentityActivityBadge } from "../net-identity/NetIdentityActivityBadge";
 import { useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import type { PcbLayerCount, PcbLayerId } from "../../../../sdks";
 import {
@@ -98,6 +99,8 @@ interface PcbTopToolbarProps {
   drcErrorCount?: number;
   /** A batch DRC run is queued or executing — swaps the icon for a spinner. */
   drcRunning?: boolean;
+  netIdentityScope?: string;
+  netIdentityDesignId?: string | null;
   /** Whether DRC violation markers are drawn on the canvas. */
   drcMarkersVisible: boolean;
   onToggleDrcMarkers: () => void;
@@ -665,6 +668,8 @@ export function PcbTopToolbar({
   onToggleDrcPanel,
   drcErrorCount,
   drcRunning = false,
+  netIdentityScope,
+  netIdentityDesignId,
   drcMarkersVisible,
   onToggleDrcMarkers,
   canUndo,
@@ -782,6 +787,7 @@ export function PcbTopToolbar({
             {drcErrorCount}
           </span>
         ) : null}
+        <NetIdentityActivityBadge scope={netIdentityScope} designId={netIdentityDesignId} />
       </ToolbarButton>
 
       <ViewToggleDropdown

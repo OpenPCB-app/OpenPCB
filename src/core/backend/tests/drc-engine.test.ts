@@ -215,6 +215,7 @@ describe("runDrc — clearance", () => {
     // centers 0.5 apart → edge gap 0.3 ≥ 0.25 rule and ≥ 0.127 fab.
     const report = runDrc(
       projection({
+        netNames: { n1: "A", n2: "B" },
         traces: [
           trace("a", "n1", [
             [0, 0],
@@ -233,6 +234,7 @@ describe("runDrc — clearance", () => {
   test("same-net traces are never flagged (clearance or short)", () => {
     const report = runDrc(
       projection({
+        netNames: { n1: "A" },
         traces: [
           trace("a", "n1", [
             [0, 0],
@@ -312,6 +314,7 @@ describe("runDrc — clearance", () => {
   test("different layers do not clear-check against each other", () => {
     const report = runDrc(
       projection({
+        netNames: { n1: "A", n2: "B" },
         traces: [
           trace("a", "n1", [
             [0, 0],
@@ -370,6 +373,7 @@ describe("runDrc — trace ↔ pad (mirror handling)", () => {
   test("trace at the non-mirrored x is clear (proves X-mirror applied)", () => {
     const report = runDrc(
       projection({
+        netNames: { n2: "B" },
         placements: [pl],
         traces: [
           trace(
@@ -580,6 +584,7 @@ describe("runDrc — constraints + structural + connectivity", () => {
 
 describe("runDrc — ids, waivers, ignore", () => {
   const proj = projection({
+    netNames: { n1: "A", n2: "B" },
     traces: [
       trace("a", "n1", [
         [0, 0],
@@ -627,6 +632,7 @@ describe("runDrc — nm→mm conversion sanity", () => {
   test("1 mm-separated traces are clear (conversion applied, not raw nm)", () => {
     const report = runDrc(
       projection({
+        netNames: { n1: "A", n2: "B" },
         traces: [
           trace(
             "a",

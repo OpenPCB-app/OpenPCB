@@ -60,7 +60,9 @@ export type {
   DesignerCreateWireJunctionCommand,
   DesignerUpdateWireGeometryCommand,
   DesignerDeleteEntityCommand,
+  DesignerDuplicatePartCommand,
   DesignerDerivedNet,
+  DesignerNetDiagnostic,
   DesignerDesignRecord,
   DesignerDesignSummary,
   DesignerDrcStatus,
@@ -77,6 +79,8 @@ export type {
   DesignerMirrorPartCommand,
   DesignerMovePartCommand,
   DesignerPin,
+  DesignerPinElectricalIntent,
+  DesignerSetPinElectricalIntentCommand,
   PcbBoardOutline,
   PcbBoardOutlineRect,
   PcbBoardOutlineRoundRect,
@@ -145,6 +149,7 @@ export type {
   DesignerPcbRotatePlacementCommand,
   DesignerPcbSetActiveLayerCommand,
   DesignerPcbSetBoardSettingsCommand,
+  DesignerPcbRebindNetReferencesCommand,
   DesignerPcbSetBoardOutlineCommand,
   DesignerPcbSetViewStateCommand,
   DesignerPcbSetDesignRulesCommand,
@@ -187,6 +192,7 @@ export type {
   DrcRuleConstraint,
   DrcRuleScope,
   DrcRunCancelReason,
+  DrcRunEvidence,
   DrcRunProgress,
   DrcRunSnapshot,
   DrcRunStatus,
@@ -194,6 +200,7 @@ export type {
   DrcViolation,
   PcbDrcRule,
   PcbDiffPair,
+  PcbRuleReadDiagnostic,
   DesignerPlacePartCommand,
   DesignerPlaceGndPortCommand,
   DesignerPlacePwrPortCommand,
@@ -420,7 +427,13 @@ export interface DesignerBoardSnapshotBuild {
 
 // Cloud auto-router wire contracts (BoardSnapshot / RouteResultEnvelope / ProgressFrame).
 export * from "./stackup";
+export type {
+  DesignerNetReferenceSite, DesignerNetDependents, DesignerNetIdentityEvent,
+  DesignerNetIdentityOutcome,
+  DesignerNetReferenceGroup, DesignerNetIdentitySummary, DesignerNetIdentityStatus,
+} from "./net-identity";
 export type * from "./autoroute";
 // Cloud auto-place wire contracts (PlacementResultEnvelope / PlaceOperation / PlaceProgressFrame).
 // Reuses BoardSnapshot / SnapshotPlacement / PlaceOptions / PlaceWeights from ./autoroute.
 export type * from "./autoplace";
+export type { NetRebindReceipt } from "./net-rebind";

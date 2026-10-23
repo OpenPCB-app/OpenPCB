@@ -389,4 +389,73 @@ describe("createDrcRunController", () => {
     expect(useDrcStore.getState().error).toBe("backend down");
     expect(FakeEventSource.instances).toHaveLength(0);
   });
+
+  test("a pending start is busy and cannot send duplicate starts", async () => {
+    let accept!: (value: DrcRunSnapshot) => void;
+    const api = makeApi({
+      startDrcRun: vi.fn(() => new Promise<DrcRunSnapshot>((resolve) => { accept = resolve; })),
+    });
+    const controller = controllerFor(api);
+    const pending = controller.start();
+    expect(useDrcStore.getState().starting).toBe(true);
+    await controller.start();
+    expect(api.startDrcRun).toHaveBeenCalledTimes(1);
+    accept(snapshot());
+    await pending;
+    expect(useDrcStore.getState().starting).toBe(false);
+  });
+
+  test("a missing completed report preserves history and reports failure", async () => {
+    const api = makeApi({ getDrcResult: vi.fn(async () => null) });
+    useDrcStore.getState().setReport(report(6));
+    await controllerFor(api).start();
+    lastStream().emit("run.completed", {});
+    await vi.waitFor(() => expect(useDrcStore.getState().error).toBe("DRC report unavailable"));
+    expect(useDrcStore.getState().report?.revision).toBe(6);
+    expect(useDrcStore.getState().reportIsPrevious).toBe(true);
+  });
+
+  test("a late completed fetch cannot overwrite another design", async () => {
+    let accept!: (value: DrcReport) => void;
+    const api = makeApi({
+      getDrcResult: vi.fn(() => new Promise<DrcReport>((resolve) => { accept = resolve; })),
+    });
+    await controllerFor(api).start();
+    lastStream().emit("run.completed", {});
+    useDrcStore.getState().clear();
+    const current = { ...report(9), designId: "design-2" };
+    useDrcStore.getState().setReport(current);
+    accept(report(7));
+    await Promise.resolve();
+    expect(useDrcStore.getState().report).toBe(current);
+    expect(useDrcStore.getState().error).toBeNull();
+  });
+
+  test("a terminal cancel response ends the run without waiting for the stream", async () => {
+    const api = makeApi({
+      cancelDrcRun: vi.fn(async () => snapshot({ status: "cancelled", cancelReason: "user" })),
+    });
+    useDrcStore.getState().setReport(report(6));
+    const controller = controllerFor(api);
+    await controller.start();
+    await controller.cancel();
+    expect(useDrcStore.getState().cancelNotice).toBe("user");
+    expect(useDrcStore.getState().report?.revision).toBe(6);
+    expect(lastStream().closed).toBe(true);
+  });
+
+  test("disposing a pending start permits a new controller to join the run", async () => {
+    let accept!: (value: DrcRunSnapshot) => void;
+    const api = makeApi({
+      startDrcRun: vi.fn(() => new Promise<DrcRunSnapshot>((resolve) => { accept = resolve; })),
+    });
+    const controller = controllerFor(api);
+    const pending = controller.start();
+    controller.dispose();
+    expect(useDrcStore.getState().starting).toBe(false);
+    accept(snapshot());
+    await pending;
+    expect(useDrcStore.getState().run).toBeNull();
+    expect(FakeEventSource.instances).toHaveLength(0);
+  });
 });

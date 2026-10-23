@@ -52,7 +52,7 @@ export function manufacturabilityItems(
 
   for (const t of items.traces) {
     const width = ctx.resolver.scalar("trackWidth", {
-      netId: t.netId,
+      netId: ctx.tierNetOf(t),
       layers: [t.layer],
       geometry: {
         kind: "polyline",
@@ -92,7 +92,7 @@ export function manufacturabilityItems(
     const via = vg.via;
     // One scope item per via: its barrel disc and its resolved layer span.
     const viaItem = {
-      netId: vg.netId,
+      netId: ctx.tierNetOf(vg),
       layers: vg.layers,
       geometry: {
         kind: "disc" as const,

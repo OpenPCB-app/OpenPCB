@@ -1,19 +1,20 @@
 import type {
   DesignerCommand,
   DesignerDerivedNet,
-  DesignerPlaceGndPortCommand,
-  DesignerPlaceNetPortalCommand,
-  DesignerPlacePwrPortCommand,
-  DesignerUpsertLabelCommand,
 } from "../../../sdks";
 
 export interface NetMergeSummary {
-  /** null = auto-named (`Net_<n>`), i.e. no label / port named it. */
+  /** null = automatically named; legacy reports infer that from `Net_<n>`. */
   name: string | null;
   pinCount: number;
 }
 
 const AUTO_NET_NAME = /^Net_\d+$/;
+const NAMING_COMMANDS = ["upsert_label", "place_gnd_port", "place_pwr_port", "place_net_portal", "update_primitive_text"] as const;
+const GEOMETRY_COMMANDS = ["place_part", "duplicate_part", "move_part", "rotate_part", "mirror_part", "move_primitive",
+  "rotate_primitive", "update_wire_geometry", "auto_arrange_schematic"] as const;
+export type NetMergePolicy = "naming" | "geometry";
+type GatedCommand = Extract<DesignerCommand, { type: typeof NAMING_COMMANDS[number] | typeof GEOMETRY_COMMANDS[number] }>;
 
 function memberIds(net: DesignerDerivedNet): string[] {
   return [
@@ -25,7 +26,7 @@ function memberIds(net: DesignerDerivedNet): string[] {
 }
 
 function isNamed(net: DesignerDerivedNet): boolean {
-  return !AUTO_NET_NAME.test(net.name);
+  return net.autoNamed === undefined ? !AUTO_NET_NAME.test(net.name) : !net.autoNamed;
 }
 
 /**
@@ -33,12 +34,12 @@ function isNamed(net: DesignerDerivedNet): boolean {
  * identity behind the user's back. Fusing ONE named net with anonymous ones is
  * ordinary naming (a GND port dropped on a 2-pin net) and stays silent.
  */
-function needsConfirm(merged: readonly DesignerDerivedNet[]): boolean {
+function needsConfirm(merged: readonly DesignerDerivedNet[], policy: NetMergePolicy): boolean {
   const named = merged.filter(isNamed).length;
   const anonymousMultiPin = merged.filter(
     (net) => !isNamed(net) && net.pinIds.length >= 2,
   ).length;
-  return named >= 2 || anonymousMultiPin >= 2;
+  return named >= 2 || (policy === "naming" && anonymousMultiPin >= 2);
 }
 
 function significant(net: DesignerDerivedNet): boolean {
@@ -46,15 +47,16 @@ function significant(net: DesignerDerivedNet): boolean {
 }
 
 /**
- * Detects a label/port edit that fuses 2+ previously distinct nets. Net ids
- * are union-find roots and change between derivations, so BEFORE nets are
- * matched to AFTER nets through their (stable, unique) member entity ids.
+ * Detects an edit that fuses 2+ previously distinct nets. BEFORE nets
+ * are matched through stable member ids because legacy roots can change and
+ * durable merges preserve at most one predecessor id.
  * Only "significant" BEFORE nets count (named, or >= 2 pins): naming a bare
  * stub or a lone pin never asks for confirmation.
  */
 export function detectNetMerge(
   before: DesignerDerivedNet[],
   after: DesignerDerivedNet[],
+  policy: NetMergePolicy = "naming",
 ): { nets: NetMergeSummary[] } | null {
   const afterByMember = new Map<string, DesignerDerivedNet>();
   for (const net of after) {
@@ -74,7 +76,7 @@ export function detectNetMerge(
     }
   }
   for (const merged of groups.values()) {
-    if (!needsConfirm(merged)) continue;
+    if (!needsConfirm(merged, policy)) continue;
     const sig = merged.filter(significant);
     return {
       nets: sig.map((net) => ({
@@ -94,28 +96,20 @@ export class NetMergeRefusal extends Error {
 
 export function isNetMergeGatedCommand(
   command: DesignerCommand,
-): command is
-  | DesignerUpsertLabelCommand
-  | DesignerPlaceGndPortCommand
-  | DesignerPlacePwrPortCommand
-  | DesignerPlaceNetPortalCommand {
-  return (
-    command.type === "upsert_label" ||
-    command.type === "place_gnd_port" ||
-    command.type === "place_pwr_port" ||
-    command.type === "place_net_portal"
-  );
+): command is GatedCommand {
+  return NAMING_COMMANDS.some((type) => command.type === type) || GEOMETRY_COMMANDS.some((type) => command.type === type);
 }
 
-/**
- * Whether a dispatch must be net-merge-checked: a gated command without
- * `confirmMerge: true`, or a batch carrying at least one such step.
- */
-export function isNetMergeGatedDispatch(command: DesignerCommand): boolean {
+/** Mixed batches retain the broader naming policy because the gate compares their final topology. */
+export function getNetMergePolicy(command: DesignerCommand): NetMergePolicy | null {
   if (command.type === "batch_commands") {
-    return command.commands.some(
-      (step) => isNetMergeGatedCommand(step) && step.confirmMerge !== true,
-    );
+    const policies = command.commands.map(getNetMergePolicy);
+    return policies.includes("naming") ? "naming" : policies.includes("geometry") ? "geometry" : null;
   }
-  return isNetMergeGatedCommand(command) && command.confirmMerge !== true;
+  if (!isNetMergeGatedCommand(command) || command.confirmMerge === true) return null;
+  return NAMING_COMMANDS.some((type) => command.type === type) ? "naming" : "geometry";
+}
+
+export function isNetMergeGatedDispatch(command: DesignerCommand): boolean {
+  return getNetMergePolicy(command) !== null;
 }

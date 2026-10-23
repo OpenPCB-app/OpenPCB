@@ -1,6 +1,7 @@
 import type { RuleProblem } from "../rule-resolver";
 import type { DrcContext } from "../drc-context";
 import type { DrcViolationDraft } from "../types";
+import type { PcbRuleReadDiagnostic } from "../../../sdks/designer";
 
 /**
  * Rule-table validity (rule-semantics contract §2.1, §10). The resolver is the
@@ -26,6 +27,7 @@ import type { DrcViolationDraft } from "../types";
  */
 export function checkRules(ctx: DrcContext): DrcViolationDraft[] {
   return [
+    ...storedRuleDrafts(ctx.projection.ruleReadDiagnostics ?? []),
     ...group(ctx.resolver.problems, "invalid").map(([id, problems]) => ({
       code: "DRC_RULE_INVALID" as const,
       message: `Rule "${labelOf(problems)}" cannot be applied: ${details(problems)}`,
@@ -42,6 +44,29 @@ export function checkRules(ctx: DrcContext): DrcViolationDraft[] {
       anchors: [{ kind: "rule" as const, ruleId: id }],
     })),
   ];
+}
+
+/** Group reader losses so multiple fields on one stored rule share one id. */
+function storedRuleDrafts(
+  diagnostics: readonly PcbRuleReadDiagnostic[],
+): DrcViolationDraft[] {
+  const byId = new Map<string, PcbRuleReadDiagnostic[]>();
+  for (const diagnostic of diagnostics) {
+    const namespace = diagnostic.path.split("[")[0]!;
+    const rowPath = diagnostic.path.match(/^[^[]+\[\d+\]/)?.[0]
+      ?? diagnostic.path;
+    const id = diagnostic.ruleId
+      ? `stored:${namespace}:${diagnostic.ruleId}`
+      : `stored:${rowPath}`;
+    const bucket = byId.get(id);
+    if (bucket) bucket.push(diagnostic);
+    else byId.set(id, [diagnostic]);
+  }
+  return [...byId].map(([ruleId, rows]) => ({
+    code: "DRC_RULE_INVALID",
+    message: `Stored board settings cannot be fully applied: ${rows.map((row) => `${row.path} (${row.reason}): ${row.message}`).join("; ")}`,
+    anchors: [{ kind: "rule", ruleId }],
+  }));
 }
 
 /** Problems of one kind, bucketed by rule id, in first-seen order. */

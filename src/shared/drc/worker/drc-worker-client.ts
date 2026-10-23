@@ -97,10 +97,11 @@ const queue: QueuedRun[] = [];
 let runCounter = 0;
 
 /**
- * The ONE bundler-aware seam (contract 09 §2.1). Three runtimes:
+ * The ONE bundler-aware seam (contract 09 §2.1):
  *
- * - Bun (`npm run dev`, `bun test`, Playwright): transpiles a `.ts` worker
- *   entry natively, so the sibling source file is the entry.
+ * - Bun: transpiles a `.ts` worker entry natively.
+ * - Node running source through tsx: a source-only bootstrap registers the
+ *   worker's TypeScript loader before importing the engine.
  * - The tsup CJS bundle: `import.meta.url` is defined to the bundle entry's
  *   own file URL, so `./drc-worker.js` resolves next to it — `dist/main/`.
  * - Electron (dev and packaged): `backend-server.ts` sets the absolute path
@@ -108,9 +109,12 @@ let runCounter = 0;
  */
 function resolveDrcWorkerEntry(): URL | string {
   if (overrideEntry !== null) return overrideEntry;
-  return process.versions.bun
-    ? new URL("./drc-worker.ts", import.meta.url)
-    : new URL("./drc-worker.js", import.meta.url);
+  if (process.versions.bun) return new URL("./drc-worker.ts", import.meta.url);
+  const source = new URL(import.meta.url).pathname.endsWith(".ts");
+  return new URL(
+    source ? "./drc-worker-node.mjs" : "./drc-worker.js",
+    import.meta.url,
+  );
 }
 
 /** Overrides the entry for the NEXT spawn; call before the first run. */
@@ -135,7 +139,7 @@ function workerError(entry: URL | string, detail: string): Error {
 }
 
 /** Detaches and terminates the current worker; the next run respawns. */
-function dropWorker(): Promise<void> {
+function dropWorker(error?: Error): Promise<void> {
   const current = spawn;
   spawn = null;
   if (!current) return Promise.resolve();
@@ -151,7 +155,7 @@ function dropWorker(): Promise<void> {
   const rejectReady = current.rejectReady;
   current.resolveReady = null;
   current.rejectReady = null;
-  rejectReady?.(workerError(current.entry, "dropped before ready"));
+  rejectReady?.(error ?? workerError(current.entry, "dropped before ready"));
   return Promise.resolve(current.instance.terminate()).then(
     () => undefined,
     () => undefined,
@@ -165,10 +169,9 @@ function dropWorker(): Promise<void> {
 function handleWorkerFailure(error: Error): void {
   const pendingSpawn = spawn?.rejectReady ?? null;
   const run = active;
-  void dropWorker();
+  void dropWorker(error);
   if (pendingSpawn) {
     // `startRun` awaits this and settles the run it belongs to.
-    pendingSpawn(error);
     return;
   }
   if (run) {

@@ -38,6 +38,7 @@ import { usePcbViewStore } from "./pcb/pcb-view-store";
 import { setPcbCursorPoint } from "./pcb/pcb-cursor-store";
 import { setSchematicCursorPoint } from "./stores/schematic-cursor-store";
 import { ercIssueCount, useErcStore } from "./stores/erc-store";
+import { useErcDesignScope } from "./stores/use-erc-design-scope";
 import {
   MAX_DOCK_WIDTH,
   MIN_DOCK_WIDTH,
@@ -445,6 +446,14 @@ function DesignerSpaceInner({
     pinNumbers: string[];
   } | null>(null);
   const [pcbRefreshToken, setPcbRefreshToken] = useState(0);
+  const identityTarget = useRef({ designId: state.selectedDesignId, scope: state.commandScope });
+  identityTarget.current = { designId: state.selectedDesignId, scope: state.commandScope };
+  const observeIdentityChange = useCallback(async (designId: string, revision: number) => {
+    actions.notifyExternalRevisionBump(designId, revision);
+    if (identityTarget.current.designId !== designId || identityTarget.current.scope !== state.commandScope) return;
+    setPcbRefreshToken((token) => token + 1);
+    await Promise.all([actions.refreshProjection(), actions.refreshHistory()]);
+  }, [actions, state.commandScope]);
   const openChangeFootprint = useCallback(
     (partId: string) => {
       const parts = state.projection?.parts ?? [];
@@ -540,10 +549,9 @@ function DesignerSpaceInner({
   // Batch-ERC summary for the schematic status bar + dock badge. ERC is not
   // persisted server-side; the dock view runs it on open.
   const ercReportRaw = useErcStore((s) => s.report);
-  const clearErc = useErcStore((s) => s.clear);
-  // Never let another design's report drive this design's badge/status chip —
-  // the store is cleared on design change, but the dock view's own re-run
-  // effect races that clear by one commit.
+  useErcDesignScope(state.selectedDesignId);
+  // Layout effects reset the store after render; never paint the old design's
+  // report during that render.
   const ercReport =
     ercReportRaw && ercReportRaw.designId === state.selectedDesignId
       ? ercReportRaw
@@ -1085,12 +1093,6 @@ function DesignerSpaceInner({
     setDockTab("erc");
   }, [ercDockShown]);
 
-  // ERC is computed on demand and never persisted, so a design switch must not
-  // leave the previous design's violations on screen.
-  useEffect(() => {
-    clearErc();
-  }, [clearErc, state.selectedDesignId]);
-
   // Selecting on the PCB canvas surfaces the Properties tab. A closed dock is
   // opened (the retired floating inspector appeared unconditionally, and free
   // holes/pads/text have no other editor), but an Assistant conversation is
@@ -1459,6 +1461,7 @@ function DesignerSpaceInner({
                   autoLayoutEnabled={autoLayoutEnabled}
                   autoLayoutSignedIn={autoLayoutSignedIn}
                   commandRevision={state.commandQueue?.revision}
+                  commandScope={state.commandScope}
                   dispatchCommand={actions.dispatchCommand}
                   runHistory={actions.runHistory}
                   notifyExternalRevisionBump={
@@ -1549,7 +1552,9 @@ function DesignerSpaceInner({
                 backendURL={backendURL}
                 moduleId={moduleId}
                 designId={state.selectedDesignId}
-                revision={state.projection?.revision ?? null}
+                revision={state.commandQueue?.revision ?? state.projection?.revision ?? null}
+                commandScope={state.commandScope}
+                netIdentityActions={{ dispatchCommand: actions.dispatchCommand, onObserved: observeIdentityChange }}
                 onShowViolation={() => actions.setActiveView("pcb")}
               />
             </div>
@@ -1612,7 +1617,9 @@ function DesignerSpaceInner({
                 backendURL={backendURL}
                 moduleId={moduleId}
                 designId={state.selectedDesignId}
-                revision={state.projection?.revision ?? null}
+                revision={state.commandQueue?.revision ?? state.projection?.revision ?? null}
+                commandScope={state.commandScope}
+                netIdentityActions={{ dispatchCommand: actions.dispatchCommand, onObserved: observeIdentityChange }}
                 onShowViolation={() => {
                   /* already on PCB — centering flows through the DRC store */
                 }}

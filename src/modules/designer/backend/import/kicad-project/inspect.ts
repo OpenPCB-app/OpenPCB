@@ -415,11 +415,11 @@ function appendComponentReference(
 
 function pushWarnings(
   out: KicadProjectImportWarning[],
-  parsed: Array<{ code: string; message: string }>,
+  parsed: Array<{ code: string; message: string; severity?: "info" | "warning" }>,
   severity: "info" | "warning",
 ): void {
   for (const w of parsed) {
-    out.push({ code: w.code, message: w.message, severity });
+    out.push({ code: w.code, message: w.message, severity: w.severity ?? severity });
   }
 }
 

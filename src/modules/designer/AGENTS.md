@@ -42,30 +42,46 @@ code.
 
 ## IDENTITY — read this before persisting anything
 
-**Net ids are ephemeral and must never be persisted against.** `deriveNetsAndJunctions` in
-`projection-world.ts` builds nets with a union-find over coordinate-keyed nodes; `net.id` is
-whichever node won the merge. It therefore depends on geometry and merge order, and it **changes**
-when a component moves, a pin moves, or a wire is added. Nets are not persisted at all — there is
-no `designer_nets` table, and `netNames` is rebuilt on every projection.
+**Resolve the design's identity mode before using net references.** Active durable state stores
+membership and naming provenance in `designer_net_identity_state`. `net-identity/bind.ts` assigns
+`net:<design-salt>:<sequence>` IDs from stable member IDs; geometry alone does not identify a net.
+Display names are separate metadata. Allocation counters and the retirement ledger never roll
+back during undo, restore or re-migration.
 
-Consequences, in the order you will hit them:
-
-- **Key persisted constraints on the stable pad address `` `${placement.id}|${pad.number}` ``** (or
-  on the pin id `` `${partId}:${originPinKey}` ``), then resolve to the live `net.id` at projection
-  time through `padNets`. Never store a `net.id`.
-- **The upper-cased net NAME is the durable cross-edit identifier — and only for named nets.** This
-  is why persisted traces and vias re-bind by name (`bindNetName`) after a schematic→PCB re-sync.
-  Unnamed nets get regenerated `Net_<n>` labels and carry no identity across edits.
+- Durable PCB projections preserve stored copper references. Never repair an inactive ID by
+  coordinate or name matching in a consumer. Explicit split/merge reconciliation determines
+  which predecessor survives; references to retired IDs remain inert until repaired.
+- Fresh lone pins use `nc:<pinId>` without allocating durable records. Read-only intermediate
+  components may use `pending:<n>`; these provisional IDs are not persistable identities.
+- Legacy mode retains coordinate-derived roots and historical name binding. It covers absent,
+  failed, restored or invalid identity state and is a degraded compatibility path. Read errors
+  must not silently reset stored state. Migration requires exact backup and positive evidence.
+- Read-only status uses the dedicated net-identity GET route; it must not ensure migration,
+  synchronize placements or populate defaults. Own-key lookup determines active map membership;
+  inherited properties are never net IDs. A stable logical ID does not preserve physical routing
+  when PCB placements move away from fixed copper.
+- `pcb_rebind_net_references` requires durable mode, 1..500 distinct source bindings and current
+  targets or null; it is not batchable. Preserve raw unknown fields and exact hint text. Refuse
+  lossy numeric serialization before writing. Its versioned raw-history carrier replays only
+  reference slots/affected board sections with compare-and-swap checks, preserving current
+  geometry and unrelated view settings. Never send it through generic combined-world replay;
+  a mismatch is `NET_REBIND_HISTORY_CONFLICT` with no partial writes or history movement.
+- The stable pad address remains `` `${placement.id}|${pad.number}` ``. Resolve it through
+  `padNets`; pin IDs retain the `` `${partId}:${originPinKey}` `` convention.
 - `placement.id` is a `crypto.randomUUID()` minted once and matched on re-sync by `partId`. It is
   **stable across re-annotation and re-sync** and dies only with its schematic part.
 - `pad.number` is library-defined and refdes-independent. The correlation convention is that the
   symbol's `pin.number` equals the footprint's `pad.number` on the same placement.
-- Re-annotating a refdes updates only the `reference` column, keyed by an unchanged `partId`. Pin
-  ids and geometry are untouched, so `net.id` does not change — but the net **name** can, if a label
-  or rail was renamed.
+- History patches carry full `designer.net_identity` records, including display overrides.
+  Replay reconciles patched membership against prior DB ownership and counts dependents from
+  the patched PCB state. Contested history records are sanitized; contested persisted ownership
+  is corruption and must remain untouched.
 
-Net-id instability is the single biggest constraint on relational features (constraint groups,
-decoupling/crystal groups, diff pairs). Plan for it up front; it is a design constraint, not a bug.
+The current cloud protocol cannot preserve durable identity state or allocation history. Cloud
+writes are refused when a state row or retirement ledger exists, including empty or corrupt state.
+See [`docs/designer/net-identity.md`](../../../docs/designer/net-identity.md) for the canonical
+storage, boundary, migration, repair and export contracts. Identity repair does not lift the
+independent manufacturing/import capability quarantine.
 
 ## BOARD SETTINGS — the cheap extension surface
 
@@ -121,7 +137,7 @@ its name in the serializer's known-key list (a missing name fails `tsc`).
   (`DRC_RULE_INVALID` non-overridable, `DRC_RULE_INEFFECTIVE`). Clearance comparisons use
   `clearanceViolated` (0.5 nm float grace).
 - **Dispatch is a hardcoded array, not a registry.** `runDrc` is one monolithic function: it builds
-  one `DrcContext`, runs seventeen pure `(ctx: DrcContext) => DrcViolationDraft[]` checks into a flat
+  one `DrcContext`, runs 22 pure `(ctx: DrcContext) => DrcViolationDraft[]` checks into a flat
   list, then applies class, severity, ignores, waivers and ids in a single pass and sorts the report
   by `(code, id)` (S7, `docs/pcb-hardening/06-batch-drc-contract.md` §6 — input order never changes
   the report). Adding a check is a new
@@ -426,8 +442,9 @@ cross-repo parity checks instead of standing up a runtime.
 
 ## ANTI-PATTERNS
 
-- Do **NOT** persist anything keyed on `net.id`. Use `` `${placement.id}|${pad.number}` `` or the
-  upper-cased net name.
+- Do **NOT** persist provisional `pending:` IDs or resolve durable references by display name
+  inside consumers. Validate persistent net IDs at command/import boundaries; use
+  `` `${placement.id}|${pad.number}` `` when addressing a physical pad.
 - Do **NOT** assume a `PcbNetClass` width or via field is enforced for a net that fell to the
   array-order default class — `NETCLASS_*` checks cover explicitly assigned or name-matched nets
   only; `clearanceMm` covers all.

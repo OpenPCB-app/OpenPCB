@@ -238,7 +238,8 @@ describe("designer ERC SDK + route regression", () => {
     expect(await ercViaRoute(server, design.id)).toEqual(floating);
 
     // ── Connect part A's power_in + input to part B's passive pin via wires,
-    //    making them genuinely connected (≥2-pin nets). They must clear.
+    //    making them genuinely connected (≥2-pin nets). A passive pin cannot
+    //    supply a power input; a signal output can drive an ordinary input.
     //    All probe pins sit on y=0, so a straight wire would run THROUGH the
     //    other pins and (correctly, per connect-by-touch) join them too —
     //    detour each wire away from the pin row with explicit waypoints. ──
@@ -288,8 +289,10 @@ describe("designer ERC SDK + route regression", () => {
     const connected = await designerSdk.getProjectionAndErc(design.id);
     if (!connected) throw new Error("getProjectionAndErc returned null");
 
-    // Now-connected pins on part A clear their unconnected violations.
-    expect(codesFor(connected.erc, aPwr)).toEqual([]);
+    // Connection clears the old error, but a passive supply is still undriven.
+    expect(codesFor(connected.erc, aPwr)).toEqual([
+      { code: "UNDRIVEN_POWER_PIN", severity: "error" },
+    ]);
     expect(codesFor(connected.erc, aIn)).toEqual([]);
     // Part B's still-floating power_in/input remain flagged.
     const bPwr = pinOf(partB, "power_in");
@@ -301,8 +304,8 @@ describe("designer ERC SDK + route regression", () => {
       { code: "UNCONNECTED_INPUT_PIN", severity: "warning" },
     ]);
 
-    // One error + one warning left after wiring.
-    expect(connected.erc.summary.errors).toBe(1);
+    // One undriven supply, one floating supply, and one floating signal input.
+    expect(connected.erc.summary.errors).toBe(2);
     expect(connected.erc.summary.warnings).toBe(1);
 
     // Same-revision invariant + route agreement still hold post-mutation.

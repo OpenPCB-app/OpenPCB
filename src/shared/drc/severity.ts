@@ -55,6 +55,7 @@ export const DEFAULT_SEVERITY_BY_CODE: Record<DrcRuleCode, DrcSeverity> = {
   OUTLINE_SLOT_WIDTH: "warning",
   // connectivity
   UNCONNECTED_NET: "error",
+  NET_ORPHANED_COPPER: "error",
   ISOLATED_COPPER_ISLAND: "warning",
   // zones / keepouts (contract 03 §13.1)
   KEEPOUT_VIOLATION: "error",
@@ -124,6 +125,7 @@ export function severityRank(severity: DrcSeverity): number {
 /** Codes whose error severity is safety-critical and never overridable. */
 export const NON_OVERRIDABLE = new Set<DrcRuleCode>([
   "NET_SHORT_CIRCUIT",
+  "NET_ORPHANED_COPPER",
   "VIA_LAYER_SPAN",
   "PAD_LAYER_MISMATCH",
   "BOARD_OUTLINE_INVALID",
@@ -175,6 +177,7 @@ export const RULE_CLASS_BY_CODE: Record<DrcRuleCode, DrcRuleClass> = {
   ZONE_OVERLAP: "constraint",
   // connectivity
   UNCONNECTED_NET: "connectivity",
+  NET_ORPHANED_COPPER: "connectivity",
   NET_SHORT_CIRCUIT: "connectivity",
   // manufacturability
   TRACE_WIDTH_MIN: "manufacturability",

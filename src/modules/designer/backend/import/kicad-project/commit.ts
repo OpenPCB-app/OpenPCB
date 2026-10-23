@@ -11,19 +11,19 @@ import { assertQualifiedProjectImport } from "../../capability-quarantine";
  *   3. Pre-resolve LibraryComponentPlacementDetail for each ingested component
  *      (async hop done outside the inserter transaction).
  *   4. Single Drizzle transaction:
- *        a. Insert design head + board settings.
+ *        a. Insert design head.
  *        b. Insert flattened schematic entities (parts + pins, labels,
  *           power primitives, wires).
- *        c. Insert PCB entities (placements with positions from .kicad_pcb,
- *           traces, vias).
- *        d. Insert synthetic `import_kicad_project` command-log row.
+ *        c. Initialize durable identity and resolve named-net class assignments.
+ *        d. Insert board settings and PCB entities, then resolve named hints.
+ *        e. Insert synthetic `import_kicad_project` command-log row.
  *
  * Hierarchical sheets are flattened at parse time: every .kicad_sch file in
  * the archive is parsed independently and merged into one flat sheet.
  */
 
-import { and, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { ValidationError } from "../../../../../core/contracts/errors";
 import type {
   KicadProjectCommitResult,
   KicadProjectDeferredEntityKind,
@@ -57,8 +57,8 @@ import { ingestProjectModels } from "./ingest-models";
 import { insertSchematicEntities } from "./insert-schematic";
 import { adjustBoardCenter, insertPcbEntities } from "./insert-pcb";
 import { flattenSheets } from "./flatten-sheets";
-import { loadSchematicProjection } from "../../projection-read";
-import { netNamesFromSchematic } from "../../pcb/pcb-projection";
+import { initializeNetIdentity } from "../../net-identity/sync";
+import { resolveImportedNetHints, resolvePerNetClassAssignments } from "./net-references";
 
 type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
@@ -98,6 +98,10 @@ export async function commitKicadProjectImport(
   const flatten = flattenSheets(rawSchematics);
   const schematics = flatten.sheets;
   const pcb = parseKicadPcb(files.pcbContent);
+  const namedZeroNet = pcb.nets.find((net) => net.ordinal === 0 && net.name.trim().length > 0);
+  if (namedZeroNet) {
+    throw new ValidationError(`KiCad net ordinal 0 cannot have a nonblank name ('${namedZeroNet.name}').`);
+  }
   const settings = buildBoardSettings(
     report,
     timestamp,
@@ -188,17 +192,6 @@ export async function commitKicadProjectImport(
         })
         .run();
 
-      tx.insert(pcbEntities)
-        .values({
-          id: crypto.randomUUID(),
-          designId,
-          kind: "board_settings",
-          payloadJson: serializePcbBoardSettings(undefined, settings),
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        })
-        .run();
-
       const schematic = insertSchematicEntities(
         tx,
         {
@@ -210,37 +203,20 @@ export async function commitKicadProjectImport(
         timestamp,
       );
 
-      // Per-net class assignments are keyed by net NAME in the project file,
-      // but OpenPCB stores them by net ID — and net ids only exist once the
-      // schematic projection can derive them from the inserted wires/labels
-      // (rule-semantics contract §12.3). So resolve them here, after the
-      // schematic insert, and rewrite the settings row.
+      // Allocate once from the complete schematic before persisting any
+      // references; later projection reads must not migrate this new import.
+      const nets = initializeNetIdentity(tx, designId, "kicad-import", timestamp);
       const assignments = resolvePerNetClassAssignments(
-        tx,
-        designId,
+        nets,
         settings,
         report.netClassAssignments ?? {},
         warnings,
       );
-      if (Object.keys(assignments).length > 0) {
-        tx.update(pcbEntities)
-          .set({
-            // The row was inserted from `settings` a few statements above, so
-            // there is no stored payload with unknown keys to carry over.
-            payloadJson: serializePcbBoardSettings(undefined, {
-              ...settings,
-              perNetClassAssignments: assignments,
-            }),
-            updatedAt: timestamp,
-          })
-          .where(
-            and(
-              eq(pcbEntities.designId, designId),
-              eq(pcbEntities.kind, "board_settings"),
-            ),
-          )
-          .run();
-      }
+      tx.insert(pcbEntities).values({
+        id: crypto.randomUUID(), designId, kind: "board_settings",
+        payloadJson: serializePcbBoardSettings(undefined, { ...settings, perNetClassAssignments: assignments }),
+        createdAt: timestamp, updatedAt: timestamp,
+      }).run();
 
       const pcbResult = insertPcbEntities(
         tx,
@@ -252,6 +228,7 @@ export async function commitKicadProjectImport(
         },
         timestamp,
       );
+      resolveImportedNetHints(tx, designId, nets, warnings, timestamp);
 
       // Synthetic command-log row — informational, marks the design as
       // KiCad-imported in undo/history traces.
@@ -459,61 +436,6 @@ function applyKicadDesignRules(
     clearanceMm: num(rules.minClearanceMm, base.minimums.clearanceMm ?? 0),
   };
   return { ...base, clearance, minimums };
-}
-
-/**
- * Net NAME → class NAME (from the project file) resolved against the design's
- * real nets and class ids. A name that matches no net, or a class that the
- * merged class list does not carry, is skipped WITH a warning — a silently
- * dropped assignment would leave a net quietly on the default class.
- */
-function resolvePerNetClassAssignments(
-  tx: DbClient,
-  designId: string,
-  settings: PcbBoardSettings,
-  byNetName: Record<string, string>,
-  warnings: KicadProjectImportWarning[],
-): Record<string, string> {
-  if (Object.keys(byNetName).length === 0) return {};
-  const netIdByName = new Map<string, string>();
-  for (const [netId, netName] of netNamesFromSchematic(
-    loadSchematicProjection(tx, designId),
-  )) {
-    // Two nets can share a display name; the first in projection order wins,
-    // which is the same tie-break every other name lookup uses.
-    if (!netIdByName.has(netName)) netIdByName.set(netName, netId);
-  }
-  const classIdByName = new Map(
-    settings.netClasses.map((c) => [c.name.toLowerCase(), c.id]),
-  );
-  const out: Record<string, string> = {};
-  for (const [netName, className] of Object.entries(byNetName)) {
-    const netId = netIdByName.get(netName);
-    if (!netId) {
-      warnings.push({
-        code: "kicad_netclass_assignment_unknown_net",
-        severity: "warning",
-        message: `Net class '${className}' is assigned to net '${netName}', which this design has no net for; the assignment was skipped.`,
-      });
-      continue;
-    }
-    // Guard, not a live branch today: `foldNetClassAssignments` already drops
-    // an assignment naming a class the PROJECT does not declare (tested at
-    // inspect level), and `mergeNetClasses` puts every declared class on the
-    // board. It stays so a future merge that filters classes cannot silently
-    // leave a net on the default class.
-    const classId = classIdByName.get(className.toLowerCase());
-    if (!classId) {
-      warnings.push({
-        code: "kicad_netclass_unknown",
-        severity: "warning",
-        message: `Net '${netName}' is assigned to net class '${className}', which was not imported; the assignment was skipped.`,
-      });
-      continue;
-    }
-    out[netId] = classId;
-  }
-  return out;
 }
 
 function pickLayerCount(

@@ -14,6 +14,28 @@ import { MentionRegistry } from "../mentions";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
 
+async function seedNet(
+  sdk: DesignerSDK,
+  designId: string,
+  name: string,
+  y: number,
+): Promise<string> {
+  const result = await sdk.dispatchCommand(designId, {
+    commandId: crypto.randomUUID(),
+    sessionId: "capture-fixture-setup",
+    aggregateId: designId,
+    baseRevision: null,
+    issuedAt: Date.now(),
+    command: { type: "upsert_label", text: name, positionNm: { x: 0, y } },
+  });
+  expect(result.ok).toBe(true);
+  const projection = await sdk.getSchematicProjection(designId);
+  const net = projection?.nets.find((candidate) => candidate.name === name);
+  if (!net) throw new Error(`Missing schematic net ${name}`);
+  expect(net.id).toMatch(/^net:[a-z2-7]{10}:[1-9][0-9]*$/);
+  return net.id;
+}
+
 const BASE = "http://localhost/api/modules/designer";
 
 async function createRuntime() {
@@ -80,6 +102,7 @@ describe("milestone snapshots", () => {
     const captureDir = setupEnv("capture-snapshots");
     const { server, sdk } = await createRuntime();
     const design = await sdk.createDesign({ name: "Snapshots" });
+    const netId = await seedNet(sdk, design.id, "netS", 0);
     const proj = await sdk.getPcbProjection(design.id);
     const netClassId = proj!.board.netClasses[0]!.id;
 
@@ -117,7 +140,7 @@ describe("milestone snapshots", () => {
                   { x: 5_000_000, y: 0 },
                 ],
                 widthMm: 0.25,
-                netId: "netS",
+                netId,
                 netClassId,
                 segmentMode: "manhattan-90",
               },

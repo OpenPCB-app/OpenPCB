@@ -32,6 +32,7 @@ import {
 const DESIGNER_SESSION_ID = SCHEMATIC_SESSION;
 
 export interface DesignerWorkspaceState {
+  commandScope: string;
   commandQueue: CommandQueueSnapshot<DesignerAction> | null;
   loadingDesigns: boolean;
   creatingDesign: boolean;
@@ -594,7 +595,8 @@ export function useDesignerWorkspace(params: {
           command.type === "place_part" ||
           command.type === "pcb_set_view_state" ||
           command.type === "pcb_apply_autolayout_candidate" ||
-          command.type === "refresh_part_footprint"
+          command.type === "refresh_part_footprint" ||
+          command.type === "pcb_rebind_net_references"
         )
           throw new Error("This action cannot be included in an atomic batch");
         batch.push(command);
@@ -759,6 +761,7 @@ export function useDesignerWorkspace(params: {
 
   return {
     state: {
+      commandScope: coordinator.scope,
       commandQueue: selectedDesignId
         ? coordinator.queue.snapshot(selectedDesignId)
         : null,

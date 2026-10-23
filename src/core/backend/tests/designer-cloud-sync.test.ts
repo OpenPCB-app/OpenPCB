@@ -16,8 +16,21 @@ import type {
 type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
 function makeDb(): { db: DbClient; close: () => void } {
+  // Protocol unit tests have no design head: ensure has no design to migrate.
+  // Real initialized-design preservation is covered by cloud-ensure tests.
   const sqlite = new Database(":memory:");
   sqlite.exec(`
+    create table designer_net_identity_state (design_id text primary key);
+    create table designer_net_identity_retired (design_id text, net_id text);
+    create table designer_design_heads (
+      id text primary key, name text, revision integer, created_at text,
+      updated_at text, schematic_preview_json text
+    );
+    create table designer_schematic_pins (
+      id text primary key,
+      design_id text not null,
+      electrical_intent text
+    );
     create table designer_cloud_link (
       design_id text primary key,
       cloud_design_id text not null,
@@ -385,7 +398,7 @@ describe("linkDesignToCloud", () => {
         designName: "ignored",
         bearer: "tok",
         apiUrl: "https://api.test",
-      });
+      }, makeLogger());
       expect(out.cloudDesignId).toBe("cloud-existing");
       expect(stub.calls.length).toBe(0);
     } finally {
@@ -405,7 +418,7 @@ describe("linkDesignToCloud", () => {
         designName: "My Design",
         bearer: "tok",
         apiUrl: "https://api.test",
-      });
+      }, makeLogger());
       expect(out).toEqual({
         cloudDesignId: "cloud-new",
         workspaceId: "ws-42",
@@ -446,7 +459,7 @@ describe("linkDesignToCloud", () => {
         apiUrl: "https://api.test",
         existingCloudDesignId: "cloud-pre",
         lastSyncedRevision: 12,
-      });
+      }, makeLogger());
       expect(out.cloudDesignId).toBe("cloud-pre");
       expect(stub.calls.length).toBe(2);
       expect(stub.calls.map((c) => c.url)).toEqual([
@@ -474,7 +487,7 @@ describe("linkDesignToCloud", () => {
           designName: "x",
           bearer: "tok",
           apiUrl: "https://api.test",
-        }),
+        }, makeLogger()),
       ).rejects.toThrow(/workspace fetch failed/);
     } finally {
       stub.restore();

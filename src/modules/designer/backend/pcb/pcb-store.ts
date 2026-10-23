@@ -30,6 +30,7 @@ import type {
   PcbViewState,
   PcbDrcRule,
   PcbDiffPair,
+  PcbRuleReadDiagnostic,
   PcbZone,
   PcbKeepout,
   AutoLayoutConfig,
@@ -55,6 +56,7 @@ import {
 } from "../../../../shared/pcb-geometry/outline-geometry";
 import { pcbEntities } from "../schema";
 import { asNumber, asRecord, asString } from "../value-guards";
+import { collectStoredRuleDiagnostics } from "./stored-rule-diagnostics";
 import { stageNewPlacements } from "./placement-staging";
 import {
   serializeBoardSettings,
@@ -1226,10 +1228,9 @@ function parseDrcRuleScopes(value: unknown): PcbDrcRule["scopes"] | null {
 
 /**
  * One rule row that could not be parsed at all (rule-semantics §2.1
- * `malformed`). The READ path drops these — the one remaining silent drop,
- * because a persisted row that is not even shaped like a rule has no id to
- * report against and no board has ever been observed with one. The UPDATE
- * path is fail-closed: `pcb_set_design_rules` refuses the whole command with
+ * `malformed`). The READ path drops these from typed settings; the projection
+ * captures raw stored-rule diagnostics separately, including rows without ids.
+ * The UPDATE path is fail-closed: `pcb_set_design_rules` refuses the command with
  * `INVALID_DRC_RULE` rather than dropping a tightening rule the author wrote.
  */
 export interface DrcRuleParseIssue {
@@ -1427,43 +1428,26 @@ export function serializePcbBoardSettings(
  * `serializeBoardSettings` carries unknown keys over from — and reading them
  * together is what keeps a settings write at one SELECT.
  *
- * The repair branch (a row that does not parse) is a write like any other, so it
- * too carries the unknown keys of the payload it replaces.
+ * Existing malformed rows are recovered only in memory. A read must not erase
+ * declared rules because unrelated outline or layer metadata cannot be parsed.
+ * Explicit writes still normalize known fields through the same serializer.
  */
 function loadBoardSettingsRow(
   db: DbClient,
   designId: string,
   timestamp: string,
 ): { settings: PcbBoardSettings; storedRaw: unknown } {
-  const row = db
-    .select()
-    .from(pcbEntities)
-    .where(
-      and(
-        eq(pcbEntities.designId, designId),
-        eq(pcbEntities.kind, BOARD_SETTINGS_KIND),
-      ),
-    )
-    .get();
-
+  const row = findBoardSettingsRow(db, designId);
   const storedRaw = row ? parsePayload(row.payloadJson) : undefined;
   if (row) {
-    const parsed = parseBoardSettings(storedRaw);
-    if (parsed) return { settings: parsed, storedRaw };
+    return {
+      settings: parseBoardSettings(storedRaw)
+        ?? recoverBoardSettings(storedRaw, timestamp),
+      storedRaw,
+    };
   }
 
   const settings = createDefaultPcbBoardSettings(timestamp);
-  if (row) {
-    db.update(pcbEntities)
-      .set({
-        payloadJson: serializePcbBoardSettings(storedRaw, settings),
-        updatedAt: timestamp,
-      })
-      .where(eq(pcbEntities.id, row.id))
-      .run();
-    return { settings, storedRaw };
-  }
-
   db.insert(pcbEntities)
     .values({
       id: crypto.randomUUID(),
@@ -1477,12 +1461,79 @@ function loadBoardSettingsRow(
   return { settings, storedRaw: undefined };
 }
 
+type BoardFallbackField = "outline" | "activeLayer" | "updatedAt";
+
+function boardFallbackFields(raw: Record<string, unknown>): BoardFallbackField[] {
+  const fields: BoardFallbackField[] = [];
+  if (!parseOutlineShape(raw.outline)) fields.push("outline");
+  if (!isPcbLayerId(asString(raw.activeLayer))) fields.push("activeLayer");
+  if (!asString(raw.updatedAt)) fields.push("updatedAt");
+  return fields;
+}
+
+function recoverBoardSettings(raw: unknown, timestamp: string): PcbBoardSettings {
+  const defaults = createDefaultPcbBoardSettings(timestamp);
+  const record = asRecord(raw);
+  if (!record) return defaults;
+  const recovered = { ...record };
+  for (const field of boardFallbackFields(record)) {
+    recovered[field] = defaults[field];
+  }
+  // These are the only fields whose shape can reject the entire legacy record.
+  return parseBoardSettings(recovered)!;
+}
+
+function boardFallbackDiagnostics(raw: unknown): PcbRuleReadDiagnostic[] {
+  const record = asRecord(raw);
+  if (!record) {
+    return [{
+      path: "boardSettings",
+      reason: "malformed",
+      message: "Stored board settings are not a readable JSON object; default board settings are used in memory.",
+    }];
+  }
+  return boardFallbackFields(record).map((field) => ({
+    path: `boardSettings.${field}`,
+    reason: "malformed",
+    message: `Stored ${field} cannot be read; its default is used in memory. Repair board settings before relying on this DRC report.`,
+  }));
+}
+
 export function ensurePcbBoardSettings(
   db: DbClient,
   designId: string,
   timestamp: string,
 ): PcbBoardSettings {
   return loadBoardSettingsRow(db, designId, timestamp).settings;
+}
+
+export interface MigrationBoardSettingsRead {
+  rowId: string | null;
+  storedRaw: unknown;
+  settings: PcbBoardSettings;
+  status: "absent" | "parsed" | "unparseable";
+  diagnostics: PcbRuleReadDiagnostic[];
+}
+
+/** Migration reads must not create defaults or repair persisted board metadata. */
+export function readPcbBoardSettingsForMigration(
+  db: DbClient,
+  designId: string,
+  timestamp: string,
+): MigrationBoardSettingsRead {
+  const row = findBoardSettingsRow(db, designId);
+  if (!row) return {
+    rowId: null, storedRaw: undefined,
+    settings: createDefaultPcbBoardSettings(timestamp), status: "absent", diagnostics: [],
+  };
+  const storedRaw = parsePayload(row.payloadJson);
+  const parsed = parseBoardSettings(storedRaw);
+  return {
+    rowId: row.id, storedRaw,
+    settings: parsed ?? recoverBoardSettings(storedRaw, timestamp),
+    status: parsed ? "parsed" : "unparseable",
+    diagnostics: [...boardFallbackDiagnostics(storedRaw), ...collectStoredRuleDiagnostics(storedRaw)],
+  };
 }
 
 export function updatePcbBoardSize(params: {
@@ -3138,10 +3189,11 @@ export function insertPcbZone(
   designId: string,
   zone: PcbZone,
   timestamp: string,
+  rowId?: string,
 ): void {
   db.insert(pcbEntities)
     .values({
-      id: crypto.randomUUID(),
+      id: rowId ?? crypto.randomUUID(),
       designId,
       kind: ZONE_KIND,
       payloadJson: JSON.stringify(zone),
@@ -3230,6 +3282,45 @@ export function loadPcbKeepouts(db: DbClient, designId: string): PcbKeepout[] {
     if (parsed) out.push(parsed);
   }
   return out;
+}
+
+interface MigrationPcbEntityMap {
+  placement: PcbPlacedPart;
+  trace: PcbTrace;
+  via: PcbVia;
+  free_pad: PcbFreePad;
+  free_hole: PcbFreeHole;
+  zone: PcbZone;
+  keepout: PcbKeepout;
+}
+
+export type MigrationPcbEntityRead = {
+  [Kind in keyof MigrationPcbEntityMap]: {
+    kind: Kind;
+    entity: MigrationPcbEntityMap[Kind] | null;
+    warnings: ZoneRecordWarning[];
+  }
+}[keyof MigrationPcbEntityMap];
+
+/** The existing readers' policy, exposed per row so migration can attribute every loss. */
+export function readPcbEntityForMigration(
+  kind: string,
+  payloadJson: string,
+): MigrationPcbEntityRead | null {
+  const raw = parsePayload(payloadJson);
+  switch (kind) {
+    case "placement": return { kind, entity: parsePlacement(raw), warnings: [] };
+    case "trace": return { kind, entity: parseTrace(raw), warnings: [] };
+    case "via": return { kind, entity: parseVia(raw), warnings: [] };
+    case "free_pad": return { kind, entity: parseFreePad(raw), warnings: [] };
+    case "free_hole": return { kind, entity: parseFreeHole(raw), warnings: [] };
+    case "keepout": return { kind, entity: parseKeepout(raw), warnings: [] };
+    case "zone": {
+      const upgraded = upgradePcbZoneRecord(raw);
+      return { kind, entity: upgraded.zone, warnings: upgraded.warnings };
+    }
+    default: return null;
+  }
 }
 
 /** Row id is a fresh uuid; the entity id lives in the payload (see `insertPcbZone`). */
@@ -3322,7 +3413,18 @@ export function readRawBoardSettingsRow(
   db: DbClient,
   designId: string,
 ): { rowId: string; raw: Record<string, unknown> } | null {
-  const row = db
+  const row = findBoardSettingsRow(db, designId);
+  if (!row) return null;
+  const raw = asRecord(parsePayload(row.payloadJson));
+  if (!raw) return null;
+  return { rowId: row.id, raw };
+}
+
+function findBoardSettingsRow(
+  db: DbClient,
+  designId: string,
+): typeof pcbEntities.$inferSelect | undefined {
+  return db
     .select()
     .from(pcbEntities)
     .where(
@@ -3332,10 +3434,17 @@ export function readRawBoardSettingsRow(
       ),
     )
     .get();
-  if (!row) return null;
-  const raw = asRecord(parsePayload(row.payloadJson));
-  if (!raw) return null;
-  return { rowId: row.id, raw };
+}
+
+/** Report raw rule losses and every required-field fallback without writing. */
+export function readStoredPcbRuleDiagnostics(
+  db: DbClient,
+  designId: string,
+): PcbRuleReadDiagnostic[] {
+  const row = findBoardSettingsRow(db, designId);
+  if (!row) return [];
+  const raw = parsePayload(row.payloadJson);
+  return [...boardFallbackDiagnostics(raw), ...collectStoredRuleDiagnostics(raw)];
 }
 
 /** Copper layer ids from a legacy `viewState.copperFillLayers` array. */
@@ -3358,9 +3467,10 @@ function readLegacyFillLayers(value: unknown): PcbCopperLayerId[] {
  * board settings calls it FIRST, because every settings writer re-serialises the
  * parsed record and would otherwise silently drop the unread legacy keys.
  *
- * The legacy policy poured "the net whose name matches GND_NAMES", so the row
- * persists that net's real NAME (net ids are ephemeral); with no ground net the
- * hint is `"GND"`, which pours nothing until such a net exists.
+ * The legacy policy poured "the net whose name matches GND_NAMES". Name-hint
+ * mode preserves that net's display name; bound mode persists its current id
+ * and clears the hint. Without a ground net both modes retain null / "GND",
+ * which stays unresolved in durable mode rather than guessing a binding.
  *
  * Idempotent, no revision bump, no history entry. Returns whether it wrote.
  */
@@ -3369,6 +3479,7 @@ export function migrateLegacyBoardFill(
   designId: string,
   netNames: ReadonlyMap<string, string>,
   timestamp: string,
+  options?: { rowIdForZone?: (zoneId: string) => string; mode?: "bound" | "name-hint" },
 ): boolean {
   const row = readRawBoardSettingsRow(db, designId);
   if (!row) return false;
@@ -3407,13 +3518,14 @@ export function migrateLegacyBoardFill(
         enabled: true,
         lockedAt: null,
         layer,
-        netId: null,
-        netName: gndNetName,
+        netId: options?.mode === "bound" ? gndNetId : null,
+        netName: options?.mode === "bound" && gndNetId !== null ? null : gndNetName,
         region: { kind: "board" },
         priority: 0,
         padConnection: "solid",
       },
       timestamp,
+      options?.rowIdForZone?.(id),
     );
   }
 

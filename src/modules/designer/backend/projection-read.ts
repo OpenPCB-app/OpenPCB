@@ -6,6 +6,7 @@ import type {
   DesignerLabel,
   DesignerPin,
   DesignerPlacedPart,
+  DesignerPrimitive,
   DesignerSchematicPreview,
   DesignerSchematicProjection,
   DesignerWire,
@@ -13,7 +14,12 @@ import type {
 } from "../../../sdks";
 import { normalizeRotationDeg } from "./commands/place-part";
 import { loadPrimitives } from "./primitive-store";
-import { deriveNetsAndJunctions } from "./projection-world";
+import { deriveNetComponents, deriveNetsAndJunctions } from "./projection-world";
+import { lazyCensus } from "./net-identity/census";
+import { loadNetReferenceSource } from "./net-identity/census-source";
+import { resolveIdentityMode } from "./net-identity/mode";
+import { bindSchematicIdentity } from "./net-identity/projection";
+import { designNetSalt } from "./net-identity/types";
 import {
   designHeads,
   drcResults,
@@ -54,6 +60,7 @@ function mapPinRow(row: PinRow): DesignerPin {
     number: row.number,
     name: row.name,
     electricalType: row.electricalType,
+    ...(row.electricalIntent === null ? {} : { electricalIntent: row.electricalIntent }),
     unit: row.unit,
     localPositionNm: { x: row.localXNm, y: row.localYNm },
     worldPositionNm: { x: row.worldXNm, y: row.worldYNm },
@@ -129,10 +136,20 @@ export function mapDesignSummary(
   };
 }
 
-export function loadSchematicProjection(
+export interface SchematicSource {
+  designId: string;
+  revision: number;
+  parts: DesignerPlacedPart[];
+  wires: DesignerWire[];
+  labels: DesignerLabel[];
+  primitives: DesignerPrimitive[];
+}
+
+/** Raw persisted schematic mapping, without net derivation or projection side effects. */
+export function loadSchematicSource(
   db: DbClient,
   designId: string,
-): DesignerSchematicProjection | null {
+): SchematicSource | null {
   const head = db
     .select()
     .from(designHeads)
@@ -179,10 +196,29 @@ export function loadSchematicProjection(
   const wires = wireRows.map(mapWireRow);
   const labels = labelRows.map(mapLabelRow);
   const primitives = loadPrimitives(db, designId);
+  return { designId, revision: head.revision, parts, wires, labels, primitives };
+}
+
+export function loadSchematicProjection(
+  db: DbClient,
+  designId: string,
+): DesignerSchematicProjection | null {
+  const source = loadSchematicSource(db, designId);
+  if (!source) return null;
+  const { revision, parts, wires, labels, primitives } = source;
+  const identity = resolveIdentityMode(db, designId);
+  if (identity.mode === "durable" && identity.state) {
+    const derived = deriveNetComponents(parts, wires, labels, primitives);
+    const census = lazyCensus(() => loadNetReferenceSource(db, designId));
+    return bindSchematicIdentity(source, derived, {
+      previousActive: identity.state.active, salt: designNetSalt(designId),
+      seqWatermark: identity.state.nextSeq, mode: "read", dependentCount: (id) => census.count(id),
+    }).projection;
+  }
   const derived = deriveNetsAndJunctions(parts, wires, labels, primitives);
   return {
     designId,
-    revision: head.revision,
+    revision,
     parts,
     wires,
     labels: labels.map((l) => ({
@@ -195,6 +231,7 @@ export function loadSchematicProjection(
     })),
     nets: derived.nets,
     junctions: derived.junctions,
+    netDiagnostics: derived.warnings,
   };
 }
 

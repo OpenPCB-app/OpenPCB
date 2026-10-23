@@ -8,6 +8,7 @@ import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
+import { dispatchOk } from "./helpers/designer-runtime";
 
 function isolateTestDb(label: string): void {
   resetSharedSqliteForTesting();
@@ -175,18 +176,22 @@ describe("designer PCB free pads + manual vias (F5)", () => {
     );
     expect(add.ok).toBe(true);
     if (!add.ok) return;
+    const named = await dispatchOk(sdk, design.id, {
+      type: "upsert_label", text: "VCC", positionNm: { x: 0, y: 0 },
+    });
+    const netId = (await sdk.getSchematicProjection(design.id))!.nets.find((net) => net.labelIds.includes(named.createdEntityId!))!.id;
     const proj1 = await sdk.getPcbProjection(design.id);
     const upd = await sdk.dispatchCommand(
       design.id,
       envelope(design.id, "cmd-upd", SESSION, proj1!.revision, {
         type: "pcb_update_free_pad",
         freePadId: add.createdEntityId!,
-        netId: "net-vcc",
+        netId,
       }),
     );
     expect(upd.ok).toBe(true);
     const proj2 = await sdk.getPcbProjection(design.id);
-    expect(proj2?.freePads[0]?.netId).toBe("net-vcc");
+    expect(proj2?.freePads[0]?.netId).toBe(netId);
   });
 
   test("a `circle` free pad is persisted as a DISC (contract 10 §7)", async () => {

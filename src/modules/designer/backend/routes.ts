@@ -1,4 +1,6 @@
 import { commentAttachmentResponse } from "./comments/attachment-response";
+import { assertNetIdentityExportable } from "./net-identity/export-gate";
+import { registerNetIdentityRoutes } from "./net-identity/routes";
 import {
   assertQualifiedManufacturing,
   assertQualifiedProjectImport,
@@ -14,6 +16,8 @@ import {
   ValidationError,
 } from "../../../core/contracts/errors";
 import { isFeatureEnabled } from "../../../core/contracts/feature-flags/backend";
+import { isPinElectricalIntent } from "./pin-electrical-intent";
+import { duplicatePartPositionProblem } from "./commands/duplicate-part";
 import {
   clearActiveDesignIfMatches,
   getActiveDesignState,
@@ -37,6 +41,7 @@ import type {
 import type {
   DesignerAutoArrangeSchematicCommand,
   DesignerCommandEnvelope,
+  DesignerSetPinElectricalIntentCommand,
   PlaceOperation,
   PlaceOptions,
   RouteOperation,
@@ -45,6 +50,7 @@ import type {
   DesignerCreateWireJunctionCommand,
   DesignerUpdateWireGeometryCommand,
   DesignerDeleteEntityCommand,
+  DesignerDuplicatePartCommand,
   DesignerMirrorPartCommand,
   DesignerMovePartCommand,
   DesignerMovePrimitiveCommand,
@@ -636,7 +642,19 @@ function parsePlacePartCommand(
     positionNm,
     rotationDeg: rotationDeg ?? undefined,
     mirrored: mirrored === true,
+    ...parseConfirmMerge(raw),
   };
+}
+
+function parseDuplicatePartCommand(
+  raw: Record<string, unknown>,
+): DesignerDuplicatePartCommand {
+  const partId = asString(raw.partId);
+  if (!partId?.trim()) throw new ValidationError("command.partId must be a non-empty string");
+  const positionNm = parsePointNm(raw.positionNm, "command.positionNm");
+  const problem = duplicatePartPositionProblem(positionNm);
+  if (problem) throw new ValidationError(`command.${problem}`);
+  return { type: "duplicate_part", partId, positionNm, ...parseConfirmMerge(raw) };
 }
 
 function parseMovePartCommand(
@@ -650,6 +668,7 @@ function parseMovePartCommand(
     type: "move_part",
     partId,
     positionNm: parsePointNm(raw.positionNm, "command.positionNm"),
+    ...parseConfirmMerge(raw),
   };
 }
 
@@ -671,6 +690,7 @@ function parseRotatePartCommand(
     type: "rotate_part",
     partId,
     rotationDeg: rotationDeg as 0 | 90 | 180 | 270,
+    ...parseConfirmMerge(raw),
   };
 }
 
@@ -686,6 +706,7 @@ function parseMirrorPartCommand(
     type: "mirror_part",
     partId,
     mirrored: raw.mirrored === true,
+    ...parseConfirmMerge(raw),
   };
 }
 
@@ -752,6 +773,17 @@ function parseUpdatePartsPropertiesCommand(
         propertiesJson as DesignerUpdatePartsPropertiesCommand["propertiesJson"],
     }),
   };
+}
+
+function parsePinElectricalIntentCommand(
+  raw: Record<string, unknown>,
+): DesignerSetPinElectricalIntentCommand {
+  const pinId = asString(raw.pinId);
+  if (!pinId?.trim()) throw new ValidationError("command.pinId must be a non-empty string");
+  if (raw.intent !== null && !isPinElectricalIntent(raw.intent)) {
+    throw new ValidationError("command.intent must be no_connect, power_source, or null");
+  }
+  return { type: "set_pin_electrical_intent", pinId, intent: raw.intent };
 }
 
 function parseRefreshPartFootprintCommand(
@@ -871,6 +903,7 @@ function parseMovePrimitiveCommand(
     type: "move_primitive",
     primitiveId,
     positionNm: parsePointNm(raw.positionNm, "command.positionNm"),
+    ...parseConfirmMerge(raw),
   };
 }
 
@@ -891,6 +924,7 @@ function parseRotatePrimitiveCommand(
     type: "rotate_primitive",
     primitiveId,
     rotationDeg: rotationDeg as 0 | 90 | 180 | 270,
+    ...parseConfirmMerge(raw),
   };
 }
 
@@ -905,7 +939,7 @@ function parseUpdatePrimitiveTextCommand(
   if (text === null) {
     throw new ValidationError("command.text must be a string");
   }
-  return { type: "update_primitive_text", primitiveId, text };
+  return { type: "update_primitive_text", primitiveId, text, ...parseConfirmMerge(raw) };
 }
 
 function parseAutoArrangeSchematicCommand(
@@ -913,6 +947,7 @@ function parseAutoArrangeSchematicCommand(
 ): DesignerAutoArrangeSchematicCommand {
   const command: DesignerAutoArrangeSchematicCommand = {
     type: "auto_arrange_schematic",
+    ...parseConfirmMerge(raw),
   };
   if (raw.originNm !== undefined) {
     command.originNm = parsePointNm(raw.originNm, "command.originNm");
@@ -1332,7 +1367,7 @@ function parseUpdateWireGeometryCommand(
   const pointsNm = raw.pointsNm.map((point, index) =>
     parsePointNm(point, `command.pointsNm[${index}]`),
   );
-  return { type: "update_wire_geometry", wireId, pointsNm };
+  return { type: "update_wire_geometry", wireId, pointsNm, ...parseConfirmMerge(raw) };
 }
 
 const PCB_TRACE_SEGMENT_MODES = new Set<string>([
@@ -1909,10 +1944,8 @@ function parsePcbSetDesignRulesCommand(
     >;
   }
   if (raw.lengthMatchGroups !== undefined) {
-    if (!Array.isArray(raw.lengthMatchGroups)) {
-      throw new ValidationError("command.lengthMatchGroups must be an array");
-    }
-    // Shape-only forward; updatePcbDesignRules drops malformed entries.
+    // Preserve raw input for strict command-boundary validation, shared by
+    // HTTP and direct SDK calls. Stored-row recovery stays tolerant.
     command.lengthMatchGroups = raw.lengthMatchGroups as PcbLengthMatchGroup[];
   }
   if (raw.drcSeverityOverrides !== undefined) {
@@ -1934,9 +1967,7 @@ function parsePcbSetDesignRulesCommand(
       raw.drcRules as DesignerPcbSetDesignRulesCommand["drcRules"];
   }
   if (raw.diffPairs !== undefined) {
-    if (!Array.isArray(raw.diffPairs)) {
-      throw new ValidationError("command.diffPairs must be an array");
-    }
+    // The executor refuses the whole command before any settings mutation.
     command.diffPairs =
       raw.diffPairs as DesignerPcbSetDesignRulesCommand["diffPairs"];
   }
@@ -2885,8 +2916,14 @@ function parseCommand(
 
   let command: DesignerCommandEnvelope["command"];
   switch (type) {
+    case "pcb_rebind_net_references":
+      command = { type, bindings: commandRecord.bindings as import("../../../sdks/designer").DesignerPcbRebindNetReferencesCommand["bindings"] };
+      break;
     case "place_part":
       command = parsePlacePartCommand(commandRecord);
+      break;
+    case "duplicate_part":
+      command = parseDuplicatePartCommand(commandRecord);
       break;
     case "create_wire":
       command = parseCreateWireCommand(commandRecord);
@@ -2914,6 +2951,9 @@ function parseCommand(
       break;
     case "refresh_part_footprint":
       command = parseRefreshPartFootprintCommand(commandRecord);
+      break;
+    case "set_pin_electrical_intent":
+      command = parsePinElectricalIntentCommand(commandRecord);
       break;
     case "delete_entity":
       command = parseDeleteEntityCommand(commandRecord);
@@ -3140,6 +3180,7 @@ export function registerRoutes(
   router: ModuleRouterHandle,
   ctx: CoreBackendModuleContext,
 ): void {
+  registerNetIdentityRoutes(router, { db: ctx.db.db as BetterSQLite3Database<Record<string, unknown>>, logger: ctx.logger, success });
   const store = createDesignerStore(ctx);
   // ONE run registry per module context — the SDK resolves the same instance,
   // so a run started through either surface is joined by the other (09 §5).
@@ -3428,6 +3469,7 @@ export function registerRoutes(
     const designId = params.getOrThrow("designId");
     const pcb = await store.getPcbProjection(designId);
     if (!pcb) throw new NotFoundError(`Design '${designId}' not found`);
+    assertNetIdentityExportable(pcb);
     const schematic = await store.getSchematicProjection(designId);
     const overrides = await store.listBomOverrides(designId);
     return textResponse(
@@ -3444,6 +3486,7 @@ export function registerRoutes(
       const designId = params.getOrThrow("designId");
       const pcb = await store.getPcbProjection(designId);
       if (!pcb) throw new NotFoundError(`Design '${designId}' not found`);
+      assertNetIdentityExportable(pcb);
       const schematic = await store.getSchematicProjection(designId);
       const overrides = await store.listBomOverrides(designId);
 

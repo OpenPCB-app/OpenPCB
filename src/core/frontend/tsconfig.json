@@ -23,6 +23,7 @@
     "../../sdks/**/*.ts",
     "../../shared/domain/**/*.ts",
     "../../shared/drc/**/*.ts",
+    "../../shared/electrical-identity/**/*.ts",
     "../../shared/pcb-areas/**/*.ts",
     "../../shared/pcb-connectivity/**/*.ts",
     "../../shared/pcb-geometry/**/*.ts",

@@ -1,7 +1,9 @@
 import type { NetPath } from "../../pcb-connectivity/net-path";
+import { below, exceeds } from "../../pcb-geometry/tolerance";
 import { resolveLengthTarget } from "../si/length-target";
 import type { DrcContext } from "../drc-context";
 import type { DrcViolationDraft } from "../types";
+import { knownSiNetIds, missingSiNetRows } from "./si-rule-validity";
 
 /**
  * Length-match rules (`PcbBoardSettings.lengthMatchGroups`): every member net
@@ -23,6 +25,8 @@ import type { DrcViolationDraft } from "../types";
  *   being measured by an arbitrary sum, so the rule is never silently inert
  *   (contract 14 §3). `open` and `terminals` stay silent: `UNCONNECTED_NET`
  *   and the absence of pins are not this rule's facts.
+ * - A member missing from the board is a stale rule reference, not an open
+ *   path: `DRC_RULE_INEFFECTIVE` names it without suppressing valid members.
  * - A net violating in several groups yields ONE violation per group: the
  *   group is a second anchor, so the ids stay distinct (contract 06 §6).
  */
@@ -31,6 +35,7 @@ export function checkLength(ctx: DrcContext): DrcViolationDraft[] {
   const groups = ctx.projection.board.lengthMatchGroups ?? [];
   if (groups.length === 0) return out;
 
+  const known = knownSiNetIds(ctx);
   const netPaths = ctx.netPaths();
   const pathCache = new Map<string, NetPath>();
   const pathOf = (netId: string): NetPath => {
@@ -42,6 +47,14 @@ export function checkLength(ctx: DrcContext): DrcViolationDraft[] {
   };
 
   for (const group of groups) {
+    out.push(
+      ...missingSiNetRows(
+        group.netIds,
+        known,
+        { kind: "lengthGroup", groupId: group.id },
+        `Length group '${group.name}'`,
+      ),
+    );
     // Canonical member order (contract 06 §7): the group's own list, each net
     // once. The target resolution walks the same list, so the float sum that
     // picks `longest` cannot follow the projection's array order.
@@ -84,9 +97,11 @@ export function checkLength(ctx: DrcContext): DrcViolationDraft[] {
       const lengthMm = lengthByNet.get(netId);
       if (lengthMm === undefined) continue;
       const deltaMm = lengthMm - targetMm;
-      const tooShort = deltaMm < -group.toleranceMm;
+      // Endpoint comparisons preserve the shared float grace at both limits.
+      const tooShort = below(lengthMm, targetMm - group.toleranceMm);
       const tooLong =
-        group.target.kind === "absolute" && deltaMm > group.toleranceMm;
+        group.target.kind === "absolute" &&
+        exceeds(lengthMm, targetMm + group.toleranceMm);
       if (!tooShort && !tooLong) continue;
       const netName = ctx.netNames[netId] ?? netId;
       out.push({

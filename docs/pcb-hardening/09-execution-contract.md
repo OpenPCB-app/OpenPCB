@@ -94,15 +94,19 @@ The engine runs on ONE persistent `node:worker_threads` worker per backend proce
 
 | Runtime | Entry | Why |
 |---|---|---|
-| Bun (`npm run dev`, `bun test`, Playwright `chromium`) | `new URL("./drc-worker.ts", import.meta.url)` | Bun transpiles a `.ts` worker entry natively (spike, §8) |
+| Bun (`bun test`) | `new URL("./drc-worker.ts", import.meta.url)` | Bun transpiles a `.ts` worker entry natively (spike, §8) |
+| Node running source through tsx (`npm run dev`, Playwright backend) | `new URL("./drc-worker-node.mjs", import.meta.url)` | A `.ts` client URL selects the source-only bootstrap, which registers the worker's tsx loader before dynamically importing `drc-worker.ts` |
 | tsup bundle, no override | `new URL("./drc-worker.js", import.meta.url)` | in the bundle `import.meta.url` is defined to the bundle entry's own URL, so this is `dist/main/drc-worker.js` |
 | Electron dev (`npm run dev:electron`) | `setDrcWorkerEntry(dist/main/drc-worker.js)` from `backend-server.ts` | explicit; `wait-on` also waits for the file |
 | Electron packaged | `setDrcWorkerEntry(<resources>/app.asar.unpacked/dist/main/drc-worker.js)` | `asarUnpack` lists `dist/main/drc-worker.js*`; a worker entry inside the archive is not relied on |
 
 The worker is a **fourth tsup config** (`electron/tsup.config.ts`, placed after the main config,
-`clean: false`, the same `banner` / `format` / `platform` / `target` / `define`, `external:
+no per-config cleaning, the same `banner` / `format` / `platform` / `target` / `define`, `external:
 ["electron", "better-sqlite3", "electron-updater"]`). A spawn failure (missing file, bad path)
-ends the run `failed` with the error message; it never throws out of the service.
+ends the run `failed` with the error message; it never throws out of the service. Before-ready
+errors, exits and timeouts retain their original cause instead of a generic disposal message;
+queued runs can respawn. The source bootstrap resolves tsx relative to its own module, so it
+does not require the repository cwd. Bundled and packaged workers do not import tsx.
 
 ### 2.2 The clone boundary
 
@@ -262,6 +266,10 @@ POST's signal (R2 #2; verified on Bun 1.4 and Node 22 with a real socket).
   respawn; crash → `failed` + respawn; spawn failure → `failed`; **loop freedom**: while the 10k
   synthetic board runs, ≥ 5 `setTimeout(10)` ticks fire, an in-process `GET /api/health`
   resolves, and a `run.progress` SSE frame is received — all before the run promise resolves.
+- `drc-worker-node.test.ts` — real Node processes load the source client through tsx from an
+  unrelated cwd, with no worker entry override; a cold and reused worker match golden report
+  bytes and emit progress. Before-ready errors, exits and the 10 s startup timeout preserve
+  their cause, and already-queued runs recover on the default source entry.
 - `drc-run-service.test.ts` — join returns the same `runId`; supersede cancels the old run and
   the joined caller resolves with the new report; FIFO across designs; design deleted mid-run →
   `cancelled (design-deleted)`, no row, no unhandled rejection; SSE replay on a late connect and
@@ -315,11 +323,8 @@ is paid once per process and once per respawn after a terminate or a crash.
 - `worker.unref()` is not relied on (§2.3); shutdown is explicit (`disposeDrcWorker` from
   Electron's `stopBackendServer` / `closeCurrentRuntime`, from `afterAll` in every test file that
   spawns the real worker, and from the designer module's SIGTERM hook).
-- `electron/tsup.config.ts` builds its configs concurrently while config[0] `clean: true`s
-  `dist/`; the observed order is safe (the clean logs before any write) but it is a latent race
-  shared by every `clean: false` bundle, pre-existing, not introduced here.
 - The Node smoke on the built worker needs a projection JSON dumped by Bun (the golden loader is
-  TypeScript); the one-liner is in the script header. Not wired into CI.
+  TypeScript); `scripts/drc-worker-smoke.mjs` computes it and is wired into CI.
 - The worker client's queue is unbounded; admission (one non-terminal run per design, §5) is the
   service's job, and every caller goes through the service.
 - The standalone Bun backend (`bun main.ts`) does not exit on SIGTERM whether or not a worker is

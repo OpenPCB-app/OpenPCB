@@ -9,7 +9,7 @@
  *      string it is not registered for;
  *  (c) every `DrcAnchor` kind has a `case` in `anchorKey` and in
  *      `resolveAnchorLabel`;
- *  (d) `NON_OVERRIDABLE` is exactly the eight codes contract §6 lists;
+ *  (d) `NON_OVERRIDABLE` is exactly contract §6 plus the H08 orphan blocker;
  *  (e) `computeViolationId`'s location-hashed behavior (LOCATION_HASHED_CODES
  *      is not exported, so this is asserted through its effect).
  *
@@ -200,10 +200,11 @@ describe("DRC census — (c) every DrcAnchor kind has an anchorKey + label arm",
   });
 });
 
-describe("DRC census — (d) NON_OVERRIDABLE is exactly contract §6's eight codes", () => {
+describe("DRC census — (d) NON_OVERRIDABLE includes the H08 orphan blocker", () => {
   test("membership", () => {
     const expected = new Set<DrcRuleCode>([
       "NET_SHORT_CIRCUIT",
+      "NET_ORPHANED_COPPER",
       "VIA_LAYER_SPAN",
       "PAD_LAYER_MISMATCH",
       "TRACE_LAYER_MISMATCH",
@@ -212,7 +213,7 @@ describe("DRC census — (d) NON_OVERRIDABLE is exactly contract §6's eight cod
       "ZONE_FILL_FAILED",
       "DRC_RULE_INVALID",
     ]);
-    expect(NON_OVERRIDABLE.size).toBe(8);
+    expect(NON_OVERRIDABLE.size).toBe(9);
     expect([...NON_OVERRIDABLE].sort()).toEqual([...expected].sort());
   });
 

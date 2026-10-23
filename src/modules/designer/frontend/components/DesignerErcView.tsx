@@ -11,6 +11,11 @@ import type {
 } from "../../../../sdks";
 import { createDesignerApi } from "../api";
 import { useErcStore } from "../stores/erc-store";
+import { detachedErcAnchorTarget } from "./erc-anchor-target";
+import {
+  validationReportNotice,
+  validationReportState,
+} from "./validation-report-state";
 import {
   netBoundsMm,
   partBoundsMm,
@@ -67,6 +72,9 @@ function resolveAnchor(
       bounds: netBoundsMm(net, projection),
     };
   }
+  if (anchor.kind === "label" || anchor.kind === "primitive") {
+    return detachedErcAnchorTarget(anchor, projection);
+  }
   for (const part of projection.parts) {
     const pin = part.pins.find((p) => p.id === anchor.pinId);
     if (!pin) continue;
@@ -93,6 +101,12 @@ function anchorLabel(
   if (anchor.kind === "net") {
     return (
       projection.nets.find((n) => n.id === anchor.netId)?.name ?? anchor.netId
+    );
+  }
+  if (anchor.kind === "label" || anchor.kind === "primitive") {
+    return (
+      detachedErcAnchorTarget(anchor, projection)?.label ??
+      (anchor.kind === "label" ? anchor.labelId : anchor.primitiveId)
     );
   }
   for (const part of projection.parts) {
@@ -129,6 +143,7 @@ export function DesignerErcView({
     reportRaw && reportRaw.designId === designId ? reportRaw : null;
   const running = useErcStore((s) => s.running);
   const error = useErcStore((s) => s.error);
+  const reportIsPrevious = useErcStore((s) => s.reportIsPrevious);
   const selectedIndex = useErcStore((s) => s.selectedIndex);
   const select = useErcStore((s) => s.select);
   const run = useErcStore((s) => s.run);
@@ -143,7 +158,7 @@ export function DesignerErcView({
     if (!designId) return;
     const state = useErcStore.getState();
     if (state.running || state.report?.designId === designId) return;
-    void state.run(() => api.runErc(designId));
+    void state.run(() => api.runErc(designId), designId);
   }, [api, designId]);
 
   const counts = report?.summary ?? { errors: 0, warnings: 0, infos: 0 };
@@ -154,14 +169,17 @@ export function DesignerErcView({
       .filter(({ violation }) => filter.has(violation.severity));
   }, [report, filter]);
 
-  const stale =
-    report != null &&
-    projection != null &&
-    report.revision !== projection.revision;
+  const reportState = validationReportState({
+    report,
+    designId,
+    revision: projection?.designId === designId ? projection.revision : null,
+    previous: reportIsPrevious || running || error !== null,
+  });
+  const notice = validationReportNotice("ERC", reportState);
 
   const onRun = (): void => {
     if (!designId) return;
-    void run(() => api.runErc(designId));
+    void run(() => api.runErc(designId), designId);
   };
 
   const showViolation = (index: number): void => {
@@ -238,9 +256,9 @@ export function DesignerErcView({
         ) : null}
       </div>
 
-      {stale ? (
-        <div className="flex h-[22px] shrink-0 items-center border-b border-border bg-status-warning-soft px-2 text-2xs text-status-warning">
-          The schematic changed since this ERC ran — re-run ERC.
+      {notice ? (
+        <div className="shrink-0 border-b border-border bg-status-warning-soft px-2 py-1 text-2xs text-status-warning">
+          {notice}
         </div>
       ) : null}
       {error ? (
@@ -251,8 +269,16 @@ export function DesignerErcView({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {report && report.violations.length === 0 ? (
-          <div className="m-2 rounded-control bg-status-success-soft px-2 py-1.5 text-xs text-status-success">
-            No ERC violations
+          <div className="m-2 rounded-control bg-surface-section px-2 py-1.5 text-xs text-text-secondary">
+            {reportState === "current"
+              ? "No reported ERC violations"
+              : "Previous ERC report: no reported violations"}
+          </div>
+        ) : null}
+        {report ? (
+          <div className="px-2 py-1 text-2xs text-text-tertiary">
+            Only supported checks are reported. This does not certify electrical
+            correctness.
           </div>
         ) : null}
 

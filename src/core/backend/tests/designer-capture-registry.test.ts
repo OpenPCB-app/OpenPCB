@@ -18,6 +18,28 @@ import { ModuleRouterRegistry } from "../router/module-registry";
 const SESSION = "designer-pcb-session";
 const BASE = "http://localhost/api/modules/designer";
 
+async function seedNet(
+  sdk: DesignerSDK,
+  designId: string,
+  name: string,
+  y: number,
+): Promise<string> {
+  const result = await sdk.dispatchCommand(designId, {
+    commandId: crypto.randomUUID(),
+    sessionId: "capture-fixture-setup",
+    aggregateId: designId,
+    baseRevision: null,
+    issuedAt: Date.now(),
+    command: { type: "upsert_label", text: name, positionNm: { x: 0, y } },
+  });
+  expect(result.ok).toBe(true);
+  const projection = await sdk.getSchematicProjection(designId);
+  const net = projection?.nets.find((candidate) => candidate.name === name);
+  if (!net) throw new Error(`Missing schematic net ${name}`);
+  expect(net.id).toMatch(/^net:[a-z2-7]{10}:[1-9][0-9]*$/);
+  return net.id;
+}
+
 async function createRuntime() {
   const repoRoot = path.resolve(import.meta.dir, "../../..");
   const moduleRegistry = new ModuleRouterRegistry();
@@ -81,6 +103,7 @@ async function applyFakeCandidate(
   server: { fetch(req: Request): Promise<Response> | Response },
   designId: string,
   netClassId: string,
+  nets: { net1: string; net2: string; net3: string },
 ): Promise<void> {
   const response = await server.fetch(
     new Request(`${BASE}/designs/${designId}/autoroute/apply`, {
@@ -94,9 +117,9 @@ async function applyFakeCandidate(
           determinism: { snapshotHash: "snap-h", engineVersion: "0.8.1" },
         },
         operations: [
-          traceOp("op-1", "net1", netClassId, 0),
-          traceOp("op-2", "net2", netClassId, 2_000_000),
-          traceOp("op-3", "net3", netClassId, 4_000_000),
+          traceOp("op-1", nets.net1, netClassId, 0),
+          traceOp("op-2", nets.net2, netClassId, 2_000_000),
+          traceOp("op-3", nets.net3, netClassId, 4_000_000),
         ],
       }),
     }),
@@ -159,14 +182,19 @@ describe("AutoCopperRegistry", () => {
     setupEnv("capture-registry");
     const { server, sdk } = await createRuntime();
     const design = await sdk.createDesign({ name: "Registry" });
+    const nets = {
+      net1: await seedNet(sdk, design.id, "net1", 0),
+      net2: await seedNet(sdk, design.id, "net2", 2_000_000),
+      net3: await seedNet(sdk, design.id, "net3", 4_000_000),
+    };
     const proj = await sdk.getPcbProjection(design.id);
     const netClassId = proj!.board.netClasses[0]!.id;
 
-    await applyFakeCandidate(server, design.id, netClassId);
+    await applyFakeCandidate(server, design.id, netClassId, nets);
 
     let rows = copperRows();
     expect(rows).toHaveLength(3);
-    expect(rows.map((r) => r.net_id)).toEqual(["net1", "net2", "net3"]);
+    expect(rows.map((r) => r.net_id)).toEqual([nets.net1, nets.net2, nets.net3]);
     expect(rows.every((r) => r.job_id === "job-1" && r.status === "active")).toBe(true);
 
     const jobs = getSharedSqlite()
@@ -179,8 +207,8 @@ describe("AutoCopperRegistry", () => {
     ]);
 
     // User edits net2's auto trace and deletes net3's.
-    const net2 = rows.find((r) => r.net_id === "net2")!;
-    const net3 = rows.find((r) => r.net_id === "net3")!;
+    const net2 = rows.find((r) => r.net_id === nets.net2)!;
+    const net3 = rows.find((r) => r.net_id === nets.net3)!;
     const modify = await sdk.dispatchCommand(
       design.id,
       envelope(design.id, "cmd-modify-net2", {
@@ -205,20 +233,25 @@ describe("AutoCopperRegistry", () => {
     expect(del.ok).toBe(true);
 
     rows = copperRows();
-    expect(rows.find((r) => r.net_id === "net1")?.status).toBe("active");
-    expect(rows.find((r) => r.net_id === "net2")?.status).toBe("modified");
-    expect(rows.find((r) => r.net_id === "net3")?.status).toBe("deleted");
-    expect(JSON.parse(rows.find((r) => r.net_id === "net2")!.touches_json)).toHaveLength(1);
+    expect(rows.find((r) => r.net_id === nets.net1)?.status).toBe("active");
+    expect(rows.find((r) => r.net_id === nets.net2)?.status).toBe("modified");
+    expect(rows.find((r) => r.net_id === nets.net3)?.status).toBe("deleted");
+    expect(JSON.parse(rows.find((r) => r.net_id === nets.net2)!.touches_json)).toHaveLength(1);
   });
 
   test("undo/redo cycle: registrations removed on undo of apply, restored on redo", async () => {
     setupEnv("capture-registry-undo");
     const { server, sdk } = await createRuntime();
     const design = await sdk.createDesign({ name: "Registry Undo" });
+    const nets = {
+      net1: await seedNet(sdk, design.id, "net1", 0),
+      net2: await seedNet(sdk, design.id, "net2", 2_000_000),
+      net3: await seedNet(sdk, design.id, "net3", 4_000_000),
+    };
     const proj = await sdk.getPcbProjection(design.id);
     const netClassId = proj!.board.netClasses[0]!.id;
 
-    await applyFakeCandidate(server, design.id, netClassId);
+    await applyFakeCandidate(server, design.id, netClassId, nets);
     const idsBefore = copperRows().map((r) => r.geometry_id);
 
     // Undo the whole apply (3 commands share the pcb session's undo stack).
@@ -234,7 +267,7 @@ describe("AutoCopperRegistry", () => {
     // Touch-undo: modify net2 (via HTTP — same store instance as the undo
     // route; the two-store history divergence is a pre-existing hazard),
     // undo → back to active; redo → modified again.
-    const net2 = after.find((r) => r.net_id === "net2")!;
+    const net2 = after.find((r) => r.net_id === nets.net2)!;
     const touchResponse = await server.fetch(
       new Request(`${BASE}/designs/${design.id}/commands`, {
         method: "POST",
@@ -252,19 +285,24 @@ describe("AutoCopperRegistry", () => {
       }),
     );
     expect(touchResponse.status).toBe(200);
-    expect(copperRows().find((r) => r.net_id === "net2")?.status).toBe("modified");
+    expect(copperRows().find((r) => r.net_id === nets.net2)?.status).toBe("modified");
     await history(server, design.id, "undo");
-    expect(copperRows().find((r) => r.net_id === "net2")?.status).toBe("active");
+    expect(copperRows().find((r) => r.net_id === nets.net2)?.status).toBe("active");
     await history(server, design.id, "redo");
-    expect(copperRows().find((r) => r.net_id === "net2")?.status).toBe("modified");
+    expect(copperRows().find((r) => r.net_id === nets.net2)?.status).toBe("modified");
   });
 
   test("registry survives a runtime restart (same DB)", async () => {
     setupEnv("capture-registry-restart");
     const { server, sdk } = await createRuntime();
     const design = await sdk.createDesign({ name: "Registry Restart" });
+    const nets = {
+      net1: await seedNet(sdk, design.id, "net1", 0),
+      net2: await seedNet(sdk, design.id, "net2", 2_000_000),
+      net3: await seedNet(sdk, design.id, "net3", 4_000_000),
+    };
     const proj = await sdk.getPcbProjection(design.id);
-    await applyFakeCandidate(server, design.id, proj!.board.netClasses[0]!.id);
+    await applyFakeCandidate(server, design.id, proj!.board.netClasses[0]!.id, nets);
     const before = copperRows();
     expect(before).toHaveLength(3);
 

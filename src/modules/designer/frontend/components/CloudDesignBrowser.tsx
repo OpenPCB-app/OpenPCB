@@ -8,6 +8,7 @@ import {
 } from "@/cloud/queries";
 import { useDesignerTabsStore } from "../stores/designer-tabs-store";
 import type { createDesignerApi } from "../api";
+import { cloudNetIdentityImportError } from "./cloud-import-identity";
 
 type DesignerApi = ReturnType<typeof createDesignerApi>;
 
@@ -16,7 +17,7 @@ interface CloudDesignBrowserProps {
   onClose: () => void;
   api: Pick<
     DesignerApi,
-    "createDesign" | "linkDesignToCloud" | "dispatchLocalOnly"
+    "createDesign" | "dispatchLocalOnly"
   >;
   onNotify: (
     message: string,
@@ -34,6 +35,31 @@ interface ProjectionView {
 function newId(): string {
   // crypto.randomUUID is available in modern browsers + Electron.
   return crypto.randomUUID();
+}
+
+function cloudPinIntentImportError(projection: unknown): string | null {
+  if (typeof projection !== "object" || projection === null) return null;
+  const parts = (projection as Record<string, unknown>).parts;
+  if (!Array.isArray(parts)) return null;
+
+  for (const part of parts) {
+    if (typeof part !== "object" || part === null) continue;
+    const partRecord = part as Record<string, unknown>;
+    if (!("pins" in partRecord)) continue;
+    if (!Array.isArray(partRecord.pins)) {
+      return "Cloud import cannot inspect malformed pin data. No local design was created.";
+    }
+    for (const pin of partRecord.pins) {
+      if (typeof pin !== "object" || pin === null) {
+        return "Cloud import cannot inspect malformed pin data. No local design was created.";
+      }
+      const electricalIntent = (pin as Record<string, unknown>).electricalIntent;
+      if (electricalIntent !== null && electricalIntent !== undefined) {
+        return "Cloud import cannot preserve pin electrical intent yet. No local design was created.";
+      }
+    }
+  }
+  return null;
 }
 
 interface ImportSummary {
@@ -100,20 +126,18 @@ export function CloudDesignBrowser({
       setImporting(true);
       setError(null);
       try {
+        const pinIntentError = cloudPinIntentImportError(
+          cloudDesign.projection,
+        );
+        if (pinIntentError) throw new Error(pinIntentError);
+        const identityError = cloudNetIdentityImportError(cloudDesign.projection);
+        if (identityError) throw new Error(identityError);
+
         // 1. Create new local design with the cloud's name.
         const local = await api.createDesign(cloudDesign.name);
 
-        // 2. Link the new local to the existing cloud design (skip the
-        //    "create-design-on-cloud" step inside the backend).
-        await api.linkDesignToCloud(local.id, {
-          existingCloudDesignId: cloudDesign.designId,
-          lastSyncedRevision: cloudDesign.revision,
-        });
-
-        // 3. Rehydrate cloud projection into local SQLite via synthetic
-        //    desktop commands. Cloud uses desktop's exact shape (positionNm,
-        //    rotationDeg, sourcePinId, …), so we forward fields verbatim.
-        //    dispatchLocalOnly skips outbound mirror — cloud already has them.
+        // This legacy replay is a new, unlinked copy. It cannot preserve the
+        // peer's entity identities, revision, or complete projection contents.
         const projection = cloudDesign.projection;
         const summary: ImportSummary = {
           parts: 0,
@@ -205,7 +229,7 @@ export function CloudDesignBrowser({
           ? ` — ${summary.wiresSkipped} wires skipped`
           : "";
         onNotify(
-          `Imported ${cloudDesign.name}: ${summary.parts} parts, ${summary.wires} wires, ${summary.labels} labels${skippedMsg}${wiresMsg}`,
+          `Imported unlinked copy of ${cloudDesign.name}: ${summary.parts} parts, ${summary.wires} wires, ${summary.labels} labels${skippedMsg}${wiresMsg}`,
           summary.partsSkipped.length || summary.wiresSkipped
             ? "warning"
             : "success",
@@ -292,13 +316,16 @@ export function CloudDesignBrowser({
           {!loading && view && (
             <div className="space-y-4">
               <ProjectionSummary projection={view.projection} />
+              <p className="text-xs text-text-secondary">
+                Creates a new, unlinked copy of parts, wires, and labels. Some data may be skipped.
+              </p>
               <button
                 type="button"
                 onClick={() => void onImportToLocal(view)}
                 disabled={importing}
                 className="rounded-sm border border-slate-300 bg-slate-100 px-3 py-1 text-xs hover:bg-slate-200 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:hover:bg-slate-700"
               >
-                {importing ? "Importing…" : "Import to local & open"}
+                {importing ? "Importing copy…" : "Import copy"}
               </button>
             </div>
           )}

@@ -9,9 +9,12 @@
 import { describe, expect, test } from "bun:test";
 import os from "node:os";
 import path from "node:path";
+import { eq } from "drizzle-orm";
 import type { DesignerSDK } from "../../../sdks";
 import { MODULE_SDK_TOKENS } from "../../../sdks";
-import { resetSharedSqliteForTesting } from "../db/sqlite-client";
+import { getSharedDb, resetSharedSqliteForTesting } from "../db/sqlite-client";
+import { readNetIdentityState } from "../../../modules/designer/backend/net-identity/state-store";
+import { designHeads, pcbEntities } from "../../../modules/designer/backend/schema";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
 import {
@@ -381,6 +384,18 @@ describe("KiCad project import (F3)", () => {
     // Full pipeline runs end-to-end now; nothing deferred for a complete
     // project with at least one resolvable schematic part.
     expect(result.applied.deferred).toEqual([]);
+
+    // Inspect raw state before a public projection read could migrate an import
+    // whose assignments had accidentally been persisted against legacy roots.
+    const db = getSharedDb();
+    const identity = readNetIdentityState(db, result.designId)!;
+    expect(identity.provenance.origin).toBe("kicad-import");
+    expect(db.select().from(designHeads).where(eq(designHeads.id, result.designId)).get()!.revision).toBe(0);
+    const rawSettings = db.select().from(pcbEntities).where(eq(pcbEntities.designId, result.designId)).all()
+      .find((row) => row.kind === "board_settings")!;
+    const rawAssignments = (JSON.parse(rawSettings.payloadJson) as { perNetClassAssignments: Record<string, string> }).perNetClassAssignments;
+    expect(Object.keys(rawAssignments)).toHaveLength(2);
+    expect(Object.keys(rawAssignments).every((id) => identity.active.some((net) => net.id === id))).toBe(true);
 
     // The persisted PCB projection should reflect the imported outline.
     const projection = await sdk.getPcbProjection(result.designId);

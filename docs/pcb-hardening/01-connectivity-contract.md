@@ -45,7 +45,18 @@ removed), no cross-layer contact without a via, no bounding-box approximation of
 
 Net of a footprint pad = `projection.padNets["<placementId>|<padNumber>"]` (schematic
 correlation); of a free pad = `freePad.netId`; of a trace / via = its `netId`; of an island = the
-pour net. Items with a null net belong to no net graph — they never join a component and never
+pour net. In durable mode these are stable logical references backed by typed schematic member
+IDs, not coordinate roots or display names. Current lone pins use `nc:<pinId>`; read-only
+`pending:<n>` values are provisional and must not be persisted. Consumers preserve stored copper
+IDs and never substitute by position or hint; own-key membership in the authoritative net map
+determines whether a reference is active. An inactive ID can still describe stored copper, so
+the identity summary and non-overridable `NET_ORPHANED_COPPER` check expose it for explicit repair.
+Legacy mode retains historical binding and remains degraded. Moving a PCB placement can break
+physical contact while leaving its logical ID unchanged; the geometric predicates below still
+decide contact. See [Net identity](../designer/net-identity.md) for storage, modes, migration,
+repair and API contracts.
+
+Items with a null net belong to no net graph — they never join a component and never
 manufacture connectivity between named nets (a null-net trace joining two pads leaves their
 airwire in place: this is deliberate assignment uncertainty, not a physical claim; DRC reports the
 same overlap as a different-net contact, and since S7 a null-net item that touches copper of two

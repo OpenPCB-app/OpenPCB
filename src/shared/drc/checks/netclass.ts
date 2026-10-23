@@ -41,7 +41,7 @@ export function netClassItems(
     // Intent gate: only enforce when the class came from an explicit
     // assignment or a name match — never the array-order fallback.
     const explicit =
-      (assignments[netId] !== undefined &&
+      (Object.hasOwn(assignments, netId) && assignments[netId] !== undefined &&
         board.netClasses.some((c) => c.id === assignments[netId])) ||
       netNameMatchesClassPattern(name, board.netClasses);
     const cls = explicit ? (classById.get(id) ?? null) : null;

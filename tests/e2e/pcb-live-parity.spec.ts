@@ -120,6 +120,7 @@ test.describe("pcb live-parity gate", () => {
     // The override toggles legality to "report"; the same ghost now commits.
     await page.getByRole("button", { name: "allow violations" }).click();
     await expect(page.getByText(/DRC override ON/)).toBeVisible();
+    await expect(page.locator('[aria-label="PCB canvas"]')).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(page.getByText(/Commit blocked/)).toBeHidden();
     await expect

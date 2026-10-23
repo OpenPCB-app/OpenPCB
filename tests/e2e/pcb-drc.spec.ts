@@ -52,7 +52,7 @@ async function drawKeepoutTrap(
 ) {
   const options = page.locator('[data-testid="area-tool-options"]');
   await expect(async () => {
-    await canvas.focus().catch(() => {});
+    await page.locator('[aria-label="PCB canvas"]').focus();
     await page.keyboard.press("k");
     await expect(options).toBeVisible({ timeout: 1_000 });
   }).toPass({ timeout: 10_000 });
@@ -97,11 +97,16 @@ test.describe("pcb batch DRC run", () => {
     ).toBeVisible();
     await page.getByRole("button", { name: "allow violations" }).click();
     await expect(page.getByText(/DRC override ON/)).toBeVisible();
+    await expect(page.locator('[aria-label="PCB canvas"]')).toBeFocused();
     await page.keyboard.press("Enter");
     await expect
       .poll(async () => (await pcbProjection(page, designId)).traces.length)
       .toBe(1);
+    // The server write precedes the client's projection refresh. Wait until
+    // the session finishes so Escape exits Route instead of only cancelling it.
+    await expect(page.getByText("Route — click a pad to start")).toBeVisible();
     await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "45°" })).toBeHidden();
 
     // Open the DRC dock from the toolbar and run the batch check.
     // `exact`: the status-bar chip is named "<n> DRC" and would also match.
@@ -140,7 +145,7 @@ test.describe("pcb batch DRC run", () => {
     // dock tab, whose name carries its issue badge ("DRC 2").
     await page.getByRole("tab", { name: /^DRC \d+$/ }).click();
     await expect(
-      page.getByText(/The board changed since this DRC ran/),
+      page.getByText("Previous DRC report: the design changed. Re-run DRC."),
     ).toBeVisible();
   });
 });

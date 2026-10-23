@@ -34,12 +34,29 @@ export interface ElectricalNetRetirement {
   readonly successorIds: readonly string[];
 }
 
+export type ElectricalSuccessorPolicy = "retire" | "inherit-most-pins";
+
+export interface ElectricalNetTransition {
+  readonly kind: "split" | "merge" | "reconfigure";
+  readonly predecessorIds: readonly string[];
+  readonly successorIds: readonly string[];
+  readonly inherited: readonly {
+    readonly fromId: string;
+    readonly componentKey: string;
+  }[];
+}
+
 export interface ElectricalIdentityInput {
   readonly previousActive: readonly ActiveElectricalNet[];
   readonly currentComponents: readonly ElectricalComponent[];
-  /** The caller must supply the complete durable retirement ledger to prevent recycling. */
+  /** Supply the retirement ledger unless a durable monotonic allocator guarantees no reuse. */
   readonly retiredIds?: readonly string[];
   readonly allocateId: ElectricalNetAllocator;
+  readonly successorPolicy: ElectricalSuccessorPolicy;
+  /** Higher finite rank wins between different predecessors; evaluated once per id. */
+  readonly predecessorPriority?: (id: string) => number;
+  /** Deterministic total preorder, consulted after overlap and pin-count ties. */
+  readonly comparePredecessors?: (firstId: string, secondId: string) => number;
 }
 
 export interface ElectricalIdentityResult {
@@ -48,4 +65,5 @@ export interface ElectricalIdentityResult {
   readonly createdIds: readonly string[];
   readonly preservedIds: readonly string[];
   readonly retirements: readonly ElectricalNetRetirement[];
+  readonly transitions: readonly ElectricalNetTransition[];
 }

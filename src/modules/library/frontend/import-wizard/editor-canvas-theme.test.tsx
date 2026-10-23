@@ -9,6 +9,17 @@ const canvasProps = vi.hoisted(
   () => new Map<string, { backgroundColor?: string; themeMode?: string }>(),
 );
 
+// These children never render through the canvas double. Their real barrels
+// eagerly preload Troika fonts, unrelated to editor theme propagation.
+vi.mock("../../../../shared/frontend/canvas/primitives", () => ({
+  GridShader: () => null,
+  EDAText: () => null,
+}));
+vi.mock("../../../../shared/frontend/canvas/scene", () => ({
+  SymbolRenderLayer: () => null,
+  FootprintRenderLayer: () => null,
+}));
+
 vi.mock("../../../../shared/frontend/canvas/interaction", () => ({
   EdaCanvas: (props: {
     backgroundColor?: string;

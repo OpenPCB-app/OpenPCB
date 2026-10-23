@@ -1,0 +1,841 @@
+{
+  "metadata": {
+    "fixtureId": "f2-t132-stale",
+    "capturedAt": "2026-10-22T17:06:34.414Z",
+    "generator": "bun scripts/capture-legacy-net-fixtures.ts",
+    "gitHead": "0182502ab11cc5ba4e910f6e1caec2f0ac603db2",
+    "captureBoundary": "Current working tree before durable net identity implementation; includes native pin-intent migration 0021_pin_electrical_intent.sql, not the older d5547f9 baseline",
+    "workingTreeDirty": true,
+    "dirtyStatus": [
+      " M docs/pcb-hardening/09-execution-contract.md",
+      " M docs/pcb-hardening/13-electrical-contract.md",
+      " M src/core/backend/tests/designer-cloud-sync.test.ts",
+      " M src/core/backend/tests/designer-erc-sdk.test.ts",
+      " M src/core/backend/tests/designer-pcb-view-state.test.ts",
+      " M src/core/backend/tests/fixtures/assistant-parity/catalog.current.json",
+      " M src/modules/assistant/backend/agentkit/native-adapter.test.ts",
+      " M src/modules/assistant/backend/agentkit/native-identity.ts",
+      " M src/modules/designer/backend/cloud-sync.ts",
+      " M src/modules/designer/backend/command-executor.ts",
+      " M src/modules/designer/backend/commands/place-part.ts",
+      " M src/modules/designer/backend/drc-results.ts",
+      " M src/modules/designer/backend/erc/erc-engine.ts",
+      " M src/modules/designer/backend/import/kicad-project/insert-schematic.ts",
+      " M src/modules/designer/backend/import/kicad-project/inspect.ts",
+      " M src/modules/designer/backend/pcb/pcb-projection.ts",
+      " M src/modules/designer/backend/pcb/pcb-store.ts",
+      " M src/modules/designer/backend/projection-read.ts",
+      " M src/modules/designer/backend/projection-world.ts",
+      " M src/modules/designer/backend/results.ts",
+      " M src/modules/designer/backend/routes.ts",
+      " M src/modules/designer/backend/schema.ts",
+      " M src/modules/designer/frontend/Space.tsx",
+      " M src/modules/designer/frontend/components/CloudDesignBrowser.tsx",
+      " M src/modules/designer/frontend/components/DesignerDrcView.tsx",
+      " M src/modules/designer/frontend/components/DesignerErcView.tsx",
+      " M src/modules/designer/frontend/components/OutlinePanel/OutlinePanel.tsx",
+      " M src/modules/designer/frontend/components/PcbDesignRulesDialog.tsx",
+      " M src/modules/designer/frontend/components/SchematicCanvas.tsx",
+      " M src/modules/designer/frontend/components/SelectionInspector/PartInspectorPanel.tsx",
+      " M src/modules/designer/frontend/pcb/PcbCanvas.tsx",
+      " M src/modules/designer/frontend/pcb/drc/drc-labels.ts",
+      " M src/modules/designer/frontend/pcb/drc/drc-store.test.ts",
+      " M src/modules/designer/frontend/pcb/drc/drc-store.ts",
+      " M src/modules/designer/frontend/pcb/drc/use-drc-run.test.ts",
+      " M src/modules/designer/frontend/pcb/drc/use-drc-run.ts",
+      " M src/modules/designer/frontend/stores/erc-store.test.ts",
+      " M src/modules/designer/frontend/stores/erc-store.ts",
+      " M src/modules/library/backend/infrastructure/parsers/kicad/kicad-schematic-parser.ts",
+      " M src/modules/library/frontend/import-wizard/editor-canvas-theme.test.tsx",
+      " M src/sdks/designer/index.ts",
+      " M src/sdks/designer/types.ts",
+      " M src/shared/drc/checks/board.ts",
+      " M src/shared/drc/checks/length.ts",
+      " M src/shared/drc/checks/manufacturability.ts",
+      " M src/shared/drc/checks/rules.ts",
+      " M src/shared/drc/checks/signal-integrity.ts",
+      " M src/shared/drc/code-registry.ts",
+      " M src/shared/drc/drc-context.ts",
+      " M src/shared/drc/drc-engine.ts",
+      " M src/shared/drc/legality.ts",
+      " M src/shared/drc/worker/drc-worker-client.ts",
+      " M tests/e2e/pcb-drc.spec.ts",
+      " M tests/e2e/pcb-live-parity.spec.ts",
+      " M tests/e2e/pcb-routing.spec.ts",
+      "?? docs/pcb-hardening/electrical-validation.md",
+      "?? scripts/capture-legacy-net-fixtures.ts",
+      "?? scripts/legacy-net-fixture-dump.ts",
+      "?? src/core/backend/tests/designer-cloud-pin-intent.test.ts",
+      "?? src/core/backend/tests/designer-duplicate-part.test.ts",
+      "?? src/core/backend/tests/designer-pin-electrical-intent.test.ts",
+      "?? src/core/backend/tests/designer-si-rules-validation.test.ts",
+      "?? src/core/backend/tests/drc-effective-scalar.test.ts",
+      "?? src/core/backend/tests/drc-report-evidence-persistence.test.ts",
+      "?? src/core/backend/tests/drc-run-evidence.test.ts",
+      "?? src/core/backend/tests/drc-si-rule-validity.test.ts",
+      "?? src/core/backend/tests/drc-stored-rule-diagnostics.test.ts",
+      "?? src/core/backend/tests/drc-worker-node.test.ts",
+      "?? src/core/backend/tests/erc-hardening.test.ts",
+      "?? src/core/backend/tests/erc-net-diagnostics.test.ts",
+      "?? src/core/backend/tests/erc-pin-electrical-intent.test.ts",
+      "?? src/core/backend/tests/helpers/erc-fixtures.ts",
+      "?? src/core/backend/tests/kicad-electrical-markers-import.test.ts",
+      "?? src/modules/designer/backend/cloud-intent-guard.ts",
+      "?? src/modules/designer/backend/commands/duplicate-part.ts",
+      "?? src/modules/designer/backend/commands/pin-electrical-intent.ts",
+      "?? src/modules/designer/backend/erc/drive-checks.ts",
+      "?? src/modules/designer/backend/erc/intent-checks.ts",
+      "?? src/modules/designer/backend/erc/metadata-checks.ts",
+      "?? src/modules/designer/backend/erc/projection-checks.ts",
+      "?? src/modules/designer/backend/migrations/0021_pin_electrical_intent.sql",
+      "?? src/modules/designer/backend/pcb/stored-rule-diagnostics.ts",
+      "?? src/modules/designer/backend/pin-electrical-intent.ts",
+      "?? src/modules/designer/frontend/components/CloudDesignBrowser.test.tsx",
+      "?? src/modules/designer/frontend/components/DrcEvidenceSummary.test.tsx",
+      "?? src/modules/designer/frontend/components/DrcEvidenceSummary.tsx",
+      "?? src/modules/designer/frontend/components/OutlinePanel/OutlinePanel.test.tsx",
+      "?? src/modules/designer/frontend/components/PcbDesignRulesDialog.test.tsx",
+      "?? src/modules/designer/frontend/components/PinElectricalIntentMarkers.test.tsx",
+      "?? src/modules/designer/frontend/components/PinElectricalIntentMarkers.tsx",
+      "?? src/modules/designer/frontend/components/SelectionInspector/PinElectricalIntentEditor.test.tsx",
+      "?? src/modules/designer/frontend/components/SelectionInspector/PinElectricalIntentEditor.tsx",
+      "?? src/modules/designer/frontend/components/erc-anchor-target.test.ts",
+      "?? src/modules/designer/frontend/components/erc-anchor-target.ts",
+      "?? src/modules/designer/frontend/components/validation-report-state.test.ts",
+      "?? src/modules/designer/frontend/components/validation-report-state.ts",
+      "?? src/modules/designer/frontend/components/validation-report-views.test.tsx",
+      "?? src/modules/designer/frontend/pcb/drc/drc-labels.test.ts",
+      "?? src/modules/designer/frontend/stores/use-erc-design-scope.test.ts",
+      "?? src/modules/designer/frontend/stores/use-erc-design-scope.ts",
+      "?? src/shared/drc/checks/si-rule-validity.ts",
+      "?? src/shared/drc/run-evidence.ts",
+      "?? src/shared/drc/si/rule-input-validation.ts",
+      "?? src/shared/drc/worker/drc-worker-node.mjs",
+      "?? tests/e2e/pin-electrical-intent.spec.ts"
+    ],
+    "workingTreeDiffSha256": "5f6e4e121f04e06e731d84ead66365a0c9fa60e0cd95e85703f0208748595899",
+    "sourceFilesSha256": {
+      "scripts/capture-legacy-net-fixtures.ts": "5da368e277b648fc03f0e67baad736b7c145ad192fab875686cdc10ac02c288f",
+      "scripts/legacy-net-fixture-dump.ts": "9b64b83ea09e75220a10daaa1fbd5b81937477bbbd01031b42e93fcba41c6d97",
+      "src/core/backend/tests/helpers/designer-runtime.ts": "c2d2d8a26c49fd73818e26eddd9b58e27d7b945eae80427592d1a191e1669d84",
+      "src/modules/designer/backend/command-executor.ts": "815167ad9b02799feba4c61f3baa47a91b83fe85271d0427d05f8863440a965e",
+      "src/modules/designer/backend/pcb/pcb-projection.ts": "0c6c9c7546b2b36ff804bb4dfae121c0577fa948fcc6fffa7d08d15f98a39954",
+      "src/modules/designer/backend/pcb/pcb-store.ts": "03d71a0a2b856e46b8ff43f48438ffb3796e824129a5858a1ba7a2bff6d9b1dd",
+      "src/modules/designer/backend/projection-read.ts": "a986eb438a3fabb43c0ff4ecb1344d7091c87ea873f77d629fbc95c9b89f6520",
+      "src/modules/designer/backend/projection-world.ts": "8fa60270b679e0602fa5c5231c0fc15ba0fd29cccaca9864be31d38ff9af7966",
+      "src/modules/designer/backend/schema.ts": "7639c8a139fac0eb122b9cbb71d1d5751ea0c02cadf7bddf81b9b0e2b0d72c1a",
+      "src/modules/designer/backend/store.ts": "7441ac13106a370a6f49e6186a71a44c40031dd5824259d81d7136785be5f43f",
+      "src/modules/designer/frontend/pcb/tools/area-tool-options.ts": "25919403bd6644fe5e1fa20d0011cb882339378919ab62f52ccc8957a2373dde",
+      "src/sdks/designer/types.ts": "a220c85a8db5cbcb8058f51e84b6f14a367e579905a396f0d834f52f19e2f411"
+    },
+    "payloadHashEncoding": "SHA-256 of UTF-8 JSON.stringify(payload); fixed key order, every table array sorted by id; raw JSON column strings unchanged",
+    "timestampsAndIds": "Actual SDK-generated UUIDs and timestamps; capture output is an immutable observed snapshot, not byte-identical across reruns",
+    "privacy": "Only design fixtures and source-file hashes captured; no environment values, credentials or provider data",
+    "deviations": [
+      "Copper authoring uses legality: off to capture binding facts; fixture names do not claim manufacturing or circuit qualification",
+      "Each passive two-pad capacitor fixture supplies one isolated two-pin net by wiring its two symbol pins together; this tests identity and persistence, not a functional circuit"
+    ]
+  },
+  "sha256": "33248e6a4255fdc57c169a6b1c2e7dc0e572a0a8cde1197e025e9ffe1a25553a",
+  "payload": {
+    "format": "openpcb.net-identity-backup/2",
+    "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+    "revision": 21,
+    "schematic": {
+      "parts": [
+        {
+          "id": "a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d",
+          "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+          "componentId": "df68a5b7-a6d4-4975-8182-ba81427891ea",
+          "reference": "C3",
+          "value": "",
+          "positionXNm": 72000000,
+          "positionYNm": 7000000,
+          "rotationDeg": 0,
+          "mirrored": 0,
+          "symbolSnapshotJson": "{\"symbolId\":\"0c8cd222-0f0b-4833-acf0-6fa2acbaa868\",\"name\":\"C\",\"referencePrefix\":\"C\",\"sourceHash\":\"dd62c430d2c9db34c4e60f62a8e2238f33b34513cab223195dee122eed05a6fc\",\"pins\":[{\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"localPositionMm\":{\"x\":0,\"y\":3.81},\"electricalType\":\"passive\",\"unit\":1},{\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"localPositionMm\":{\"x\":0,\"y\":-3.81},\"electricalType\":\"passive\",\"unit\":1}],\"preview\":{\"kind\":\"symbol\",\"units\":\"mm\",\"name\":\"C\",\"unitCount\":1,\"graphics\":[{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":-0.762},{\"x\":2.032,\"y\":-0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508},{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":0.762},{\"x\":2.032,\"y\":0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508}],\"pins\":[{\"id\":\"u1:1\",\"name\":\"1\",\"number\":\"1\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":3.81},\"bodyEnd\":{\"x\":-5.132494735226557e-16,\"y\":1.016},\"rotationDeg\":270},{\"id\":\"u1:2\",\"name\":\"2\",\"number\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":-3.81},\"bodyEnd\":{\"x\":1.7108315784088525e-16,\"y\":-1.016},\"rotationDeg\":90}],\"labels\":[{\"id\":\"u1:1:name\",\"text\":\"1\",\"at\":{\"x\":-5.132494735226557e-16,\"y\":1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"left\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:1:number\",\"text\":\"1\",\"at\":{\"x\":0.508,\"y\":3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"u1:2:name\",\"text\":\"2\",\"at\":{\"x\":1.7108315784088525e-16,\"y\":-1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"right\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:2:number\",\"text\":\"2\",\"at\":{\"x\":0.508,\"y\":-3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"symbol:reference\",\"text\":\"C\",\"at\":{\"x\":0,\"y\":5.25018},\"fontSizeMm\":1.27,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"bottom\",\"role\":\"reference\"}],\"bounds\":{\"minX\":-2.286,\"minY\":-3.9801800000000007,\"maxX\":2.286,\"maxY\":6.52018},\"warnings\":[]}}",
+          "footprintSnapshotJson": "{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]}",
+          "propertiesJson": "{\"description\":\"designer test part\"}",
+          "createdAt": "2026-10-22T17:06:35.439Z",
+          "updatedAt": "2026-10-22T17:06:35.604Z"
+        },
+        {
+          "id": "a73d645d-eb06-4dac-abd9-607a1f3660d1",
+          "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+          "componentId": "df68a5b7-a6d4-4975-8182-ba81427891ea",
+          "reference": "C2",
+          "value": "",
+          "positionXNm": 30000000,
+          "positionYNm": 0,
+          "rotationDeg": 0,
+          "mirrored": 0,
+          "symbolSnapshotJson": "{\"symbolId\":\"0c8cd222-0f0b-4833-acf0-6fa2acbaa868\",\"name\":\"C\",\"referencePrefix\":\"C\",\"sourceHash\":\"dd62c430d2c9db34c4e60f62a8e2238f33b34513cab223195dee122eed05a6fc\",\"pins\":[{\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"localPositionMm\":{\"x\":0,\"y\":3.81},\"electricalType\":\"passive\",\"unit\":1},{\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"localPositionMm\":{\"x\":0,\"y\":-3.81},\"electricalType\":\"passive\",\"unit\":1}],\"preview\":{\"kind\":\"symbol\",\"units\":\"mm\",\"name\":\"C\",\"unitCount\":1,\"graphics\":[{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":-0.762},{\"x\":2.032,\"y\":-0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508},{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":0.762},{\"x\":2.032,\"y\":0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508}],\"pins\":[{\"id\":\"u1:1\",\"name\":\"1\",\"number\":\"1\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":3.81},\"bodyEnd\":{\"x\":-5.132494735226557e-16,\"y\":1.016},\"rotationDeg\":270},{\"id\":\"u1:2\",\"name\":\"2\",\"number\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":-3.81},\"bodyEnd\":{\"x\":1.7108315784088525e-16,\"y\":-1.016},\"rotationDeg\":90}],\"labels\":[{\"id\":\"u1:1:name\",\"text\":\"1\",\"at\":{\"x\":-5.132494735226557e-16,\"y\":1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"left\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:1:number\",\"text\":\"1\",\"at\":{\"x\":0.508,\"y\":3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"u1:2:name\",\"text\":\"2\",\"at\":{\"x\":1.7108315784088525e-16,\"y\":-1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"right\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:2:number\",\"text\":\"2\",\"at\":{\"x\":0.508,\"y\":-3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"symbol:reference\",\"text\":\"C\",\"at\":{\"x\":0,\"y\":5.25018},\"fontSizeMm\":1.27,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"bottom\",\"role\":\"reference\"}],\"bounds\":{\"minX\":-2.286,\"minY\":-3.9801800000000007,\"maxX\":2.286,\"maxY\":6.52018},\"warnings\":[]}}",
+          "footprintSnapshotJson": "{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]}",
+          "propertiesJson": "{\"description\":\"designer test part\"}",
+          "createdAt": "2026-10-22T17:06:35.434Z",
+          "updatedAt": "2026-10-22T17:06:35.434Z"
+        },
+        {
+          "id": "f59feda3-c379-46a4-ad4a-d308cd7cfc7d",
+          "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+          "componentId": "df68a5b7-a6d4-4975-8182-ba81427891ea",
+          "reference": "C1",
+          "value": "",
+          "positionXNm": 0,
+          "positionYNm": 0,
+          "rotationDeg": 0,
+          "mirrored": 0,
+          "symbolSnapshotJson": "{\"symbolId\":\"0c8cd222-0f0b-4833-acf0-6fa2acbaa868\",\"name\":\"C\",\"referencePrefix\":\"C\",\"sourceHash\":\"dd62c430d2c9db34c4e60f62a8e2238f33b34513cab223195dee122eed05a6fc\",\"pins\":[{\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"localPositionMm\":{\"x\":0,\"y\":3.81},\"electricalType\":\"passive\",\"unit\":1},{\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"localPositionMm\":{\"x\":0,\"y\":-3.81},\"electricalType\":\"passive\",\"unit\":1}],\"preview\":{\"kind\":\"symbol\",\"units\":\"mm\",\"name\":\"C\",\"unitCount\":1,\"graphics\":[{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":-0.762},{\"x\":2.032,\"y\":-0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508},{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":0.762},{\"x\":2.032,\"y\":0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508}],\"pins\":[{\"id\":\"u1:1\",\"name\":\"1\",\"number\":\"1\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":3.81},\"bodyEnd\":{\"x\":-5.132494735226557e-16,\"y\":1.016},\"rotationDeg\":270},{\"id\":\"u1:2\",\"name\":\"2\",\"number\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":-3.81},\"bodyEnd\":{\"x\":1.7108315784088525e-16,\"y\":-1.016},\"rotationDeg\":90}],\"labels\":[{\"id\":\"u1:1:name\",\"text\":\"1\",\"at\":{\"x\":-5.132494735226557e-16,\"y\":1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"left\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:1:number\",\"text\":\"1\",\"at\":{\"x\":0.508,\"y\":3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"u1:2:name\",\"text\":\"2\",\"at\":{\"x\":1.7108315784088525e-16,\"y\":-1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"right\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:2:number\",\"text\":\"2\",\"at\":{\"x\":0.508,\"y\":-3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"symbol:reference\",\"text\":\"C\",\"at\":{\"x\":0,\"y\":5.25018},\"fontSizeMm\":1.27,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"bottom\",\"role\":\"reference\"}],\"bounds\":{\"minX\":-2.286,\"minY\":-3.9801800000000007,\"maxX\":2.286,\"maxY\":6.52018},\"warnings\":[]}}",
+          "footprintSnapshotJson": "{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]}",
+          "propertiesJson": "{\"description\":\"designer test part\"}",
+          "createdAt": "2026-10-22T17:06:35.429Z",
+          "updatedAt": "2026-10-22T17:06:35.429Z"
+        }
+      ],
+      "pins": [
+        {
+          "id": "a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:1",
+          "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+          "partId": "a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d",
+          "originPinKey": "u1:1",
+          "number": "1",
+          "name": "1",
+          "electricalType": "passive",
+          "electricalIntent": null,
+          "unit": 1,
+          "localXNm": 0,
+          "localYNm": 3810000,
+          "worldXNm": 72000000,
+          "worldYNm": 10810000,
+          "createdAt": "2026-10-22T17:06:35.439Z",
+          "updatedAt": "2026-10-22T17:06:35.604Z"
+        },
+        {
+          "id": "a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:2",
+          "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+          "partId": "a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d",
+          "originPinKey": "u1:2",
+          "number": "2",
+          "name": "2",
+          "electricalType": "passive",
+          "electricalIntent": null,
+          "unit": 1,
+          "localXNm": 0,
+          "localYNm": -3810000,
+          "worldXNm": 72000000,
+          "worldYNm": 3190000,
+          "createdAt": "2026-10-22T17:06:35.439Z",
+          "updatedAt": "2026-10-22T17:06:35.604Z"
+        },
+        {
+          "id": "a73d645d-eb06-4dac-abd9-607a1f3660d1:u1:1",
+          "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+          "partId": "a73d645d-eb06-4dac-abd9-607a1f3660d1",
+          "originPinKey": "u1:1",
+          "number": "1",
+          "name": "1",
+          "electricalType": "passive",
+          "electricalIntent": null,
+          "unit": 1,
+          "localXNm": 0,
+          "localYNm": 3810000,
+          "worldXNm": 30000000,
+          "worldYNm": 3810000,
+          "createdAt": "2026-10-22T17:06:35.434Z",
+          "updatedAt": "2026-10-22T17:06:35.434Z"
+        },
+        {
+          "id": "a73d645d-eb06-4dac-abd9-607a1f3660d1:u1:2",
+          "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+          "partId": "a73d645d-eb06-4dac-abd9-607a1f3660d1",
+          "originPinKey": "u1:2",
+          "number": "2",
+          "name": "2",
+          "electricalType": "passive",
+          "electricalIntent": null,
+          "unit": 1,
+          "localXNm": 0,
+          "localYNm": -3810000,
+          "worldXNm": 30000000,
+          "worldYNm": -3810000,
+          "createdAt": "2026-10-22T17:06:35.434Z",
+          "updatedAt": "2026-10-22T17:06:35.434Z"
+        },
+        {
+          "id": "f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:1",
+          "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+          "partId": "f59feda3-c379-46a4-ad4a-d308cd7cfc7d",
+          "originPinKey": "u1:1",
+          "number": "1",
+          "name": "1",
+          "electricalType": "passive",
+          "electricalIntent": "power_source",
+          "unit": 1,
+          "localXNm": 0,
+          "localYNm": 3810000,
+          "worldXNm": 0,
+          "worldYNm": 3810000,
+          "createdAt": "2026-10-22T17:06:35.429Z",
+          "updatedAt": "2026-10-22T17:06:35.495Z"
+        },
+        {
+          "id": "f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:2",
+          "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+          "partId": "f59feda3-c379-46a4-ad4a-d308cd7cfc7d",
+          "originPinKey": "u1:2",
+          "number": "2",
+          "name": "2",
+          "electricalType": "passive",
+          "electricalIntent": null,
+          "unit": 1,
+          "localXNm": 0,
+          "localYNm": -3810000,
+          "worldXNm": 0,
+          "worldYNm": -3810000,
+          "createdAt": "2026-10-22T17:06:35.429Z",
+          "updatedAt": "2026-10-22T17:06:35.429Z"
+        }
+      ],
+      "wires": [
+        {
+          "id": "20142dfe-86ee-46a6-9b9b-c4a8d1076a2e",
+          "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+          "sourcePinId": "a73d645d-eb06-4dac-abd9-607a1f3660d1:u1:1",
+          "targetPinId": "a73d645d-eb06-4dac-abd9-607a1f3660d1:u1:2",
+          "pointsJson": "[{\"x\":30000000,\"y\":3810000},{\"x\":30000000,\"y\":-3810000}]",
+          "routeStatus": null,
+          "createdAt": "2026-10-22T17:06:35.475Z",
+          "updatedAt": "2026-10-22T17:06:35.475Z"
+        },
+        {
+          "id": "20d69d7c-e9f6-4b2b-8b3a-25da5073699c",
+          "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+          "sourcePinId": "a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:1",
+          "targetPinId": "a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:2",
+          "pointsJson": "[{\"x\":72000000,\"y\":10810000},{\"x\":72000000,\"y\":3190000}]",
+          "routeStatus": null,
+          "createdAt": "2026-10-22T17:06:35.480Z",
+          "updatedAt": "2026-10-22T17:06:35.604Z"
+        },
+        {
+          "id": "e46d6c5a-9743-4ccf-9572-b4fe15c57636",
+          "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+          "sourcePinId": "f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:1",
+          "targetPinId": "f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:2",
+          "pointsJson": "[{\"x\":0,\"y\":3810000},{\"x\":0,\"y\":-3810000}]",
+          "routeStatus": null,
+          "createdAt": "2026-10-22T17:06:35.470Z",
+          "updatedAt": "2026-10-22T17:06:35.470Z"
+        }
+      ],
+      "labels": [],
+      "primitives": [
+        {
+          "id": "35be3420-ffd6-49e0-ab9e-c295fa70140e",
+          "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+          "kind": "gnd",
+          "positionXNm": 30000000,
+          "positionYNm": 3810000,
+          "rotationDeg": 0,
+          "payloadJson": "{}",
+          "createdAt": "2026-10-22T17:06:35.491Z",
+          "updatedAt": "2026-10-22T17:06:35.491Z"
+        },
+        {
+          "id": "62fadfad-9d04-493f-a12e-7f91e29b4c7c",
+          "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+          "kind": "pwr",
+          "positionXNm": 0,
+          "positionYNm": 3810000,
+          "rotationDeg": 0,
+          "payloadJson": "{\"railText\":\"VCC\"}",
+          "createdAt": "2026-10-22T17:06:35.485Z",
+          "updatedAt": "2026-10-22T17:06:35.485Z"
+        }
+      ]
+    },
+    "pcbEntities": [
+      {
+        "id": "02e0b779-05e3-42d0-bcda-a7d868f54e8e",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "kind": "trace",
+        "payloadJson": "{\"id\":\"02e0b779-05e3-42d0-bcda-a7d868f54e8e\",\"netId\":\"pt:0:-3810000\",\"netClassId\":\"default\",\"layer\":\"F.Cu\",\"widthMm\":0.25,\"pointsNm\":[{\"x\":14225000,\"y\":20000000},{\"x\":14225000,\"y\":10000000},{\"x\":15775000,\"y\":10000000},{\"x\":15775000,\"y\":20000000}],\"segmentMode\":\"manhattan-90\"}",
+        "createdAt": "2026-10-22T17:06:35.502Z",
+        "updatedAt": "2026-10-22T17:06:35.502Z"
+      },
+      {
+        "id": "21595368-a418-4c70-b532-303a7cbf72f3",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "kind": "board_settings",
+        "payloadJson": "{\"outline\":{\"kind\":\"rect\",\"widthMm\":100,\"heightMm\":80,\"centerMm\":{\"x\":35,\"y\":25}},\"activeLayer\":\"F.Cu\",\"visibleLayers\":[\"F.Cu\",\"B.Cu\",\"F.SilkS\",\"Edge.Cuts\",\"Drill\",\"Metadata\"],\"designRules\":{\"clearance\":{\"traceToTraceMm\":0.25,\"traceToPadMm\":0.25,\"padToPadMm\":0.25,\"traceToViaMm\":0.25,\"viaToViaMm\":0.3,\"copperToBoardEdgeMm\":0.5},\"minimums\":{\"traceWidthMm\":0.2,\"drillSizeMm\":0.4,\"annularRingMm\":0.2,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"holeToHoleMm\":0.25,\"clearanceMm\":0.1}},\"netClasses\":[{\"id\":\"default\",\"name\":\"Default\",\"traceWidthMm\":0.25,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#d4d4d8\",\"defaultViaProtection\":\"tented\"},{\"id\":\"power\",\"name\":\"Power\",\"traceWidthMm\":0.5,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#f87171\",\"defaultViaProtection\":\"tented\"},{\"id\":\"gnd\",\"name\":\"GND\",\"traceWidthMm\":0.4,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#64748b\",\"defaultViaProtection\":\"tented\"},{\"id\":\"legacy-fixture-class\",\"name\":\"Legacy fixture class\",\"traceWidthMm\":0.25,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#d4d4d8\",\"defaultViaProtection\":\"tented\"}],\"tracePresets\":[0.15,0.2,0.25,0.5,1],\"fabricator\":\"jlcpcb_2l\",\"layerCount\":2,\"boardThicknessMm\":1.6,\"displayMode\":\"normal\",\"solderMaskExpansionMm\":0.075,\"solderPasteExpansionMm\":-0.05,\"viewState\":{\"displayMode\":\"normal\",\"viewSide\":\"top\",\"perLayerOpacity\":{},\"layerPreset\":\"custom\",\"ratsnestVisible\":true,\"drcIgnoredRuleClasses\":[],\"drcWaivedViolationIds\":[]},\"updatedAt\":\"2026-10-22T17:06:35.583Z\",\"perNetClassAssignments\":{\"pt:0:-3810000\":\"legacy-fixture-class\",\"pt:30000000:-3810000\":\"legacy-fixture-class\",\"pt:60000000:-3810000\":\"legacy-fixture-class\"},\"lengthMatchGroups\":[{\"id\":\"legacy-length\",\"name\":\"Legacy length\",\"netIds\":[\"pt:0:-3810000\",\"pt:60000000:-3810000\"],\"target\":{\"kind\":\"longest\"},\"toleranceMm\":2}],\"drcRules\":[{\"id\":\"legacy-scope\",\"name\":\"Legacy scoped width\",\"enabled\":true,\"priority\":10,\"scopes\":[{\"kind\":\"net\",\"netIds\":[\"pt:30000000:-3810000\",\"pt:60000000:-3810000\"]}],\"constraint\":{\"kind\":\"trackWidth\",\"minMm\":0.25}}],\"diffPairs\":[{\"id\":\"legacy-pair\",\"name\":\"Legacy pair\",\"pNetId\":\"pt:0:-3810000\",\"nNetId\":\"pt:60000000:-3810000\"}],\"schemaVersion\":1}",
+        "createdAt": "2026-10-22T17:06:35.414Z",
+        "updatedAt": "2026-10-22T17:06:35.583Z"
+      },
+      {
+        "id": "28288269-846e-4df1-b16c-f52f6b7d159d",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "kind": "placement",
+        "payloadJson": "{\"id\":\"28288269-846e-4df1-b16c-f52f6b7d159d\",\"partId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"reference\":\"C3\",\"positionMm\":{\"x\":55,\"y\":20},\"rotationDeg\":0,\"mirrored\":false,\"layer\":\"F.Cu\",\"footprint\":{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]}}",
+        "createdAt": "2026-10-22T17:06:35.442Z",
+        "updatedAt": "2026-10-22T17:06:35.464Z"
+      },
+      {
+        "id": "39dd4d75-248e-4cfc-8417-e1ab871c635d",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "kind": "trace",
+        "payloadJson": "{\"id\":\"39dd4d75-248e-4cfc-8417-e1ab871c635d\",\"netId\":\"pt:60000000:-3810000\",\"netClassId\":\"default\",\"layer\":\"F.Cu\",\"widthMm\":0.25,\"pointsNm\":[{\"x\":54225000,\"y\":20000000},{\"x\":54225000,\"y\":5000000},{\"x\":55775000,\"y\":5000000},{\"x\":55775000,\"y\":20000000}],\"segmentMode\":\"manhattan-90\"}",
+        "createdAt": "2026-10-22T17:06:35.514Z",
+        "updatedAt": "2026-10-22T17:06:35.514Z"
+      },
+      {
+        "id": "6a5bec9c-7958-4643-acf7-eb706517edc3",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "kind": "placement",
+        "payloadJson": "{\"id\":\"6a5bec9c-7958-4643-acf7-eb706517edc3\",\"partId\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"reference\":\"C1\",\"positionMm\":{\"x\":15,\"y\":20},\"rotationDeg\":0,\"mirrored\":false,\"layer\":\"F.Cu\",\"footprint\":{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]}}",
+        "createdAt": "2026-10-22T17:06:35.442Z",
+        "updatedAt": "2026-10-22T17:06:35.450Z"
+      },
+      {
+        "id": "6e0eeb4a-c61e-48db-a196-2fe890f6375a",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "kind": "placement",
+        "payloadJson": "{\"id\":\"6e0eeb4a-c61e-48db-a196-2fe890f6375a\",\"partId\":\"a73d645d-eb06-4dac-abd9-607a1f3660d1\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"reference\":\"C2\",\"positionMm\":{\"x\":35,\"y\":20},\"rotationDeg\":0,\"mirrored\":false,\"layer\":\"F.Cu\",\"footprint\":{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]}}",
+        "createdAt": "2026-10-22T17:06:35.442Z",
+        "updatedAt": "2026-10-22T17:06:35.456Z"
+      },
+      {
+        "id": "70313abc-29e5-4f3b-9181-0c376af20f71",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "kind": "zone",
+        "payloadJson": "{\"id\":\"9f93341c-8ed9-43df-93d4-f61a68539b15\",\"name\":\"Unnamed UI zone\",\"enabled\":true,\"lockedAt\":null,\"layer\":\"F.Cu\",\"netId\":null,\"netName\":\"Net_1\",\"region\":{\"kind\":\"polygon\",\"pointsMm\":[{\"x\":33,\"y\":2},{\"x\":59,\"y\":2},{\"x\":59,\"y\":12},{\"x\":33,\"y\":12}]},\"priority\":0,\"padConnection\":\"solid\"}",
+        "createdAt": "2026-10-22T17:06:35.532Z",
+        "updatedAt": "2026-10-22T17:06:35.532Z"
+      },
+      {
+        "id": "98cd1a01-06a1-4bce-9915-9a28bce305af",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "kind": "via",
+        "payloadJson": "{\"id\":\"98cd1a01-06a1-4bce-9915-9a28bce305af\",\"netId\":\"pt:30000000:-3810000\",\"netClassId\":\"default\",\"centerMm\":{\"x\":35,\"y\":30},\"diameterMm\":0.8,\"drillMm\":0.4,\"fromLayer\":\"F.Cu\",\"toLayer\":\"B.Cu\",\"viaType\":\"through\",\"protection\":\"tented\",\"provenance\":\"route\"}",
+        "createdAt": "2026-10-22T17:06:35.519Z",
+        "updatedAt": "2026-10-22T17:06:35.519Z"
+      },
+      {
+        "id": "af028f94-8bc7-4c68-af9c-c373ae40368b",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "kind": "zone",
+        "payloadJson": "{\"id\":\"board:B.Cu\",\"name\":\"GND plane\",\"enabled\":true,\"lockedAt\":null,\"layer\":\"B.Cu\",\"netId\":null,\"netName\":\"GND\",\"region\":{\"kind\":\"board\"},\"priority\":0,\"padConnection\":\"solid\"}",
+        "createdAt": "2026-10-22T17:06:35.556Z",
+        "updatedAt": "2026-10-22T17:06:35.556Z"
+      },
+      {
+        "id": "e5aea5e9-0a88-46ec-9c0b-f5fc32049138",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "kind": "trace",
+        "payloadJson": "{\"id\":\"e5aea5e9-0a88-46ec-9c0b-f5fc32049138\",\"netId\":\"pt:30000000:-3810000\",\"netClassId\":\"default\",\"layer\":\"F.Cu\",\"widthMm\":0.25,\"pointsNm\":[{\"x\":34225000,\"y\":20000000},{\"x\":34225000,\"y\":30000000},{\"x\":35775000,\"y\":30000000},{\"x\":35775000,\"y\":20000000}],\"segmentMode\":\"manhattan-90\"}",
+        "createdAt": "2026-10-22T17:06:35.508Z",
+        "updatedAt": "2026-10-22T17:06:35.508Z"
+      }
+    ],
+    "sessionHistories": [
+      {
+        "id": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3:designer-test-session",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "undoStackJson": "[{\"envelope\":{\"commandId\":\"7d2d81c9-363c-439d-9868-6d329658678c\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":0,\"issuedAt\":1792688795416,\"command\":{\"type\":\"pcb_set_board_outline\",\"outline\":{\"kind\":\"rect\",\"widthMm\":100,\"heightMm\":80,\"centerMm\":{\"x\":35,\"y\":25}}}},\"revision\":1,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"pcb:board_settings\",\"component\":{\"type\":\"designer.pcb_settings\",\"payload\":{\"outline\":{\"kind\":\"rect\",\"widthMm\":100,\"heightMm\":80,\"centerMm\":{\"x\":35,\"y\":25}},\"designRules\":{\"clearance\":{\"traceToTraceMm\":0.25,\"traceToPadMm\":0.25,\"padToPadMm\":0.25,\"traceToViaMm\":0.25,\"viaToViaMm\":0.3,\"copperToBoardEdgeMm\":0.5},\"minimums\":{\"traceWidthMm\":0.2,\"drillSizeMm\":0.4,\"annularRingMm\":0.2,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"holeToHoleMm\":0.25,\"clearanceMm\":0.1}},\"netClasses\":[{\"id\":\"default\",\"name\":\"Default\",\"traceWidthMm\":0.25,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#d4d4d8\",\"defaultViaProtection\":\"tented\"},{\"id\":\"power\",\"name\":\"Power\",\"traceWidthMm\":0.5,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#f87171\",\"defaultViaProtection\":\"tented\"},{\"id\":\"gnd\",\"name\":\"GND\",\"traceWidthMm\":0.4,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#64748b\",\"defaultViaProtection\":\"tented\"}],\"tracePresets\":[0.15,0.2,0.25,0.5,1],\"fabricator\":\"jlcpcb_2l\",\"layerCount\":2,\"boardThicknessMm\":1.6,\"displayMode\":\"normal\",\"solderMaskExpansionMm\":0.075,\"solderPasteExpansionMm\":-0.05,\"updatedAt\":\"2026-10-22T17:06:35.418Z\"}}}],\"inversePatches\":[{\"kind\":\"component.set\",\"entityId\":\"pcb:board_settings\",\"component\":{\"type\":\"designer.pcb_settings\",\"payload\":{\"outline\":{\"kind\":\"rect\",\"widthMm\":50,\"heightMm\":30,\"centerMm\":{\"x\":0,\"y\":0}},\"designRules\":{\"clearance\":{\"traceToTraceMm\":0.25,\"traceToPadMm\":0.25,\"padToPadMm\":0.25,\"traceToViaMm\":0.25,\"viaToViaMm\":0.3,\"copperToBoardEdgeMm\":0.5},\"minimums\":{\"traceWidthMm\":0.2,\"drillSizeMm\":0.4,\"annularRingMm\":0.2,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"holeToHoleMm\":0.25,\"clearanceMm\":0.1}},\"netClasses\":[{\"id\":\"default\",\"name\":\"Default\",\"traceWidthMm\":0.25,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#d4d4d8\",\"defaultViaProtection\":\"tented\"},{\"id\":\"power\",\"name\":\"Power\",\"traceWidthMm\":0.5,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#f87171\",\"defaultViaProtection\":\"tented\"},{\"id\":\"gnd\",\"name\":\"GND\",\"traceWidthMm\":0.4,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#64748b\",\"defaultViaProtection\":\"tented\"}],\"tracePresets\":[0.15,0.2,0.25,0.5,1],\"fabricator\":\"jlcpcb_2l\",\"layerCount\":2,\"boardThicknessMm\":1.6,\"displayMode\":\"normal\",\"solderMaskExpansionMm\":0.075,\"solderPasteExpansionMm\":-0.05,\"updatedAt\":\"2026-10-22T17:06:35.414Z\"}}}],\"createdEntityId\":null,\"timestamp\":1792688795416},{\"envelope\":{\"commandId\":\"247a62b8-9644-4cb0-b816-cbdd3477adb3\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":1,\"issuedAt\":1792688795425,\"command\":{\"type\":\"place_part\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"positionNm\":{\"x\":0,\"y\":0}}},\"revision\":2,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"part:f59feda3-c379-46a4-ad4a-d308cd7cfc7d\",\"component\":{\"type\":\"designer.entity\",\"kind\":\"part\",\"payload\":{\"id\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"reference\":\"C1\",\"value\":\"\",\"rotationDeg\":0,\"mirrored\":false,\"positionNm\":{\"x\":0,\"y\":0},\"symbol\":{\"symbolId\":\"0c8cd222-0f0b-4833-acf0-6fa2acbaa868\",\"name\":\"C\",\"referencePrefix\":\"C\",\"sourceHash\":\"dd62c430d2c9db34c4e60f62a8e2238f33b34513cab223195dee122eed05a6fc\",\"pins\":[{\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"localPositionMm\":{\"x\":0,\"y\":3.81},\"electricalType\":\"passive\",\"unit\":1},{\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"localPositionMm\":{\"x\":0,\"y\":-3.81},\"electricalType\":\"passive\",\"unit\":1}],\"preview\":{\"kind\":\"symbol\",\"units\":\"mm\",\"name\":\"C\",\"unitCount\":1,\"graphics\":[{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":-0.762},{\"x\":2.032,\"y\":-0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508},{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":0.762},{\"x\":2.032,\"y\":0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508}],\"pins\":[{\"id\":\"u1:1\",\"name\":\"1\",\"number\":\"1\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":3.81},\"bodyEnd\":{\"x\":-5.132494735226557e-16,\"y\":1.016},\"rotationDeg\":270},{\"id\":\"u1:2\",\"name\":\"2\",\"number\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":-3.81},\"bodyEnd\":{\"x\":1.7108315784088525e-16,\"y\":-1.016},\"rotationDeg\":90}],\"labels\":[{\"id\":\"u1:1:name\",\"text\":\"1\",\"at\":{\"x\":-5.132494735226557e-16,\"y\":1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"left\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:1:number\",\"text\":\"1\",\"at\":{\"x\":0.508,\"y\":3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"u1:2:name\",\"text\":\"2\",\"at\":{\"x\":1.7108315784088525e-16,\"y\":-1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"right\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:2:number\",\"text\":\"2\",\"at\":{\"x\":0.508,\"y\":-3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"symbol:reference\",\"text\":\"C\",\"at\":{\"x\":0,\"y\":5.25018},\"fontSizeMm\":1.27,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"bottom\",\"role\":\"reference\"}],\"bounds\":{\"minX\":-2.286,\"minY\":-3.9801800000000007,\"maxX\":2.286,\"maxY\":6.52018},\"warnings\":[]}},\"footprint\":{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]},\"pins\":[{\"id\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:1\",\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"electricalType\":\"passive\",\"unit\":1,\"localPositionNm\":{\"x\":0,\"y\":3810000},\"worldPositionNm\":{\"x\":0,\"y\":3810000}},{\"id\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:2\",\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"localPositionNm\":{\"x\":0,\"y\":-3810000},\"worldPositionNm\":{\"x\":0,\"y\":-3810000}}],\"propertiesJson\":{\"description\":\"designer test part\"}}}}],\"inversePatches\":[{\"kind\":\"component.remove\",\"entityId\":\"part:f59feda3-c379-46a4-ad4a-d308cd7cfc7d\",\"componentType\":\"designer.entity\"}],\"createdEntityId\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d\",\"timestamp\":1792688795425},{\"envelope\":{\"commandId\":\"56a33553-c137-4002-86b2-7cb159e4c130\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":2,\"issuedAt\":1792688795432,\"command\":{\"type\":\"place_part\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"positionNm\":{\"x\":30000000,\"y\":0}}},\"revision\":3,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"part:a73d645d-eb06-4dac-abd9-607a1f3660d1\",\"component\":{\"type\":\"designer.entity\",\"kind\":\"part\",\"payload\":{\"id\":\"a73d645d-eb06-4dac-abd9-607a1f3660d1\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"reference\":\"C2\",\"value\":\"\",\"rotationDeg\":0,\"mirrored\":false,\"positionNm\":{\"x\":30000000,\"y\":0},\"symbol\":{\"symbolId\":\"0c8cd222-0f0b-4833-acf0-6fa2acbaa868\",\"name\":\"C\",\"referencePrefix\":\"C\",\"sourceHash\":\"dd62c430d2c9db34c4e60f62a8e2238f33b34513cab223195dee122eed05a6fc\",\"pins\":[{\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"localPositionMm\":{\"x\":0,\"y\":3.81},\"electricalType\":\"passive\",\"unit\":1},{\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"localPositionMm\":{\"x\":0,\"y\":-3.81},\"electricalType\":\"passive\",\"unit\":1}],\"preview\":{\"kind\":\"symbol\",\"units\":\"mm\",\"name\":\"C\",\"unitCount\":1,\"graphics\":[{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":-0.762},{\"x\":2.032,\"y\":-0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508},{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":0.762},{\"x\":2.032,\"y\":0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508}],\"pins\":[{\"id\":\"u1:1\",\"name\":\"1\",\"number\":\"1\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":3.81},\"bodyEnd\":{\"x\":-5.132494735226557e-16,\"y\":1.016},\"rotationDeg\":270},{\"id\":\"u1:2\",\"name\":\"2\",\"number\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":-3.81},\"bodyEnd\":{\"x\":1.7108315784088525e-16,\"y\":-1.016},\"rotationDeg\":90}],\"labels\":[{\"id\":\"u1:1:name\",\"text\":\"1\",\"at\":{\"x\":-5.132494735226557e-16,\"y\":1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"left\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:1:number\",\"text\":\"1\",\"at\":{\"x\":0.508,\"y\":3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"u1:2:name\",\"text\":\"2\",\"at\":{\"x\":1.7108315784088525e-16,\"y\":-1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"right\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:2:number\",\"text\":\"2\",\"at\":{\"x\":0.508,\"y\":-3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"symbol:reference\",\"text\":\"C\",\"at\":{\"x\":0,\"y\":5.25018},\"fontSizeMm\":1.27,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"bottom\",\"role\":\"reference\"}],\"bounds\":{\"minX\":-2.286,\"minY\":-3.9801800000000007,\"maxX\":2.286,\"maxY\":6.52018},\"warnings\":[]}},\"footprint\":{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]},\"pins\":[{\"id\":\"a73d645d-eb06-4dac-abd9-607a1f3660d1:u1:1\",\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"electricalType\":\"passive\",\"unit\":1,\"localPositionNm\":{\"x\":0,\"y\":3810000},\"worldPositionNm\":{\"x\":30000000,\"y\":3810000}},{\"id\":\"a73d645d-eb06-4dac-abd9-607a1f3660d1:u1:2\",\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"localPositionNm\":{\"x\":0,\"y\":-3810000},\"worldPositionNm\":{\"x\":30000000,\"y\":-3810000}}],\"propertiesJson\":{\"description\":\"designer test part\"}}}}],\"inversePatches\":[{\"kind\":\"component.remove\",\"entityId\":\"part:a73d645d-eb06-4dac-abd9-607a1f3660d1\",\"componentType\":\"designer.entity\"}],\"createdEntityId\":\"a73d645d-eb06-4dac-abd9-607a1f3660d1\",\"timestamp\":1792688795432},{\"envelope\":{\"commandId\":\"684ebac4-8ee9-44f3-8154-a451de05451e\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":3,\"issuedAt\":1792688795438,\"command\":{\"type\":\"place_part\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"positionNm\":{\"x\":60000000,\"y\":0}}},\"revision\":4,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"part:a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d\",\"component\":{\"type\":\"designer.entity\",\"kind\":\"part\",\"payload\":{\"id\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"reference\":\"C3\",\"value\":\"\",\"rotationDeg\":0,\"mirrored\":false,\"positionNm\":{\"x\":60000000,\"y\":0},\"symbol\":{\"symbolId\":\"0c8cd222-0f0b-4833-acf0-6fa2acbaa868\",\"name\":\"C\",\"referencePrefix\":\"C\",\"sourceHash\":\"dd62c430d2c9db34c4e60f62a8e2238f33b34513cab223195dee122eed05a6fc\",\"pins\":[{\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"localPositionMm\":{\"x\":0,\"y\":3.81},\"electricalType\":\"passive\",\"unit\":1},{\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"localPositionMm\":{\"x\":0,\"y\":-3.81},\"electricalType\":\"passive\",\"unit\":1}],\"preview\":{\"kind\":\"symbol\",\"units\":\"mm\",\"name\":\"C\",\"unitCount\":1,\"graphics\":[{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":-0.762},{\"x\":2.032,\"y\":-0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508},{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":0.762},{\"x\":2.032,\"y\":0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508}],\"pins\":[{\"id\":\"u1:1\",\"name\":\"1\",\"number\":\"1\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":3.81},\"bodyEnd\":{\"x\":-5.132494735226557e-16,\"y\":1.016},\"rotationDeg\":270},{\"id\":\"u1:2\",\"name\":\"2\",\"number\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":-3.81},\"bodyEnd\":{\"x\":1.7108315784088525e-16,\"y\":-1.016},\"rotationDeg\":90}],\"labels\":[{\"id\":\"u1:1:name\",\"text\":\"1\",\"at\":{\"x\":-5.132494735226557e-16,\"y\":1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"left\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:1:number\",\"text\":\"1\",\"at\":{\"x\":0.508,\"y\":3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"u1:2:name\",\"text\":\"2\",\"at\":{\"x\":1.7108315784088525e-16,\"y\":-1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"right\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:2:number\",\"text\":\"2\",\"at\":{\"x\":0.508,\"y\":-3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"symbol:reference\",\"text\":\"C\",\"at\":{\"x\":0,\"y\":5.25018},\"fontSizeMm\":1.27,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"bottom\",\"role\":\"reference\"}],\"bounds\":{\"minX\":-2.286,\"minY\":-3.9801800000000007,\"maxX\":2.286,\"maxY\":6.52018},\"warnings\":[]}},\"footprint\":{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]},\"pins\":[{\"id\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:1\",\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"electricalType\":\"passive\",\"unit\":1,\"localPositionNm\":{\"x\":0,\"y\":3810000},\"worldPositionNm\":{\"x\":60000000,\"y\":3810000}},{\"id\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:2\",\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"localPositionNm\":{\"x\":0,\"y\":-3810000},\"worldPositionNm\":{\"x\":60000000,\"y\":-3810000}}],\"propertiesJson\":{\"description\":\"designer test part\"}}}}],\"inversePatches\":[{\"kind\":\"component.remove\",\"entityId\":\"part:a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d\",\"componentType\":\"designer.entity\"}],\"createdEntityId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d\",\"timestamp\":1792688795438},{\"envelope\":{\"commandId\":\"82a5c41b-3cec-4115-a5af-fc46af27c9cf\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":4,\"issuedAt\":1792688795449,\"command\":{\"type\":\"pcb_move_placement\",\"placementId\":\"6a5bec9c-7958-4643-acf7-eb706517edc3\",\"positionMm\":{\"x\":15,\"y\":20}}},\"revision\":5,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"pcb:placement:6a5bec9c-7958-4643-acf7-eb706517edc3\",\"component\":{\"type\":\"designer.pcb_placement\",\"payload\":{\"id\":\"6a5bec9c-7958-4643-acf7-eb706517edc3\",\"partId\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"reference\":\"C1\",\"positionMm\":{\"x\":15,\"y\":20},\"rotationDeg\":0,\"mirrored\":false,\"layer\":\"F.Cu\",\"footprint\":{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]}}}}],\"inversePatches\":[{\"kind\":\"component.set\",\"entityId\":\"pcb:placement:6a5bec9c-7958-4643-acf7-eb706517edc3\",\"component\":{\"type\":\"designer.pcb_placement\",\"payload\":{\"id\":\"6a5bec9c-7958-4643-acf7-eb706517edc3\",\"partId\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"reference\":\"C1\",\"positionMm\":{\"x\":91.225,\"y\":64},\"rotationDeg\":0,\"mirrored\":false,\"layer\":\"F.Cu\",\"footprint\":{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]}}}}],\"createdEntityId\":null,\"timestamp\":1792688795449},{\"envelope\":{\"commandId\":\"aa716e6f-c991-4b79-9924-7a5e6cd9a0fa\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":5,\"issuedAt\":1792688795455,\"command\":{\"type\":\"pcb_move_placement\",\"placementId\":\"6e0eeb4a-c61e-48db-a196-2fe890f6375a\",\"positionMm\":{\"x\":35,\"y\":20}}},\"revision\":6,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"pcb:placement:6e0eeb4a-c61e-48db-a196-2fe890f6375a\",\"component\":{\"type\":\"designer.pcb_placement\",\"payload\":{\"id\":\"6e0eeb4a-c61e-48db-a196-2fe890f6375a\",\"partId\":\"a73d645d-eb06-4dac-abd9-607a1f3660d1\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"reference\":\"C2\",\"positionMm\":{\"x\":35,\"y\":20},\"rotationDeg\":0,\"mirrored\":false,\"layer\":\"F.Cu\",\"footprint\":{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]}}}}],\"inversePatches\":[{\"kind\":\"component.set\",\"entityId\":\"pcb:placement:6e0eeb4a-c61e-48db-a196-2fe890f6375a\",\"component\":{\"type\":\"designer.pcb_placement\",\"payload\":{\"id\":\"6e0eeb4a-c61e-48db-a196-2fe890f6375a\",\"partId\":\"a73d645d-eb06-4dac-abd9-607a1f3660d1\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"reference\":\"C2\",\"positionMm\":{\"x\":91.225,\"y\":60},\"rotationDeg\":0,\"mirrored\":false,\"layer\":\"F.Cu\",\"footprint\":{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]}}}}],\"createdEntityId\":null,\"timestamp\":1792688795455},{\"envelope\":{\"commandId\":\"7db73e9f-53d5-4e8e-a6c5-321f501a3375\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":6,\"issuedAt\":1792688795463,\"command\":{\"type\":\"pcb_move_placement\",\"placementId\":\"28288269-846e-4df1-b16c-f52f6b7d159d\",\"positionMm\":{\"x\":55,\"y\":20}}},\"revision\":7,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"pcb:placement:28288269-846e-4df1-b16c-f52f6b7d159d\",\"component\":{\"type\":\"designer.pcb_placement\",\"payload\":{\"id\":\"28288269-846e-4df1-b16c-f52f6b7d159d\",\"partId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"reference\":\"C3\",\"positionMm\":{\"x\":55,\"y\":20},\"rotationDeg\":0,\"mirrored\":false,\"layer\":\"F.Cu\",\"footprint\":{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]}}}}],\"inversePatches\":[{\"kind\":\"component.set\",\"entityId\":\"pcb:placement:28288269-846e-4df1-b16c-f52f6b7d159d\",\"component\":{\"type\":\"designer.pcb_placement\",\"payload\":{\"id\":\"28288269-846e-4df1-b16c-f52f6b7d159d\",\"partId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"reference\":\"C3\",\"positionMm\":{\"x\":91.225,\"y\":56},\"rotationDeg\":0,\"mirrored\":false,\"layer\":\"F.Cu\",\"footprint\":{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]}}}}],\"createdEntityId\":null,\"timestamp\":1792688795463},{\"envelope\":{\"commandId\":\"bd04c841-3028-4762-a518-ecba38ae630e\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":7,\"issuedAt\":1792688795469,\"command\":{\"type\":\"create_wire\",\"sourcePinId\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:1\",\"targetPinId\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:2\"}},\"revision\":8,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"wire:e46d6c5a-9743-4ccf-9572-b4fe15c57636\",\"component\":{\"type\":\"designer.entity\",\"kind\":\"wire\",\"payload\":{\"id\":\"e46d6c5a-9743-4ccf-9572-b4fe15c57636\",\"sourcePinId\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:1\",\"targetPinId\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:2\",\"pointsNm\":[{\"x\":0,\"y\":3810000},{\"x\":0,\"y\":-3810000}]}}}],\"inversePatches\":[{\"kind\":\"component.remove\",\"entityId\":\"wire:e46d6c5a-9743-4ccf-9572-b4fe15c57636\",\"componentType\":\"designer.entity\"}],\"createdEntityId\":\"e46d6c5a-9743-4ccf-9572-b4fe15c57636\",\"timestamp\":1792688795469},{\"envelope\":{\"commandId\":\"2b16b3bc-de36-4eca-b442-db1cd80d4d9b\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":8,\"issuedAt\":1792688795475,\"command\":{\"type\":\"create_wire\",\"sourcePinId\":\"a73d645d-eb06-4dac-abd9-607a1f3660d1:u1:1\",\"targetPinId\":\"a73d645d-eb06-4dac-abd9-607a1f3660d1:u1:2\"}},\"revision\":9,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"wire:20142dfe-86ee-46a6-9b9b-c4a8d1076a2e\",\"component\":{\"type\":\"designer.entity\",\"kind\":\"wire\",\"payload\":{\"id\":\"20142dfe-86ee-46a6-9b9b-c4a8d1076a2e\",\"sourcePinId\":\"a73d645d-eb06-4dac-abd9-607a1f3660d1:u1:1\",\"targetPinId\":\"a73d645d-eb06-4dac-abd9-607a1f3660d1:u1:2\",\"pointsNm\":[{\"x\":30000000,\"y\":3810000},{\"x\":30000000,\"y\":-3810000}]}}}],\"inversePatches\":[{\"kind\":\"component.remove\",\"entityId\":\"wire:20142dfe-86ee-46a6-9b9b-c4a8d1076a2e\",\"componentType\":\"designer.entity\"}],\"createdEntityId\":\"20142dfe-86ee-46a6-9b9b-c4a8d1076a2e\",\"timestamp\":1792688795475},{\"envelope\":{\"commandId\":\"30858ad8-8bfd-46e7-ad92-863e44712a48\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":9,\"issuedAt\":1792688795479,\"command\":{\"type\":\"create_wire\",\"sourcePinId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:1\",\"targetPinId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:2\"}},\"revision\":10,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"wire:20d69d7c-e9f6-4b2b-8b3a-25da5073699c\",\"component\":{\"type\":\"designer.entity\",\"kind\":\"wire\",\"payload\":{\"id\":\"20d69d7c-e9f6-4b2b-8b3a-25da5073699c\",\"sourcePinId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:1\",\"targetPinId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:2\",\"pointsNm\":[{\"x\":60000000,\"y\":3810000},{\"x\":60000000,\"y\":-3810000}]}}}],\"inversePatches\":[{\"kind\":\"component.remove\",\"entityId\":\"wire:20d69d7c-e9f6-4b2b-8b3a-25da5073699c\",\"componentType\":\"designer.entity\"}],\"createdEntityId\":\"20d69d7c-e9f6-4b2b-8b3a-25da5073699c\",\"timestamp\":1792688795479},{\"envelope\":{\"commandId\":\"63e27e5d-4838-45f6-b7cd-9ffbb52c3320\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":10,\"issuedAt\":1792688795484,\"command\":{\"type\":\"place_pwr_port\",\"railText\":\"VCC\",\"positionNm\":{\"x\":0,\"y\":3810000}}},\"revision\":11,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"primitive:62fadfad-9d04-493f-a12e-7f91e29b4c7c\",\"component\":{\"type\":\"designer.entity\",\"kind\":\"primitive\",\"payload\":{\"id\":\"62fadfad-9d04-493f-a12e-7f91e29b4c7c\",\"positionNm\":{\"x\":0,\"y\":3810000},\"rotationDeg\":0,\"kind\":\"pwr\",\"railText\":\"VCC\",\"attached\":true}}}],\"inversePatches\":[{\"kind\":\"component.remove\",\"entityId\":\"primitive:62fadfad-9d04-493f-a12e-7f91e29b4c7c\",\"componentType\":\"designer.entity\"}],\"createdEntityId\":\"62fadfad-9d04-493f-a12e-7f91e29b4c7c\",\"timestamp\":1792688795484},{\"envelope\":{\"commandId\":\"e05f8eb9-c8ed-4721-897e-00e0a92f2d1c\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":11,\"issuedAt\":1792688795490,\"command\":{\"type\":\"place_gnd_port\",\"positionNm\":{\"x\":30000000,\"y\":3810000}}},\"revision\":12,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"primitive:35be3420-ffd6-49e0-ab9e-c295fa70140e\",\"component\":{\"type\":\"designer.entity\",\"kind\":\"primitive\",\"payload\":{\"id\":\"35be3420-ffd6-49e0-ab9e-c295fa70140e\",\"positionNm\":{\"x\":30000000,\"y\":3810000},\"rotationDeg\":0,\"kind\":\"gnd\",\"attached\":true}}}],\"inversePatches\":[{\"kind\":\"component.remove\",\"entityId\":\"primitive:35be3420-ffd6-49e0-ab9e-c295fa70140e\",\"componentType\":\"designer.entity\"}],\"createdEntityId\":\"35be3420-ffd6-49e0-ab9e-c295fa70140e\",\"timestamp\":1792688795490},{\"envelope\":{\"commandId\":\"cd8ebc12-f99b-4120-b1d7-550127069ca4\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":12,\"issuedAt\":1792688795494,\"command\":{\"type\":\"set_pin_electrical_intent\",\"pinId\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:1\",\"intent\":\"power_source\"}},\"revision\":13,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"part:f59feda3-c379-46a4-ad4a-d308cd7cfc7d\",\"component\":{\"type\":\"designer.entity\",\"kind\":\"part\",\"payload\":{\"id\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"reference\":\"C1\",\"value\":\"\",\"rotationDeg\":0,\"mirrored\":false,\"positionNm\":{\"x\":0,\"y\":0},\"symbol\":{\"symbolId\":\"0c8cd222-0f0b-4833-acf0-6fa2acbaa868\",\"name\":\"C\",\"referencePrefix\":\"C\",\"sourceHash\":\"dd62c430d2c9db34c4e60f62a8e2238f33b34513cab223195dee122eed05a6fc\",\"pins\":[{\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"localPositionMm\":{\"x\":0,\"y\":3.81},\"electricalType\":\"passive\",\"unit\":1},{\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"localPositionMm\":{\"x\":0,\"y\":-3.81},\"electricalType\":\"passive\",\"unit\":1}],\"preview\":{\"kind\":\"symbol\",\"units\":\"mm\",\"name\":\"C\",\"unitCount\":1,\"graphics\":[{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":-0.762},{\"x\":2.032,\"y\":-0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508},{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":0.762},{\"x\":2.032,\"y\":0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508}],\"pins\":[{\"id\":\"u1:1\",\"name\":\"1\",\"number\":\"1\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":3.81},\"bodyEnd\":{\"x\":-5.132494735226557e-16,\"y\":1.016},\"rotationDeg\":270},{\"id\":\"u1:2\",\"name\":\"2\",\"number\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":-3.81},\"bodyEnd\":{\"x\":1.7108315784088525e-16,\"y\":-1.016},\"rotationDeg\":90}],\"labels\":[{\"id\":\"u1:1:name\",\"text\":\"1\",\"at\":{\"x\":-5.132494735226557e-16,\"y\":1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"left\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:1:number\",\"text\":\"1\",\"at\":{\"x\":0.508,\"y\":3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"u1:2:name\",\"text\":\"2\",\"at\":{\"x\":1.7108315784088525e-16,\"y\":-1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"right\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:2:number\",\"text\":\"2\",\"at\":{\"x\":0.508,\"y\":-3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"symbol:reference\",\"text\":\"C\",\"at\":{\"x\":0,\"y\":5.25018},\"fontSizeMm\":1.27,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"bottom\",\"role\":\"reference\"}],\"bounds\":{\"minX\":-2.286,\"minY\":-3.9801800000000007,\"maxX\":2.286,\"maxY\":6.52018},\"warnings\":[]}},\"footprint\":{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]},\"pins\":[{\"id\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:1\",\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"electricalType\":\"passive\",\"electricalIntent\":\"power_source\",\"unit\":1,\"localPositionNm\":{\"x\":0,\"y\":3810000},\"worldPositionNm\":{\"x\":0,\"y\":3810000}},{\"id\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:2\",\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"localPositionNm\":{\"x\":0,\"y\":-3810000},\"worldPositionNm\":{\"x\":0,\"y\":-3810000}}],\"propertiesJson\":{\"description\":\"designer test part\"}}}}],\"inversePatches\":[{\"kind\":\"component.set\",\"entityId\":\"part:f59feda3-c379-46a4-ad4a-d308cd7cfc7d\",\"component\":{\"type\":\"designer.entity\",\"kind\":\"part\",\"payload\":{\"id\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"reference\":\"C1\",\"value\":\"\",\"rotationDeg\":0,\"mirrored\":false,\"positionNm\":{\"x\":0,\"y\":0},\"symbol\":{\"symbolId\":\"0c8cd222-0f0b-4833-acf0-6fa2acbaa868\",\"name\":\"C\",\"referencePrefix\":\"C\",\"sourceHash\":\"dd62c430d2c9db34c4e60f62a8e2238f33b34513cab223195dee122eed05a6fc\",\"pins\":[{\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"localPositionMm\":{\"x\":0,\"y\":3.81},\"electricalType\":\"passive\",\"unit\":1},{\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"localPositionMm\":{\"x\":0,\"y\":-3.81},\"electricalType\":\"passive\",\"unit\":1}],\"preview\":{\"kind\":\"symbol\",\"units\":\"mm\",\"name\":\"C\",\"unitCount\":1,\"graphics\":[{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":-0.762},{\"x\":2.032,\"y\":-0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508},{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":0.762},{\"x\":2.032,\"y\":0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508}],\"pins\":[{\"id\":\"u1:1\",\"name\":\"1\",\"number\":\"1\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":3.81},\"bodyEnd\":{\"x\":-5.132494735226557e-16,\"y\":1.016},\"rotationDeg\":270},{\"id\":\"u1:2\",\"name\":\"2\",\"number\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":-3.81},\"bodyEnd\":{\"x\":1.7108315784088525e-16,\"y\":-1.016},\"rotationDeg\":90}],\"labels\":[{\"id\":\"u1:1:name\",\"text\":\"1\",\"at\":{\"x\":-5.132494735226557e-16,\"y\":1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"left\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:1:number\",\"text\":\"1\",\"at\":{\"x\":0.508,\"y\":3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"u1:2:name\",\"text\":\"2\",\"at\":{\"x\":1.7108315784088525e-16,\"y\":-1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"right\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:2:number\",\"text\":\"2\",\"at\":{\"x\":0.508,\"y\":-3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"symbol:reference\",\"text\":\"C\",\"at\":{\"x\":0,\"y\":5.25018},\"fontSizeMm\":1.27,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"bottom\",\"role\":\"reference\"}],\"bounds\":{\"minX\":-2.286,\"minY\":-3.9801800000000007,\"maxX\":2.286,\"maxY\":6.52018},\"warnings\":[]}},\"footprint\":{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]},\"pins\":[{\"id\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:1\",\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"electricalType\":\"passive\",\"unit\":1,\"localPositionNm\":{\"x\":0,\"y\":3810000},\"worldPositionNm\":{\"x\":0,\"y\":3810000}},{\"id\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:2\",\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"localPositionNm\":{\"x\":0,\"y\":-3810000},\"worldPositionNm\":{\"x\":0,\"y\":-3810000}}],\"propertiesJson\":{\"description\":\"designer test part\"}}}}],\"createdEntityId\":null,\"timestamp\":1792688795494},{\"envelope\":{\"commandId\":\"129a1c70-f05b-4766-82be-66b567081dd6\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":13,\"issuedAt\":1792688795501,\"command\":{\"type\":\"pcb_add_trace\",\"layer\":\"F.Cu\",\"netId\":\"pt:0:-3810000\",\"netClassId\":\"default\",\"widthMm\":0.25,\"segmentMode\":\"manhattan-90\",\"legality\":\"off\",\"pointsNm\":[{\"x\":14225000,\"y\":20000000},{\"x\":14225000,\"y\":10000000},{\"x\":15775000,\"y\":10000000},{\"x\":15775000,\"y\":20000000}]}},\"revision\":14,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"pcb:trace:02e0b779-05e3-42d0-bcda-a7d868f54e8e\",\"component\":{\"type\":\"designer.pcb_trace\",\"payload\":{\"id\":\"02e0b779-05e3-42d0-bcda-a7d868f54e8e\",\"netId\":\"pt:0:-3810000\",\"netClassId\":\"default\",\"layer\":\"F.Cu\",\"widthMm\":0.25,\"pointsNm\":[{\"x\":14225000,\"y\":20000000},{\"x\":14225000,\"y\":10000000},{\"x\":15775000,\"y\":10000000},{\"x\":15775000,\"y\":20000000}],\"segmentMode\":\"manhattan-90\"}}}],\"inversePatches\":[{\"kind\":\"component.remove\",\"entityId\":\"pcb:trace:02e0b779-05e3-42d0-bcda-a7d868f54e8e\",\"componentType\":\"designer.pcb_trace\"}],\"createdEntityId\":\"02e0b779-05e3-42d0-bcda-a7d868f54e8e\",\"timestamp\":1792688795501},{\"envelope\":{\"commandId\":\"5d482f6a-30fc-4ef7-a531-2359a7a3f5b5\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":14,\"issuedAt\":1792688795507,\"command\":{\"type\":\"pcb_add_trace\",\"layer\":\"F.Cu\",\"netId\":\"pt:30000000:-3810000\",\"netClassId\":\"default\",\"widthMm\":0.25,\"segmentMode\":\"manhattan-90\",\"legality\":\"off\",\"pointsNm\":[{\"x\":34225000,\"y\":20000000},{\"x\":34225000,\"y\":30000000},{\"x\":35775000,\"y\":30000000},{\"x\":35775000,\"y\":20000000}]}},\"revision\":15,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"pcb:trace:e5aea5e9-0a88-46ec-9c0b-f5fc32049138\",\"component\":{\"type\":\"designer.pcb_trace\",\"payload\":{\"id\":\"e5aea5e9-0a88-46ec-9c0b-f5fc32049138\",\"netId\":\"pt:30000000:-3810000\",\"netClassId\":\"default\",\"layer\":\"F.Cu\",\"widthMm\":0.25,\"pointsNm\":[{\"x\":34225000,\"y\":20000000},{\"x\":34225000,\"y\":30000000},{\"x\":35775000,\"y\":30000000},{\"x\":35775000,\"y\":20000000}],\"segmentMode\":\"manhattan-90\"}}}],\"inversePatches\":[{\"kind\":\"component.remove\",\"entityId\":\"pcb:trace:e5aea5e9-0a88-46ec-9c0b-f5fc32049138\",\"componentType\":\"designer.pcb_trace\"}],\"createdEntityId\":\"e5aea5e9-0a88-46ec-9c0b-f5fc32049138\",\"timestamp\":1792688795507},{\"envelope\":{\"commandId\":\"98ea9a01-3055-446f-b9c7-6592551d1b14\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":15,\"issuedAt\":1792688795514,\"command\":{\"type\":\"pcb_add_trace\",\"layer\":\"F.Cu\",\"netId\":\"pt:60000000:-3810000\",\"netClassId\":\"default\",\"widthMm\":0.25,\"segmentMode\":\"manhattan-90\",\"legality\":\"off\",\"pointsNm\":[{\"x\":54225000,\"y\":20000000},{\"x\":54225000,\"y\":5000000},{\"x\":55775000,\"y\":5000000},{\"x\":55775000,\"y\":20000000}]}},\"revision\":16,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"pcb:trace:39dd4d75-248e-4cfc-8417-e1ab871c635d\",\"component\":{\"type\":\"designer.pcb_trace\",\"payload\":{\"id\":\"39dd4d75-248e-4cfc-8417-e1ab871c635d\",\"netId\":\"pt:60000000:-3810000\",\"netClassId\":\"default\",\"layer\":\"F.Cu\",\"widthMm\":0.25,\"pointsNm\":[{\"x\":54225000,\"y\":20000000},{\"x\":54225000,\"y\":5000000},{\"x\":55775000,\"y\":5000000},{\"x\":55775000,\"y\":20000000}],\"segmentMode\":\"manhattan-90\"}}}],\"inversePatches\":[{\"kind\":\"component.remove\",\"entityId\":\"pcb:trace:39dd4d75-248e-4cfc-8417-e1ab871c635d\",\"componentType\":\"designer.pcb_trace\"}],\"createdEntityId\":\"39dd4d75-248e-4cfc-8417-e1ab871c635d\",\"timestamp\":1792688795514},{\"envelope\":{\"commandId\":\"96d04328-54d3-4787-b6c6-eb15e1c76c7c\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":16,\"issuedAt\":1792688795519,\"command\":{\"type\":\"pcb_add_via\",\"centerMm\":{\"x\":35,\"y\":30},\"netId\":\"pt:30000000:-3810000\",\"netClassId\":\"default\",\"diameterMmOverride\":0.8,\"drillMmOverride\":0.4,\"legality\":\"off\"}},\"revision\":17,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"pcb:via:98cd1a01-06a1-4bce-9915-9a28bce305af\",\"component\":{\"type\":\"designer.pcb_via\",\"payload\":{\"id\":\"98cd1a01-06a1-4bce-9915-9a28bce305af\",\"netId\":\"pt:30000000:-3810000\",\"netClassId\":\"default\",\"centerMm\":{\"x\":35,\"y\":30},\"diameterMm\":0.8,\"drillMm\":0.4,\"fromLayer\":\"F.Cu\",\"toLayer\":\"B.Cu\",\"viaType\":\"through\",\"protection\":\"tented\",\"provenance\":\"route\"}}}],\"inversePatches\":[{\"kind\":\"component.remove\",\"entityId\":\"pcb:via:98cd1a01-06a1-4bce-9915-9a28bce305af\",\"componentType\":\"designer.pcb_via\"}],\"createdEntityId\":\"98cd1a01-06a1-4bce-9915-9a28bce305af\",\"timestamp\":1792688795519},{\"envelope\":{\"commandId\":\"8ea8f9c9-02c0-489d-8ca1-aff68b0eaa26\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":17,\"issuedAt\":1792688795530,\"command\":{\"type\":\"pcb_add_zone\",\"layer\":\"F.Cu\",\"net\":{\"netId\":null,\"netName\":\"Net_1\"},\"name\":\"Unnamed UI zone\",\"region\":{\"kind\":\"polygon\",\"pointsMm\":[{\"x\":33,\"y\":2},{\"x\":59,\"y\":2},{\"x\":59,\"y\":12},{\"x\":33,\"y\":12}],\"holesMm\":[]},\"padConnection\":\"solid\"}},\"revision\":18,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"pcb:zone:9f93341c-8ed9-43df-93d4-f61a68539b15\",\"component\":{\"type\":\"designer.pcb_zone\",\"payload\":{\"id\":\"9f93341c-8ed9-43df-93d4-f61a68539b15\",\"name\":\"Unnamed UI zone\",\"enabled\":true,\"lockedAt\":null,\"layer\":\"F.Cu\",\"netId\":null,\"netName\":\"Net_1\",\"region\":{\"kind\":\"polygon\",\"pointsMm\":[{\"x\":33,\"y\":2},{\"x\":59,\"y\":2},{\"x\":59,\"y\":12},{\"x\":33,\"y\":12}]},\"priority\":0,\"padConnection\":\"solid\"}}}],\"inversePatches\":[{\"kind\":\"component.remove\",\"entityId\":\"pcb:zone:9f93341c-8ed9-43df-93d4-f61a68539b15\",\"componentType\":\"designer.pcb_zone\"}],\"createdEntityId\":\"9f93341c-8ed9-43df-93d4-f61a68539b15\",\"timestamp\":1792688795530},{\"envelope\":{\"commandId\":\"fc71fc04-b6c9-4d99-a59d-0013ab3a5317\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":18,\"issuedAt\":1792688795556,\"command\":{\"type\":\"pcb_add_zone\",\"layer\":\"B.Cu\",\"net\":{\"netId\":null,\"netName\":\"GND\"},\"name\":\"GND plane\",\"region\":{\"kind\":\"board\"},\"padConnection\":\"solid\"}},\"revision\":19,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"pcb:zone:board:B.Cu\",\"component\":{\"type\":\"designer.pcb_zone\",\"payload\":{\"id\":\"board:B.Cu\",\"name\":\"GND plane\",\"enabled\":true,\"lockedAt\":null,\"layer\":\"B.Cu\",\"netId\":null,\"netName\":\"GND\",\"region\":{\"kind\":\"board\"},\"priority\":0,\"padConnection\":\"solid\"}}}],\"inversePatches\":[{\"kind\":\"component.remove\",\"entityId\":\"pcb:zone:board:B.Cu\",\"componentType\":\"designer.pcb_zone\"}],\"createdEntityId\":\"board:B.Cu\",\"timestamp\":1792688795556},{\"envelope\":{\"commandId\":\"2a2d63f5-5396-4bd9-9f7d-a18c7474e8de\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":19,\"issuedAt\":1792688795582,\"command\":{\"type\":\"pcb_set_design_rules\",\"netClasses\":[{\"id\":\"default\",\"name\":\"Default\",\"traceWidthMm\":0.25,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#d4d4d8\",\"defaultViaProtection\":\"tented\"},{\"id\":\"power\",\"name\":\"Power\",\"traceWidthMm\":0.5,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#f87171\",\"defaultViaProtection\":\"tented\"},{\"id\":\"gnd\",\"name\":\"GND\",\"traceWidthMm\":0.4,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#64748b\",\"defaultViaProtection\":\"tented\"},{\"id\":\"legacy-fixture-class\",\"name\":\"Legacy fixture class\",\"traceWidthMm\":0.25,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#d4d4d8\",\"defaultViaProtection\":\"tented\"}],\"perNetClassAssignments\":{\"pt:0:-3810000\":\"legacy-fixture-class\",\"pt:30000000:-3810000\":\"legacy-fixture-class\",\"pt:60000000:-3810000\":\"legacy-fixture-class\"},\"lengthMatchGroups\":[{\"id\":\"legacy-length\",\"name\":\"Legacy length\",\"netIds\":[\"pt:0:-3810000\",\"pt:60000000:-3810000\"],\"target\":{\"kind\":\"longest\"},\"toleranceMm\":2}],\"diffPairs\":[{\"id\":\"legacy-pair\",\"name\":\"Legacy pair\",\"pNetId\":\"pt:0:-3810000\",\"nNetId\":\"pt:60000000:-3810000\"}],\"drcRules\":[{\"id\":\"legacy-scope\",\"name\":\"Legacy scoped width\",\"enabled\":true,\"priority\":10,\"scopes\":[{\"kind\":\"net\",\"netIds\":[\"pt:30000000:-3810000\",\"pt:60000000:-3810000\"]}],\"constraint\":{\"kind\":\"trackWidth\",\"minMm\":0.25}}]}},\"revision\":20,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"pcb:board_settings\",\"component\":{\"type\":\"designer.pcb_settings\",\"payload\":{\"outline\":{\"kind\":\"rect\",\"widthMm\":100,\"heightMm\":80,\"centerMm\":{\"x\":35,\"y\":25}},\"designRules\":{\"clearance\":{\"traceToTraceMm\":0.25,\"traceToPadMm\":0.25,\"padToPadMm\":0.25,\"traceToViaMm\":0.25,\"viaToViaMm\":0.3,\"copperToBoardEdgeMm\":0.5},\"minimums\":{\"traceWidthMm\":0.2,\"drillSizeMm\":0.4,\"annularRingMm\":0.2,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"holeToHoleMm\":0.25,\"clearanceMm\":0.1}},\"netClasses\":[{\"id\":\"default\",\"name\":\"Default\",\"traceWidthMm\":0.25,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#d4d4d8\",\"defaultViaProtection\":\"tented\"},{\"id\":\"power\",\"name\":\"Power\",\"traceWidthMm\":0.5,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#f87171\",\"defaultViaProtection\":\"tented\"},{\"id\":\"gnd\",\"name\":\"GND\",\"traceWidthMm\":0.4,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#64748b\",\"defaultViaProtection\":\"tented\"},{\"id\":\"legacy-fixture-class\",\"name\":\"Legacy fixture class\",\"traceWidthMm\":0.25,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#d4d4d8\",\"defaultViaProtection\":\"tented\"}],\"tracePresets\":[0.15,0.2,0.25,0.5,1],\"fabricator\":\"jlcpcb_2l\",\"layerCount\":2,\"boardThicknessMm\":1.6,\"displayMode\":\"normal\",\"solderMaskExpansionMm\":0.075,\"solderPasteExpansionMm\":-0.05,\"updatedAt\":\"2026-10-22T17:06:35.583Z\",\"perNetClassAssignments\":{\"pt:0:-3810000\":\"legacy-fixture-class\",\"pt:30000000:-3810000\":\"legacy-fixture-class\",\"pt:60000000:-3810000\":\"legacy-fixture-class\"},\"lengthMatchGroups\":[{\"id\":\"legacy-length\",\"name\":\"Legacy length\",\"netIds\":[\"pt:0:-3810000\",\"pt:60000000:-3810000\"],\"target\":{\"kind\":\"longest\"},\"toleranceMm\":2}],\"drcRules\":[{\"id\":\"legacy-scope\",\"name\":\"Legacy scoped width\",\"enabled\":true,\"priority\":10,\"scopes\":[{\"kind\":\"net\",\"netIds\":[\"pt:30000000:-3810000\",\"pt:60000000:-3810000\"]}],\"constraint\":{\"kind\":\"trackWidth\",\"minMm\":0.25}}],\"diffPairs\":[{\"id\":\"legacy-pair\",\"name\":\"Legacy pair\",\"pNetId\":\"pt:0:-3810000\",\"nNetId\":\"pt:60000000:-3810000\"}]}}}],\"inversePatches\":[{\"kind\":\"component.set\",\"entityId\":\"pcb:board_settings\",\"component\":{\"type\":\"designer.pcb_settings\",\"payload\":{\"outline\":{\"kind\":\"rect\",\"widthMm\":100,\"heightMm\":80,\"centerMm\":{\"x\":35,\"y\":25}},\"designRules\":{\"clearance\":{\"traceToTraceMm\":0.25,\"traceToPadMm\":0.25,\"padToPadMm\":0.25,\"traceToViaMm\":0.25,\"viaToViaMm\":0.3,\"copperToBoardEdgeMm\":0.5},\"minimums\":{\"traceWidthMm\":0.2,\"drillSizeMm\":0.4,\"annularRingMm\":0.2,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"holeToHoleMm\":0.25,\"clearanceMm\":0.1}},\"netClasses\":[{\"id\":\"default\",\"name\":\"Default\",\"traceWidthMm\":0.25,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#d4d4d8\",\"defaultViaProtection\":\"tented\"},{\"id\":\"power\",\"name\":\"Power\",\"traceWidthMm\":0.5,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#f87171\",\"defaultViaProtection\":\"tented\"},{\"id\":\"gnd\",\"name\":\"GND\",\"traceWidthMm\":0.4,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#64748b\",\"defaultViaProtection\":\"tented\"}],\"tracePresets\":[0.15,0.2,0.25,0.5,1],\"fabricator\":\"jlcpcb_2l\",\"layerCount\":2,\"boardThicknessMm\":1.6,\"displayMode\":\"normal\",\"solderMaskExpansionMm\":0.075,\"solderPasteExpansionMm\":-0.05,\"updatedAt\":\"2026-10-22T17:06:35.418Z\"}}}],\"createdEntityId\":null,\"timestamp\":1792688795582},{\"envelope\":{\"commandId\":\"fc43a977-5fcb-46f2-9751-cb3de81ab0e5\",\"sessionId\":\"designer-test-session\",\"aggregateId\":\"7dfcdd2e-94e9-493a-974c-cbac6d341fb3\",\"baseRevision\":20,\"issuedAt\":1792688795603,\"command\":{\"type\":\"move_part\",\"partId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d\",\"positionNm\":{\"x\":72000000,\"y\":7000000}}},\"revision\":21,\"forwardPatches\":[{\"kind\":\"component.set\",\"entityId\":\"part:a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d\",\"component\":{\"type\":\"designer.entity\",\"kind\":\"part\",\"payload\":{\"id\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"reference\":\"C3\",\"value\":\"\",\"rotationDeg\":0,\"mirrored\":false,\"positionNm\":{\"x\":72000000,\"y\":7000000},\"symbol\":{\"symbolId\":\"0c8cd222-0f0b-4833-acf0-6fa2acbaa868\",\"name\":\"C\",\"referencePrefix\":\"C\",\"sourceHash\":\"dd62c430d2c9db34c4e60f62a8e2238f33b34513cab223195dee122eed05a6fc\",\"pins\":[{\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"localPositionMm\":{\"x\":0,\"y\":3.81},\"electricalType\":\"passive\",\"unit\":1},{\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"localPositionMm\":{\"x\":0,\"y\":-3.81},\"electricalType\":\"passive\",\"unit\":1}],\"preview\":{\"kind\":\"symbol\",\"units\":\"mm\",\"name\":\"C\",\"unitCount\":1,\"graphics\":[{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":-0.762},{\"x\":2.032,\"y\":-0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508},{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":0.762},{\"x\":2.032,\"y\":0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508}],\"pins\":[{\"id\":\"u1:1\",\"name\":\"1\",\"number\":\"1\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":3.81},\"bodyEnd\":{\"x\":-5.132494735226557e-16,\"y\":1.016},\"rotationDeg\":270},{\"id\":\"u1:2\",\"name\":\"2\",\"number\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":-3.81},\"bodyEnd\":{\"x\":1.7108315784088525e-16,\"y\":-1.016},\"rotationDeg\":90}],\"labels\":[{\"id\":\"u1:1:name\",\"text\":\"1\",\"at\":{\"x\":-5.132494735226557e-16,\"y\":1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"left\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:1:number\",\"text\":\"1\",\"at\":{\"x\":0.508,\"y\":3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"u1:2:name\",\"text\":\"2\",\"at\":{\"x\":1.7108315784088525e-16,\"y\":-1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"right\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:2:number\",\"text\":\"2\",\"at\":{\"x\":0.508,\"y\":-3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"symbol:reference\",\"text\":\"C\",\"at\":{\"x\":0,\"y\":5.25018},\"fontSizeMm\":1.27,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"bottom\",\"role\":\"reference\"}],\"bounds\":{\"minX\":-2.286,\"minY\":-3.9801800000000007,\"maxX\":2.286,\"maxY\":6.52018},\"warnings\":[]}},\"footprint\":{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]},\"pins\":[{\"id\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:1\",\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"electricalType\":\"passive\",\"unit\":1,\"localPositionNm\":{\"x\":0,\"y\":3810000},\"worldPositionNm\":{\"x\":72000000,\"y\":10810000}},{\"id\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:2\",\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"localPositionNm\":{\"x\":0,\"y\":-3810000},\"worldPositionNm\":{\"x\":72000000,\"y\":3190000}}],\"propertiesJson\":{\"description\":\"designer test part\"}}}},{\"kind\":\"component.set\",\"entityId\":\"wire:20d69d7c-e9f6-4b2b-8b3a-25da5073699c\",\"component\":{\"type\":\"designer.entity\",\"kind\":\"wire\",\"payload\":{\"id\":\"20d69d7c-e9f6-4b2b-8b3a-25da5073699c\",\"sourcePinId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:1\",\"targetPinId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:2\",\"pointsNm\":[{\"x\":72000000,\"y\":10810000},{\"x\":72000000,\"y\":3190000}]}}}],\"inversePatches\":[{\"kind\":\"component.set\",\"entityId\":\"wire:20d69d7c-e9f6-4b2b-8b3a-25da5073699c\",\"component\":{\"type\":\"designer.entity\",\"kind\":\"wire\",\"payload\":{\"id\":\"20d69d7c-e9f6-4b2b-8b3a-25da5073699c\",\"sourcePinId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:1\",\"targetPinId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:2\",\"pointsNm\":[{\"x\":60000000,\"y\":3810000},{\"x\":60000000,\"y\":-3810000}]}}},{\"kind\":\"component.set\",\"entityId\":\"part:a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d\",\"component\":{\"type\":\"designer.entity\",\"kind\":\"part\",\"payload\":{\"id\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"reference\":\"C3\",\"value\":\"\",\"rotationDeg\":0,\"mirrored\":false,\"positionNm\":{\"x\":60000000,\"y\":0},\"symbol\":{\"symbolId\":\"0c8cd222-0f0b-4833-acf0-6fa2acbaa868\",\"name\":\"C\",\"referencePrefix\":\"C\",\"sourceHash\":\"dd62c430d2c9db34c4e60f62a8e2238f33b34513cab223195dee122eed05a6fc\",\"pins\":[{\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"localPositionMm\":{\"x\":0,\"y\":3.81},\"electricalType\":\"passive\",\"unit\":1},{\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"localPositionMm\":{\"x\":0,\"y\":-3.81},\"electricalType\":\"passive\",\"unit\":1}],\"preview\":{\"kind\":\"symbol\",\"units\":\"mm\",\"name\":\"C\",\"unitCount\":1,\"graphics\":[{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":-0.762},{\"x\":2.032,\"y\":-0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508},{\"kind\":\"polyline\",\"points\":[{\"x\":-2.032,\"y\":0.762},{\"x\":2.032,\"y\":0.762}],\"closed\":false,\"fill\":\"none\",\"strokeWidthMm\":0.508}],\"pins\":[{\"id\":\"u1:1\",\"name\":\"1\",\"number\":\"1\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":3.81},\"bodyEnd\":{\"x\":-5.132494735226557e-16,\"y\":1.016},\"rotationDeg\":270},{\"id\":\"u1:2\",\"name\":\"2\",\"number\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"anchor\":{\"x\":0,\"y\":-3.81},\"bodyEnd\":{\"x\":1.7108315784088525e-16,\"y\":-1.016},\"rotationDeg\":90}],\"labels\":[{\"id\":\"u1:1:name\",\"text\":\"1\",\"at\":{\"x\":-5.132494735226557e-16,\"y\":1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"left\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:1:number\",\"text\":\"1\",\"at\":{\"x\":0.508,\"y\":3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"u1:2:name\",\"text\":\"2\",\"at\":{\"x\":1.7108315784088525e-16,\"y\":-1.524},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"right\",\"anchorY\":\"middle\",\"role\":\"pin-name\"},{\"id\":\"u1:2:number\",\"text\":\"2\",\"at\":{\"x\":0.508,\"y\":-3.5864800000000003},\"fontSizeMm\":1.27,\"rotationDeg\":90,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"role\":\"pin-number\"},{\"id\":\"symbol:reference\",\"text\":\"C\",\"at\":{\"x\":0,\"y\":5.25018},\"fontSizeMm\":1.27,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"bottom\",\"role\":\"reference\"}],\"bounds\":{\"minX\":-2.286,\"minY\":-3.9801800000000007,\"maxX\":2.286,\"maxY\":6.52018},\"warnings\":[]}},\"footprint\":{\"footprintId\":\"c679911c-499e-4f68-a032-2cefbbf9c974\",\"name\":\"C_0603_1608Metric\",\"mountType\":\"smd\",\"sourceHash\":\"fe0dbfefbb181a0466f93a8de52d84ba7b00fcd9acdbb69575f4128a0af4e405\",\"preview\":{\"kind\":\"footprint\",\"units\":\"mm\",\"name\":\"C_0603_1608Metric\",\"pads\":[{\"id\":\"1:0\",\"number\":\"1\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":-0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"},{\"id\":\"2:1\",\"number\":\"2\",\"shape\":\"roundrect\",\"centerMm\":{\"x\":0.775,\"y\":0},\"widthMm\":0.9,\"heightMm\":0.95,\"rotationDeg\":0,\"roundrectRatio\":0.25,\"layer\":\"F.Cu\"}],\"graphics\":[{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":-0.51},\"b\":{\"x\":0.14058,\"y\":-0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"line\",\"a\":{\"x\":-0.14058,\"y\":0.51},\"b\":{\"x\":0.14058,\"y\":0.51},\"strokeWidthMm\":0.12,\"layer\":\"F.SilkS\"},{\"kind\":\"rect\",\"x\":-0.8,\"y\":-0.4,\"width\":1.6,\"height\":0.8,\"fill\":\"none\",\"strokeWidthMm\":0.12,\"layer\":\"F.Fab\"}],\"labels\":[{\"id\":\"fp-text:F.Fab:0:0:${REFERENCE}\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":0},\"fontSizeMm\":0.4,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"footprint-text\"},{\"id\":\"fp-text:F.SilkS:0:-1.43:REF**\",\"text\":\"REF**\",\"at\":{\"x\":0,\"y\":-1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.SilkS\",\"role\":\"reference\"},{\"id\":\"fp-text:F.Fab:0:1.43:C_0603_1608Metric\",\"text\":\"C_0603_1608Metric\",\"at\":{\"x\":0,\"y\":1.43},\"fontSizeMm\":1,\"rotationDeg\":0,\"anchorX\":\"center\",\"anchorY\":\"middle\",\"layer\":\"F.Fab\",\"role\":\"value\"}],\"bounds\":{\"minX\":-1.225,\"minY\":-1,\"maxX\":1.225,\"maxY\":1},\"warnings\":[]},\"pinMap\":[{\"pinNumber\":\"1\",\"padNumber\":\"1\",\"pinName\":\"1\"},{\"pinNumber\":\"2\",\"padNumber\":\"2\",\"pinName\":\"2\"}]},\"pins\":[{\"id\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:1\",\"originPinKey\":\"u1:1\",\"number\":\"1\",\"name\":\"1\",\"electricalType\":\"passive\",\"unit\":1,\"localPositionNm\":{\"x\":0,\"y\":3810000},\"worldPositionNm\":{\"x\":60000000,\"y\":3810000}},{\"id\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:2\",\"originPinKey\":\"u1:2\",\"number\":\"2\",\"name\":\"2\",\"electricalType\":\"passive\",\"unit\":1,\"localPositionNm\":{\"x\":0,\"y\":-3810000},\"worldPositionNm\":{\"x\":60000000,\"y\":-3810000}}],\"propertiesJson\":{\"description\":\"designer test part\"}}}}],\"createdEntityId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d\",\"timestamp\":1792688795603}]",
+        "redoStackJson": "[]",
+        "updatedAt": "2026-10-22T17:06:35.604Z"
+      }
+    ]
+  },
+  "auxiliaryRows": {
+    "designHead": {
+      "id": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+      "name": "H08 S0 routed legacy design",
+      "revision": 21,
+      "createdAt": "2026-10-22T17:06:35.414Z",
+      "updatedAt": "2026-10-22T17:06:35.604Z",
+      "schematicPreviewJson": null
+    },
+    "commandLog": [
+      {
+        "commandId": "129a1c70-f05b-4766-82be-66b567081dd6",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "pcb_add_trace",
+        "commandJson": "{\"type\":\"pcb_add_trace\",\"layer\":\"F.Cu\",\"netId\":\"pt:0:-3810000\",\"netClassId\":\"default\",\"widthMm\":0.25,\"segmentMode\":\"manhattan-90\",\"legality\":\"off\",\"pointsNm\":[{\"x\":14225000,\"y\":20000000},{\"x\":14225000,\"y\":10000000},{\"x\":15775000,\"y\":10000000},{\"x\":15775000,\"y\":20000000}]}",
+        "resultJson": "{\"ok\":true,\"revision\":14,\"createdEntityId\":\"02e0b779-05e3-42d0-bcda-a7d868f54e8e\",\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795501,
+        "appliedRevision": 14,
+        "createdAt": "2026-10-22T17:06:35.502Z"
+      },
+      {
+        "commandId": "247a62b8-9644-4cb0-b816-cbdd3477adb3",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "place_part",
+        "commandJson": "{\"type\":\"place_part\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"positionNm\":{\"x\":0,\"y\":0}}",
+        "resultJson": "{\"ok\":true,\"revision\":2,\"createdEntityId\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d\",\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795425,
+        "appliedRevision": 2,
+        "createdAt": "2026-10-22T17:06:35.429Z"
+      },
+      {
+        "commandId": "2a2d63f5-5396-4bd9-9f7d-a18c7474e8de",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "pcb_set_design_rules",
+        "commandJson": "{\"type\":\"pcb_set_design_rules\",\"netClasses\":[{\"id\":\"default\",\"name\":\"Default\",\"traceWidthMm\":0.25,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#d4d4d8\",\"defaultViaProtection\":\"tented\"},{\"id\":\"power\",\"name\":\"Power\",\"traceWidthMm\":0.5,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#f87171\",\"defaultViaProtection\":\"tented\"},{\"id\":\"gnd\",\"name\":\"GND\",\"traceWidthMm\":0.4,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#64748b\",\"defaultViaProtection\":\"tented\"},{\"id\":\"legacy-fixture-class\",\"name\":\"Legacy fixture class\",\"traceWidthMm\":0.25,\"clearanceMm\":0.25,\"viaDiameterMm\":0.8,\"viaDrillMm\":0.4,\"color\":\"#d4d4d8\",\"defaultViaProtection\":\"tented\"}],\"perNetClassAssignments\":{\"pt:0:-3810000\":\"legacy-fixture-class\",\"pt:30000000:-3810000\":\"legacy-fixture-class\",\"pt:60000000:-3810000\":\"legacy-fixture-class\"},\"lengthMatchGroups\":[{\"id\":\"legacy-length\",\"name\":\"Legacy length\",\"netIds\":[\"pt:0:-3810000\",\"pt:60000000:-3810000\"],\"target\":{\"kind\":\"longest\"},\"toleranceMm\":2}],\"diffPairs\":[{\"id\":\"legacy-pair\",\"name\":\"Legacy pair\",\"pNetId\":\"pt:0:-3810000\",\"nNetId\":\"pt:60000000:-3810000\"}],\"drcRules\":[{\"id\":\"legacy-scope\",\"name\":\"Legacy scoped width\",\"enabled\":true,\"priority\":10,\"scopes\":[{\"kind\":\"net\",\"netIds\":[\"pt:30000000:-3810000\",\"pt:60000000:-3810000\"]}],\"constraint\":{\"kind\":\"trackWidth\",\"minMm\":0.25}}]}",
+        "resultJson": "{\"ok\":true,\"revision\":20,\"createdEntityId\":null,\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795582,
+        "appliedRevision": 20,
+        "createdAt": "2026-10-22T17:06:35.583Z"
+      },
+      {
+        "commandId": "2b16b3bc-de36-4eca-b442-db1cd80d4d9b",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "create_wire",
+        "commandJson": "{\"type\":\"create_wire\",\"sourcePinId\":\"a73d645d-eb06-4dac-abd9-607a1f3660d1:u1:1\",\"targetPinId\":\"a73d645d-eb06-4dac-abd9-607a1f3660d1:u1:2\"}",
+        "resultJson": "{\"ok\":true,\"revision\":9,\"createdEntityId\":\"20142dfe-86ee-46a6-9b9b-c4a8d1076a2e\",\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795475,
+        "appliedRevision": 9,
+        "createdAt": "2026-10-22T17:06:35.475Z"
+      },
+      {
+        "commandId": "30858ad8-8bfd-46e7-ad92-863e44712a48",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "create_wire",
+        "commandJson": "{\"type\":\"create_wire\",\"sourcePinId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:1\",\"targetPinId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:2\"}",
+        "resultJson": "{\"ok\":true,\"revision\":10,\"createdEntityId\":\"20d69d7c-e9f6-4b2b-8b3a-25da5073699c\",\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795479,
+        "appliedRevision": 10,
+        "createdAt": "2026-10-22T17:06:35.480Z"
+      },
+      {
+        "commandId": "56a33553-c137-4002-86b2-7cb159e4c130",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "place_part",
+        "commandJson": "{\"type\":\"place_part\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"positionNm\":{\"x\":30000000,\"y\":0}}",
+        "resultJson": "{\"ok\":true,\"revision\":3,\"createdEntityId\":\"a73d645d-eb06-4dac-abd9-607a1f3660d1\",\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795432,
+        "appliedRevision": 3,
+        "createdAt": "2026-10-22T17:06:35.434Z"
+      },
+      {
+        "commandId": "5d482f6a-30fc-4ef7-a531-2359a7a3f5b5",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "pcb_add_trace",
+        "commandJson": "{\"type\":\"pcb_add_trace\",\"layer\":\"F.Cu\",\"netId\":\"pt:30000000:-3810000\",\"netClassId\":\"default\",\"widthMm\":0.25,\"segmentMode\":\"manhattan-90\",\"legality\":\"off\",\"pointsNm\":[{\"x\":34225000,\"y\":20000000},{\"x\":34225000,\"y\":30000000},{\"x\":35775000,\"y\":30000000},{\"x\":35775000,\"y\":20000000}]}",
+        "resultJson": "{\"ok\":true,\"revision\":15,\"createdEntityId\":\"e5aea5e9-0a88-46ec-9c0b-f5fc32049138\",\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795507,
+        "appliedRevision": 15,
+        "createdAt": "2026-10-22T17:06:35.508Z"
+      },
+      {
+        "commandId": "63e27e5d-4838-45f6-b7cd-9ffbb52c3320",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "place_pwr_port",
+        "commandJson": "{\"type\":\"place_pwr_port\",\"railText\":\"VCC\",\"positionNm\":{\"x\":0,\"y\":3810000}}",
+        "resultJson": "{\"ok\":true,\"revision\":11,\"createdEntityId\":\"62fadfad-9d04-493f-a12e-7f91e29b4c7c\",\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795484,
+        "appliedRevision": 11,
+        "createdAt": "2026-10-22T17:06:35.485Z"
+      },
+      {
+        "commandId": "684ebac4-8ee9-44f3-8154-a451de05451e",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "place_part",
+        "commandJson": "{\"type\":\"place_part\",\"componentId\":\"df68a5b7-a6d4-4975-8182-ba81427891ea\",\"positionNm\":{\"x\":60000000,\"y\":0}}",
+        "resultJson": "{\"ok\":true,\"revision\":4,\"createdEntityId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d\",\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795438,
+        "appliedRevision": 4,
+        "createdAt": "2026-10-22T17:06:35.439Z"
+      },
+      {
+        "commandId": "7d2d81c9-363c-439d-9868-6d329658678c",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "pcb_set_board_outline",
+        "commandJson": "{\"type\":\"pcb_set_board_outline\",\"outline\":{\"kind\":\"rect\",\"widthMm\":100,\"heightMm\":80,\"centerMm\":{\"x\":35,\"y\":25}}}",
+        "resultJson": "{\"ok\":true,\"revision\":1,\"createdEntityId\":null,\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795416,
+        "appliedRevision": 1,
+        "createdAt": "2026-10-22T17:06:35.418Z"
+      },
+      {
+        "commandId": "7db73e9f-53d5-4e8e-a6c5-321f501a3375",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "pcb_move_placement",
+        "commandJson": "{\"type\":\"pcb_move_placement\",\"placementId\":\"28288269-846e-4df1-b16c-f52f6b7d159d\",\"positionMm\":{\"x\":55,\"y\":20}}",
+        "resultJson": "{\"ok\":true,\"revision\":7,\"createdEntityId\":null,\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795463,
+        "appliedRevision": 7,
+        "createdAt": "2026-10-22T17:06:35.464Z"
+      },
+      {
+        "commandId": "82a5c41b-3cec-4115-a5af-fc46af27c9cf",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "pcb_move_placement",
+        "commandJson": "{\"type\":\"pcb_move_placement\",\"placementId\":\"6a5bec9c-7958-4643-acf7-eb706517edc3\",\"positionMm\":{\"x\":15,\"y\":20}}",
+        "resultJson": "{\"ok\":true,\"revision\":5,\"createdEntityId\":null,\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795449,
+        "appliedRevision": 5,
+        "createdAt": "2026-10-22T17:06:35.450Z"
+      },
+      {
+        "commandId": "8ea8f9c9-02c0-489d-8ca1-aff68b0eaa26",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "pcb_add_zone",
+        "commandJson": "{\"type\":\"pcb_add_zone\",\"layer\":\"F.Cu\",\"net\":{\"netId\":null,\"netName\":\"Net_1\"},\"name\":\"Unnamed UI zone\",\"region\":{\"kind\":\"polygon\",\"pointsMm\":[{\"x\":33,\"y\":2},{\"x\":59,\"y\":2},{\"x\":59,\"y\":12},{\"x\":33,\"y\":12}],\"holesMm\":[]},\"padConnection\":\"solid\"}",
+        "resultJson": "{\"ok\":true,\"revision\":18,\"createdEntityId\":\"9f93341c-8ed9-43df-93d4-f61a68539b15\",\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795530,
+        "appliedRevision": 18,
+        "createdAt": "2026-10-22T17:06:35.532Z"
+      },
+      {
+        "commandId": "96d04328-54d3-4787-b6c6-eb15e1c76c7c",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "pcb_add_via",
+        "commandJson": "{\"type\":\"pcb_add_via\",\"centerMm\":{\"x\":35,\"y\":30},\"netId\":\"pt:30000000:-3810000\",\"netClassId\":\"default\",\"diameterMmOverride\":0.8,\"drillMmOverride\":0.4,\"legality\":\"off\"}",
+        "resultJson": "{\"ok\":true,\"revision\":17,\"createdEntityId\":\"98cd1a01-06a1-4bce-9915-9a28bce305af\",\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795519,
+        "appliedRevision": 17,
+        "createdAt": "2026-10-22T17:06:35.519Z"
+      },
+      {
+        "commandId": "98ea9a01-3055-446f-b9c7-6592551d1b14",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "pcb_add_trace",
+        "commandJson": "{\"type\":\"pcb_add_trace\",\"layer\":\"F.Cu\",\"netId\":\"pt:60000000:-3810000\",\"netClassId\":\"default\",\"widthMm\":0.25,\"segmentMode\":\"manhattan-90\",\"legality\":\"off\",\"pointsNm\":[{\"x\":54225000,\"y\":20000000},{\"x\":54225000,\"y\":5000000},{\"x\":55775000,\"y\":5000000},{\"x\":55775000,\"y\":20000000}]}",
+        "resultJson": "{\"ok\":true,\"revision\":16,\"createdEntityId\":\"39dd4d75-248e-4cfc-8417-e1ab871c635d\",\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795514,
+        "appliedRevision": 16,
+        "createdAt": "2026-10-22T17:06:35.514Z"
+      },
+      {
+        "commandId": "aa716e6f-c991-4b79-9924-7a5e6cd9a0fa",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "pcb_move_placement",
+        "commandJson": "{\"type\":\"pcb_move_placement\",\"placementId\":\"6e0eeb4a-c61e-48db-a196-2fe890f6375a\",\"positionMm\":{\"x\":35,\"y\":20}}",
+        "resultJson": "{\"ok\":true,\"revision\":6,\"createdEntityId\":null,\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795455,
+        "appliedRevision": 6,
+        "createdAt": "2026-10-22T17:06:35.456Z"
+      },
+      {
+        "commandId": "bd04c841-3028-4762-a518-ecba38ae630e",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "create_wire",
+        "commandJson": "{\"type\":\"create_wire\",\"sourcePinId\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:1\",\"targetPinId\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:2\"}",
+        "resultJson": "{\"ok\":true,\"revision\":8,\"createdEntityId\":\"e46d6c5a-9743-4ccf-9572-b4fe15c57636\",\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795469,
+        "appliedRevision": 8,
+        "createdAt": "2026-10-22T17:06:35.470Z"
+      },
+      {
+        "commandId": "cd8ebc12-f99b-4120-b1d7-550127069ca4",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "set_pin_electrical_intent",
+        "commandJson": "{\"type\":\"set_pin_electrical_intent\",\"pinId\":\"f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:1\",\"intent\":\"power_source\"}",
+        "resultJson": "{\"ok\":true,\"revision\":13,\"createdEntityId\":null,\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795494,
+        "appliedRevision": 13,
+        "createdAt": "2026-10-22T17:06:35.495Z"
+      },
+      {
+        "commandId": "e05f8eb9-c8ed-4721-897e-00e0a92f2d1c",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "place_gnd_port",
+        "commandJson": "{\"type\":\"place_gnd_port\",\"positionNm\":{\"x\":30000000,\"y\":3810000}}",
+        "resultJson": "{\"ok\":true,\"revision\":12,\"createdEntityId\":\"35be3420-ffd6-49e0-ab9e-c295fa70140e\",\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795490,
+        "appliedRevision": 12,
+        "createdAt": "2026-10-22T17:06:35.491Z"
+      },
+      {
+        "commandId": "fc43a977-5fcb-46f2-9751-cb3de81ab0e5",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "move_part",
+        "commandJson": "{\"type\":\"move_part\",\"partId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d\",\"positionNm\":{\"x\":72000000,\"y\":7000000}}",
+        "resultJson": "{\"ok\":true,\"revision\":21,\"createdEntityId\":\"a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d\",\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795603,
+        "appliedRevision": 21,
+        "createdAt": "2026-10-22T17:06:35.604Z"
+      },
+      {
+        "commandId": "fc71fc04-b6c9-4d99-a59d-0013ab3a5317",
+        "designId": "7dfcdd2e-94e9-493a-974c-cbac6d341fb3",
+        "sessionId": "designer-test-session",
+        "commandType": "pcb_add_zone",
+        "commandJson": "{\"type\":\"pcb_add_zone\",\"layer\":\"B.Cu\",\"net\":{\"netId\":null,\"netName\":\"GND\"},\"name\":\"GND plane\",\"region\":{\"kind\":\"board\"},\"padConnection\":\"solid\"}",
+        "resultJson": "{\"ok\":true,\"revision\":19,\"createdEntityId\":\"board:B.Cu\",\"idempotent\":false}",
+        "operationIdentityJson": null,
+        "actorScope": null,
+        "operationId": null,
+        "issuedAt": 1792688795556,
+        "appliedRevision": 19,
+        "createdAt": "2026-10-22T17:06:35.556Z"
+      }
+    ]
+  },
+  "observations": {
+    "rootsBefore": [
+      {
+        "id": "pt:0:-3810000",
+        "name": "VCC",
+        "pinIds": [
+          "f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:1",
+          "f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:2"
+        ]
+      },
+      {
+        "id": "pt:30000000:-3810000",
+        "name": "GND",
+        "pinIds": [
+          "a73d645d-eb06-4dac-abd9-607a1f3660d1:u1:1",
+          "a73d645d-eb06-4dac-abd9-607a1f3660d1:u1:2"
+        ]
+      },
+      {
+        "id": "pt:60000000:-3810000",
+        "name": "Net_1",
+        "pinIds": [
+          "a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:1",
+          "a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:2"
+        ]
+      }
+    ],
+    "rootsAfter": [
+      {
+        "id": "pt:0:-3810000",
+        "name": "VCC",
+        "pinIds": [
+          "f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:1",
+          "f59feda3-c379-46a4-ad4a-d308cd7cfc7d:u1:2"
+        ],
+        "wireIds": [
+          "e46d6c5a-9743-4ccf-9572-b4fe15c57636"
+        ],
+        "labelIds": [],
+        "primitiveIds": [
+          "62fadfad-9d04-493f-a12e-7f91e29b4c7c"
+        ]
+      },
+      {
+        "id": "pt:30000000:-3810000",
+        "name": "GND",
+        "pinIds": [
+          "a73d645d-eb06-4dac-abd9-607a1f3660d1:u1:1",
+          "a73d645d-eb06-4dac-abd9-607a1f3660d1:u1:2"
+        ],
+        "wireIds": [
+          "20142dfe-86ee-46a6-9b9b-c4a8d1076a2e"
+        ],
+        "labelIds": [],
+        "primitiveIds": [
+          "35be3420-ffd6-49e0-ab9e-c295fa70140e"
+        ]
+      },
+      {
+        "id": "pt:72000000:3190000",
+        "name": "Net_1",
+        "pinIds": [
+          "a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:1",
+          "a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:2"
+        ],
+        "wireIds": [
+          "20d69d7c-e9f6-4b2b-8b3a-25da5073699c"
+        ],
+        "labelIds": [],
+        "primitiveIds": []
+      }
+    ],
+    "changedRoots": [
+      {
+        "id": "pt:60000000:-3810000",
+        "name": "Net_1",
+        "pinIds": [
+          "a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:1",
+          "a598f52c-ddd8-43ab-ada9-7cfdcecd9b8d:u1:2"
+        ]
+      }
+    ],
+    "storedCopperUnchangedFromF1": true,
+    "operation": "move_part"
+  }
+}

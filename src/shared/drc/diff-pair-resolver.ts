@@ -33,16 +33,17 @@ export interface ResolvedDiffPair {
  * One refused explicit table entry (contract §5, Astra #14, R2).
  *
  * - `self-pair` — one row naming the same net twice. A pair needs two nets.
+ * - `unknown-net` — a member has no own entry in the current schematic name
+ *   map. Copper carrying that ID is not proof that the net still exists.
  * - `duplicate` — a second row over the SAME unordered net set with different
  *   parameters. The FIRST row stays in force; only the later one is refused.
  * - `shared-net` — two rows over DIFFERENT net sets that share a net, so that
  *   net would belong to two pairs at once. NEITHER row is resolved: there is
  *   no non-arbitrary way to pick the one the designer meant.
  *
- * Identical duplicates are not conflicts — they dedupe silently.
+ * Otherwise valid identical duplicates are not conflicts — they dedupe silently.
  */
-export interface DiffPairConflict {
-  reason: "self-pair" | "duplicate" | "shared-net";
+interface DiffPairConflictSite {
   /** The rows the refusal is about, in table order. */
   ids: readonly string[];
   /** The net two rows fight over (`shared-net` only). */
@@ -51,6 +52,14 @@ export interface DiffPairConflict {
   pNetId: string;
   nNetId: string;
 }
+
+export type DiffPairConflict =
+  | (DiffPairConflictSite & { reason: "self-pair" | "duplicate" | "shared-net" })
+  | (DiffPairConflictSite & {
+      reason: "unknown-net";
+      name: string;
+      missingNetIds: readonly string[];
+    });
 
 export interface DiffPairResolution {
   pairs: ResolvedDiffPair[];
@@ -128,6 +137,14 @@ export function resolveDiffPairsFull(
         netId: dp.pNetId,
         pNetId: dp.pNetId,
         nNetId: dp.nNetId,
+      });
+      continue;
+    }
+    const missingNetIds = [dp.pNetId, dp.nNetId].filter((id) => !Object.hasOwn(netNames, id)).sort();
+    if (missingNetIds.length > 0) {
+      conflicts.push({
+        reason: "unknown-net", ids: [dp.id], name: dp.name, missingNetIds,
+        netId: null, pNetId: dp.pNetId, nNetId: dp.nNetId,
       });
       continue;
     }

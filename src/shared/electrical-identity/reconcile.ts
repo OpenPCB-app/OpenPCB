@@ -6,28 +6,23 @@ import type {
   ElectricalNetAllocator,
   ElectricalNetRetirement,
   ElectricalNetRetirementReason,
+  ElectricalNetTransition,
 } from "./types";
-
-interface CanonicalRecord {
-  readonly key: string;
-  readonly members: readonly ElectricalMember[];
-  readonly tokens: readonly string[];
-}
-
-interface OverlapGraph {
-  readonly previous: readonly Set<number>[];
-  readonly current: readonly Set<number>[];
-}
+import {
+  compareMembership,
+  compareText,
+  overlapClusters,
+  selectSuccessors,
+  type CanonicalRecord,
+  type OverlapCluster,
+  type OverlapGraph,
+} from "./successors";
 
 interface AssignedComponents {
   readonly componentNetIds: Map<string, string>;
   readonly createdIds: string[];
   readonly preservedIds: string[];
   readonly nextActive: ActiveElectricalNet[];
-}
-
-function compareText(first: string, second: string): number {
-  return first < second ? -1 : first > second ? 1 : 0;
 }
 
 function requireId(value: unknown, context: string): asserts value is string {
@@ -108,24 +103,6 @@ function canonicalRecords(
   return result.sort((first, second) => compareText(first.key, second.key));
 }
 
-function compareMembership(
-  first: CanonicalRecord,
-  second: CanonicalRecord,
-): number {
-  for (
-    let index = 0;
-    index < Math.min(first.tokens.length, second.tokens.length);
-    index++
-  ) {
-    const comparison = compareText(first.tokens[index]!, second.tokens[index]!);
-    if (comparison) return comparison;
-  }
-  return (
-    first.tokens.length - second.tokens.length ||
-    compareText(first.key, second.key)
-  );
-}
-
 function reservedIds(
   input: ElectricalIdentityInput,
   previous: readonly CanonicalRecord[],
@@ -173,36 +150,19 @@ function overlapGraph(
 
 function retirementReasons(
   graph: OverlapGraph,
+  clusters: readonly OverlapCluster[],
 ): ElectricalNetRetirementReason[] {
   const result: ElectricalNetRetirementReason[] = graph.previous.map(
     () => "removed",
   );
-  const visited = new Set<number>();
-  for (let start = 0; start < graph.previous.length; start++) {
-    if (visited.has(start) || graph.previous[start]!.size === 0) continue;
-    const predecessors = new Set([start]),
-      successors = new Set<number>(),
-      queue = [start];
-    visited.add(start);
-    for (let index = 0; index < queue.length; index++) {
-      for (const successor of graph.previous[queue[index]!]!) {
-        if (successors.has(successor)) continue;
-        successors.add(successor);
-        for (const predecessor of graph.current[successor]!) {
-          if (visited.has(predecessor)) continue;
-          visited.add(predecessor);
-          predecessors.add(predecessor);
-          queue.push(predecessor);
-        }
-      }
-    }
+  for (const cluster of clusters) {
     const reason =
-      predecessors.size > 1
-        ? successors.size > 1
+      cluster.previous.length > 1
+        ? cluster.current.length > 1
           ? "reconfigured"
           : "merged"
         : "split";
-    for (const predecessor of predecessors) result[predecessor] = reason;
+    for (const predecessor of cluster.previous) result[predecessor] = reason;
   }
   return result;
 }
@@ -231,7 +191,7 @@ function allocateComponentId(
 function assignComponents(
   previous: readonly CanonicalRecord[],
   current: readonly CanonicalRecord[],
-  graph: OverlapGraph,
+  selected: ReadonlyMap<number, number>,
   allocateId: ElectricalNetAllocator,
   used: Set<string>,
 ): AssignedComponents {
@@ -247,11 +207,8 @@ function assignComponents(
       compareMembership(first.component, second.component),
     );
   for (const { component, index } of ordered) {
-    const predecessors = graph.current[index]!;
-    const predecessor = predecessors.values().next().value;
-    // One-to-one continuity survives added/removed members; geometry and names have no role.
-    const preserved =
-      predecessors.size === 1 && graph.previous[predecessor!]!.size === 1;
+    const predecessor = selected.get(index);
+    const preserved = predecessor !== undefined;
     const id = allocateComponentId(
       component,
       preserved ? previous[predecessor!]!.key : undefined,
@@ -271,10 +228,10 @@ function createRetirements(
   current: readonly CanonicalRecord[],
   graph: OverlapGraph,
   assigned: AssignedComponents,
+  clusters: readonly OverlapCluster[],
 ): ElectricalNetRetirement[] {
-  const reasons = retirementReasons(graph),
+  const reasons = retirementReasons(graph, clusters),
     preserved = new Set(assigned.preservedIds);
-  // Split/merge invalidation prevents copper, rules or aliases silently following an arbitrary branch.
   return previous.flatMap((record, index) =>
     preserved.has(record.key)
       ? []
@@ -292,18 +249,60 @@ function createRetirements(
   );
 }
 
+function createTransitions(
+  previous: readonly CanonicalRecord[],
+  current: readonly CanonicalRecord[],
+  clusters: readonly OverlapCluster[],
+  selected: ReadonlyMap<number, number>,
+  assigned: AssignedComponents,
+): ElectricalNetTransition[] {
+  return clusters.flatMap((cluster) => {
+    if (cluster.previous.length === 1 && cluster.current.length === 1) return [];
+    const inherited = cluster.current.flatMap((successor) => {
+      const predecessor = selected.get(successor);
+      return predecessor === undefined ? [] : [
+        Object.freeze({
+          fromId: previous[predecessor]!.key,
+          componentKey: current[successor]!.key,
+        }),
+      ];
+    }).sort((first, second) =>
+      compareText(first.fromId, second.fromId) ||
+      compareText(first.componentKey, second.componentKey),
+    );
+    const kind = cluster.previous.length === 1 ? "split" :
+      cluster.current.length === 1 ? "merge" : "reconfigure";
+    return [Object.freeze({
+      kind,
+      predecessorIds: Object.freeze(cluster.previous.map((index) => previous[index]!.key)),
+      successorIds: Object.freeze(cluster.current.map((index) =>
+        assigned.componentNetIds.get(current[index]!.key)!,
+      ).sort(compareText)),
+      inherited: Object.freeze(inherited),
+    })];
+  });
+}
+
 /** Pure planning only: callers must persist identities, retirements and dependent edits atomically. */
 export function reconcileElectricalIdentity(
   input: ElectricalIdentityInput,
 ): ElectricalIdentityResult {
+  if (
+    input.successorPolicy !== "retire" &&
+    input.successorPolicy !== "inherit-most-pins"
+  ) {
+    throw new Error("Invalid electrical successor policy");
+  }
   const previous = canonicalRecords(input.previousActive, "id");
   const current = canonicalRecords(input.currentComponents, "key");
   const used = reservedIds(input, previous),
     graph = overlapGraph(previous, current);
+  const clusters = overlapClusters(graph);
+  const selected = selectSuccessors({ input, previous, current, graph, clusters });
   const assigned = assignComponents(
     previous,
     current,
-    graph,
+    selected,
     input.allocateId,
     used,
   );
@@ -318,6 +317,9 @@ export function reconcileElectricalIdentity(
     ),
     createdIds: assigned.createdIds.sort(compareText),
     preservedIds: assigned.preservedIds.sort(compareText),
-    retirements: createRetirements(previous, current, graph, assigned),
+    retirements: createRetirements(previous, current, graph, assigned, clusters),
+    transitions: Object.freeze(
+      createTransitions(previous, current, clusters, selected, assigned),
+    ),
   };
 }

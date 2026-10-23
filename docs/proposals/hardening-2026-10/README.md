@@ -13,9 +13,10 @@ binding user/lead decisions and overrides any open-question default inside the d
 | `H19-OPENPCB-67-manufacturing-output.md` | OPENPCB-67 |
 | `P103-OPENPCB-103-edit-recovery.md` | OPENPCB-103 |
 
-Migration numbering overrides the docs: designer H08 `0021_net_identity`, H13
-`0022_design_frame_status`, H19 `0023_drc_result_provenance`, H14 `0024_kicad_import_reports`;
-library H13 takes the next free number (`0012_footprint_frame_provenance` if free).
+Designer migrations `0021_pin_electrical_intent` and H08 `0022_net_identity` are allocated.
+H13, H19 and H14 must take the next free designer migration numbers when implemented;
+their proposed numbers are not reservations. Library H13 likewise takes the next free number
+(`0012_footprint_frame_provenance` if free).
 
 Cross-item merge order for shared designer files (§4.7): P103 S2 → H08 S3/S5/S7/S10 → H13
 OP4a/b/c → H19 S2/S6a/S6b → H14 S10.

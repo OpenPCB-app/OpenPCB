@@ -22,7 +22,10 @@ import type {
 } from "../../../sdks";
 import { MODULE_SDK_TOKENS } from "../../../sdks";
 import { runDrc } from "../../../shared/drc/drc-engine";
+import { readNetIdentityState, writeNetIdentityState } from "../../../modules/designer/backend/net-identity/state-store";
+import { isDurableNetIdOf } from "../../../modules/designer/backend/net-identity/types";
 import {
+  getSharedDb,
   getSharedSqlite,
   resetSharedSqliteForTesting,
 } from "../db/sqlite-client";
@@ -35,8 +38,6 @@ import { getKicadFixtureDir } from "./helpers/kicad-fixtures";
 const SESSION = "copper-gate-session";
 const F_CU = "F.Cu" as PcbCopperLayerId;
 const MANHATTAN = "manhattan-90" as PcbTraceSegmentMode;
-const NET_A = "net-a";
-const NET_B = "net-b";
 
 /** Flat mm coordinate pairs → the integer-nanometre path that is persisted. */
 function pts(...mm: number[]): Array<{ x: number; y: number }> {
@@ -51,6 +52,8 @@ interface Harness {
   sdk: DesignerSDK;
   designId: string;
   netClassId: string;
+  netA: string;
+  netB: string;
   server: ReturnType<typeof createHttpServer>;
 }
 
@@ -84,13 +87,31 @@ async function newBoard(label: string): Promise<Harness> {
     .getSdkRegistry()
     .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
   const design = await sdk.createDesign({ name: label });
+  const nets = await namedNets(sdk, design.id);
   const projection = await sdk.getPcbProjection(design.id);
   return {
     sdk,
     designId: design.id,
     netClassId: projection!.board.netClasses[0]!.id,
+    ...nets,
     server,
   };
+}
+
+async function namedNets(sdk: DesignerSDK, designId: string): Promise<{ netA: string; netB: string }> {
+  for (const [index, text] of ["NET_A", "NET_B"].entries()) {
+    const result = await sdk.dispatchCommand(designId, envelope(designId, {
+      type: "upsert_label", text, positionNm: { x: index * 20_000_000, y: 100_000_000 },
+    }));
+    expect(result.ok).toBe(true);
+  }
+  const projection = (await sdk.getSchematicProjection(designId))!;
+  const netA = projection.nets.find((net) => net.name === "NET_A")!.id;
+  const netB = projection.nets.find((net) => net.name === "NET_B")!.id;
+  expect(isDurableNetIdOf(netA, designId)).toBe(true);
+  expect(isDurableNetIdOf(netB, designId)).toBe(true);
+  expect(netA).not.toBe(netB);
+  return { netA, netB };
 }
 
 let commandSeq = 0;
@@ -186,13 +207,13 @@ function accepted(result: DesignerDispatchResult) {
 
 /** The crossing foreign run every "dead short" case commits against. */
 function crossingRun(h: Harness) {
-  return trace(h, NET_B, pts(0, -5, 0, 5));
+  return trace(h, h.netB, pts(0, -5, 0, 5));
 }
 
 describe("copper commit gate (contract 07 §6)", () => {
   test("1 — a crossing foreign trace is refused and nothing is persisted", async () => {
     const h = await newBoard("copper-gate-refuse");
-    await seedTrace(h, NET_A, pts(-5, 0, 5, 0));
+    await seedTrace(h, h.netA, pts(-5, 0, 5, 0));
     const before = await h.sdk.getPcbProjection(h.designId);
 
     const refused = refusal(
@@ -215,7 +236,7 @@ describe("copper commit gate (contract 07 §6)", () => {
 
   test("2 — legality:report commits the same route and counts the refusal", async () => {
     const h = await newBoard("copper-gate-report");
-    await seedTrace(h, NET_A, pts(-5, 0, 5, 0));
+    await seedTrace(h, h.netA, pts(-5, 0, 5, 0));
 
     const result = accepted(
       await dispatch(h, {
@@ -231,7 +252,7 @@ describe("copper commit gate (contract 07 §6)", () => {
 
   test("3 — legality:off computes no verdict at all", async () => {
     const h = await newBoard("copper-gate-off");
-    await seedTrace(h, NET_A, pts(-5, 0, 5, 0));
+    await seedTrace(h, h.netA, pts(-5, 0, 5, 0));
 
     const result = accepted(
       await dispatch(h, {
@@ -250,7 +271,7 @@ describe("copper commit gate (contract 07 §6)", () => {
     const result = accepted(
       await dispatch(h, {
         type: "pcb_commit_route",
-        traces: [trace(h, NET_A, pts(-10, 5, 10, 5))],
+        traces: [trace(h, h.netA, pts(-10, 5, 10, 5))],
         vias: [],
       }),
     );
@@ -264,8 +285,8 @@ describe("copper commit gate (contract 07 §6)", () => {
       await dispatch(h, {
         type: "pcb_commit_route",
         traces: [
-          trace(h, NET_A, pts(-5, 0, 5, 0)),
-          trace(h, NET_B, pts(0, -5, 0, 5)),
+          trace(h, h.netA, pts(-5, 0, 5, 0)),
+          trace(h, h.netB, pts(0, -5, 0, 5)),
         ],
         vias: [],
       }),
@@ -276,7 +297,7 @@ describe("copper commit gate (contract 07 §6)", () => {
 
   test("5 — every refused violation is in the batch report, to the bit", async () => {
     const h = await newBoard("copper-gate-parity");
-    await seedTrace(h, NET_A, pts(-5, 0, 5, 0));
+    await seedTrace(h, h.netA, pts(-5, 0, 5, 0));
     // `report` so the copper actually lands: batch can only be asked about a
     // board that exists, and the ids the gate reported ARE the inserted ids.
     const committed = accepted(
@@ -292,7 +313,7 @@ describe("copper commit gate (contract 07 §6)", () => {
     // Re-judge the SAME geometry under `refuse` (a no-op reshape of the trace
     // just committed) to recover the violation objects the gate produced.
     const landed = (await h.sdk.getPcbProjection(h.designId))!.traces.find(
-      (t) => t.netId === NET_B,
+      (t) => t.netId === h.netB,
     )!;
     const blocked = refusal(
       await dispatch(h, {
@@ -328,10 +349,10 @@ describe("copper commit gate (contract 07 §6)", () => {
       widthMm: 1,
       heightMm: 1,
       layer: F_CU,
-      netId: NET_B,
+      netId: h.netB,
     });
     expect(pad.ok).toBe(true);
-    const intoPad = await seedTrace(h, NET_A, pts(-5, 5, 0, 5));
+    const intoPad = await seedTrace(h, h.netA, pts(-5, 5, 0, 5));
     const reshaped = refusal(
       await dispatch(h, {
         type: "pcb_update_trace_geometry",
@@ -345,8 +366,8 @@ describe("copper commit gate (contract 07 §6)", () => {
 
     // (b) dropping interior vertices draws a NEW segment — a vertex
     // subsequence is not a copper subset (Astra run 1 #2).
-    await seedVia(h, NET_B, { x: 0, y: -5 });
-    const around = await seedTrace(h, NET_A, pts(-5, -5, -5, -8, 5, -8, 5, -5));
+    await seedVia(h, h.netB, { x: 0, y: -5 });
+    const around = await seedTrace(h, h.netA, pts(-5, -5, -5, -8, 5, -8, 5, -5));
     const straightened = refusal(
       await dispatch(h, {
         type: "pcb_update_trace_geometry",
@@ -359,7 +380,7 @@ describe("copper commit gate (contract 07 §6)", () => {
     );
 
     // (c) a truncation that genuinely clears is accepted — and still judged.
-    const clean = await seedTrace(h, NET_A, pts(-12, 10, 12, 10));
+    const clean = await seedTrace(h, h.netA, pts(-12, 10, 12, 10));
     const truncated = accepted(
       await dispatch(h, {
         type: "pcb_update_trace_geometry",
@@ -388,8 +409,10 @@ describe("copper commit gate (contract 07 §6)", () => {
     expect(moved.legality).toEqual({ refused: 0, warnings: 0 });
   });
 
-  test("6e — the pending item is built from the BOUND row, not the raw one", async () => {
+  test("6e — legacy pending item is built from the BOUND row, not the raw one", async () => {
     const h = await newBoard("copper-gate-netname");
+    const state = readNetIdentityState(getSharedDb(), h.designId)!;
+    writeNetIdentityState(getSharedDb(), { ...state, status: "legacy_restored", active: [], lastError: null });
     // One GND port is enough to give the schematic a net named "GND", which is
     // what `bindNetName` resolves an importer hint against.
     expect((await dispatch(h, { type: "place_gnd_port", positionNm: { x: 0, y: 0 } })).ok).toBe(true);
@@ -426,6 +449,25 @@ describe("copper commit gate (contract 07 §6)", () => {
     expect(rawTracePayload(edited).netId).toBeNull();
   });
 
+  test("6f — durable rows keep name hints unbound during projection and geometry edits", async () => {
+    const h = await newBoard("copper-gate-durable-netname");
+    expect((await dispatch(h, { type: "place_gnd_port", positionNm: { x: 0, y: 0 } })).ok).toBe(true);
+    const boardSide = await seedTrace(h, null, pts(-10, 0, 10, 0));
+    const edited = await seedTrace(h, null, pts(-10, 5, 10, 5));
+    setNetNameHint(boardSide, "GND");
+    setNetNameHint(edited, "GND");
+    const before = (await h.sdk.getPcbProjection(h.designId))!;
+    expect(Object.values(before.netNames)).toContain("GND");
+    expect(before.traces.filter((trace) => [boardSide, edited].includes(trace.id)).map((trace) => trace.netId)).toEqual([null, null]);
+    const result = refusal(await dispatch(h, {
+      type: "pcb_update_trace_geometry", traceId: edited, pointsNm: pts(-10, 0.35, 10, 0.35),
+    }));
+    expect(result.violations.map((violation) => violation.code)).toContain("TRACE_TO_TRACE_CLEARANCE");
+    expect(rawTracePayload(edited).netId).toBeNull();
+    expect((await h.sdk.getPcbProjection(h.designId))!.traces.find((trace) => trace.id === edited)!.pointsNm)
+      .toEqual(pts(-10, 5, 10, 5));
+  });
+
   test("7 — the gate writes nothing: no placement lands in the history patch", async () => {
     isolateTestDb("copper-gate-history");
     const { moduleRuntime, server } = await createRuntime();
@@ -438,6 +480,7 @@ describe("copper commit gate (contract 07 §6)", () => {
       sdk,
       designId: design.id,
       netClassId: "default",
+      ...await namedNets(sdk, design.id),
       server,
     };
 
@@ -455,7 +498,7 @@ describe("copper commit gate (contract 07 §6)", () => {
     const routed = accepted(
       await dispatch(h, {
         type: "pcb_commit_route",
-        traces: [trace(h, NET_A, pts(-10, 12, 10, 12))],
+        traces: [trace(h, h.netA, pts(-10, 12, 10, 12))],
         vias: [],
       }),
     );
@@ -466,7 +509,7 @@ describe("copper commit gate (contract 07 §6)", () => {
 
   test("8 — HOLE_TO_HOLE is a warning, not a refusal", async () => {
     const h = await newBoard("copper-gate-hole");
-    await seedVia(h, NET_A, { x: 10, y: 0 });
+    await seedVia(h, h.netA, { x: 10, y: 0 });
 
     // Same net, so the copper pair skips and only the drills are judged:
     // 0.6 mm centres − 0.4 mm drill = 0.2 mm < the 0.25 mm hole-to-hole rule.
@@ -474,7 +517,7 @@ describe("copper commit gate (contract 07 §6)", () => {
       await dispatch(h, {
         type: "pcb_add_via",
         centerMm: { x: 10.6, y: 0 },
-        netId: NET_A,
+        netId: h.netA,
         netClassId: h.netClassId,
       }),
     );
@@ -488,7 +531,7 @@ describe("copper commit gate (contract 07 §6)", () => {
     const refused = refusal(
       await dispatch(h, {
         type: "pcb_add_trace",
-        ...trace(h, NET_A, pts(-8, 8, 8, 8), 0.1),
+        ...trace(h, h.netA, pts(-8, 8, 8, 8), 0.1),
       }),
     );
     expect(refused.violations.map((v) => v.code)).toContain("TRACE_WIDTH_MIN");
@@ -496,11 +539,11 @@ describe("copper commit gate (contract 07 §6)", () => {
 
   test("10 — a waived violation is not refused", async () => {
     const h = await newBoard("copper-gate-waiver");
-    await seedVia(h, NET_B, { x: -6, y: -10 });
+    await seedVia(h, h.netB, { x: -6, y: -10 });
     // The trace ROW id is stable across attempts, so the violation id the
     // refusal reports is the id the waiver has to match. A CLEARANCE breach,
     // not a short: `NET_SHORT_CIRCUIT` is non-overridable and never waivable.
-    const edited = await seedTrace(h, NET_A, pts(-12, -10, -9, -10));
+    const edited = await seedTrace(h, h.netA, pts(-12, -10, -9, -10));
     // 0.6 mm centre gap − 0.4 via radius − 0.125 half width = 0.075 mm.
     const conflicting = pts(-12, -10, -6.6, -10);
 
@@ -554,7 +597,7 @@ describe("copper commit gate (contract 07 §6)", () => {
     const result = accepted(
       await dispatch(h, {
         type: "pcb_commit_route",
-        traces: [trace(h, NET_A, pts(-10, 14, 10, 14))],
+        traces: [trace(h, h.netA, pts(-10, 14, 10, 14))],
         vias: [],
       }),
     );
@@ -567,7 +610,7 @@ describe("copper commit gate (contract 07 §6)", () => {
 
   test("12 — every copper-creating command refuses a dead short", async () => {
     const h = await newBoard("copper-gate-all-commands");
-    await seedTrace(h, NET_A, pts(-5, 0, 5, 0));
+    await seedTrace(h, h.netA, pts(-5, 0, 5, 0));
 
     const addTrace = refusal(
       await dispatch(h, { type: "pcb_add_trace", ...crossingRun(h) }),
@@ -578,7 +621,7 @@ describe("copper commit gate (contract 07 §6)", () => {
       await dispatch(h, {
         type: "pcb_add_via",
         centerMm: { x: 2, y: 0 },
-        netId: NET_B,
+        netId: h.netB,
         netClassId: h.netClassId,
       }),
     );
@@ -589,7 +632,7 @@ describe("copper commit gate (contract 07 §6)", () => {
       await dispatch(h, {
         type: "pcb_add_manual_via",
         centerMm: { x: -2, y: 0 },
-        netId: NET_B,
+        netId: h.netB,
         netClassId: h.netClassId,
       }),
     );
@@ -598,10 +641,10 @@ describe("copper commit gate (contract 07 §6)", () => {
     const addTraceVia = refusal(
       await dispatch(h, {
         type: "pcb_add_trace_via",
-        trace: trace(h, NET_B, pts(3, -6, 3, 0)),
+        trace: trace(h, h.netB, pts(3, -6, 3, 0)),
         via: {
           centerMm: { x: 3, y: 0 },
-          netId: NET_B,
+          netId: h.netB,
           netClassId: h.netClassId,
         },
       }),
@@ -618,12 +661,12 @@ describe("copper commit gate (contract 07 §6)", () => {
     // 8 board runs × 8 pending runs = 64 crossings, all NET_SHORT_CIRCUIT. The
     // verdict is O(pending × board), so the persisted result must not be.
     for (let i = 0; i < 8; i += 1) {
-      await seedTrace(h, NET_A, pts(-10, i - 4, 10, i - 4));
+      await seedTrace(h, h.netA, pts(-10, i - 4, 10, i - 4));
     }
     const env = envelope(h.designId, {
       type: "pcb_commit_route",
       traces: Array.from({ length: 8 }, (_, i) =>
-        trace(h, NET_B, pts(i - 4, -10, i - 4, 10)),
+        trace(h, h.netB, pts(i - 4, -10, i - 4, 10)),
       ),
       vias: [],
     });

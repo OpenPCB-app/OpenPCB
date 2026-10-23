@@ -20,6 +20,7 @@ import { checkSignalIntegrity } from "./checks/signal-integrity";
 import { checkLength } from "./checks/length";
 import { checkManufacturability } from "./checks/manufacturability";
 import { checkNetClass } from "./checks/netclass";
+import { checkNetBinding } from "./checks/net-binding";
 import { checkKeepouts } from "./checks/keepouts";
 import { checkOutline } from "./checks/outline";
 import { checkRules } from "./checks/rules";
@@ -39,10 +40,11 @@ import {
 } from "./severity";
 import type { DrcSeverityOverrides } from "./severity";
 import { computeViolationId } from "./violation-id";
+import { buildDrcRunEvidence } from "./run-evidence";
 
 /**
  * DRC engine — pure function over the PCB projection, mirroring `runErc`.
- * Builds an mm-domain context, runs all 21 check groups, then resolves severity
+ * Builds an mm-domain context, runs all 22 check groups, then resolves severity
  * and rule class, assigns stable ids, applies ignore/waive options, and tallies
  * the summary.
  *
@@ -67,11 +69,18 @@ import { computeViolationId } from "./violation-id";
  */
 export function drcOptionsFromProjection(
   projection: DesignerPcbProjection,
-): { ignoredRuleClasses: DrcRuleClass[]; waivedIds: string[] } {
+): {
+  ignoredRuleClasses: DrcRuleClass[];
+  waivedIds: string[];
+  severityOverrides?: DrcSeverityOverrides;
+} {
   const view = projection.board.viewState;
   return {
     ignoredRuleClasses: [...(view?.drcIgnoredRuleClasses ?? [])],
     waivedIds: [...(view?.drcWaivedViolationIds ?? [])],
+    ...(projection.board.drcSeverityOverrides === undefined
+      ? {}
+      : { severityOverrides: { ...projection.board.drcSeverityOverrides } }),
   };
 }
 
@@ -140,6 +149,7 @@ export const DRC_STAGES: ReadonlyArray<
   // it is the same clearance tier over a different obstacle (§4).
   ["copperToHole", checkCopperToHole],
   ["connectivity", checkConnectivity],
+  ["net-binding", checkNetBinding],
   ["copperPour", checkCopperPour],
   ["dangling", checkDangling],
   ["electrical", checkElectrical],
@@ -205,7 +215,7 @@ export function runDrc(
   const viewState = projection.board.viewState;
   const drafts = drcDrafts(projection, options);
 
-  return finalizeReport(drafts, {
+  const effectiveOptions = {
     designId: projection.designId,
     revision: projection.revision,
     ignoredRuleClasses:
@@ -213,7 +223,16 @@ export function runDrc(
     waivedIds: options.waivedIds ?? viewState?.drcWaivedViolationIds ?? [],
     severityOverrides:
       options.severityOverrides ?? projection.board.drcSeverityOverrides,
-  });
+  };
+  const report = finalizeReport(drafts, effectiveOptions);
+  return {
+    ...report,
+    evidence: buildDrcRunEvidence({
+      ...effectiveOptions,
+      drafts,
+      executedStages: DRC_STAGES.map(([stage]) => stage),
+    }),
+  };
 }
 
 /**

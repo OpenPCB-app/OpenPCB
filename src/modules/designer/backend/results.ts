@@ -6,6 +6,9 @@ import type {
   PcbCopperLayerId,
 } from "../../../sdks";
 import { isCopperLayerId } from "../../../sdks/designer";
+import { parseNetIdentityOutcome } from "./net-identity/outcome-parse";
+import { parseNetRebindReceipt } from "./net-identity/rebind-result-parse";
+import { parseNetReferenceFailure } from "./net-identity/reference-result-parse";
 import { asNumber, asRecord, asString, parseJsonRecord } from "./value-guards";
 
 export function parseDispatchResultJson(
@@ -23,6 +26,9 @@ export function parseDispatchResultJson(
     const legalityRaw = asRecord(parsed.legality);
     const refused = asNumber(legalityRaw?.refused);
     const warnings = asNumber(legalityRaw?.warnings);
+    const netIdentity = parseNetIdentityOutcome(parsed.netIdentity);
+    const netRebind = Object.hasOwn(parsed, "netRebind") ? parseNetRebindReceipt(parsed.netRebind) : undefined;
+    if (netRebind === null) return null;
     return {
       ok: true,
       revision,
@@ -31,6 +37,8 @@ export function parseDispatchResultJson(
           ? createdEntityIdRaw
           : null,
       idempotent: true,
+      ...(netIdentity ? { netIdentity } : {}),
+      ...(netRebind ? { netRebind } : {}),
       ...(refused !== null && warnings !== null
         ? { legality: { refused, warnings } }
         : {}),
@@ -44,6 +52,10 @@ export function parseDispatchResultJson(
   const code = asString(parsed.code);
   if (!code) {
     return null;
+  }
+
+  if (code === "NET_REFERENCE_DANGLING" || code === "NET_REFERENCE_AMBIGUOUS") {
+    return parseNetReferenceFailure(parsed);
   }
 
   if (code === "REVISION_CONFLICT") {
@@ -83,6 +95,18 @@ export function parseDispatchResultJson(
   if (code === "PIN_NOT_FOUND") {
     const pinId = asString(parsed.pinId);
     return pinId ? { ok: false, code, pinId } : null;
+  }
+
+  if (code === "INVALID_PIN_ELECTRICAL_INTENT") {
+    const pinId = asString(parsed.pinId);
+    const detail = asString(parsed.detail);
+    return pinId && detail ? { ok: false, code, pinId, detail } : null;
+  }
+
+  if (code === "INVALID_PART_POSITION") {
+    const partId = asString(parsed.partId);
+    const detail = asString(parsed.detail);
+    return partId && detail ? { ok: false, code, partId, detail } : null;
   }
 
   if (code === "ENTITY_NOT_FOUND") {

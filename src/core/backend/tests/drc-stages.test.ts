@@ -49,6 +49,7 @@ const EXPECTED_STAGES: readonly Exclude<DrcStage, "pour" | "copperShapeUnit">[] 
   "clearance",
   "copperToHole",
   "connectivity",
+  "net-binding",
   "copperPour",
   "dangling",
   "electrical",
@@ -104,6 +105,7 @@ describe("DRC_STAGES", () => {
       "checkClearance",
       "checkCopperToHole",
       "checkConnectivity",
+      "checkNetBinding",
       "checkCopperPour",
       "checkDangling",
       "checkElectrical",
@@ -120,7 +122,7 @@ describe("DRC_STAGES", () => {
 });
 
 describe("tick — stage checkpoints", () => {
-  test("every golden ticks the 21 stages in order with a non-decreasing draft count", () => {
+  test("every golden ticks the 22 stages in order with a non-decreasing draft count", () => {
     expect(goldens.length).toBeGreaterThanOrEqual(6);
     for (const { name, projection } of goldens) {
       const { tick, ticks } = recordingTick();

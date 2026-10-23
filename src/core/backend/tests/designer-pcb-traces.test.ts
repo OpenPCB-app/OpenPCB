@@ -13,6 +13,7 @@ import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
+import { dispatchOk } from "./helpers/designer-runtime";
 
 function isolateTestDb(label: string): void {
   resetSharedSqliteForTesting();
@@ -56,6 +57,13 @@ function envelope(
 }
 
 const SESSION = "designer-pcb-session";
+
+async function namedNet(sdk: DesignerSDK, designId: string): Promise<string> {
+  const named = await dispatchOk(sdk, designId, {
+    type: "upsert_label", text: "NET_A", positionNm: { x: 0, y: 0 },
+  });
+  return (await sdk.getSchematicProjection(designId))!.nets.find((net) => net.labelIds.includes(named.createdEntityId!))!.id;
+}
 
 async function defaultNetClassId(
   designerSdk: DesignerSDK,
@@ -356,6 +364,7 @@ describe("designer PCB traces (Phase 1)", () => {
       .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
 
     const design = await sdk.createDesign({ name: "Trace Via Atomic" });
+    const netId = await namedNet(sdk, design.id);
     const proj0 = await sdk.getPcbProjection(design.id);
     const netClass = proj0!.board.netClasses[0]!;
 
@@ -370,13 +379,13 @@ describe("designer PCB traces (Phase 1)", () => {
             { x: 5_000_000, y: 0 },
           ],
           widthMm: 0.25,
-          netId: "net-A",
+          netId,
           netClassId: netClass.id,
           segmentMode: "manhattan-90" as PcbTraceSegmentMode,
         },
         via: {
           centerMm: { x: 5, y: 0 },
-          netId: "net-A",
+          netId,
           netClassId: netClass.id,
           diameterMmOverride: 0.1,
           drillMmOverride: 0.05,
@@ -385,6 +394,7 @@ describe("designer PCB traces (Phase 1)", () => {
     );
 
     expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("INVALID_PCB_VIA");
     const proj = await sdk.getPcbProjection(design.id);
     expect(proj!.traces).toHaveLength(0);
     expect(proj!.vias).toHaveLength(0);
@@ -398,9 +408,9 @@ describe("designer PCB traces (Phase 1)", () => {
       .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
 
     const design = await sdk.createDesign({ name: "Smart Via" });
+    const netId = await namedNet(sdk, design.id);
     const proj0 = await sdk.getPcbProjection(design.id);
     const netClass = proj0!.board.netClasses[0]!;
-    const netId = "net-A"; // synthetic net id, no schematic correlation needed
 
     // 1) F.Cu segment from p0 to viaCenter.
     const p0 = { x: 0, y: 0 };

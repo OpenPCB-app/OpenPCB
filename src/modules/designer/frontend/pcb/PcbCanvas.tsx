@@ -424,6 +424,7 @@ interface PcbCanvasProps {
   moduleId: string;
   designId: string | null;
   commandRevision?: number | null;
+  commandScope?: string;
   /** Login-only cloud auth headers (bearer) for the auto-layout service. */
   cloudHeaders?: CloudHeadersProvider;
   /** Logged in + cloud configured → show the unified Auto-Layout button. */
@@ -2346,15 +2347,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     [workspace.projection],
   );
 
-  /** Nearest pad on the named net — the diff-pair partner auto-add. */
+  /** Partner membership is by active ID; the name is only a display label. */
   const findNearestPadOnNet = useCallback(
-    (netName: string, nearNm: PointNm): BundlePad | null => {
+    (netId: string, nearNm: PointNm): BundlePad | null => {
       const projection = workspace.projection;
       if (!projection) return null;
-      const netId = Object.entries(projection.netNames).find(
-        ([, name]) => name === netName,
-      )?.[0];
-      if (!netId) return null;
+      const netName = Object.hasOwn(projection.netNames, netId) ? projection.netNames[netId]! : null;
       let best: BundlePad | null = null;
       let bestDistSq = Infinity;
       for (const placement of projection.placements) {
@@ -2545,10 +2543,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     ];
     const diffPair =
       s.pads.length === 2 &&
-      s.pads[0]!.netName !== null &&
-      s.pads[1]!.netName !== null &&
-      diffPairIndex.partnerNetName(s.pads[0]!.netId, s.pads[0]!.netName) ===
-        s.pads[1]!.netName;
+      s.pads[0]!.netId !== null &&
+      s.pads[1]!.netId !== null &&
+      diffPairIndex.partnerNetId(s.pads[0]!.netId) === s.pads[1]!.netId;
     return {
       padCount: s.pads.length,
       netNames,
@@ -2976,13 +2973,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               bundleState.kind === "bundling" &&
               bundleState.session.pads.some((p) => p.padId === pad.padId);
             dispatchBundle({ kind: "toggle-pad", pad, ...toggleDefaults });
-            if (!alreadyIn && netName) {
-              const partnerName = diffPairIndex.partnerNetName(
-                anchor.netId,
-                netName,
-              );
-              const partner = partnerName
-                ? findNearestPadOnNet(partnerName, pad.centerNm)
+            if (!alreadyIn && anchor.netId !== null) {
+              const partnerId = diffPairIndex.partnerNetId(anchor.netId);
+              const partner = partnerId
+                ? findNearestPadOnNet(partnerId, pad.centerNm)
                 : null;
               const partnerCollected =
                 partner !== null &&
@@ -3770,8 +3764,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           }
           return;
         }
+        // A quick release can precede the render exposing the new session.
+        // The hook's updater also finishes a queued begin and ignores null.
+        marquee.finishMarquee();
         if (marquee.marqueeSession) {
-          marquee.finishMarquee();
           return;
         }
         const fpSession = freePrimitiveDragSessionRef.current;
@@ -6209,6 +6205,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               onToggleDrcPanel={toggleDrcPanel}
               drcErrorCount={drcErrorCount}
               drcRunning={drcRunning}
+              netIdentityScope={props.commandScope}
+              netIdentityDesignId={props.designId}
               drcMarkersVisible={drcMarkersVisible}
               onToggleDrcMarkers={toggleDrcMarkers}
               canUndo={workspace.canUndo}
@@ -6806,6 +6804,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                   blockedConflictCount={blockedConflictCount}
                   allowDrcViolations={allowDrcViolations}
                   onToggleAllowDrcViolations={() => {
+                    // The focused banner button disappears; keep its gesture
+                    // in the canvas scope instead of abandoning it on blur.
+                    wrapperRef.current?.focus({ preventScroll: true });
                     setAllowDrcViolations((prev) => !prev);
                     setBlockedConflictCount(null);
                   }}
@@ -6828,9 +6829,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                 model={tuneHudModel}
                 notice={tuneNotice}
                 allowDrcViolations={allowDrcViolations}
-                onToggleAllowDrcViolations={() =>
-                  setAllowDrcViolations((prev) => !prev)
-                }
+                onToggleAllowDrcViolations={() => {
+                  wrapperRef.current?.focus({ preventScroll: true });
+                  setAllowDrcViolations((prev) => !prev);
+                }}
                 targetInputOpen={tuneTargetInputOpen}
                 onOpenTargetInput={() => setTuneTargetInputOpen(true)}
                 onTargetInputSubmit={(t) =>

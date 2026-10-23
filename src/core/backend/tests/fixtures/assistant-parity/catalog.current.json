@@ -1,5 +1,5 @@
 {
-  "sha256": "1a7bc96f6d6a96893d6f3b0014f93acf5630e995a2988eeada306e77dccf1aa2",
+  "sha256": "36ac69acaa8da648f08bd1e90d8e9fc118c4eb9184239fe999cddb969e7d9231",
   "data": {
     "formatVersion": 2,
     "scope": "Canonical AgentKit desktop contracts; pure native domain and separate MCP store; no inference or packaged qualification",
@@ -3108,6 +3108,12 @@
       },
       {
         "type": "index",
+        "name": "designer_net_identity_retired_seq_idx",
+        "tbl_name": "designer_net_identity_retired",
+        "sql": "CREATE INDEX designer_net_identity_retired_seq_idx ON designer_net_identity_retired (design_id, seq)"
+      },
+      {
+        "type": "index",
         "name": "designer_pcb_entities_design_id_idx",
         "tbl_name": "designer_pcb_entities",
         "sql": "CREATE INDEX `designer_pcb_entities_design_id_idx` ON `designer_pcb_entities` (`design_id`)"
@@ -3582,6 +3588,30 @@
       },
       {
         "type": "table",
+        "name": "designer_net_identity_backups",
+        "tbl_name": "designer_net_identity_backups",
+        "sql": "CREATE TABLE designer_net_identity_backups (\n  design_id TEXT NOT NULL,\n  schema_version INTEGER NOT NULL,\n  revision INTEGER NOT NULL,\n  payload_json TEXT NOT NULL,\n  sha256 TEXT NOT NULL,\n  created_at TEXT NOT NULL,\n  PRIMARY KEY (design_id, schema_version)\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_net_identity_quarantine",
+        "tbl_name": "designer_net_identity_quarantine",
+        "sql": "CREATE TABLE designer_net_identity_quarantine (\n  design_id TEXT NOT NULL,\n  ref_kind TEXT NOT NULL,\n  ref_id TEXT NOT NULL,\n  legacy_value TEXT NOT NULL,\n  reason TEXT NOT NULL,\n  candidates_json TEXT NOT NULL,\n  suggested_net_id TEXT,\n  created_at TEXT NOT NULL,\n  PRIMARY KEY (design_id, ref_kind, ref_id, legacy_value)\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_net_identity_retired",
+        "tbl_name": "designer_net_identity_retired",
+        "sql": "CREATE TABLE designer_net_identity_retired (\n  design_id TEXT NOT NULL,\n  net_id TEXT NOT NULL,\n  seq INTEGER NOT NULL,\n  reason TEXT NOT NULL,\n  successor_ids_json TEXT NOT NULL,\n  display_name TEXT,\n  retired_at_revision INTEGER NOT NULL,\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL,\n  PRIMARY KEY (design_id, net_id)\n)"
+      },
+      {
+        "type": "table",
+        "name": "designer_net_identity_state",
+        "tbl_name": "designer_net_identity_state",
+        "sql": "CREATE TABLE designer_net_identity_state (\n  design_id TEXT PRIMARY KEY NOT NULL,\n  schema_version INTEGER NOT NULL,\n  status TEXT NOT NULL,\n  next_seq INTEGER NOT NULL,\n  active_json TEXT NOT NULL,\n  provenance_json TEXT NOT NULL,\n  last_error TEXT,\n  updated_at TEXT NOT NULL\n)"
+      },
+      {
+        "type": "table",
         "name": "designer_pcb_entities",
         "tbl_name": "designer_pcb_entities",
         "sql": "CREATE TABLE `designer_pcb_entities` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`design_id` text NOT NULL,\n\t`kind` text NOT NULL,\n\t`payload_json` text NOT NULL,\n\t`created_at` text NOT NULL,\n\t`updated_at` text NOT NULL\n)"
@@ -3602,7 +3632,7 @@
         "type": "table",
         "name": "designer_schematic_pins",
         "tbl_name": "designer_schematic_pins",
-        "sql": "CREATE TABLE `designer_schematic_pins` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`design_id` text NOT NULL,\n\t`part_id` text NOT NULL,\n\t`origin_pin_key` text NOT NULL,\n\t`number` text,\n\t`name` text NOT NULL,\n\t`electrical_type` text NOT NULL,\n\t`unit` integer NOT NULL,\n\t`local_x_nm` integer NOT NULL,\n\t`local_y_nm` integer NOT NULL,\n\t`world_x_nm` integer NOT NULL,\n\t`world_y_nm` integer NOT NULL,\n\t`created_at` text NOT NULL,\n\t`updated_at` text NOT NULL\n)"
+        "sql": "CREATE TABLE `designer_schematic_pins` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`design_id` text NOT NULL,\n\t`part_id` text NOT NULL,\n\t`origin_pin_key` text NOT NULL,\n\t`number` text,\n\t`name` text NOT NULL,\n\t`electrical_type` text NOT NULL,\n\t`unit` integer NOT NULL,\n\t`local_x_nm` integer NOT NULL,\n\t`local_y_nm` integer NOT NULL,\n\t`world_x_nm` integer NOT NULL,\n\t`world_y_nm` integer NOT NULL,\n\t`created_at` text NOT NULL,\n\t`updated_at` text NOT NULL\n, electrical_intent TEXT)"
       },
       {
         "type": "table",
@@ -3853,6 +3883,14 @@
       {
         "module_id": "designer",
         "migration_name": "0020_operation_receipts.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0021_pin_electrical_intent.sql"
+      },
+      {
+        "module_id": "designer",
+        "migration_name": "0022_net_identity.sql"
       },
       {
         "module_id": "library",

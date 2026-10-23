@@ -28,7 +28,10 @@ function inferReferencePrefix(detail: LibraryComponentPlacementDetail): string {
   return raw;
 }
 
-function nextReference(parts: DesignerPlacedPart[], prefix: string): string {
+export function nextReference(
+  parts: readonly DesignerPlacedPart[],
+  prefix: string,
+): string {
   let max = 0;
   for (const part of parts) {
     if (!part.reference.startsWith(prefix)) {

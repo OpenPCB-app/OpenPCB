@@ -12,6 +12,7 @@ import type {
   DesignerDispatchResult,
   DesignerHistoryActionResult,
   DesignerHistorySnapshot,
+  DesignerNetIdentityStatus,
   DesignerPcbProjection,
   DesignerSchematicProjection,
   DrcReport,
@@ -74,7 +75,7 @@ function downloadBlob(blob: Blob, fileName: string): void {
   URL.revokeObjectURL(url);
 }
 
-interface ProblemDetails {
+export interface DesignerApiProblem {
   type: string;
   title: string;
   status: number;
@@ -83,15 +84,23 @@ interface ProblemDetails {
   [key: string]: unknown;
 }
 
+/** Preserve machine-readable refusal details without changing message consumers. */
+export class DesignerApiProblemError extends Error {
+  readonly code: string | undefined;
+  constructor(readonly status: number, readonly problem: DesignerApiProblem) {
+    super(problem.detail ?? problem.title ?? `HTTP ${status}`);
+    this.name = "DesignerApiProblemError";
+    this.code = typeof problem.code === "string" ? problem.code : undefined;
+  }
+}
+
 async function fetchData<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
     const contentType = response.headers.get("content-type") ?? "";
     if (contentType.includes("application/problem+json")) {
-      const problem = (await response.json()) as ProblemDetails;
-      throw new Error(
-        problem.detail ?? problem.title ?? `HTTP ${response.status}`,
-      );
+      const problem = (await response.json()) as DesignerApiProblem;
+      throw new DesignerApiProblemError(response.status, problem);
     }
     throw new Error(`HTTP ${response.status}`);
   }
@@ -215,6 +224,24 @@ export function createDesignerApi(params: {
         ),
       );
       return data.projection;
+    },
+
+    async getNetIdentity(designId: string): Promise<DesignerNetIdentityStatus> {
+      return fetchData<DesignerNetIdentityStatus>(buildModuleUrl(backendURL, moduleId,
+        `/designs/${encodeURIComponent(designId)}/net-identity`));
+    },
+
+    async migrateNetIdentity(designId: string): Promise<DesignerNetIdentityStatus> {
+      return fetchData<DesignerNetIdentityStatus>(buildModuleUrl(backendURL, moduleId,
+        `/designs/${encodeURIComponent(designId)}/net-identity/migrate`), { method: "POST" });
+    },
+
+    async restoreNetIdentity(designId: string, confirmDiscardRevisions = false): Promise<DesignerNetIdentityStatus> {
+      return fetchData<DesignerNetIdentityStatus>(buildModuleUrl(backendURL, moduleId,
+        `/designs/${encodeURIComponent(designId)}/net-identity/restore-legacy`), {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirmDiscardRevisions }),
+      });
     },
 
     async listCommentThreads(
@@ -673,7 +700,7 @@ export function createDesignerApi(params: {
       if (!res.ok) {
         const contentType = res.headers.get("content-type") ?? "";
         if (contentType.includes("application/problem+json")) {
-          const problem = (await res.json()) as ProblemDetails;
+          const problem = (await res.json()) as DesignerApiProblem;
           throw new Error(
             problem.detail ?? problem.title ?? `HTTP ${res.status}`,
           );

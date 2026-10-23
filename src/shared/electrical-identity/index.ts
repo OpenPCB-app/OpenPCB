@@ -10,4 +10,6 @@ export type {
   ElectricalNetAllocator,
   ElectricalNetRetirement,
   ElectricalNetRetirementReason,
+  ElectricalNetTransition,
+  ElectricalSuccessorPolicy,
 } from "./types";

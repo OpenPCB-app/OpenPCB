@@ -22,6 +22,7 @@ import {
   readRawBoardSettingsRow,
 } from "../../../modules/designer/backend/pcb/pcb-store";
 import { pcbEntities } from "../../../modules/designer/backend/schema";
+import { isDurableNetIdOf } from "../../../modules/designer/backend/net-identity/types";
 import type { DesignerSDK, PcbZone } from "../../../sdks";
 import { MODULE_SDK_TOKENS } from "../../../sdks";
 import { collectCopperZones } from "../../../shared/pcb-areas/copper-zones";
@@ -101,6 +102,32 @@ function boardRows(db: PcbDb, designId: string): PcbZone[] {
 }
 
 describe("migrateLegacyBoardFill", () => {
+  test("bound mode stores the actual ground id without a name hint and keeps deterministic row ids", () => {
+    const db = makeDb();
+    seedRawBoardSettings(db, "d1", legacyPayload(["F.Cu"]));
+    const netId = "net:abcdefghij:12";
+    const options = { mode: "bound" as const, rowIdForZone: (zoneId: string) => `deterministic:${zoneId}` };
+    expect(migrateLegacyBoardFill(db, "d1", new Map([[netId, "gNd"]]), TS, options)).toBe(true);
+    expect(boardRows(db, "d1")[0]).toMatchObject({ netId, netName: null });
+    expect(db.select().from(pcbEntities).where(eq(pcbEntities.kind, "zone")).get()!.id).toBe("deterministic:board:F.Cu");
+    expect(migrateLegacyBoardFill(db, "d1", new Map([["changed", "GND"]]), TS, options)).toBe(false);
+    expect(boardRows(db, "d1")[0]).toMatchObject({ netId, netName: null });
+  });
+
+  test("bound mode without ground keeps an unresolved GND hint", () => {
+    const db = makeDb();
+    seedRawBoardSettings(db, "d1", legacyPayload(["F.Cu"]));
+    expect(migrateLegacyBoardFill(db, "d1", new Map([["signal", "SIG"]]), TS, { mode: "bound" })).toBe(true);
+    expect(boardRows(db, "d1")[0]).toMatchObject({ netId: null, netName: "GND" });
+  });
+
+  test("explicit name-hint mode preserves legacy ground naming", () => {
+    const db = makeDb();
+    seedRawBoardSettings(db, "d1", legacyPayload(["F.Cu"]));
+    migrateLegacyBoardFill(db, "d1", new Map([["ground", "gNd"]]), TS, { mode: "name-hint" });
+    expect(boardRows(db, "d1")[0]).toMatchObject({ netId: null, netName: "gNd" });
+  });
+
   test("legacy fill layers become board rows and the keys are stripped", () => {
     const db = makeDb();
     seedRawBoardSettings(db, "d1", legacyPayload(["F.Cu", "B.Cu"]));
@@ -511,6 +538,11 @@ describe("migrateLegacyBoardFill through getPcbProjection", () => {
     }
     await sdk.getPcbProjection(legacy.id);
     await sdk.getPcbProjection(authored.id);
+    const legacyGround = (await sdk.getSchematicProjection(legacy.id))!.nets.find((net) => net.name === "GND")!.id;
+    const authoredGround = (await sdk.getSchematicProjection(authored.id))!.nets.find((net) => net.name === "GND")!.id;
+    expect(isDurableNetIdOf(legacyGround, legacy.id)).toBe(true);
+    expect(isDurableNetIdOf(authoredGround, authored.id)).toBe(true);
+    expect(legacyGround).not.toBe(authoredGround);
 
     makeDesignLegacy(legacy.id, ["F.Cu"]);
     insertPcbZone(
@@ -522,8 +554,8 @@ describe("migrateLegacyBoardFill through getPcbProjection", () => {
         enabled: true,
         lockedAt: null,
         layer: "F.Cu",
-        netId: null,
-        netName: "GND",
+        netId: authoredGround,
+        netName: null,
         region: { kind: "board" },
         priority: 0,
         padConnection: "solid",
@@ -533,7 +565,13 @@ describe("migrateLegacyBoardFill through getPcbProjection", () => {
 
     const legacyProj = await sdk.getPcbProjection(legacy.id);
     const authoredProj = await sdk.getPcbProjection(authored.id);
-    expect(legacyProj?.zones).toEqual(authoredProj!.zones);
+    expect(legacyProj!.zones).toHaveLength(1);
+    expect(authoredProj!.zones).toHaveLength(1);
+    expect(legacyProj!.zones[0]).toMatchObject({ netId: legacyGround, netName: null });
+    expect(authoredProj!.zones[0]).toMatchObject({ netId: authoredGround, netName: null });
+    const normalize = <T extends { netId: string | null }>(zones: T[], ownGround: string) =>
+      zones.map((zone) => ({ ...zone, netId: zone.netId === ownGround ? "fixture:GND" : zone.netId }));
+    expect(normalize(legacyProj!.zones, legacyGround)).toEqual(normalize(authoredProj!.zones, authoredGround));
 
     const derive = (proj: typeof legacyProj) =>
       collectCopperZones({
@@ -550,6 +588,10 @@ describe("migrateLegacyBoardFill through getPcbProjection", () => {
         ([, name]) => name === "GND",
       )![0],
     );
-    expect(derived).toEqual(derive(authoredProj));
+    const authoredDerived = derive(authoredProj);
+    expect(authoredDerived.zones).toHaveLength(1);
+    expect(authoredDerived.zones[0]?.netId).toBe(authoredGround);
+    expect({ ...derived, zones: normalize(derived.zones, legacyGround) })
+      .toEqual({ ...authoredDerived, zones: normalize(authoredDerived.zones, authoredGround) });
   });
 });

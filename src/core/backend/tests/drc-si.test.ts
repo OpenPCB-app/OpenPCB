@@ -144,7 +144,7 @@ describe("diff-pair resolver", () => {
         { id: "a", name: "X", pNetId: "p", nNetId: "n", gapMm: 0.2 },
         { id: "b", name: "X", pNetId: "p", nNetId: "n", gapMm: 0.2 },
       ],
-      {},
+      { p: "P", n: "N" },
     );
     expect(same.pairs).toHaveLength(1);
     expect(same.conflicts).toEqual([]);
@@ -154,7 +154,7 @@ describe("diff-pair resolver", () => {
         { id: "a", name: "X", pNetId: "p", nNetId: "n", gapMm: 0.2 },
         { id: "b", name: "X", pNetId: "n", nNetId: "p", gapMm: 0.3 },
       ],
-      {},
+      { p: "P", n: "N" },
     );
     // The FIRST row stays in force; only the later one is refused.
     expect(differing.pairs.map((p) => p.id)).toEqual(["a"]);
@@ -181,7 +181,7 @@ describe("diff-pair resolver", () => {
         { id: "ac", name: "AC", pNetId: "a", nNetId: "c" },
         { id: "de", name: "DE", pNetId: "d", nNetId: "e" },
       ],
-      {},
+      { a: "A", b: "B", c: "C", d: "D", e: "E" },
     );
     // The untouched row survives; the two fighting over net `a` do not.
     expect(resolution.pairs.map((p) => p.id)).toEqual(["de"]);

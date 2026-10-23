@@ -472,6 +472,16 @@ describe("real native domain through AgentKit proposal pipeline", () => {
       ...(proposal.envelope.nativeIdentity as Record<string, unknown>), actorScope: "external" } } };
     expect(await applier.apply({ proposal: foreign, operationId: "foreign" })).toMatchObject({ status: "failed", appliedOps: 0 });
     expect(commandRisk([{ type: "batch_commands", commands: [{ type: "pcb_delete_trace", traceId: "t" }] }])).toBe("destructive");
+    expect(commandRisk([{ type: "duplicate_part", partId: "part-1" }])).toBe("medium");
+    expect(commandRisk([{ type: "set_pin_electrical_intent", pinId: "part-1:pin-1", intent: "no_connect" }])).toBe("medium");
+    expect(commandRisk([{ type: "batch_commands", commands: [
+      { type: "duplicate_part", partId: "part-1" },
+      { type: "set_pin_electrical_intent", pinId: "part-1:pin-1", intent: "no_connect" },
+    ] }])).toBe("medium");
+    expect(commandRisk([{ type: "batch_commands", commands: [
+      { type: "duplicate_part", partId: "part-1" },
+      { type: "delete_entity", entityId: "part-1", entityKind: "part" },
+    ] }])).toBe("destructive");
     const spoof = { type: "delete_entity", entityId: "C1", entityKind: "part", payload: { type: "place_part", componentId: "x" } };
     expect(commandRisk([{ payload: spoof }])).toBe("destructive");
     expect(commandRisk([{ payload: { type: "batch_commands", commands: [spoof],

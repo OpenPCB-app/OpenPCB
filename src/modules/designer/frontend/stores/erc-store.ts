@@ -17,13 +17,15 @@ interface ErcStoreState {
   report: ErcReport | null;
   running: boolean;
   error: string | null;
+  /** Kept as history while a replacement run is pending or unavailable. */
+  reportIsPrevious: boolean;
   /** Index into `report.violations`, or null when nothing is focused. */
   selectedIndex: number | null;
 }
 
 interface ErcStoreActions {
   /** Run ERC via the supplied runner (wired to `api.runErc`). */
-  run(runner: () => Promise<ErcReport | null>): Promise<void>;
+  run(runner: () => Promise<ErcReport | null>, designId?: string): Promise<void>;
   setReport(report: ErcReport | null): void;
   select(index: number | null): void;
   clear(): void;
@@ -36,36 +38,71 @@ export function ercIssueCount(report: ErcReport | null): number {
 }
 
 export const useErcStore = create<ErcStoreState & ErcStoreActions>(
-  (set, get) => ({
-    report: null,
-    running: false,
-    error: null,
-    selectedIndex: null,
+  (set, get) => {
+    // Clearing or replacing a report invalidates requests for the previous view.
+    let generation = 0;
+    return {
+      report: null,
+      running: false,
+      error: null,
+      reportIsPrevious: false,
+      selectedIndex: null,
 
-    async run(runner) {
-      if (get().running) return;
-      set({ running: true, error: null });
-      try {
-        const report = await runner();
-        set({ report, running: false });
-      } catch (err) {
+      async run(runner, designId) {
+        if (get().running) return;
+        const requestGeneration = ++generation;
         set({
-          running: false,
-          error: err instanceof Error ? err.message : "ERC failed",
+          running: true,
+          error: null,
+          reportIsPrevious: get().report !== null,
         });
-      }
-    },
+        try {
+          const report = await runner();
+          if (requestGeneration !== generation) return;
+          if (!report) throw new Error("ERC report unavailable");
+          if (designId && report.designId !== designId) {
+            throw new Error("ERC report does not match the requested design");
+          }
+          set({
+            report,
+            running: false,
+            reportIsPrevious: false,
+            selectedIndex: null,
+          });
+        } catch (err) {
+          if (requestGeneration !== generation) return;
+          set({
+            running: false,
+            error: err instanceof Error ? err.message : "ERC failed",
+          });
+        }
+      },
 
-    setReport(report) {
-      set({ report, selectedIndex: null });
-    },
+      setReport(report) {
+        generation += 1;
+        set({
+          report,
+          running: false,
+          error: null,
+          reportIsPrevious: false,
+          selectedIndex: null,
+        });
+      },
 
-    select(index) {
-      set({ selectedIndex: index });
-    },
+      select(index) {
+        set({ selectedIndex: index });
+      },
 
-    clear() {
-      set({ report: null, running: false, error: null, selectedIndex: null });
-    },
-  }),
+      clear() {
+        generation += 1;
+        set({
+          report: null,
+          running: false,
+          error: null,
+          reportIsPrevious: false,
+          selectedIndex: null,
+        });
+      },
+    };
+  },
 );

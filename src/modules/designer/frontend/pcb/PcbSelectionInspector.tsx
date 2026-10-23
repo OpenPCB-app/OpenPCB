@@ -355,11 +355,8 @@ export function OverlayTextPanel({
 }
 
 /**
- * Net picker for a zone, in the persisted `PcbZoneNetRef` shape: "" is "no
- * net" (both fields null), a named net persists as `{ netId: null, netName }`
- * and an unnamed one as `{ netId, netName: null }` (contract §12.2). The
- * current value maps back to the option whose name — or, for an unnamed net,
- * id — matches.
+ * Stored IDs stay authoritative across renames. An inactive ID is shown for
+ * explicit repair; only ID-less legacy hints may match a display name.
  */
 export function NetSelect({
   value,
@@ -374,13 +371,16 @@ export function NetSelect({
   disabled?: boolean;
   ariaLabel?: string;
 }): ReactElement {
-  // The projection binds names case-insensitively (trim + upper-case), so the
-  // picker must find the same net the pour uses.
+  const missingId =
+    value.netId !== null && !nets.some((n) => n.id === value.netId)
+      ? value.netId
+      : null;
   const nameKey = value.netName?.trim().toUpperCase() ?? null;
   const pick =
-    nameKey !== null
+    value.netId ??
+    (nameKey !== null
       ? (nets.find((n) => n.name.trim().toUpperCase() === nameKey)?.id ?? "")
-      : (value.netId ?? "");
+      : "");
   return (
     <select
       value={pick}
@@ -390,6 +390,11 @@ export function NetSelect({
       className={FIELD_CLASS}
     >
       <option value="">No net</option>
+      {missingId !== null ? (
+        <option value={missingId} disabled>
+          Unresolved net: {missingId}
+        </option>
+      ) : null}
       {nets.map((n) => (
         <option key={n.id} value={n.id}>
           {n.name}

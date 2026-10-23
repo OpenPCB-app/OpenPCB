@@ -2,6 +2,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { CreateDesignerDesignInput, DesignerDesignSummary } from "../../../sdks/designer";
 import { ensurePcbBoardSettings } from "./pcb/pcb-store";
 import { designHeads } from "./schema";
+import { initializeNetIdentity } from "./net-identity/sync";
 
 export function insertDesign(
   tx: BetterSQLite3Database<Record<string, unknown>>,
@@ -15,5 +16,6 @@ export function insertDesign(
   };
   tx.insert(designHeads).values(design).run();
   ensurePcbBoardSettings(tx, id, timestamp);
+  initializeNetIdentity(tx, id, "native", timestamp);
   return design;
 }

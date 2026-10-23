@@ -43,7 +43,7 @@ import type { DispatchCaptureMeta } from "./capture/types";
 import { executeDesignerCommand } from "./command-executor";
 import {
   detectNetMerge,
-  isNetMergeGatedDispatch,
+  getNetMergePolicy,
   NetMergeRefusal,
 } from "./net-merge-guard";
 import {
@@ -139,6 +139,17 @@ import {
   listDesignCreationReceipts,
 } from "./design-creation-receipts";
 import { insertDesign } from "./design-initialization";
+import { deleteDesignNetIdentity } from "./net-identity/state-store";
+import { readNetIdentityState } from "./net-identity/state-store";
+import { ensureNetIdentity } from "./net-identity/ensure";
+import { resolveIdentityMode } from "./net-identity/mode";
+import { syncDispatchedIdentity } from "./net-identity/dispatch-sync";
+import { historyIdentityBinding } from "./net-identity/history-binding";
+import { applyRawNetRebindDelta } from "./net-identity/rebind-history";
+import { buildNetRebindHistoryPatchSet, readNetRebindHistoryDelta } from "./net-identity/rebind-history-patches";
+import type { RawNetRebindDelta } from "./net-identity/rebind-history-types";
+import { rawNetRebindConflict } from "./net-identity/rebind-history-validation";
+import type { DesignerNetIdentityOutcome } from "../../../sdks/designer/net-identity";
 
 type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
@@ -350,10 +361,27 @@ export function createDesignerStore(
     patches: EcsPatch<DesignerWorldComponent>[],
     sessionId: string,
     history: CommandHistory<DesignerCommand, DesignerWorldComponent>,
-  ): number | null {
+    envelope: DesignerCommandEnvelope,
+  ): { revision: number; netIdentity?: DesignerNetIdentityOutcome } | null {
     const timestamp = nowIso();
     return ctx.db.transaction((txRaw) => {
       const tx = txRaw as DbClient;
+      const rebind = readNetRebindHistoryDelta(designId, envelope?.command?.type ?? "", patches);
+      const identity = resolveIdentityMode(tx, designId);
+      if (rebind) {
+        if (envelope.aggregateId !== designId) rawNetRebindConflict("Repair history belongs to another design");
+        if (identity.mode !== "durable") rawNetRebindConflict("Repair history requires durable net identity");
+        const head = tx.select({ revision: designHeads.revision }).from(designHeads).where(eq(designHeads.id, designId)).get();
+        if (!head) rawNetRebindConflict("Repair history design is missing");
+        if (!Number.isSafeInteger(head.revision) || head.revision < 0 || !Number.isSafeInteger(head.revision + 1)) {
+          rawNetRebindConflict("Repair history revision is invalid or exhausted");
+        }
+        applyRawNetRebindDelta(tx, designId, rebind, timestamp);
+        const revision = head.revision + 1;
+        tx.update(designHeads).set({ revision, updatedAt: timestamp }).where(eq(designHeads.id, designId)).run();
+        persistSessionHistorySnapshot({ db: tx, designId, sessionId, history, timestamp });
+        return { revision };
+      }
       const current = loadSchematicProjection(tx, designId);
       if (!current) {
         return null;
@@ -365,6 +393,7 @@ export function createDesignerStore(
         designId,
         netNamesFromSchematic(current),
         timestamp,
+        { mode: identity.mode === "durable" ? "bound" : "name-hint" },
       );
       const pcb = ensurePcbBoardSettings(tx, designId, timestamp);
       const placements = loadPcbPlacements(tx, designId);
@@ -389,9 +418,11 @@ export function createDesignerStore(
         overlayShapes,
         zones,
         keepouts,
+        ...(identity.mode === "durable" ? { activeNetIdentities: identity.state!.active } : {}),
       });
       applyPatches(world, patches);
-      const next = combinedStateFromWorld(designId, nextRevision, world);
+      const identityReplay = identity.mode === "durable" ? historyIdentityBinding(tx, identity.state!) : null;
+      const next = combinedStateFromWorld(designId, nextRevision, world, identityReplay?.binder);
       replaceSchematicProjection(tx, designId, next.schematic, timestamp);
       // viewState / activeLayer / visibleLayers are intentionally stripped
       // from the world snapshot (see combinedStateToWorld) so undo never
@@ -419,8 +450,9 @@ export function createDesignerStore(
       replacePcbOverlayShapes(tx, designId, next.overlayShapes, timestamp);
       replacePcbZones(tx, designId, next.zones, timestamp);
       replacePcbKeepouts(tx, designId, next.keepouts, timestamp);
+      const events = identityReplay?.persist(next, nextRevision, timestamp) ?? [];
       persistSessionHistorySnapshot({ db: tx, designId, sessionId, history, timestamp });
-      return nextRevision;
+      return { revision: nextRevision, ...(events.length > 0 ? { netIdentity: { events } } : {}) };
     });
   }
 
@@ -430,6 +462,7 @@ export function createDesignerStore(
     direction: "undo" | "redo",
     expectedRevision?: number,
   ): DesignerHistoryActionResult {
+    ensureNetIdentity(db, designId, ctx.logger);
     const replay = ctx.db.transaction(() => {
       const history = resolveSessionHistory(designId, sessionId);
       const actual =
@@ -462,13 +495,14 @@ export function createDesignerStore(
           entry: null,
         };
       // The consumed entry is persisted inside the patch transaction.
-      const revision = applyHistoryPatches(
+      const applied = applyHistoryPatches(
         designId,
         direction === "undo" ? entry.inversePatches : entry.forwardPatches,
         sessionId,
         history,
+        entry.envelope,
       );
-      if (revision === null)
+      if (applied === null)
         return {
           result: historyEmpty(direction, summarizeHistory(history)),
           entry: null,
@@ -476,7 +510,7 @@ export function createDesignerStore(
       return {
         result: {
           ok: true as const,
-          revision,
+          ...applied,
           history: summarizeHistory(history),
         },
         entry,
@@ -538,6 +572,7 @@ export function createDesignerStore(
     },
 
     async getDesign(designId) {
+      ensureNetIdentity(db, designId, ctx.logger);
       const head = db
         .select()
         .from(designHeads)
@@ -648,11 +683,13 @@ export function createDesignerStore(
           .where(eq(sessionHistoryRows.designId, designId))
           .run();
         tx.delete(cloudLink).where(eq(cloudLink.designId, designId)).run();
+        deleteDesignNetIdentity(tx, designId);
         tx.delete(designHeads).where(eq(designHeads.id, designId)).run();
       });
     },
 
     async getSchematicProjection(designId) {
+      ensureNetIdentity(db, designId, ctx.logger);
       const projection = loadSchematicProjection(db, designId);
       if (!projection) return null;
       // `footprintStale` needs LibrarySDK, which the pure projection reader
@@ -662,35 +699,27 @@ export function createDesignerStore(
     },
 
     async getPcbProjection(designId) {
-      const head = db
-        .select()
-        .from(designHeads)
-        .where(eq(designHeads.id, designId))
-        .get();
-      if (!head) return null;
-      return loadPcbProjection({
-        db,
-        designId,
-        revision: head.revision,
-        timestamp: nowIso(),
+      ensureNetIdentity(db, designId, ctx.logger);
+      return ctx.db.transaction((txRaw) => {
+        const tx = txRaw as DbClient;
+        const identityMode = resolveIdentityMode(tx, designId).mode;
+        const head = tx.select().from(designHeads).where(eq(designHeads.id, designId)).get();
+        if (!head) return null;
+        return loadPcbProjection({ db: tx, designId, revision: head.revision, timestamp: nowIso(), identityMode });
       });
     },
 
     async getBomProjection(designId) {
-      const schematic = loadSchematicProjection(db, designId);
-      const head = db
-        .select()
-        .from(designHeads)
-        .where(eq(designHeads.id, designId))
-        .get();
-      if (!head) return null;
-      const pcb = loadPcbProjection({
-        db,
-        designId,
-        revision: head.revision,
-        timestamp: nowIso(),
+      ensureNetIdentity(db, designId, ctx.logger);
+      return ctx.db.transaction((txRaw) => {
+        const tx = txRaw as DbClient;
+        const identityMode = resolveIdentityMode(tx, designId).mode;
+        const schematic = loadSchematicProjection(tx, designId);
+        const head = tx.select().from(designHeads).where(eq(designHeads.id, designId)).get();
+        if (!head) return null;
+        const pcb = loadPcbProjection({ db: tx, designId, revision: head.revision, timestamp: nowIso(), identityMode });
+        return buildBomProjection(pcb, schematic, listBomOverrides(tx, designId));
       });
-      return buildBomProjection(pcb, schematic, listBomOverrides(db, designId));
     },
 
     async saveDrcResult(designId, report, options) {
@@ -797,6 +826,11 @@ export function createDesignerStore(
             )
           : undefined;
 
+      const completedDuringLibraryRead = db.select().from(commandLog)
+        .where(eq(commandLog.commandId, envelope.commandId)).get();
+      if (completedDuringLibraryRead) return replay(completedDuringLibraryRead);
+      ensureNetIdentity(db, designId, ctx.logger);
+
       const pendingHistoryRef: {
         current: {
           revision: number;
@@ -865,6 +899,8 @@ export function createDesignerStore(
             return conflictResult;
           }
 
+          const identityState = resolveIdentityMode(tx, designId);
+          const activeBefore = identityState.mode === "durable" ? structuredClone(identityState.state!.active) : undefined;
           const projection = loadSchematicProjection(tx, designId);
           if (!projection) {
             const missingResult = conflict(
@@ -890,15 +926,18 @@ export function createDesignerStore(
 
           const timestamp = nowIso();
           const command = envelope.command;
-          const isPcbCommand = commandTouchesPcb(command);
+          const isNetRebind = command.type === "pcb_rebind_net_references";
+          const isPcbCommand = !isNetRebind && commandTouchesPcb(command);
+          const rebindDelta: { current: RawNetRebindDelta | null } = { current: null };
           // Lazy legacy board-fill migration (contract §12.1) BEFORE the
           // before-snapshot: every settings writer re-serialises the parsed
           // record, which would drop the unread legacy keys unread.
-          migrateLegacyBoardFill(
+          if (!isNetRebind) migrateLegacyBoardFill(
             tx,
             designId,
             netNamesFromSchematic(projection),
             timestamp,
+            { mode: identityState.mode === "durable" ? "bound" : "name-hint" },
           );
           const pcbBefore_ = isPcbCommand
             ? ensurePcbBoardSettings(tx, designId, timestamp)
@@ -950,26 +989,32 @@ export function createDesignerStore(
                   keepouts: keepoutsBefore,
                 }
               : undefined;
-          const result = executeDesignerCommand({
+          let result = executeDesignerCommand({
             tx,
             designId,
             revision: head.revision,
+            identityMode: identityState.mode,
             command,
             projection,
             timestamp,
             placeComponentDetail,
             ...(refreshComponentDetails ? { refreshComponentDetails } : {}),
             ...(pcbBefore ? { pcbBefore } : {}),
+            ...(isNetRebind ? { onNetRebindApplied: (delta: RawNetRebindDelta) => { rebindDelta.current = delta; } } : {}),
           });
 
-          // Net-merge gate: a label / net-port edit that fuses 2+ distinct
-          // nets needs `confirmMerge: true`. Thrown inside the transaction so
+          result = syncDispatchedIdentity(tx, designId, command, result, identityState, head.revision, timestamp);
+          const activeAfter = identityState.mode === "durable" ? readNetIdentityState(tx, designId)!.active : undefined;
+
+          // Naming edits retain anonymous multipin protection; geometry edits
+          // protect named nets. Thrown inside the transaction so
           // the executor's writes, revision bump and command-log row all roll
           // back (a refusal leaves no trace).
-          if (result.ok && isNetMergeGatedDispatch(command)) {
+          const mergePolicy = getNetMergePolicy(command);
+          if (result.ok && mergePolicy) {
             const after = loadSchematicProjection(tx, designId);
             const merge = after
-              ? detectNetMerge(projection.nets, after.nets)
+              ? detectNetMerge(projection.nets, after.nets, mergePolicy)
               : null;
             if (merge) throw new NetMergeRefusal(merge.nets);
           }
@@ -980,7 +1025,14 @@ export function createDesignerStore(
           // revision so the projection refreshes.
           const isViewOnlyCommand = command.type === "pcb_set_view_state";
 
-          if (result.ok && !isViewOnlyCommand) {
+          if (result.ok && isNetRebind) {
+            if (!rebindDelta.current) throw new Error("Successful net rebind did not return its raw delta");
+            const patchSet = buildNetRebindHistoryPatchSet(rebindDelta.current);
+            if (patchSet.forwardPatches.length > 0) pendingHistoryRef.current = {
+              revision: result.revision, createdEntityId: result.createdEntityId, ...patchSet,
+            };
+          }
+          if (result.ok && !isViewOnlyCommand && !isNetRebind) {
             const nextProjection = loadSchematicProjection(tx, designId);
             if (nextProjection) {
               if (pcbBefore_) {
@@ -1001,6 +1053,7 @@ export function createDesignerStore(
                 const patchSet = buildCombinedHistoryPatchSet(
                   {
                     schematic: projection,
+                    ...(activeBefore ? { activeNetIdentities: activeBefore } : {}),
                     pcb: pcbBefore_,
                     placements: placementsBefore ?? [],
                     traces: tracesBefore ?? [],
@@ -1014,6 +1067,7 @@ export function createDesignerStore(
                   },
                   {
                     schematic: nextProjection,
+                    ...(activeAfter ? { activeNetIdentities: activeAfter } : {}),
                     pcb: pcbAfter,
                     placements: placementsAfter,
                     traces: tracesAfter,
@@ -1038,6 +1092,7 @@ export function createDesignerStore(
                 const patchSet = buildHistoryPatchSet(
                   projection,
                   nextProjection,
+                  activeBefore && activeAfter ? { before: activeBefore, after: activeAfter } : undefined,
                 );
                 if (patchSet.forwardPatches.length > 0) {
                   pendingHistoryRef.current = {
@@ -1150,6 +1205,7 @@ export function createDesignerStore(
     },
 
     async getHistory(designId, sessionId) {
+      ensureNetIdentity(db, designId, ctx.logger);
       const history = resolveSessionHistory(designId, sessionId);
       return summarizeHistory(history);
     },
@@ -1178,7 +1234,7 @@ export function createDesignerStore(
         apiUrl: cloud.apiUrl,
         existingCloudDesignId: cloud.existingCloudDesignId,
         lastSyncedRevision: cloud.lastSyncedRevision,
-      });
+      }, ctx.logger);
     },
 
     async getCloudLink(designId) {

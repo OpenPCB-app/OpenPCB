@@ -309,7 +309,10 @@ tier (§10).
 `tierNetOf(item) = effectiveNetId ?? netId` is read by: the clearance and voltage constituents
 (the six judge sites and `clearanceBound`), the current verdict (§5) and the net-class dimension
 checks (their intent gate evaluated on the effective net: an explicit assignment or a name match
-of the net the copper extends). The original null net is kept by: the anchors of every draft,
+of the net the copper extends), scoped trace/via dimensions and via annular rings, copper-to-edge
+clearance, and plated-hole pair minima. Plated holes retain their copper owner so a live edit
+resolves the owner's current tier; mechanical and unplated holes retain the null tier.
+The original null net is kept by: the anchors of every draft,
 the short tier (`differentKnownNet`), `recordBridge` and the bridge pass. Enumeration in the
 clearance loops stays on the original net — their same-net filters run before `emit`, which is
 the only place a (null, named) touch is banked; `emit` suppresses the ordinary, fab and voltage
@@ -372,6 +375,15 @@ the rejudge budget of the first draft guarded nothing and was removed, R1 #5). A
 in progress resolves its obstacles with the board-widest bound (§3.2 c) and may look
 unroutable on a high-voltage board until a net is assigned — over-blocking, never
 under-blocking.
+
+Scoped scalar checks also rejudge retiered existing copper and its plated holes. Compare their
+before/after drafts by stable violation ID, retaining the maximum deficit (`requiredMm -
+measuredMm`) and effective severity for each prior ID. Attribute only new failures, larger
+deficits, or higher effective severities to the pending edit. This prevents a connection from
+being blocked by unchanged pre-existing scalar failures while retaining newly stricter rule
+requirements. Code severity overrides participate in the comparison. Replaced objects are
+excluded from hole-pair candidates; pending objects are checked by the normal pending-item path.
+Regression coverage: `drc-effective-scalar.test.ts` in both grid and exhaustive modes.
 
 ### 4.5 Determinism
 

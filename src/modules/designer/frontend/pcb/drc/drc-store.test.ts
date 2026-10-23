@@ -131,7 +131,7 @@ describe("drc-store run lifecycle", () => {
 
   test("completeRun swaps the report, stamps lastRunAt and keeps the terminal run", () => {
     useDrcStore.getState().setReport(report({ revision: 6 }));
-    useDrcStore.getState().beginRun(snapshot({ status: "running" }));
+    useDrcStore.getState().beginRun(snapshot({ status: "running", revision: 8 }));
     const before = Date.now();
     useDrcStore.getState().completeRun(report({ revision: 8 }));
     const state = useDrcStore.getState();
@@ -141,6 +141,40 @@ describe("drc-store run lifecycle", () => {
     expect(state.lastRunAt).not.toBeNull();
     expect(state.lastRunAt!).toBeGreaterThanOrEqual(before);
     expect(isDrcRunActive(state.run)).toBe(false);
+    expect(state.reportIsPrevious).toBe(false);
+  });
+
+  test("a missing completed report keeps the previous report and fails the attempt", () => {
+    const previous = report({ revision: 6 });
+    useDrcStore.getState().setReport(previous);
+    useDrcStore.getState().beginRun(snapshot());
+    useDrcStore.getState().completeRun(null);
+    expect(useDrcStore.getState()).toMatchObject({
+      report: previous,
+      reportIsPrevious: true,
+      error: "DRC report unavailable",
+      run: { status: "failed" },
+    });
+  });
+
+  test.each([
+    report({ designId: "design-2" }),
+    report({ revision: 9 }),
+  ])("a mismatched completed report cannot replace history", (mismatched) => {
+    const previous = report({ revision: 6 });
+    useDrcStore.getState().setReport(previous);
+    useDrcStore.getState().beginRun(snapshot());
+    useDrcStore.getState().completeRun(mismatched);
+    expect(useDrcStore.getState().report).toBe(previous);
+    expect(useDrcStore.getState().error).toBe("DRC report does not match the completed run");
+  });
+
+  test("a pending start retains history and resets after failure", () => {
+    useDrcStore.getState().setReport(report());
+    useDrcStore.getState().beginStart();
+    expect(useDrcStore.getState()).toMatchObject({ starting: true, reportIsPrevious: true });
+    useDrcStore.getState().failRun("backend down");
+    expect(useDrcStore.getState()).toMatchObject({ starting: false, reportIsPrevious: true });
   });
 
   test("cancelRun keeps the previous report and records the reason", () => {

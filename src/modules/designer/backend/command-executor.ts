@@ -1,4 +1,5 @@
 import { and, eq, inArray, or } from "drizzle-orm";
+import { validateSiRulesForSave } from "../../../shared/drc/si/rule-input-validation";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type {
   DesignerCommand,
@@ -46,6 +47,8 @@ import { autoRouteWirePointsDetailed } from "./routing/wire-obstacles";
 import { applyAutoArrange } from "./layout/arrange-schematic";
 import { executeBatchCommands } from "./commands/batch";
 import { applyRefreshPartFootprint } from "./commands/refresh-footprint";
+import { applyPinElectricalIntent } from "./commands/pin-electrical-intent";
+import { planDuplicatePart } from "./commands/duplicate-part";
 import {
   buildPlacePartPayload,
   normalizeRotationDeg,
@@ -209,6 +212,11 @@ import {
   updateConnectedWireGeometry,
 } from "./wire-geometry";
 
+import type { NetIdentityMode } from "./net-identity/types";
+import { normalizeCommandNetReferences } from "./net-identity/command-references";
+import { executeNetReferenceRebind } from "./net-identity/rebind";
+import type { RawNetRebindDelta } from "./net-identity/rebind-history-types";
+
 type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 type PinRow = typeof schematicPins.$inferSelect;
 
@@ -237,6 +245,7 @@ export interface ExecuteDesignerCommandParams {
   command: DesignerCommand;
   projection: DesignerSchematicProjection;
   timestamp: string;
+  identityMode: NetIdentityMode;
   placeComponentDetail: LibraryComponentPlacementDetail | null;
   /**
    * `refresh_part_footprint` only: freshly resolved library detail per
@@ -248,6 +257,7 @@ export interface ExecuteDesignerCommandParams {
   >;
   /** Present for every `pcb_*` command (see `PcbRowsBefore`). */
   pcbBefore?: PcbRowsBefore;
+  onNetRebindApplied?: (delta: RawNetRebindDelta) => void;
 }
 
 function isFinitePoint(point: { x: number; y: number }): boolean {
@@ -432,6 +442,7 @@ function mapPinRow(row: PinRow): DesignerPin {
     number: row.number,
     name: row.name,
     electricalType: row.electricalType,
+    ...(row.electricalIntent === null ? {} : { electricalIntent: row.electricalIntent }),
     unit: row.unit,
     localPositionNm: { x: row.localXNm, y: row.localYNm },
     worldPositionNm: { x: row.worldXNm, y: row.worldYNm },
@@ -808,6 +819,7 @@ export function insertPart(
         number: pin.number,
         name: pin.name,
         electricalType: pin.electricalType,
+        electricalIntent: pin.electricalIntent ?? null,
         unit: pin.unit,
         localXNm: pin.localPositionNm.x,
         localYNm: pin.localPositionNm.y,
@@ -908,16 +920,13 @@ interface EnvelopeLegality {
    */
   context(): LegalityContext | null;
   /**
-   * A board trace row as the CONTEXT sees it — `bindNetName` has resolved its
-   * importer `netName` hint to a net id. A pending item must be built from the
-   * BOUND row: an imported trace carries `netId: null` + `netName: "GND"`, so an
-   * unbound pending copy would be null-net against copper the context has
-   * already bound to the GND net and would be judged against its own net. The
-   * PERSISTED row stays unbound — the stored hint is design data, not a
-   * derivation. `undefined` when no context exists, or the id is not a board row.
+   * A board trace as the context sees it. Legacy mode resolves importer name
+   * hints without changing stored rows; durable mode preserves authored ids.
+   * Pending copper must use this same row to avoid judging a legacy hint
+   * against its own already-bound net. Undefined when no context/row exists.
    */
   boundTrace(traceId: string): PcbTrace | undefined;
-  /** The via twin of `boundTrace`: an imported via is bound by `netName` too. */
+  /** The via twin of `boundTrace`; only legacy mode resolves name hints. */
   boundVia(viaId: string): PcbVia | undefined;
 }
 
@@ -939,7 +948,7 @@ function legalityFor(params: ExecuteDesignerCommandParams): EnvelopeLegality {
     assembly = assemblePcbLegalityInput({
       schematic: params.projection,
       ...rows,
-    });
+    }, params.identityMode);
     context = buildDrcItems(assembly);
     return assembly;
   };
@@ -1013,19 +1022,20 @@ export function executeDesignerCommand(
     tx,
     designId,
     revision,
-    command,
+    command: originalCommand,
     projection,
     timestamp,
+    identityMode,
     placeComponentDetail,
     refreshComponentDetails,
   } = params;
-  if (command.type === "batch_commands") {
+  if (originalCommand.type === "batch_commands") {
     return executeBatchCommands({
       tx,
       designId,
       revision,
       timestamp,
-      command,
+      command: originalCommand,
       projection,
       executeStep: (step) =>
         executeDesignerCommand({
@@ -1035,12 +1045,24 @@ export function executeDesignerCommand(
           command: step.command,
           projection: step.projection,
           timestamp,
+          identityMode,
           placeComponentDetail: null,
           ...(step.pcbBefore ? { pcbBefore: step.pcbBefore } : {}),
         }),
     });
   }
-  const gate = legalityFor(params);
+  const normalized = normalizeCommandNetReferences({
+    command: originalCommand, projection, tx, designId, mode: identityMode,
+  });
+  if (!normalized.ok) return normalized.result;
+  const { command } = normalized;
+  if (command.type === "batch_commands") {
+    throw new Error("net-reference normalization must not synthesize a batch command");
+  }
+  if (command.type === "pcb_rebind_net_references") {
+    return executeNetReferenceRebind({ ...params, command, bumpRevision: () => bumpRevision(tx, designId, revision, timestamp) });
+  }
+  const gate = legalityFor({ ...params, command });
   if (command.type === "pcb_set_board_settings") {
     if (command.widthMm <= 0 || command.heightMm <= 0) {
       return invalidPcbBoardSettings("board width and height must be positive");
@@ -1119,6 +1141,13 @@ export function executeDesignerCommand(
   }
 
   if (command.type === "pcb_move_placements") {
+    // A returned refusal commits the command transaction, so validate all IDs
+    // before the mutating move helper writes any placement.
+    for (const update of command.updates) {
+      if (!loadPcbPlacementById(tx, designId, update.placementId)) {
+        return pcbPlacementNotFound(update.placementId);
+      }
+    }
     for (const update of command.updates) {
       const moved = movePcbPlacement({
         db: tx,
@@ -1513,7 +1542,7 @@ export function executeDesignerCommand(
   }
 
   if (command.type === "pcb_cleanup_pour_traces") {
-    const proj = loadPcbProjection({ db: tx, designId, revision, timestamp });
+    const proj = loadPcbProjection({ db: tx, designId, revision, timestamp, identityMode });
     const dr = proj.board.designRules;
     const padNetIds = new Map(Object.entries(proj.padNets ?? {}));
     // EVERY effective zone on the trace's layer, board plane and polygon zone
@@ -1840,6 +1869,9 @@ export function executeDesignerCommand(
   }
 
   if (command.type === "pcb_set_design_rules") {
+    // Validate author intent before even a lazy settings repair can write.
+    const siProblem = validateSiRulesForSave(command);
+    if (siProblem) return invalidPcbBoardSettings(siProblem);
     const storedClasses = ensurePcbBoardSettings(
       tx,
       designId,
@@ -2258,6 +2290,17 @@ export function executeDesignerCommand(
     }
     deletePcbOverlayShape(tx, command.overlayShapeId);
     return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "duplicate_part") {
+    const source = projection.parts.find((part) => part.id === command.partId);
+    if (!source) return entityNotFound(command.partId, "part");
+    const plan = planDuplicatePart(source, command.positionNm, projection.parts);
+    if (!plan.ok) {
+      return { ok: false, code: "INVALID_PART_POSITION", partId: command.partId, detail: plan.detail };
+    }
+    insertPart(tx, designId, plan.payload, timestamp);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), plan.payload.id);
   }
 
   if (command.type === "place_part") {
@@ -2776,6 +2819,12 @@ export function executeDesignerCommand(
       bumpRevision(tx, designId, revision, timestamp),
       requestedPartIds[0] ?? null,
     );
+  }
+
+  if (command.type === "set_pin_electrical_intent") {
+    const refused = applyPinElectricalIntent({ tx, designId, timestamp, command });
+    if (refused) return refused;
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
   }
 
   if (command.type === "refresh_part_footprint") {

@@ -7,12 +7,10 @@
  *      syncPcbPlacementsFromSchematic helper), then override each placement's
  *      positionMm / rotationDeg / layer with the values from the .kicad_pcb.
  *   2. Insert PcbTrace entities — one polyline per KiCad segment with two
- *      points. Net mapping is best-effort: KiCad uses integer ordinals,
- *      OpenPCB uses derived net ids resolved by ratsnest at projection time,
- *      so v1 records netId=null and netClassId="default" for every trace and
- *      surfaces a warning. The trace's geometry + layer are correct, so the
- *      user can re-assign nets on first projection.
- *   3. Insert PcbVia entities with the same netId=null v1 caveat.
+ *      points. Retain the parser's source net name beside a null id; commit
+ *      resolves exact named-net hints inside the same transaction after all
+ *      copper is inserted. Anonymous or unmatched hints remain unassigned.
+ *   3. Insert PcbVia entities with the same source-name provenance.
  */
 
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -156,9 +154,8 @@ export function insertPcbEntities(
     const layer = pickCopperLayer(segment.layer);
     const trace: PcbTrace = {
       id: crypto.randomUUID(),
-      // netId stays null at insert; projection binding (pcb-projection.ts)
-      // resolves it from netName at load time so we don't have to read the
-      // schematic projection mid-transaction.
+      // Commit resolves exact named hints after insertion, preserving this
+      // source spelling as provenance beside the durable id when successful.
       netId: null,
       netName: segment.netName ?? null,
       netClassId: "default",
@@ -230,7 +227,7 @@ export function insertPcbEntities(
     result.warnings.push({
       code: "pcb_traces_missing_net_name",
       severity: "info",
-      message: `${tracesWithoutName} trace(s) had no resolved net name; projection will fall back to pad-alignment heuristic for those.`,
+      message: `${tracesWithoutName} trace(s) had no resolved net name; their net ids remain unassigned for review.`,
     });
   }
 
@@ -376,8 +373,8 @@ function buildZone(
     enabled,
     lockedAt: z.locked ? timestamp : null,
     layer,
-    // netId stays null at insert; projection binding resolves netName the same
-    // way it does for traces and vias (contract §3.2).
+    // Commit resolves this hint together with trace/via hints. Keeping the
+    // original name also preserves review evidence when no named match exists.
     netId: null,
     netName: z.netName,
     region,

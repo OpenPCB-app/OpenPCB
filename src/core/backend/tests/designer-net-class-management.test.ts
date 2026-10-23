@@ -32,6 +32,10 @@ describe("net class management through pcb_set_design_rules (T-162)", () => {
   test("add + rename + delete in one save; a deleted class releases its nets and copper; one undo restores it", async () => {
     const { sdk } = await bootDesignerRuntime("netclass-manage");
     const design = await sdk.createDesign({ name: "Net classes" });
+    const named = await dispatchOk(sdk, design.id, {
+      type: "upsert_label", text: "NET_A", positionNm: { x: 0, y: 0 },
+    });
+    const netId = (await sdk.getSchematicProjection(design.id))!.nets.find((net) => net.labelIds.includes(named.createdEntityId!))!.id;
     const [defaultClass, power, gnd] = (await board(sdk, design.id)).netClasses;
     expect(gnd?.id).toBe("gnd");
     // Park an assignment and a trace on the class about to be deleted.
@@ -39,7 +43,7 @@ describe("net class management through pcb_set_design_rules (T-162)", () => {
       sdk,
       design.id,
       [defaultClass, power, gnd],
-      { "net-a": "gnd" },
+      { [netId]: "gnd" },
     );
     expect(result.ok).toBe(true);
     const trace = await dispatchOk(sdk, design.id, {
@@ -50,7 +54,7 @@ describe("net class management through pcb_set_design_rules (T-162)", () => {
         { x: 5_000_000, y: 0 },
       ],
       widthMm: 0.4,
-      netId: null,
+      netId,
       netClassId: "gnd",
       segmentMode: "manhattan-90",
     });
@@ -79,7 +83,7 @@ describe("net class management through pcb_set_design_rules (T-162)", () => {
     ]);
     expect(saved.netClasses[2]?.viaDiameterMm).toBe(1.0);
     expect(saved.netClasses[2]?.viaDrillMm).toBe(0.5);
-    expect(saved.perNetClassAssignments?.["net-a"]).toBeUndefined();
+    expect(saved.perNetClassAssignments?.[netId]).toBeUndefined();
     const pcb = (await sdk.getPcbProjection(design.id))!;
     expect(
       pcb.traces.find((t) => t.id === trace.createdEntityId)?.netClassId,
@@ -92,7 +96,7 @@ describe("net class management through pcb_set_design_rules (T-162)", () => {
       "power",
       "gnd",
     ]);
-    expect(restored.board.perNetClassAssignments?.["net-a"]).toBe("gnd");
+    expect(restored.board.perNetClassAssignments?.[netId]).toBe("gnd");
     expect(
       restored.traces.find((t) => t.id === trace.createdEntityId)?.netClassId,
     ).toBe("gnd");

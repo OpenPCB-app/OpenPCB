@@ -29,7 +29,7 @@ longer active, so it is inert. That is what makes undo/redo exact (§3.6).
 | A2 | Deterministic split/merge semantics with specified membership and invalidation | Kernel successor policy `inherit-most-pins`. Its total order includes a binder-supplied "more dependents, then lower seq" key (§3.3). Transitions and retirements are reported. Dependents become inert and are reported (§3.7) | S1, S4, S5 |
 | A3 | Identities preserved across move, rotate, refdes rename, import, reload, undo/redo | Binding is by membership, and moves, rotations and renames do not change membership. Import materialises ids at commit (§3.8). Reload reads the persisted state (§3.5). Identity entities live in the ECS world, so history patches restore them. Contested members are sanitised (§3.6) | S4–S6, S8, S13 |
 | A4 | One identity mapping consumed by routing, pours, DRC, rules, length groups, schematic projection and manufacturing snapshots; no fuzzy matching | `net.id` is durable, and every consumer already keys by `net.id` / `padNets`. Projection-time `bindNetName`, the zone name binding and import first-match-by-name are removed for durable designs in **S5**. They are kept only in legacy mode (§3.5.4). Names resolve once, at command and import boundaries (§3.8) | S5, S7, S8 |
-| A5 | Versioned migration with backup and provenance; ambiguous legacy bindings are reported and quarantined, never guessed | `0021_net_identity.sql`. A lazy per-design migration writes a logical backup row (schematic + PCB + histories, sha256) in the same tx. Evidence is per copper island, with pour evidence (§3.10). Every reference that is not proven goes to `designer_net_identity_quarantine` and keeps its legacy value | S3, S6 |
+| A5 | Versioned migration with backup and provenance; ambiguous legacy bindings are reported and quarantined, never guessed | `0022_net_identity.sql`. A lazy per-design migration writes a logical backup row (schematic + PCB + histories, sha256) in the same tx. Evidence is per copper island, with pour evidence (§3.10). Every reference that is not proven goes to `designer_net_identity_quarantine` and keeps its legacy value | S3, S6 |
 | A6 | Dangling net references detected at command/import/export | Command: `NET_REFERENCE_DANGLING` / `NET_REFERENCE_AMBIGUOUS`. Ids are design-salted, so an id copied from another design is `foreign-design` (§3.2, §3.8). Import: quarantine plus a warning. Export: the gate plus non-overridable DRC `NET_ORPHANED_COPPER` (§3.11) | S7, S8, S9 |
 | A7 | Regression and property tests: moving or renaming an already-routed design loses no bindings | `designer-net-identity-t132.test.ts` (including delete-and-redraw), invariant-based `designer-net-identity-property.test.ts` (§7) | S13 |
 | A8 | Undo/redo and save/reopen preserve identities exactly | `designer.net_identity` world components. Cross-session contested members are sanitised deterministically (§3.6). Tests: undo/redo chains across sessions, the finding-1 scenario, reboot on the same DB | S5, S13 |
@@ -199,6 +199,7 @@ export type NetIdentityMode = "durable" | "legacy";   // durable ⇔ state row s
 export interface ActiveNetRecord {          // one entry of state.active_json (durable ids only)
   id: string;                               // net:<salt>:<seq>
   name: string;                             // display name at last commit (diagnostics only)
+  nameSource: "auto" | "override" | "gnd" | "pwr" | "portal" | "label";
   members: ElectricalMember[];              // canonical: sorted by JSON.stringify([kind,id])
   displayOverride?: string;                 // H14 import name; applies only while the net is auto-named
 }
@@ -226,7 +227,7 @@ export function isPendingNetId(id: string): boolean;                     // /^pe
 export function seqOf(id: string): number | null;
 ```
 
-**Migration `src/modules/designer/backend/migrations/0021_net_identity.sql`.** DDL only, with statements separated by `--> statement-breakpoint`. The migrator is name-set based, so this coexists with H14's and H13's `0021_*` files.
+**Migration `src/modules/designer/backend/migrations/0022_net_identity.sql`.** DDL only, with statements separated by `--> statement-breakpoint`. Migration `0021_pin_electrical_intent.sql` already owns the preceding slot; logical backups include its raw pin column.
 
 ```sql
 CREATE TABLE designer_net_identity_state (
@@ -306,6 +307,8 @@ export interface ElectricalIdentityInput {
   readonly retiredIds?: readonly string[];
   readonly allocateId: ElectricalNetAllocator;
   readonly successorPolicy: ElectricalSuccessorPolicy;            // NEW, required
+  /** Higher finite priority wins between different predecessors before overlap counts. */
+  readonly predecessorPriority?: (id: string) => number;
   /** NEW. Total preorder over predecessor ids; consulted only between pairs with different predecessors. */
   readonly comparePredecessors?: (firstId: string, secondId: string) => number;
 }
@@ -330,6 +333,7 @@ Algorithm. The canonicalisation, validation and overlap graph are unchanged.
 
 | # | Key | Order |
 |---|---|---|
+| 0 | `predecessorPriority(p.key)` (absent → 0; different predecessors only) | desc |
 | 1 | `pinOverlap(p,c)` | desc |
 | 2 | `memberOverlap(p,c)` | desc |
 | 3 | `pinCount(c)` | desc |
@@ -341,7 +345,7 @@ Algorithm. The canonicalisation, validation and overlap graph are unchanged.
    Successors not taken are allocated in canonical membership order. Predecessors not taken retire with the cluster reason. In a pure split the single predecessor is always taken.
 4. `preservedIds` includes inherited ids, and `createdIds` contains only fresh ids.
 
-Key 5 exists for the binder (§3.4): "more dependents first, then lower numeric seq". So the net that carries copper or assignments wins any pin-count tie, and `net:…:10` vs `net:…:9` never sorts by text.
+Key 0 implements the named-net decision in `DECISIONS.md`: the binder ranks a predecessor with explicit naming provenance above an automatic predecessor. The kernel does not inspect display names. Priorities are finite and evaluated once per predecessor in canonical ID order. A user label literally named `Net_5` is explicit. Key 5 exists for remaining ties: "more dependents first, then lower numeric seq". Thus `net:…:10` vs `net:…:9` never sorts by text. Invalid callback results fail before allocation.
 
 Existing tests pass `successorPolicy:"retire"`. New tests:
 - split keeper
@@ -384,7 +388,7 @@ export interface BindResult {
   nets: BoundNet[];                       // durable by seq, then nc by pinId, then pending by k
   nextActive: ActiveNetRecord[];          // durable only
   nextSeq: number;
-  inSync: boolean;                        // no durable created/retired/transition, durable membership unchanged
+  inSync: boolean;                        // persisted membership and naming metadata match; no pending identities or sanitisation
   createdIds: string[]; preservedIds: string[];     // durable only
   retirements: ElectricalNetRetirement[]; transitions: ElectricalNetTransition[];
   sanitized: Array<{ token: string; keptId: string; droppedFrom: string[] }>;
@@ -398,10 +402,11 @@ Steps:
    3. The lowest numeric seq.
    4. `compareText`.
 
-   Then remove the token from the other records and drop any record left empty. For a valid state row this is a no-op. Any sanitisation in commit mode from the state row is logged at error level, because it means the row was corrupt.
-2. **Fast path.** Index the records by their first canonical token. If every non-lone component's token list equals exactly one record's list, and every record is matched, return the identity mapping with `inSync:true` without calling the kernel. Lone components get `nc:` ids.
+   Then remove the token from the other records and drop any record left empty. This is for contested history-world inputs. Stored state requires unique ownership across records; a corrupt persisted row is reported as unavailable and preserved rather than silently discarding an identity and its provenance.
+2. **Fast path.** Index the records by their first canonical token. Match every persisted record, including a durable lone-pin record, against exact canonical membership. Unmatched lone components get `nc:` ids. If all records and non-lone components match, bypass the kernel and census; still refresh display names and naming provenance. `inSync` is true only when persisted naming metadata also matches. Removing or renaming a label must not leave stale merge priority.
 3. Otherwise call the kernel with:
    - `successorPolicy:"inherit-most-pins"`
+   - `predecessorPriority = id => previous[id].nameSource === "auto" ? 0 : 1`
    - `comparePredecessors = (a,b) => (dep(b)-dep(a)) || (seqNum(a)-seqNum(b))`, where `seqNum` of a non-durable id is `+∞`
    - `retiredIds: []`, because the watermark replaces it
    - the allocator: a lone component gets `nc:<pinId>`; otherwise commit mode gives `formatDurableNetId(salt, nextSeq++)` and read mode gives `pending:${k++}`
@@ -410,7 +415,7 @@ Steps:
 
 Display names. Sort order is durable by seq, then lone, then pending.
 1. A named net (`derivedName !== null`) uses `derivedName`, with `autoNamed:false`.
-2. Otherwise, a durable net with `displayOverride` uses the override, with `autoNamed:true`.
+2. Otherwise, a durable net with `displayOverride` uses the override, with `autoNamed:false` and `nameSource:"override"`. This follows the explicit-name decision in `DECISIONS.md`.
 3. Otherwise, a durable net uses `Net_<seq>`, a lone net uses `unconnected-(<pinLabel>)` (fallback `unconnected-(<pinId>)`), and a pending net uses `Net_pending_<k>`. All of these have `autoNamed:true`.
 4. Collision rule. Process the names in this order: named, then override, then auto. If `upper(name)` equals any name already taken, append the first free `_1`, `_2`, …. Display names are therefore unique case-insensitively across the projection, so boundary name resolution can never be ambiguous between a label and an auto or override name.
 
@@ -516,7 +521,7 @@ There is **no** `NET_IDENTITY_UNAVAILABLE` result. A non-active design runs in l
 `store.ts dispatchCommand`:
 1. Before the tx, call `ensureNetIdentity(db, designId, logger)` (§3.10.1). It never throws.
 2. Inside the tx, call `resolveIdentityMode`, then pass `identityMode` to `loadPcbProjection`-equivalent assembly and to `executeDesignerCommand` (`legalityFor`).
-3. After `executeDesignerCommand` (ok or not), in durable mode and unless the command is neutral, call `syncNetIdentity(tx, designId, result.ok ? result.revision : head.revision, ts)`. Attach `result.netIdentity` before the command-log insert.
+3. After `executeDesignerCommand` (ok or not), in durable mode and unless the command is neutral, call `syncNetIdentity(tx, designId, result.ok ? result.revision : head.revision, ts)`. Successful command results carry `netIdentity` before the command-log insert. A failed result must not introduce an identity change: if sync detects one, roll back the command transaction rather than committing unreported electrical mutations without a revision or history entry. Bulk placement moves validate every requested ID before their first write.
 4. The merge gate, history capture and `nextProjection` stay where they are.
 
 **Batch.** Steps read in read mode. Fragments created mid-batch show as `pending:`, or as `nc:` when lone, until the final sync. The boundary rejects pending ids.
@@ -534,10 +539,10 @@ There is **no** `NET_IDENTITY_UNAVAILABLE` result. A non-active design runs in l
 ### 3.6 History integration (S5) — exact undo/redo
 
 `projection-world.ts`:
-- `DesignerWorldComponent` += `{ type: "designer.net_identity"; payload: { id: string; members: ElectricalMember[]; displayOverride?: string } }`.
-- `projectionEntityComponents` emits the entity `net_identity:<id>` for **durable** ids only. Lone and pending ids are skipped.
+- `DesignerWorldComponent` += `{ type: "designer.net_identity"; payload: ActiveNetRecord }`. Preserve `name` and `nameSource` as well as membership and `displayOverride`; predecessor priority cannot be reconstructed from display text.
+- `projectionEntityComponents` emits the entity `net_identity:<id>` from an explicit active-record snapshot for **durable** ids only. Lone and pending ids are skipped. Pass complete before/after records to both schematic and combined history builders; public projection nets do not contain display overrides.
 - `worldEntityComponents` adds the type.
-- `projectionFromWorldWithIdentity(designId, revision, world, binder?)` reads the identity components as `previousActive`, derives, binds, and returns `{projection, bind}`. `projectionFromWorld` stays as a read-mode wrapper.
+- `projectionFromWorldWithIdentity(designId, revision, world, binder)` reads the identity components as `previousActive` and returns `{projection, bind, previousActive}`. The explicit binder selects read or commit mode. `projectionFromWorld` retains its legacy behavior for callers without identity state; an empty active set cannot determine the mode. Durable replay always supplies a binder.
 
 `store.ts applyHistoryPatches`:
 1. `ensureNetIdentity` first. Inside the tx, resolve the mode. Legacy mode replays exactly as today, with no binder.
@@ -545,7 +550,7 @@ There is **no** `NET_IDENTITY_UNAVAILABLE` result. A non-active design runs in l
 3. Call `combinedStateFromWorld(..., binder)`. The binder runs commit mode with:
    - `previousActive` = the world identity components;
    - `priorOwner` = the token→id map of the **DB state row before replay**;
-   - `dependentCount` = the census over the post-patch PCB rows;
+   - `dependentCount` = the census over the post-patch PCB rows, decoded from the patched world before the binder runs (or persisted earlier in the same transaction). Reading the old DB rows during `combinedStateFromWorld` would use the wrong dependents;
    - the watermark from the state row.
 4. `persistReplayIdentity`:
    - It writes `active_json` and `next_seq` and upserts ledger rows for the kernel retirements.
@@ -590,6 +595,7 @@ The active set is `{net.id ∈ projection.nets | isDurableNetIdOf(id, designId) 
 | trace/via add, route commit, autolayout apply | `netId` | null is OK; otherwise it must be active |
 | free pad add/update | `netId` | same |
 | `pcb_add_zone`, `pcb_update_zone` | `net` | `netId` present ⇒ it must be active; normalise to `{netId, netName:null}`. `netId` null + non-empty `netName` ⇒ resolve by unique case-insensitive trimmed **display** name over all nets (overrides and auto names included; unique by construction, §3.4). One match ⇒ `{match, null}`. None ⇒ DANGLING `unknown-name`. More than one (only possible with stale clients) ⇒ AMBIGUOUS |
+| `pcb_update_zone` enabling a disabled zone | effective stored `net` when omitted | Validate and normalize the effective reference before enabling it; re-enabling must not introduce orphaned copper through an omitted field |
 | `pcb_set_design_rules` | assignments, length groups, diff pairs, rule scopes | Only **newly introduced** refs are validated, so stale stored refs can be re-saved unchanged |
 
 Results:
@@ -612,17 +618,22 @@ Reason classification:
 
 Both codes are added to `results.ts`.
 
+For rule references, “unchanged” means the same owner and net ID: assignment key, length-group ID,
+differential-pair ID and member, or DRC-rule ID. Reordering a rule's net scopes does not introduce
+a reference, but copying a stale reference to another owner does. Boundary validation preserves
+structural errors for the existing strict rule validator instead of normalizing them away.
+
 Post-H08 native write rule:
 - Copper written by commands carries `netName:null`.
 - **`netId === null && netName` non-empty ⇔ unresolved binding**, and an enabled unresolved zone is copper (§3.9).
 
 S8 import seam (`import/kicad-project/commit.ts`, inside the tx after `insertSchematicEntities`):
 1. `nets = initializeNetIdentity(tx, designId, "kicad-import", ts)`.
-2. `resolvePerNetClassAssignments` matches **named nets only**. A duplicate name warns `kicad_netclass_assignment_ambiguous_net` and skips.
+2. `resolvePerNetClassAssignments` matches **named nets only**, using exact case-sensitive imported names. Generated automatic names are not identity evidence; an explicitly named `Net_5` remains eligible. A duplicate name warns `kicad_netclass_assignment_ambiguous_net` and skips.
 3. Settings are written once.
 4. `insertPcbEntities`.
 5. `resolveImportedNetHints`:
-   - A unique named match sets `netId` and keeps `netName` as provenance.
+   - A unique exact named match sets `netId` and keeps `netName` as provenance. Import never repairs spelling, case or whitespace by selecting another net. Blank hints remain unassigned.
    - Zero or several matches add a quarantine row (`unknown_name` / `ambiguous_name`), keep the row as is, and add the warning `kicad_net_unresolved` / `kicad_net_ambiguous`.
 6. The synthetic command log.
 
@@ -689,19 +700,20 @@ export function restoreLegacyNetIdentity(db: DbClient, designId: string,
 #### 3.10.1 `ensureNetIdentity` (never throws)
 - **Row `active` or `legacy_restored`:** return the status.
 - **Row `migration_failed`:**
-  - If `provenance.migratorVersion < NET_IDENTITY_MIGRATOR_VERSION`, delete the row and migrate again. This is the automatic retry after a fixed build.
+  - If `provenance.migratorVersion < NET_IDENTITY_MIGRATOR_VERSION`, migrate again while retaining the row and its allocation watermark until the transaction succeeds. This is the automatic retry after a fixed build.
   - Otherwise return `migration_failed`.
 - **No design head:** return `"unmigrated"`.
 - **Otherwise:** `db.transaction(tx => migrateDesignNetIdentity(tx, …))`. On error the tx rolls back and nothing changes. Then:
   - **Transient:** `error.code` ∈ {`SQLITE_BUSY`, `SQLITE_LOCKED`, `SQLITE_IOERR*`, `SQLITE_FULL`, `SQLITE_READONLY`, `SQLITE_CANTOPEN`, `SQLITE_INTERRUPT`}. Call `logger.warn` and return `"unmigrated"` **without writing**. The next entry point retries, and meanwhile the design runs in legacy mode.
   - **Concurrent:** `SQLITE_CONSTRAINT` on the state PK. Re-read and return the status.
-  - **Anything else is deterministic.** In a separate tx, insert `{status:"migration_failed", next_seq:1, active_json:"[]", provenance:{origin:"legacy-migration", createdAt, migratorVersion}, last_error: "<stage>: <message>"}`, call `logger.error`, and return `migration_failed`.
+  - **Anything else is deterministic.** In a separate tx, write `{status:"migration_failed", next_seq:watermark, active_json:"[]", provenance:{origin:"legacy-migration", createdAt, migratorVersion}, last_error: "<stage>: <message>"}`, call `logger.error`, and return `migration_failed`. The watermark is 1 only for a never-migrated design. Invalid or unsupported existing identity state must remain untouched and be reported as unavailable; it must never be mistaken for an absent state.
 
 Call sites:
 - the store's `getSchematicProjection`, `getPcbProjection`, `getBomProjection` and `getDesign`
 - `dispatchCommand` and `replayHistory` (before the tx)
 - `sdk.getManufacturingExportSummary`
-- **`cloud-sync.ts` `linkDesignToCloud` (before `:355`) and `pushCloudSnapshot` (before `:460`).** A cloud push therefore carries durable ids whenever migration can succeed. It never carries `pending:` ids, because in durable mode outside a batch the read is in sync.
+- **`cloud-sync.ts` `linkDesignToCloud` and `pushCloudSnapshot`, before compatibility checks and network writes.** The current cloud protocol does not preserve durable identity state: its projection normalizer drops the state envelope, and command handlers preserve stale derived net arrays. Refuse linked writes when identity state or its retirement ledger exists, including an empty active set or a restored allocation watermark. An in-flight historical acknowledgment cannot clear this unsupported-state error. Do not recover a migration revision gap by automatically pushing a snapshot: the peer lacks an expected-base/content-digest comparison and a higher revision can overwrite divergent remote work.
+- Cloud import is an explicitly unlinked new copy. Reject durable/pending/lone identity references or identity metadata before creating local rows until a versioned import protocol preserves membership, allocation watermarks, retirement history and overrides. A projection's net array alone cannot reconstruct that state.
 
 Recoverability of a failed migration:
 - The design stays fully editable in legacy mode, and export is blocked.
@@ -715,27 +727,41 @@ Recoverability of a failed migration:
    - Select the design's schematic parts, pins, wires, labels and primitives, its `designer_pcb_entities` rows and its `designer_session_histories` rows. This happens **before any write, legacy fill included**.
    - Build `payload_json` (§3.2) and its sha256.
    - `INSERT OR REPLACE` into `designer_net_identity_backups (design_id, 1, revisionBefore, …)`.
-3. **Legacy fill** (`fault?.("fill")`): `migrateLegacyBoardFill(tx, designId, legacyNetNames, ts, "name-hint")`, where `legacyNetNames` comes from `deriveNetsAndJunctions(loadSchematicSource(tx))`. The GND plane therefore arrives as a `"GND"` name hint and binds by name in step 6.
+3. **Legacy fill** (`fault?.("fill")`): call `migrateLegacyBoardFill` in name-hint mode, where `legacyNetNames` comes from `deriveNetsAndJunctions(loadSchematicSource(tx))`. Supply deterministic row IDs derived from the design ID and zone ID; ordinary callers retain their existing UUID allocation. The GND plane therefore arrives as a `"GND"` name hint and binds by name in step 6. Do not normalize or rewrite an unparseable board-settings row.
 4. **Derive** (`fault?.("derive")`):
-   - `deriveNetComponents`, then bind in commit mode with `previousActive=[]`, seq starting at 1, and the design salt. Allocation follows canonical membership order.
+   - First check source fidelity against the backup: dropped or malformed wire vertices, unknown primitive kinds and malformed declared rail/portal text must fail recoverably. A reader's recovery must not become authoritative connectivity. Preserve unknown extension fields without interpreting them.
+   - `deriveNetComponents`, then bind in commit mode with `previousActive=[]`, the retained allocation watermark, and the design salt. Raise that watermark above every exact own-design durable ID observed in the raw backup, including object keys and decoded PCB/history JSON. A never-migrated design starts at 1 only when no such IDs exist. Allocation follows canonical membership order. Re-migration must not recycle previously issued durable IDs or allocate an ID that an unproven raw reference already holds.
    - Maps:
      - `R: legacyRoot → id` (durable or `nc:`)
      - `named: upper(name) → id[]` (named nets only)
      - `legacyAuto: upper(legacyName) → legacyRoot[]` (auto-named components only)
 5. **Evidence** (`evidence.ts`, `fault?.("evidence")`):
    ```ts
-   export interface CopperIsland { itemIds: string[]; legacyIds: Set<string>; padNets: Set<string> }
+   export interface CopperIsland {
+     itemKeys: string[]; refKeys: string[]; legacyIds: Set<string>;
+     directPadNets: Set<string>; padNets: Set<string>; pourNetIds: Set<string>; pour: boolean;
+   }
    export function legacyContactEvidence(input: {
-     layerCount: PcbLayerCount; placements: PcbPlacedPart[];   // loadPcbPlacements(tx), NOT synced
-     padNetIds: ReadonlyMap<string, string>;                   // from correlateNetPads(bound schematic, placements)
-     traces: PcbTrace[]; vias: PcbVia[]; freePads: PcbFreePad[];
+     board: PcbBoardSettings;
+     placements: readonly PcbPlacedPart[]; // Unsynced snapshots, qualified for positive proof.
+     padNetIds: ReadonlyMap<string, string>; // Authoritative bound schematic correlation.
+     traces: readonly PcbTrace[]; vias: readonly PcbVia[]; freePads: readonly PcbFreePad[];
+     freeHoles: readonly PcbFreeHole[]; zones: readonly PcbZone[]; keepouts: readonly PcbKeepout[];
+     legacyRootIds: ReadonlyMap<string, string>;
+     netNames: ReadonlyMap<string, string>; // Target ID to legacy display name for rule evaluation.
      nameBoundZones: ReadonlyArray<{ zone: PcbZone; netId: string }>;  // enabled zones whose hint matched exactly one NAMED net
-   }): { islandOf: Map<string, CopperIsland>; islands: CopperIsland[] };
+     allowPourEvidence: boolean;
+   }): LegacyContactEvidence;
    ```
-   - Copy the traces, vias and free pads with `netId := null` on every foreign id. Run `copperDrcItems(boardCopperRecords(…))` → `buildEffectiveNets` to get islands. `padNets(I)` is the set of durable pad labels the island touches.
-   - **Pour evidence.** For an island with `padNets(I) = ∅`: if some `nameBoundZones` entry `Z→z` is on a layer of an item in `I`, and the effective area of `Z` (the `pcb-areas` derivation) contains a vertex or centre of that item, and every legacy id `S` in `I` has `R(S) = z`, then `padNets(I) := {z}` and the island is marked `pour`.
-     - Root agreement is required because a pour clears around foreign-net items, so region overlap alone proves nothing.
-     - This fixes the pour-only GND net with stitching vias.
+   - `LegacyContactEvidence` includes physical islands, `islandOf` keyed by physical item key,
+     `evidenceByRef` keyed by `JSON.stringify([kind, id])`, pooled root evidence and pour-disable
+     reasons. A free pad can occupy independent physical islands on different layers; reference
+     evidence aggregates them without inventing a plated connection.
+   - **Positive contact proof uses the fail-safe connectivity geometry.** Build records from the unsynced placements and authoritative schematic pad map, then `toCopperItems`. Keep schematic labels out of band and give proof items a common temporary net ID for `computeConnectivity`. Reject invalid layers/spans/types and inexact pad geometry as positive evidence. Unplated copper remains separate per layer and is not an authoritative schematic source. `padNets(I)` is the set of valid schematic pad labels touched by the physical component. DRC's layer clamping and `SHORT_EPS_MM` proximity are not positive connection proof.
+   - **Pour evidence requires actual pad-connected filled copper.** The evidence input additionally carries board settings, outline/cutouts, free holes, all zones/keepouts, legacy-root mappings and legacy display names for rule evaluation. A candidate island must have at least one legacy ID; every such ID must map to the same target, with no contradicting direct pad evidence. Hypotheses are constructed only in memory. All rules, holes, keepouts, thermal connections, priorities and island pruning go through the existing fill composition. Only independently name-bound zones contribute proof fills; other effective zones still provide exclusions. Parse losses or zone/keepout derivation warnings disable pour proof conservatively.
+     - An island gains pour evidence only when a successful filled connectivity component reaches an independently schematic-labelled pad of that target. Region overlap and `attached:true` are insufficient: the candidate via itself can make an otherwise isolated island "attached".
+     - Invalid/inexact geometry remains a fill obstacle but cannot supply proof. Failed/empty fills, null-only islands and disconnected copper islands supply no pour proof. Multi-layer free-pad references aggregate their independent item evidence conservatively.
+     - The frozen pour-only GND fixture proves four vias. A keepout around one via proves three; a board-spanning keepout proves only the two vias sharing the pads' island; `padConnection:"none"` proves none. These are mandatory regression cases.
    - Rule-side pooled evidence: `Eiso(S) = { x | island I carries S, padNets(I) = {x} }`. Shorted islands (`|padNets| ≥ 2`) are ignored here because they are a copper problem. Pooling per island means a root historically reused on two islands no longer produces a false `short`.
 6. **Classify** (`enumerateNetReferences` over copper rows and parsed settings):
    - **Foreign-id references** (`netId = S`): `r = R(S)`. For copper, `e = padNets(island of the item)`. For zones and rule refs, `e = Eiso(S)`.
@@ -755,30 +781,31 @@ Recoverability of a failed migration:
      - `|N| + |A| ≥ 2`: `ambiguous_name` with candidates. Pre-H08 first-match is never reproduced.
      - `0`: `unknown_name`.
 7. **Rewrite** (`fault?.("rewrite")`):
+   - Before writing, refuse a migration if a quarantined non-null reference already equals an active result ID. Reserving observed durable sequences prevents the allocation case; a colliding `nc:` reference must fail recoverably rather than appear bound merely because its string matches. Hidden physical rows that failed parsing and ambiguous payload identities also require recoverable failure. Never reinterpret a malformed declared net ID through a parser's null fallback.
    - Copper: set `netId` on bound refs, then **clear `netName` on `autoNameHint` bindings** (the auto name is meaningless). Keep `netName` on `nameHint` bindings as provenance.
    - Copper rows are updated in place (same id and `created_at`, new `updated_at`). Quarantined refs keep their legacy value **unchanged**.
-   - Board settings: when `readRawBoardSettingsRow` parses, map the bound refs on the parsed `PcbBoardSettings` and write once through `serializeBoardSettings(raw, next)`.
-     - `perNetClassAssignments`: re-key. When two legacy keys map to one id with different classes, keep the key whose legacy string sorts first by `compareText`, and quarantine the other as `assignment_conflict`.
+   - Board settings: plan bound-reference changes on parsed `PcbBoardSettings`, then patch only those reference fields into the original raw record and serialize through the shared `serializeRawBoardSettings` migration path. Require exact old-field matches and unique raw row identities for every touched declaration. Unknown scope metadata, malformed unrelated known values and unparsed array entries must survive. A normal typed settings save would normalize unrelated values and lose unknown scope keys when their net IDs change; it is not suitable for this automatic migration.
+     - `perNetClassAssignments`: re-key. When two legacy keys map to one id with different classes, bind the key whose legacy string sorts first by `compareText`; retain the losing declaration under its original legacy key and quarantine it as `assignment_conflict`. Deleting that declaration would immediately close its quarantine provenance and hide the unresolved assignment.
      - `lengthMatchGroups[].netIds`: map, dedupe, keep the order.
      - `diffPairs`: if p and n map to the same id, quarantine both as `diff_pair_collapsed` and leave the pair unchanged.
      - `drcRules` net scopes: map and dedupe.
-     - Unparseable raw settings: leave them, report `boardSettings:"unparseable"`, and continue.
-8. **Quarantine rows** (`fault?.("quarantine")`).
+     - Unparseable raw settings: leave them, report `boardSettings:"unparseable"`, and continue. Their canonical in-memory recovery can still expose references; refuse if any skipped recovered reference already equals an active result ID. Otherwise an unproven lone-pin assignment could silently become bound despite never appearing in the migration report.
+8. **Quarantine rows** (`fault?.("quarantine")`). Count each declared reference occurrence in the report, but deduplicate identical provenance primary keys before insertion. Reference IDs are entity IDs for copper and length groups, `perNetClassAssignments` for assignments, JSON tuples `[pairId, member]` for differential pairs, and `[ruleId, scopeIndex]` for DRC scopes. Preserve the exact original ID or name hint as `legacyValue`.
 9. **Histories:** delete the design's `designer_session_histories` (`fault?.("histories")`).
 10. **Head:** `revision = revisionBefore + 1`.
 11. **State:** insert `{status:"active", next_seq, active_json, provenance:{origin:"legacy-migration", migratorVersion, migration: report}}` (`fault?.("state")`).
 
 #### 3.10.3 Retry and restore
-- **Retry** (`retryNetIdentityMigration`) deletes the state row when it is `migration_failed` or `legacy_restored`, then calls `ensureNetIdentity`.
+- **Retry** (`retryNetIdentityMigration`) retries `migration_failed` or `legacy_restored` in a transaction while preserving the allocation watermark. It must not delete the only durable copy of that counter before migration succeeds.
 - **Restore** (the downgrade path) runs in one tx:
   1. Require state `active` and a backup row whose sha256 verifies.
   2. If `head.revision > provenance.migration.revisionAfter && !confirmDiscardRevisions`, throw `AppError(…, 409, "https://openpcb.dev/problems/net-identity-restore-discards-edits")`.
   3. **Replace every backed-up table's rows for the design with the backup rows verbatim**: schematic parts, pins, wires, labels and primitives, PCB entities, and session histories. Post-migration schematic edits are therefore really discarded, and the restored pre-migration undo stacks apply to the exact schematic they were recorded against.
-  4. Delete the quarantine and ledger rows.
-  5. Set state `{status:"legacy_restored", active_json:"[]", next_seq:1, provenance.restoredAt}`.
+  4. Delete quarantine rows. Retain the retirement ledger and add `history` retirements for the previously active durable IDs, with no successors.
+  5. Set state `{status:"legacy_restored", active_json:"[]", next_seq:watermark, provenance.restoredAt}`. Compute the watermark before replacing the active set. Restore must not reset allocation history and allow a stale ID to bind different circuitry after re-migration.
   6. Set `head.revision = current + 1`. The revision is monotonic and never rolled back, so DRC goes stale and the cloud shows the design as behind.
   - Restore leaves BOM overrides, comments, capture rows and the command log untouched (they are not net data, documented).
-  - Re-migration reproduces the original result: the same salt, seq from 1, deterministic order.
+  - Re-migration is deterministic for the complete input state, including its retained watermark. The original fixture migrates identically in fresh copies; restore followed by re-migration deliberately allocates fresh IDs above all previously issued IDs.
 
 Routes (S10):
 - `GET /designs/:designId/net-identity`
@@ -826,13 +853,17 @@ export function rewriteNetReferences(src: NetReferenceSource, map: (ref: NetRefe
 ```ts
 export function assertNetIdentityExportable(pcb: DesignerPcbProjection): void
 // throws AppError(…, 422, "Net identity unqualified", "https://openpcb.dev/problems/net-identity-unqualified",
-//   { code: "NET_IDENTITY_UNQUALIFIED", status, mode, orphanedCopperCount, inertRuleReferenceCount, groups: first 50 })
+//   { code: "NET_IDENTITY_UNQUALIFIED", identityStatus, mode, orphanedCopperCount, inertRuleReferenceCount, groups: first 50 })
 export function netIdentityExportSlots(pcb: DesignerPcbProjection): {
   orphanedCopper: Array<{ kind: "trace" | "via" | "zone" | "freePad"; id: string; retiredNetId: string }>;
   netIdentityBlocked: { status: string; mode: NetIdentityMode; inertRuleReferenceCount: number } | null;
 }
 ```
 The gate throws when `pcb.netIdentity?.exportBlocked !== false`.
+The extension uses `identityStatus` so RFC 7807's numeric HTTP `status` remains 422.
+While H19 is absent, only the direct gate is implemented. Before adding the future snapshot
+adapter, its copper slot must distinguish an inactive ID from an unresolved authored name;
+an unresolved name must not be mislabeled as a retired net ID.
 
 **S9 feature-detects H19.** Whether H19 has landed is the same as whether `DesignerStore.readExportSnapshot` exists.
 - **H19 absent:** wire `assertNetIdentityExportable` into `routes.ts` `pnp.csv` and `exports/gerber` right after `getPcbProjection`, and into `sdk.ts getManufacturingExportSummary`. `assertQualifiedManufacturing()` stays first.
@@ -846,10 +877,13 @@ The gate throws when `pcb.netIdentity?.exportBlocked !== false`.
 
 - S5: `isNamed` uses `autoNamed` (§3.5.4).
 - S12:
-  - `isNetMergeGatedCommand` adds `update_primitive_text`, `move_primitive` and `rotate_primitive`.
-  - **Default (Q3):** it also adds `move_part`, `update_wire_geometry` and the wire-segment drag command, gated by the same `needsConfirm` rule. That rule fires only when two or more **named** nets merge, so ordinary drags never prompt.
+  - Naming edits retain the existing protection for two named nets or two anonymous multi-pin nets. This includes the existing label/port commands and the added `update_primitive_text` command. The earlier assumption that `needsConfirm` covered only named nets was incorrect.
+  - Geometry changes require confirmation when two or more **named** nets merge: `move_primitive`, `rotate_primitive`, `move_part`, `rotate_part`, `mirror_part`, `update_wire_geometry`, `place_part`, `duplicate_part`, and `auto_arrange_schematic`. Wire-segment dragging uses `update_wire_geometry`; there is no separate command. Ordinary geometry edits involving only unnamed nets do not prompt.
+  - Runtime review reproduced an unconfirmed VCC/GND merge through `move_part`, a naming merge through `update_primitive_text`, and a part inserted at an interior wire crossing that joined two previously separate named nets. Rotation and mirroring share the part endpoint-update path. Primitive rotation is currently topology-neutral but retains the geometry policy for consistency.
+  - Explicit `create_wire` and `create_wire_junction` keep their existing intentional-connection policy. Footprint refresh changes only the PCB footprint snapshot, not schematic pin positions, so it does not enter this gate.
   - Each command gains `confirmMerge?: boolean` and an HTTP parser.
-  - The frontend coordinator already re-sends `NET_MERGE_REQUIRES_CONFIRM` after confirmation.
+  - The frontend coordinator retries after confirmation with a fresh command ID and the same base revision. For a batch, confirmation must be applied to its steps; a flag on the batch wrapper is ignored by the backend.
+  - The existing batch gate compares the dispatch's before state with its final state. A batch containing any unconfirmed naming step uses the broader naming policy; a geometry-only batch uses the named-net policy. This deliberately preserves conservative behavior for mixed batches rather than introducing a separate per-step topology orchestrator.
 
 ### 3.13 Repair command (S10)
 
@@ -871,15 +905,44 @@ Validation:
 - `to` is active or null.
 - Errors: `NET_REFERENCE_DANGLING` (`field: "bindings[i].toNetId"`), or `INVALID_PCB_BOARD_SETTINGS` for malformed input.
 
-Apply (`rewriteNetReferences` + the existing row writers + `serializeBoardSettings`):
+Apply a simultaneous rewrite planned against the original stored references. Require durable mode;
+legacy designs must retry migration before repair. Plan all changes before writing any row.
+Ordinary typed copper writers and combined-world history cannot be used here: they discard unknown
+stored fields. Patch reference fields into the original raw records and use the shared
+`serializeRawBoardSettings` policy for board settings.
 - Copper with `to !== null`: set `netId = to` and keep `netName`. This includes disabled zones. A disabled zone is never re-enabled; enabling stays a user action.
 - Copper with `to === null`: traces, vias and free pads become `netId = null, netName = null`. Zones become `netId = null, netName = null, enabled = false` (listed in `disabledZones`).
-- Assignments: re-key `from → to`. If `to` already has one, the existing assignment wins. Null removes the key.
+- Assignments: re-key `from → to`. If `to` already has one, the existing assignment wins. Null removes the key. When multiple sources map to an unassigned target, equal classes coalesce; different classes refuse the complete command as ambiguous.
 - Length groups: map and dedupe. A group left empty is removed.
 - Diff pairs: map. If p equals n, or either is null, the pair is removed.
 - Rule net scopes: map and dedupe. A rule whose net scope becomes empty is removed, because an empty scope would mean "everything".
 - Every removal is reported.
 - The panel's "Drop all inert assignments" sends `{fromNetId, toNetId:null}` for every rule-only group.
+
+Counts report changed physical rows or declarations once; assignments count affected source keys.
+`disabledZones` lists every matched zone cleared, including an already disabled zone. An unmatched
+source is an accepted no-op: it follows the existing command revision/idempotency policy but creates
+no undo entry. Non-null sources match by ID alone; null sources match the exact untrimmed name hint.
+
+Repair history uses one reserved, versioned `component.set` carrier per direction, bound to the
+design and repair command. It never enters generic ECS patch replay. Copper deltas record the DB row
+ID, kind, payload ID and exact before/after own-field presence and values for `netId`, `netName` and
+zone `enabled`. Board deltas record only affected top-level reference sections: assignments, length
+groups, differential pairs and DRC rules. Their complete raw sections preserve removed rows, order
+and unknown metadata. Undo therefore conservatively conflicts with intervening changes in an
+affected board section, while preserving unrelated board settings and current copper geometry.
+
+Replay strictly validates the carrier, design, row identity, allowed fields and every expected value
+before writing. A mismatch returns HTTP 409 with `NET_REBIND_HISTORY_CONFLICT`; the transaction keeps
+rows, revision and persisted undo/redo stacks unchanged. Valid replay changes only those fields,
+advances the current revision once and persists history. Active identity records, retirement history
+and allocation counters remain unchanged. Historical inactive references may be restored without
+passing the authoring boundary again. Absent fields remain distinct from explicit null.
+
+The status GET is read-only and does not trigger migration or placement synchronization. Explicit
+migrate and restore routes use the existing retry and restore coordinators. Invalid restore
+provenance or backup returns 422; discarding post-migration edits still requires explicit confirmation
+after the existing 409 response.
 
 ### 3.14 Frontend (S11)
 
@@ -905,7 +968,7 @@ Tier key: standard / careful / critical. Each slice ends with `npm run typecheck
 | **S0** | Capture legacy fixtures on the pre-H08 tree. **Runs strictly first, alone** | `scripts/capture-legacy-net-fixtures.ts` (new); `src/core/backend/tests/fixtures/legacy-net-ids/{f1-routed-clean,f2-t132-stale,f3-name-hints,f9-pour-only-gnd}.json` | 280 + data | none | standard | — | none |
 | **S1** | Kernel successor policy, `comparePredecessors`, transitions | `src/shared/electrical-identity/{types,reconcile,index}.ts`; `electrical-identity.test.ts` (helper adds `"retire"`); `electrical-identity-inherit.test.ts` | 200 + 320 test | §3.3 list | critical | S0 | ∥ S2, S3 |
 | **S2** | Reference kernel (`refClass`, disabled zones) | `references.ts` (not exported from `index.ts`); SDK `DesignerNetReferenceSite`; `electrical-identity-references.test.ts` | 210 + 230 test | order, verdicts per class, rewrite immutability, every site | careful | S0 | ∥ S1, S3 |
-| **S3** | Schema, state store, id helpers | `0021_net_identity.sql`; `schema.ts`; `net-identity/{types,state-store}.ts`; `store.ts` (deleteDesign) | 140 + 240 + 170 test | `designer-net-identity-store.test.ts`: round-trips, watermark query, salt/id helpers (regex, cross-design rejection), delete cascade, migration on boot | critical | S0 | ∥ S1, S2 |
+| **S3** | Schema, state store, id helpers | `0022_net_identity.sql`; `schema.ts`; `net-identity/{types,state-store}.ts`; `store.ts` (deleteDesign) | 140 + 240 + 170 test | `designer-net-identity-store.test.ts`: round-trips, watermark query, salt/id helpers (regex, cross-design rejection), delete cascade, migration on boot | critical | S0 | ∥ S1, S2 |
 | **S4** | Derivation split + pure binder | `projection-world.ts` (`deriveNetComponents`, `legacyName`); `net-identity/bind.ts`; SDK `autoNamed` | 170 + 300 + 320 test | `designer-net-identity-bind.test.ts`: move keeps ids; lone pins → `nc:`, no seq spent; inherited lone stays durable; sanitise (all four keys, empty-record drop); fast path equals the kernel result; collision order named > override > auto; override ignored when named; comparator (dependents, then numeric seq). S1 suites unchanged | critical | S1, S3 | — |
 | **S6** | Legacy migration, evidence, restore (functions only) | `net-identity/{migrate,evidence}.ts`; `designer-net-identity-migration.test.ts` calls **`migrateDesignNetIdentity` directly** inside `db.transaction`, never `ensureNetIdentity` | 480 + 520 test | §7 matrix with S0 fixtures + synthetic F4–F8, per-stage fault injection, reproducibility, restore round-trip | critical | S2, S3, S4 | — (merges before S5) |
 | **S5** | Wiring: mode, read path, sync, census, history, init, ensure, legacy mode, removal of projection binding | `projection-read.ts`; `net-identity/{sync,census,ensure,legacy-mode,index}.ts`; `projection-world.ts` (component, binder plumbing); `store.ts`; `design-initialization.ts`; `cloud-sync.ts` (2 ensure calls); `results.ts`; `pcb/pcb-projection.ts` (mode split); `pcb/pcb-store.ts` (`migrateLegacyBoardFill` mode); `command-executor.ts` (`identityMode` into `legalityFor`, comments); `net-merge-guard.ts` (`isNamed`); SDK result/event types; **`frontend/lib/designer-recovery-record.ts` `DESIGNER_RECOVERY_EPOCH` bump if the file exists** (otherwise record "P103 starts at epoch ≥ 2" in the commit message); update `designer-pcb-zones-http.test.ts` (Net_1 collision cases → collision suffix + durable binding), `pcb-board-fill-migration.test.ts` (bound mode) | 750 (one merge unit, ≤2 commits) | `designer-net-identity-sync.test.ts` (neutral skip + dev assertion, watermark, events, display overrides); `designer-net-identity-history.test.ts` (undo/redo chains, **finding-1 cross-session scenario**, reboot); `designer-net-identity-legacy-mode.test.ts` (failed state: edits allowed, legacy binding, export blocked, transient error writes no row, migrator-version auto-retry, cloud push after ensure has no `pending:`) | critical | S4, S6 | — |
@@ -914,7 +977,7 @@ Tier key: standard / careful / critical. Each slice ends with `npm run typecheck
 | **S9** | Orphan DRC, diff-pair guard, summary, export gate (H19 feature-detect) | `shared/drc/checks/net-binding.ts`; `shared/drc/{severity,code-registry,drc-engine,diff-pair-resolver}.ts`; `shared/drc/checks/signal-integrity.ts`; SDK `DrcRuleCode`, summary types; `net-identity/{summary,export-gate}.ts`; `pcb/pcb-projection.ts` (one assignment); `routes.ts` + `sdk.ts`, **or** `store.ts readExportSnapshot` + H19 blocker file when H19 is present; `drc-labels.ts` | 380 + 300 test | `drc-net-binding.test.ts` (per copper kind, disabled zone skipped, non-overridable); `diff-pair-resolver` unknown-net test; `designer-net-identity-export.test.ts` (orphan, inert rule ref, legacy mode → one 422 each); DRC census green | careful | S8 | — |
 | **S10** | Rebind command + routes | `net-identity/rebind.ts`; `command-executor.ts`; `commands/batch.ts`; `routes.ts`; SDK; `results.ts` | 400 + 320 test | `designer-net-identity-rebind.test.ts` (each site, `nc:` source, disabled zones, conflicts, null target, undo/redo); routes for status/migrate/restore (restore discards a schematic edit with confirm, 409 without) | careful | S9 | — |
 | **S11** | Frontend | §3.14 files: `command-coordinator.ts`; `net-identity/{net-identity-activity-store.ts, net-identity-model.ts, NetIdentityPanel.tsx, *.test.ts}`; `DesignerDrcView.tsx`; DRC toolbar badge; `api.ts`; `area-tool-options.ts` (+spec); `PcbSelectionInspector.tsx` (`NetSelect`) | 480 | Vitest: model, panel, activity store, coordinator (toast iff `hasDependents`, list always), `NetSelect` prefers `netId` | standard | S10 | ∥ S12 |
-| **S12** | Merge gate extension | `net-merge-guard.ts`; SDK fields on 6 commands; `routes.ts` parsers; `designer-net-merge-guard.test.ts` + HTTP | 120 + 160 test | primitive text collision → confirm; `move_part` shorting VCC/GND → confirm; a drag merging an unnamed net → no prompt | standard | S10 | ∥ S11 |
+| **S12** | Merge gate extension | `net-merge-guard.ts`; SDK fields on 10 additional commands; `routes.ts` parsers; coordinator batch confirmation; backend, HTTP and coordinator tests | 120 + 160 test | All 14 gated commands use the naming or geometry policy in §3.12; refusal rolls back identity and history; confirmed batch retries put consent on individual steps | standard | S10 | ∥ S11 |
 | **S13** | Regression, property, persistence, e2e | `designer-net-identity-{t132,property,reopen}.test.ts`; `tests/e2e/pcb-net-identity.spec.ts` | 750 | §7 | critical | S11, S12 | — |
 | **S14** | Docs | `designer/AGENTS.md`; `docs/designer/net-identity.md`; `docs/pcb-hardening/01-connectivity-contract.md` §2; `CAPABILITY-QUARANTINE.md`; type doc comments | 280 | typecheck | standard | S13 | ∥ S13 tail |
 
@@ -949,13 +1012,13 @@ Parallel-safe order: S0 → {S1, S2, S3} → S4 → S6 → S5 → S7 → S8 → 
 9. **Pending leak.** `pending:3` → DANGLING `pending`.
 10. **Id from another design.** DANGLING `foreign-design`.
 11. **Corrupt `next_seq`.** The watermark takes the max with the ledger and active seqs.
-12. **Corrupt `active_json` (a member in two records).** Sanitised and logged at error level, so it cannot throw.
+12. **Corrupt `active_json` (a member in two records).** Stored-state validation refuses it; ensure reports unavailable without changing raw evidence or allocation history. Mode resolution keeps the design in degraded legacy mode. Contested history-world records remain valid binder inputs and are sanitised before persistence.
 13. **Empty or schematic-only design.** The state becomes active, the backup holds empty arrays, and the revision bumps.
-14. **Unparseable settings.** Skipped and reported. `ensurePcbBoardSettings` resets them later, which is pre-existing behaviour.
+14. **Unparseable settings.** Skipped and reported. Readers recover usable fields and defaults in memory while retaining the raw row and read diagnostics; they do not overwrite malformed stored evidence on read.
 15. **Unknown future board-setting keys.** `serializeBoardSettings` carries them.
 16. **Legacy waivers on net-anchored violations.** They lapse. Documented.
 17. **Comments and dataset capture.** Untouched.
-18. **Cloud-linked designs.** Ensure runs before the cloud push, so the push carries durable ids. The migration bumps the revision outside `mirrorCommand`, so the cloud replica's command mirror is behind for that revision. Documented for the cloud-sync owner.
+18. **Cloud-linked designs.** Ensure runs before link or snapshot checks. The current peer cannot preserve durable identity state or allocation history, so cloud writes are refused after initialization or migration, including empty native designs. Existing links retain the preservation error. A future versioned protocol must preserve the complete identity envelope before these writes can resume.
 19. **Downgrade without restore.** An older build sees `net:` ids as unknown, so its copper looks stale. The supported path is restore.
 20. **PCB-only import.** Every hint is quarantined `unknown_name`, which blocks export.
 21. **Same label on two KiCad sheets.** This is an H14 defect (§8).
@@ -1009,7 +1072,7 @@ OPENPCB_E2E_NO_WEBSERVER= npx playwright test tests/e2e/pcb-net-identity.spec.ts
 Baseline before S1: the six S1-adjacent suites pass (59 pass / 0 fail at d5547f9, per the review).
 
 Bun suites:
-- **`designer-net-identity-t132.test.ts`.** Build F1 via the SDK, then assert byte-equal copper netIds, settings refs, the DRC `(code,id)` list and an empty ratsnest after each of:
+- **`designer-net-identity-t132.test.ts`.** Build a routed native fixture through the SDK. Assert unchanged copper net IDs and settings references after each operation below. Schematic pose and refdes edits that preserve the electrical partition must also preserve the PCB DRC `(code,id)` list and ratsnest. Moving a PCB placement can physically disconnect routed pads: that case checks identity preservation and absence of new orphan-identity errors, not an empty ratsnest or unchanged geometry diagnostics.
   - (a) `move_part`
   - (b) `rotate_part`
   - (c) `mirror_part`
@@ -1020,12 +1083,12 @@ Bun suites:
   - **(k) delete the only wire of a routed 2-pin net, then redraw it.** The same id, and the copper stays bound.
   - **(l) two durable 1-pin nets with equal pins merge, and only one has copper.** The copper-carrying id survives, including when its seq is `…:10` against `…:9`.
 - **`designer-net-identity-property.test.ts`.** 100 seeds × 25 steps (move, rotate, mirror, rename, add/delete wire, add/delete label, undo, redo, reboot every 10). Invariants are checked after every step. **No reimplementation of §3.3:**
-  1. If the pin partition is unchanged, every id per pin set is unchanged and every previously bound reference is still bound.
-  2. For every split transition, the kept successor has the maximum pin overlap with the predecessor among its successors. For every merge, the surviving predecessor has the maximum pin overlap with the successor.
+  1. If the pin partition is unchanged, every prior durable ID per pin set is unchanged and its previously bound references remain bound, except during intentional historical restoration. A fresh lone pin may legitimately move from `nc:` to a durable ID when a label or wire adds another member; that promotion must report old `nc:` copper as unresolved and suggest the current pin owner.
+  2. For a simple split, the kept successor has the maximum pin overlap with its predecessor. For a simple merge, the surviving predecessor has the maximum pin overlap among predecessors with the highest naming priority. General many-to-many transitions follow the deterministic greedy contract in §3.3; they do not promise an independent maximum for every predecessor.
   3. No id is both inherited and retired in one result.
   4. Permutation invariance: re-running `bindNetIdentity` on shuffled `components` and `previousActive` gives a deep-equal result.
   5. No ledger id ever appears in `createdIds`, and `next_seq` never decreases.
-  6. The persisted state has no `pending:` or `nc:` id.
+  6. Persisted active identity records contain only durable IDs. No provisional `pending:` reference is persisted. Valid `nc:` references remain supported in PCB data and transition successors.
   7. Display names are unique case-insensitively.
   8. The set of copper items on inactive ids equals the set of `NET_ORPHANED_COPPER` anchors.
 - **`designer-net-identity-history.test.ts`:**
@@ -1057,10 +1120,11 @@ Vitest:
 - `area-tool-options.spec.ts`: `netRefForPick` always gives `{netId, null}`
 
 E2E `tests/e2e/pcb-net-identity.spec.ts`:
-1. Seed two capacitors and a wire, then route via the API.
-2. Drag the part in the UI. The trace `netId` is unchanged and the ratsnest is empty.
-3. Draw a wire joining the routed net to a larger net. The merge toast appears, the "Orphaned copper" section shows, and Rebind clears `NET_ORPHANED_COPPER`.
-4. Undo shows no toast. Reload keeps the ids.
+1. Seed native drawn two-pin parts, a routed two-pin net and a larger three-pin net with equal naming priority. Assign class, length and scoped DRC references through the API.
+2. Drag a part in the UI and verify its acknowledged move, stable net IDs and rules, and no airwire for the routed net. Reload retains those bindings.
+3. Rename the routed label to the larger net's name through the Outline UI. Verify merge refusal, explicit confirmation, the acknowledged merge event, toast and unread badge, and the retired source in the identity panel. This scenario exercises the naming merge gate; geometry gates have separate backend regressions.
+4. Accept the panel's explicit successor suggestion. Verify the repair receipt, unchanged trace geometry and disappearance of `NET_ORPHANED_COPPER`.
+5. PCB-session Undo restores the original references and orphan diagnostic without an identity-change toast; Redo restores the repair. Reload retains the repaired IDs.
 
 ---
 

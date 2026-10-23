@@ -437,6 +437,9 @@ function worldKey(xNm: number, yNm: number): string {
 function powerSymbolToPrimitive(
   power: ParsedKicadSchPowerSymbol,
 ): DesignerPrimitive | null {
+  // Inspect surfaces the parser's omission warning. A flag asserts a local
+  // source; naming a rail after its Value would short unrelated supplies.
+  if (power.libId === "power:PWR_FLAG") return null;
   const positionNm = mmPointToNm(power.at);
   const rotationDeg = normalizeRotationDeg(power.rotationDeg);
   // Canonical ground only. Variants like GND1 / GNDA / GNDREF stay distinct

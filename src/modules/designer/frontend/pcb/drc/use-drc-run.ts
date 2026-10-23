@@ -73,6 +73,7 @@ export function createDrcRunController(params: {
   let stream: EventSource | null = null;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
+  let startPending = false;
   /** Set once this controller has seen (or synthesised) a terminal state. */
   let finished = false;
 
@@ -94,12 +95,17 @@ export function createDrcRunController(params: {
   }
 
   async function finishCompleted(): Promise<void> {
+    const runId = store.getState().run?.runId;
+    const stillCurrent = (): boolean => {
+      const current = store.getState().run;
+      return !disposed && current?.runId === runId && current?.designId === designId;
+    };
     try {
       const report = await api.getDrcResult(designId);
-      if (disposed) return;
+      if (!stillCurrent()) return;
       store.getState().completeRun(report);
     } catch (err) {
-      if (disposed) return;
+      if (!stillCurrent()) return;
       store.getState().failRun(errorMessage(err, "DRC report unavailable"));
     }
   }
@@ -227,17 +233,24 @@ export function createDrcRunController(params: {
     async start(): Promise<void> {
       if (disposed) return;
       const active = store.getState().run;
-      if (isDrcRunActive(active) && active.designId === designId) return;
+      if (
+        store.getState().starting ||
+        (isDrcRunActive(active) && active.designId === designId)
+      ) return;
       teardown();
       finished = false;
+      startPending = true;
+      store.getState().beginStart();
       let snapshot: DrcRunSnapshot;
       try {
         snapshot = await api.startDrcRun(designId);
       } catch (err) {
+        startPending = false;
         if (disposed) return;
         store.getState().failRun(errorMessage(err, "DRC run failed to start"));
         return;
       }
+      startPending = false;
       if (disposed) return;
       store.getState().beginRun(snapshot);
       if (!isDrcRunActive(snapshot)) {
@@ -254,6 +267,10 @@ export function createDrcRunController(params: {
       try {
         const snapshot = await api.cancelDrcRun(designId, current.runId);
         if (disposed) return;
+        if (!isDrcRunActive(snapshot)) {
+          handleTerminalSnapshot(snapshot);
+          return;
+        }
         // Cooperative: the run is terminal only once the backend says so, so
         // keep listening and just record whatever came back.
         store.getState().applyRunSnapshot(snapshot);
@@ -265,6 +282,7 @@ export function createDrcRunController(params: {
 
     dispose(): void {
       disposed = true;
+      if (startPending) store.setState({ starting: false });
       teardown();
     },
   };

@@ -92,6 +92,7 @@ import {
   PrimitiveGhost,
   SchematicPrimitivesLayer,
 } from "./SchematicPrimitivesLayer";
+import { PinElectricalIntentMarkers } from "./PinElectricalIntentMarkers";
 import {
   LABEL_STEM_MM,
   SchematicAttachAnchor,
@@ -3896,6 +3897,13 @@ function SchematicScene({
               </group>
             );
           })}
+
+          <PinElectricalIntentMarkers
+            parts={parts}
+            renderedPartPositionNm={renderedPartPositionNm}
+            noConnectColor={t.labelColor}
+            powerSourceColor={t.primitivePwrColor}
+          />
 
           {labels.map((label) => {
             const selected = selection.labelIds.has(label.id);

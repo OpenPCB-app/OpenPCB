@@ -14,8 +14,18 @@ import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
 import { MentionRegistry } from "../mentions";
+import { dispatchOk } from "./helpers/designer-runtime";
 
 const SESSION = "designer-pcb-view-state";
+
+async function seedActiveNets(sdk: DesignerSDK, designId: string, count: number): Promise<string[]> {
+  for (let index = 0; index < count; index++) await dispatchOk(sdk, designId, {
+    type: "upsert_label", text: `Fixture net ${index}`, positionNm: { x: index * 10_000_000, y: 100_000_000 },
+  });
+  const projection = (await sdk.getSchematicProjection(designId))!;
+  expect(projection.nets).toHaveLength(count);
+  return projection.nets.map((net) => net.id);
+}
 
 function isolateTestDb(testLabel: string): void {
   resetSharedSqliteForTesting();
@@ -204,6 +214,7 @@ describe("designer PCB view-state persistence", () => {
     );
     expect(patched.ok).toBe(true);
 
+    const [netId] = await seedActiveNets(sdk, designId, 1);
     // A lone trace is dangling at both ends — a `dfm` code, now suppressed.
     const rev = (await sdk.getPcbProjection(designId))?.revision ?? null;
     const added = await sdk.dispatchCommand(
@@ -216,7 +227,7 @@ describe("designer PCB view-state persistence", () => {
           { x: 1_000_000, y: 0 },
         ],
         widthMm: 0.25,
-        netId: "n1",
+        netId: netId!,
         netClassId: "default",
         segmentMode: "manhattan-90",
       }),
@@ -322,27 +333,28 @@ describe("designer PCB view-state persistence", () => {
   test("diff-pair rows survive save/reload, couplingMaxGapMm included", async () => {
     // SI contract 14 §4.2: the coupling window is a stored, per-pair field. A
     // dropped one silently falls back to `4 · gap + 0.1`, which is a different
-    // rule than the one the user wrote; a stored 0 would mean "nothing
-    // couples" and turn every pair's whole length into uncoupled run, so it is
-    // refused like every other malformed optional number.
+    // rule than the one the user wrote. An omitted window retains its default;
+    // explicitly invalid values are refused at the command boundary.
     const { sdk, designId } = await createDesignerSdk("pcb-diff-pairs");
+    const [p, n, a, b] = await seedActiveNets(sdk, designId, 4);
+    const revision = (await sdk.getPcbProjection(designId))!.revision;
     const result = await sdk.dispatchCommand(
       designId,
-      envelope(designId, "cmd-diff-pairs", 0, {
+      envelope(designId, "cmd-diff-pairs", revision, {
         type: "pcb_set_design_rules",
         diffPairs: [
           {
             id: "dp1",
             name: "USB",
-            pNetId: "p",
-            nNetId: "n",
+            pNetId: p!,
+            nNetId: n!,
             gapMm: 0.15,
             gapTolMm: 0.02,
             maxUncoupledMm: 4,
             maxSkewMm: 0.25,
             couplingMaxGapMm: 1.25,
           },
-          { id: "dp2", name: "CLK", pNetId: "a", nNetId: "b", couplingMaxGapMm: 0 },
+          { id: "dp2", name: "CLK", pNetId: a!, nNetId: b! },
         ],
       } as never),
     );
@@ -476,6 +488,7 @@ describe("designer PCB view-state persistence", () => {
     // requirement AND the row that would have explained it. Contract 13 §2:
     // malformed input is reported, never dropped.
     const { sdk, designId } = await createDesignerSdk("pcb-net-class-inverted");
+    const [hvNetId, sigNetId] = await seedActiveNets(sdk, designId, 2);
     const baseProj = await sdk.getPcbProjection(designId);
     const classes = baseProj!.board.netClasses;
     // NOT the default class: `sig` below resolves to that one, and two distinct
@@ -497,7 +510,7 @@ describe("designer PCB view-state persistence", () => {
           netClasses: classes.map((c, i) =>
             i === hvIndex ? { ...c, voltageMinV, voltageMaxV } : c,
           ) as never,
-          perNetClassAssignments: { hvn: hv },
+          perNetClassAssignments: { [hvNetId!]: hv },
         }),
       );
       expect(res.ok).toBe(true);
@@ -509,11 +522,11 @@ describe("designer PCB view-state persistence", () => {
       runDrc({
         ...baseProj!,
         board,
-        netNames: { hvn: "HV_RAIL", sig: "SIG" },
+        netNames: { [hvNetId!]: "HV_RAIL", [sigNetId!]: "SIG" },
         traces: [
           {
             id: "t_hv",
-            netId: "hvn",
+            netId: hvNetId!,
             netClassId: hv,
             layer: "F.Cu",
             widthMm: 0.2,
@@ -525,7 +538,7 @@ describe("designer PCB view-state persistence", () => {
           },
           {
             id: "t_sig",
-            netId: "sig",
+            netId: sigNetId!,
             netClassId: "default",
             layer: "F.Cu",
             widthMm: 0.2,
@@ -904,14 +917,15 @@ describe("designer PCB view-state persistence", () => {
     const { sdk, server, designId } = await createDesignerHttp(
       "pcb-per-net-class-http",
     );
+    const [powerNetId, bogusClassNetId] = await seedActiveNets(sdk, designId, 2);
     const rev0 = (await sdk.getPcbProjection(designId))?.revision ?? null;
     // Routed through the real parser — if parsePcbSetDesignRulesCommand did NOT
     // forward perNetClassAssignments, the field would silently vanish here.
     const res = await postCommand(server, designId, rev0, {
       type: "pcb_set_design_rules",
       perNetClassAssignments: {
-        "net-power": "power",
-        "net-bogus": "does-not-exist",
+        [powerNetId!]: "power",
+        [bogusClassNetId!]: "does-not-exist",
       },
     });
     expect(res.status).toBe(200);
@@ -919,41 +933,26 @@ describe("designer PCB view-state persistence", () => {
     const proj = await sdk.getPcbProjection(designId);
     // Known class persists; the unknown class id is dropped on persist.
     expect(proj?.board.perNetClassAssignments).toEqual({
-      "net-power": "power",
+      [powerNetId!]: "power",
     });
   });
 
-  test("lengthMatchGroups round-trip: persist, drop malformed, clear", async () => {
+  test("lengthMatchGroups round-trip: persist, retain on unrelated write, clear", async () => {
     const { sdk, server, designId } = await createDesignerHttp(
       "pcb-length-groups-http",
     );
+    const netIds = await seedActiveNets(sdk, designId, 2);
     const rev0 = (await sdk.getPcbProjection(designId))?.revision ?? null;
-    // Through the real parser: one valid group, one malformed (no name), one
-    // with a bad absolute target — only the valid one persists.
+    // New rules pass through the same strict validator as direct SDK writes.
     const res = await postCommand(server, designId, rev0, {
       type: "pcb_set_design_rules",
       lengthMatchGroups: [
         {
           id: "ddr",
           name: "DDR data",
-          netIds: ["n1", "n2", ""],
+          netIds,
           target: { kind: "longest" },
           toleranceMm: 0.5,
-        },
-        // Malformed on purpose (no name) — the store must drop it.
-        { id: "broken", netIds: ["n3"] } as unknown as {
-          id: string;
-          name: string;
-          netIds: string[];
-          target: { kind: "longest" };
-          toleranceMm: number;
-        },
-        {
-          id: "clk",
-          name: "CLK",
-          netIds: ["n4"],
-          target: { kind: "absolute", mm: -5 },
-          toleranceMm: 0.1,
         },
       ],
     });
@@ -964,7 +963,7 @@ describe("designer PCB view-state persistence", () => {
       {
         id: "ddr",
         name: "DDR data",
-        netIds: ["n1", "n2"], // empty net id dropped
+        netIds,
         target: { kind: "longest" },
         toleranceMm: 0.5,
       },
@@ -1296,10 +1295,11 @@ describe("designer PCB view-state persistence", () => {
     const { sdk, server, designId } = await createDesignerHttp(
       "pcb-per-net-class-apply",
     );
+    const [netId] = await seedActiveNets(sdk, designId, 1);
     const rev0 = (await sdk.getPcbProjection(designId))?.revision ?? null;
     await postCommand(server, designId, rev0, {
       type: "pcb_set_design_rules",
-      perNetClassAssignments: { n1: "power" }, // power class width = 0.5 mm
+      perNetClassAssignments: { [netId!]: "power" }, // power class width = 0.5 mm
     });
 
     const rev1 = (await sdk.getPcbProjection(designId))?.revision ?? null;
@@ -1313,13 +1313,13 @@ describe("designer PCB view-state persistence", () => {
         { x: 1_000_000, y: 0 },
       ],
       widthMm: 0.25,
-      netId: "n1",
+      netId: netId!,
       netClassId: "default",
       segmentMode: "manhattan-90",
     });
 
     const proj = await sdk.getPcbProjection(designId);
-    const trace = proj?.traces.find((t) => t.netId === "n1");
+    const trace = proj?.traces.find((t) => t.netId === netId);
     expect(trace?.netClassId).toBe("power");
     expect(trace?.widthMm).toBe(0.5);
   });

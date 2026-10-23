@@ -7,8 +7,9 @@ exists ONLY to make the emit census a machine gate: together with
 and `golden-rules-2l`, the union of every emitted code across all six equals
 every `DrcRuleCode` member except `ZONE_FILL_FAILED` (documented exception
 below). Fabricator `jlcpcb_2l`, 2-layer, ≥ 80 primitives, ≥ 10 violations
-(the golden-suite non-triviality gates), 85 violations / 40 codes in this
-fixture alone since S14 (87 / 39 from S11 to S13; 82 / 37 from S8 to S10;
+(the golden-suite non-triviality gates), 105 violations / 41 codes in this
+fixture alone since H08 (85 / 40 since S14; 87 / 39 from S11 to S13;
+82 / 37 from S8 to S10;
 84 / 38 until S8: the bridge trace's two overlap rows left when touching
 unassigned copper became an extension — contract 06 §4; S11 added the two fab
 rows noted under "Hole pairs"; S14 traded three `TRACK_DANGLING` rows for the
@@ -242,3 +243,22 @@ unchanged, 52 -> 50 warnings. Cause by cause:
   copper. The pre-S14 numbers (18 mm skew, 18 mm uncoupled) came from summing
   trace polylines.
 - **No other row moved.** The nine other goldens are byte-identical.
+
+## H08 — orphaned copper on existing census geometry
+
+The source JSON is unchanged. Its authoritative `netNames` map intentionally omits
+the net references on the following 20 copper declarations. The net-binding check
+now emits one non-overridable `NET_ORPHANED_COPPER` error per declaration:
+
+- Traces (12): `t_bad_layer`, `t_bridge_a`, `t_bridge_b`, `t_clr_a`, `t_clr_via`,
+  `t_dangle`, `t_fabclr_a`, `t_fabclr_b`, `t_island_a`, `t_island_b`,
+  `t_ko_tracks`, `t_over_hole`.
+- Vias (7): `v_clr`, `v_ko`, `v_pv`, `via1`, `via2`, `via_dangle`, `via_layer_bad`.
+- Zone (1): `z_ko_pour`, whose unbound reference already provokes `ZONE_EMPTY_FILL`.
+
+Each new row has exactly that object's trace, via or zone anchor. This adds 20
+errors and one code: 35 to 55 errors, 50 warnings and 0 infos unchanged, 85 to 105
+violations, and 40 to 41 codes. All 85 previous violation IDs remain unchanged.
+An independent run of the prior stage list (excluding only `net-binding`) also
+matches every field of those 85 rows; grid and exhaustive modes produce identical
+full reports. No geometry, source net map or other golden expectation changed.

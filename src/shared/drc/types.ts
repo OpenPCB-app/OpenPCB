@@ -69,7 +69,7 @@ export function createDrcRunStats(): DrcRunStats {
 }
 
 /**
- * The 21 check stages of `drcDrafts`, in the order they run, plus the
+ * The 22 check stages of `drcDrafts`, in the order they run, plus the
  * copper-pour stage the context runs lazily the first time a check asks for
  * pour results (execution contract 09 §4, §6).
  */
@@ -84,6 +84,7 @@ export type DrcStage =
   | "clearance"
   | "copperToHole"
   | "connectivity"
+  | "net-binding"
   | "copperPour"
   | "dangling"
   | "electrical"

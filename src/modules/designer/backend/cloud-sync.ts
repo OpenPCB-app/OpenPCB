@@ -7,8 +7,9 @@
 // (renderer passes `x-cloud-bearer` + `x-cloud-api-url`). Backend never stores
 // the token.
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type { Logger } from "../../../core/contracts/modules/backend-module";
 import type {
   DesignerCommand,
   DesignerCommandEnvelope,
@@ -17,6 +18,8 @@ import type {
 import { isFeatureEnabled } from "../../../core/contracts/feature-flags/backend";
 import { cloudLink } from "./schema";
 import { loadSchematicProjection } from "./projection-read";
+import { assertCloudPreservesDesign, CloudPreservationUnsupportedError, compatibilityError } from "./cloud-intent-guard";
+import { ensureNetIdentity } from "./net-identity/ensure";
 
 type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
@@ -59,6 +62,8 @@ const SCHEMATIC_COMMAND_TYPES = new Set([
   "move_primitive",
   "rotate_primitive",
   "update_primitive_text",
+  "set_pin_electrical_intent",
+  "duplicate_part",
 ]);
 
 interface CloudCommand {
@@ -131,28 +136,19 @@ async function recordSyncOutcome(
   ok: boolean,
   revision: number,
   err?: string,
-): Promise<void> {
-  if (ok) {
-    db.update(cloudLink)
-      .set({ lastSyncedRevision: revision, failedAttempts: 0, lastError: null })
-      .where(eq(cloudLink.designId, designId))
-      .run();
-    return;
-  }
-  // Accumulate the failure count (the previous implementation always reset it
-  // to 1, masking repeated failures).
-  const cur = db
-    .select({ failedAttempts: cloudLink.failedAttempts })
-    .from(cloudLink)
-    .where(eq(cloudLink.designId, designId))
-    .get();
+): Promise<string | null> {
+  const unsupported = compatibilityError(db, designId);
+  // A historical acknowledgment remains valid, but cannot clear a newer
+  // local preservation failure or move the acknowledged revision backwards.
   db.update(cloudLink)
     .set({
-      failedAttempts: (cur?.failedAttempts ?? 0) + 1,
-      lastError: err ?? "unknown",
+      ...(ok ? { lastSyncedRevision: sql`max(${cloudLink.lastSyncedRevision}, ${revision})` } : {}),
+      failedAttempts: ok && !unsupported ? 0 : sql`${cloudLink.failedAttempts} + 1`,
+      lastError: unsupported ?? (ok ? null : err ?? "unknown"),
     })
     .where(eq(cloudLink.designId, designId))
     .run();
+  return unsupported;
 }
 
 export async function mirrorCommand(
@@ -169,6 +165,13 @@ export async function mirrorCommand(
   if (!isFeatureEnabled("cloud.sync")) return;
   const link = readLink(db, opts.designId);
   if (!link) return; // not linked → nothing to mirror
+  try {
+    assertCloudPreservesDesign(db, opts.designId);
+  } catch (error) {
+    if (!(error instanceof CloudPreservationUnsupportedError)) throw error;
+    logger.warn("cloud-sync: state preservation unsupported", { error: String(error) });
+    return;
+  }
 
   const bearer = opts.ctx.cloudBearer;
   const apiUrl = opts.ctx.cloudApiUrl;
@@ -180,12 +183,13 @@ export async function mirrorCommand(
   }
 
   const command = opts.envelope.command;
-  if (command.type === "batch_commands") {
+  if (command.type === "batch_commands" || command.type === "set_pin_electrical_intent" || command.type === "duplicate_part") {
     // The cloud has no batch command, and mirroring the steps one by one would
     // advance the cloud revision N times for ONE local revision — every later
     // mirror would then 409. Reseed the cloud copy from the local projection
-    // instead (desktop-authoritative, one revision).
-    if (!command.commands.some((step) => SCHEMATIC_COMMAND_TYPES.has(step.type))) {
+    // instead (desktop-authoritative, one revision). Pin intent and duplicate
+    // commands also require a snapshot because the peer has no matching command.
+    if (command.type === "batch_commands" && !command.commands.some((step) => SCHEMATIC_COMMAND_TYPES.has(step.type))) {
       logger.info("cloud-sync: skipping non-schematic batch", {
         designId: opts.designId,
       });
@@ -194,7 +198,7 @@ export async function mirrorCommand(
     await pushCloudSnapshot(db, opts.designId, {
       bearer,
       apiUrl,
-    }).catch((err: unknown) => {
+    }, logger).catch((err: unknown) => {
       // pushCloudSnapshot has already recorded the failed outcome.
       logger.warn("cloud-sync: batch snapshot push failed", {
         designId: opts.designId,
@@ -237,7 +241,8 @@ export async function mirrorCommand(
       },
     );
     if (res.ok) {
-      recordSyncOutcome(db, opts.designId, true, opts.newRevision);
+      const currentError = await recordSyncOutcome(db, opts.designId, true, opts.newRevision);
+      if (currentError) return;
       logger.info("cloud-sync: mirrored", {
         designId: opts.designId,
         cloudDesignId: link.cloudDesignId,
@@ -278,7 +283,7 @@ export interface LinkParams {
   bearer: string;
   apiUrl: string;
   // If provided, link to this existing cloud design instead of creating one.
-  // Used by the import-from-cloud flow.
+  // Reserved for callers that already have a compatible shared identity.
   existingCloudDesignId?: string;
   lastSyncedRevision?: number;
 }
@@ -286,7 +291,10 @@ export interface LinkParams {
 export async function linkDesignToCloud(
   db: DbClient,
   params: LinkParams,
+  logger: Pick<Logger, "warn" | "error">,
 ): Promise<{ cloudDesignId: string; workspaceId: string; userId: string }> {
+  ensureNetIdentity(db, params.designId, logger);
+  assertCloudPreservesDesign(db, params.designId);
   const existing = readLink(db, params.designId);
   if (existing) {
     return {
@@ -306,6 +314,7 @@ export async function linkDesignToCloud(
     );
   }
   const wsBody = (await wsRes.json()) as { id: string };
+  assertCloudPreservesDesign(db, params.designId);
 
   // 2) Get current user id via /v1/me.
   const meRes = await fetch(`${params.apiUrl}/v1/me`, {
@@ -317,6 +326,7 @@ export async function linkDesignToCloud(
     );
   }
   const meBody = (await meRes.json()) as { id: string };
+  assertCloudPreservesDesign(db, params.designId);
 
   // 3) Create the cloud design — unless we're linking to an existing one.
   let cloudDesignId: string;
@@ -347,18 +357,11 @@ export async function linkDesignToCloud(
   // existing local design appears in the cloud immediately (command mirroring
   // only streams FUTURE edits, and its baseRevision check requires the cloud
   // revision to match local — so without this an existing design never syncs).
-  // Skipped for the import flow (existing cloud design already has content).
+  // Existing links already have remote content and must not be seeded.
   let linkedRevision = params.lastSyncedRevision ?? -1;
-  if (!params.existingCloudDesignId) {
-    let projection: ReturnType<typeof loadSchematicProjection> = null;
-    try {
-      projection = loadSchematicProjection(db, params.designId);
-    } catch {
-      // Some focused unit tests construct only the cloud-link table. Treat that
-      // as an empty design instead of making link creation depend on the full
-      // schematic schema being present.
-      projection = null;
-    }
+  if (!params.existingCloudDesignId && !compatibilityError(db, params.designId)) {
+    assertCloudPreservesDesign(db, params.designId);
+    const projection = loadSchematicProjection(db, params.designId);
     const revision = projection?.revision ?? 0;
     if (projection && revision > 0) {
       // Best-effort: a seed failure leaves an empty cloud design; the next edit
@@ -384,7 +387,9 @@ export async function linkDesignToCloud(
     }
   }
 
-  // 4) Persist the link.
+  // Keep a created cloud shell recoverable if unsupported state appeared while the
+  // create/seed request was pending; the acknowledged seed is historical.
+  const unsupported = compatibilityError(db, params.designId);
   db.insert(cloudLink)
     .values({
       designId: params.designId,
@@ -393,10 +398,11 @@ export async function linkDesignToCloud(
       cloudUserId: meBody.id,
       lastSyncedRevision: linkedRevision,
       linkedAt: nowIso(),
-      failedAttempts: 0,
-      lastError: null,
+      failedAttempts: unsupported ? 1 : 0,
+      lastError: unsupported,
     })
     .run();
+  if (unsupported) throw new Error(unsupported);
 
   return {
     cloudDesignId: designBody.id,
@@ -452,11 +458,14 @@ export async function pushCloudSnapshot(
   db: DbClient,
   designId: string,
   ctx: { bearer: string; apiUrl: string },
+  logger: Pick<Logger, "warn" | "error">,
 ): Promise<{ pushed: boolean; revision: number; cloudDesignId: string }> {
+  ensureNetIdentity(db, designId, logger);
   const link = readLink(db, designId);
   if (!link) {
     throw new Error("design is not linked to the cloud — link it first");
   }
+  assertCloudPreservesDesign(db, designId);
   const projection = loadSchematicProjection(db, designId);
   const revision = projection?.revision ?? 0;
   if (revision === link.lastSyncedRevision) {
@@ -475,9 +484,10 @@ export async function pushCloudSnapshot(
   );
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    await recordSyncOutcome(db, designId, false, revision, `snapshot ${res.status}`);
-    throw new Error(`cloud snapshot push failed: ${res.status} ${detail.slice(0, 200)}`);
+    const currentError = await recordSyncOutcome(db, designId, false, revision, `snapshot ${res.status}`);
+    throw new Error(currentError ?? `cloud snapshot push failed: ${res.status} ${detail.slice(0, 200)}`);
   }
-  await recordSyncOutcome(db, designId, true, revision);
+  const currentError = await recordSyncOutcome(db, designId, true, revision);
+  if (currentError) throw new Error(currentError);
   return { pushed: true, revision, cloudDesignId: link.cloudDesignId };
 }

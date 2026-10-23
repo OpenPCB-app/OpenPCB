@@ -26,6 +26,10 @@ import type {
  */
 interface DrcStoreState {
   report: DrcReport | null;
+  /** The start request is pending before the backend assigns a run id. */
+  starting: boolean;
+  /** The retained report belongs to an earlier attempt. */
+  reportIsPrevious: boolean;
   /** The active run, or the last terminal one. `null` before the first run. */
   run: DrcRunSnapshot | null;
   error: string | null;
@@ -64,6 +68,7 @@ interface DrcStoreState {
 }
 
 interface DrcStoreActions {
+  beginStart(): void;
   /** A run was accepted by the backend — this snapshot becomes the active run. */
   beginRun(snapshot: DrcRunSnapshot): void;
   /**
@@ -72,7 +77,7 @@ interface DrcStoreActions {
    * ignored, as is any frame arriving after the active run went terminal.
    */
   applyRunSnapshot(snapshot: DrcRunSnapshot): void;
-  /** The run completed; `report` is the freshly fetched row (may be null). */
+  /** Accept the completed report, or fail without dropping history if unavailable. */
   completeRun(report: DrcReport | null): void;
   /** The run ended cancelled. The previous report stays on screen. */
   cancelRun(reason: DrcRunCancelReason): void;
@@ -115,6 +120,8 @@ export function isDrcRunActive(
 export const useDrcStore = create<DrcStoreState & DrcStoreActions>(
   (set, get) => ({
     report: null,
+    starting: false,
+    reportIsPrevious: false,
     run: null,
     error: null,
     cancelNotice: null,
@@ -126,8 +133,23 @@ export const useDrcStore = create<DrcStoreState & DrcStoreActions>(
     panelOpen: false,
     markersVisible: true,
 
+    beginStart() {
+      set({
+        starting: true,
+        reportIsPrevious: get().report !== null,
+        error: null,
+        cancelNotice: null,
+      });
+    },
+
     beginRun(snapshot) {
-      set({ run: snapshot, error: null, cancelNotice: null });
+      set({
+        run: snapshot,
+        starting: false,
+        reportIsPrevious: get().report !== null,
+        error: null,
+        cancelNotice: null,
+      });
     },
 
     applyRunSnapshot(snapshot) {
@@ -139,8 +161,21 @@ export const useDrcStore = create<DrcStoreState & DrcStoreActions>(
 
     completeRun(report) {
       const current = get().run;
+      if (!report) {
+        get().failRun("DRC report unavailable");
+        return;
+      }
+      if (
+        current &&
+        (report.designId !== current.designId || report.revision !== current.revision)
+      ) {
+        get().failRun("DRC report does not match the completed run");
+        return;
+      }
       set({
         report,
+        starting: false,
+        reportIsPrevious: false,
         run: current ? { ...current, status: "completed" } : null,
         lastRunAt: Date.now(),
         error: null,
@@ -154,6 +189,8 @@ export const useDrcStore = create<DrcStoreState & DrcStoreActions>(
           ? { ...current, status: "cancelled", cancelReason: reason }
           : null,
         cancelNotice: reason,
+        starting: false,
+        reportIsPrevious: get().report !== null,
       });
     },
 
@@ -162,11 +199,13 @@ export const useDrcStore = create<DrcStoreState & DrcStoreActions>(
       set({
         run: current ? { ...current, status: "failed", error: message } : null,
         error: message,
+        starting: false,
+        reportIsPrevious: get().report !== null,
       });
     },
 
     detachRun() {
-      set({ run: null });
+      set({ run: null, starting: false });
     },
 
     dismissCancelNotice() {
@@ -178,7 +217,16 @@ export const useDrcStore = create<DrcStoreState & DrcStoreActions>(
     },
 
     setReport(report) {
-      set({ report });
+      const state = get();
+      set({
+        report,
+        reportIsPrevious:
+          state.starting ||
+          state.run?.status === "cancelled" ||
+          state.run?.status === "failed" ||
+          isDrcRunActive(state.run) ||
+          state.error !== null,
+      });
     },
 
     select(id) {
@@ -219,6 +267,8 @@ export const useDrcStore = create<DrcStoreState & DrcStoreActions>(
     clear() {
       set({
         report: null,
+        starting: false,
+        reportIsPrevious: false,
         run: null,
         error: null,
         cancelNotice: null,

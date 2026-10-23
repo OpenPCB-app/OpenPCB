@@ -1,4 +1,8 @@
-import type { DesignerCommand, DesignerDispatchResult } from "../../../../sdks";
+import type {
+  DesignerCommand,
+  DesignerDispatchResult,
+  DesignerNetIdentityOutcome,
+} from "../../../../sdks";
 import {
   CommandDeclinedError,
   RevisionCommandQueue,
@@ -6,6 +10,12 @@ import {
 } from "../../../../shared/frontend/commands/revision-command-queue";
 import type { createDesignerApi } from "../api";
 import { dispatchFailureMessage } from "../pcb/dispatch-failure";
+import { toast } from "../../../../shared/frontend/ui/toast-store";
+import { netIdentityEventMessage } from "../net-identity/event-message";
+import {
+  useNetIdentityActivityStore,
+  type NetIdentityActivitySource,
+} from "../net-identity/net-identity-activity-store";
 
 export type DesignerAction =
   | { kind: "command"; command: DesignerCommand; sessionId: string }
@@ -39,14 +49,45 @@ export class NetMergeDeclinedError extends CommandDeclinedError {
   }
 }
 
+function confirmMergeStep<T extends DesignerCommand>(command: T): T {
+  switch (command.type) {
+    case "upsert_label":
+    case "place_gnd_port":
+    case "place_pwr_port":
+    case "place_net_portal":
+    case "update_primitive_text":
+    case "place_part":
+    case "duplicate_part":
+    case "move_part":
+    case "rotate_part":
+    case "mirror_part":
+    case "move_primitive":
+    case "rotate_primitive":
+    case "update_wire_geometry":
+    case "auto_arrange_schematic":
+      return { ...command, confirmMerge: true };
+    default:
+      return command;
+  }
+}
+
+function withMergeConfirmation(command: DesignerCommand): DesignerCommand {
+  return command.type === "batch_commands"
+    ? { ...command, commands: command.commands.map(confirmMergeStep) }
+    : confirmMergeStep(command);
+}
+
 export class DesignerCommandCoordinator {
   readonly queue = new RevisionCommandQueue<DesignerAction>();
+  readonly scope: string;
   private historyPending = new Map<string, Promise<void>>();
   lastConflictAt: number | null = null;
   /** Asked once per refused merge, while the lane is held. */
   confirmNetMerge: ((refusal: NetMergeRefusal) => Promise<boolean>) | null =
     null;
-  constructor(private api: Api) {}
+  constructor(private api: Api, scope?: string) {
+    this.scope = scope || `designer-private:${crypto.randomUUID()}`;
+  }
   setApi(api: Api): void {
     this.api = api;
   }
@@ -94,13 +135,42 @@ export class DesignerCommandCoordinator {
         const confirmed = (await this.confirmNetMerge?.(result)) ?? false;
         if (!confirmed) throw new NetMergeDeclinedError(result);
         result = await send(
-          { ...action.command, confirmMerge: true } as DesignerCommand,
+          withMergeConfirmation(action.command),
           crypto.randomUUID(),
         );
       }
       if (!result.ok) this.reject(result);
+      this.recordActivity(designId, result.revision, "command", result.netIdentity);
       return result;
     };
+  }
+
+  private recordActivity(
+    designId: string,
+    revision: number,
+    source: NetIdentityActivitySource,
+    outcome: DesignerNetIdentityOutcome | undefined,
+  ): void {
+    try {
+      if (!outcome?.events.length) return;
+      const entries = useNetIdentityActivityStore.getState().append(
+        { scope: this.scope, designId, revision, source },
+        outcome.events,
+      );
+      for (const entry of entries) {
+        if (!entry.event.hasDependents) continue;
+        try {
+          toast.warning(
+            `${netIdentityEventMessage(entry.event)} Review copper and rules.`,
+            { id: `net-identity:${entry.id}`, title: "Net identity changed" },
+          );
+        } catch {
+          // A notification must not turn a committed write into a failure.
+        }
+      }
+    } catch {
+      // Activity is session UI state, never part of command acknowledgement.
+    }
   }
 
   private reject(result: DesignerDispatchResult & { ok: false }): never {
@@ -145,6 +215,7 @@ export class DesignerCommandCoordinator {
           }
           throw new Error(`Nothing to ${kind}`);
         }
+        this.recordActivity(designId, result.revision, kind, result.netIdentity);
         return result;
       })
       .then(refresh)
@@ -165,7 +236,7 @@ export function getDesignerCommandCoordinator(
     existing.setApi(api);
     return existing;
   }
-  const coordinator = new DesignerCommandCoordinator(api);
+  const coordinator = new DesignerCommandCoordinator(api, scope);
   if (scope) {
     coordinators.set(scope, coordinator);
     if (typeof window !== "undefined")

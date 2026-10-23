@@ -25,6 +25,16 @@ function report(overrides: Partial<ErcReport> = {}): ErcReport {
   };
 }
 
+function deferredReport() {
+  let resolve!: (value: ErcReport) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<ErcReport>((accept, fail) => {
+    resolve = accept;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("erc-store", () => {
   beforeEach(() => {
     useErcStore.getState().clear();
@@ -80,6 +90,37 @@ describe("erc-store", () => {
     expect(useErcStore.getState().error).toBe("boom");
     expect(useErcStore.getState().running).toBe(false);
     expect(useErcStore.getState().report?.designId).toBe("design-1");
+    expect(useErcStore.getState().reportIsPrevious).toBe(true);
+  });
+
+  test("a missing result preserves the previous report as history", async () => {
+    const previous = report();
+    useErcStore.getState().setReport(previous);
+    await useErcStore.getState().run(async () => null);
+    expect(useErcStore.getState()).toMatchObject({
+      report: previous,
+      reportIsPrevious: true,
+      running: false,
+      error: "ERC report unavailable",
+    });
+  });
+
+  test("a report for another design cannot replace the requested report", async () => {
+    const previous = report();
+    useErcStore.getState().setReport(previous);
+    await useErcStore.getState().run(async () => report({ designId: "design-2" }), "design-1");
+    expect(useErcStore.getState().report).toBe(previous);
+    expect(useErcStore.getState().error).toBe("ERC report does not match the requested design");
+  });
+
+  test("a new run marks the retained report as previous until success", async () => {
+    useErcStore.getState().setReport(report());
+    const next = deferredReport();
+    const pending = useErcStore.getState().run(() => next.promise);
+    expect(useErcStore.getState().reportIsPrevious).toBe(true);
+    next.resolve(report({ revision: 8 }));
+    await pending;
+    expect(useErcStore.getState().reportIsPrevious).toBe(false);
   });
 
   test("run is ignored while another run is in flight", async () => {
@@ -104,5 +145,48 @@ describe("erc-store", () => {
     expect(
       ercIssueCount(report({ summary: { errors: 0, warnings: 0, infos: 9 } })),
     ).toBe(0);
+  });
+
+  test("a cleared run cannot overwrite the next design's report", async () => {
+    const old = deferredReport();
+    const pending = useErcStore.getState().run(() => old.promise);
+    useErcStore.getState().clear();
+    const current = report({ designId: "design-2" });
+    await useErcStore.getState().run(async () => current);
+    old.resolve(report());
+    await pending;
+    expect(useErcStore.getState().report).toEqual(current);
+  });
+
+  test("a cleared rejection cannot end or fail the current run", async () => {
+    const old = deferredReport();
+    const first = useErcStore.getState().run(() => old.promise);
+    useErcStore.getState().clear();
+    const current = deferredReport();
+    const second = useErcStore.getState().run(() => current.promise);
+    old.reject(new Error("obsolete failure"));
+    await first;
+    expect(useErcStore.getState()).toMatchObject({ running: true, error: null });
+    current.resolve(report({ designId: "design-2" }));
+    await second;
+    expect(useErcStore.getState().report?.designId).toBe("design-2");
+  });
+
+  test("an explicit replacement supersedes an in-flight run", async () => {
+    const old = deferredReport();
+    const pending = useErcStore.getState().run(() => old.promise);
+    const replacement = report({ revision: 9 });
+    useErcStore.getState().setReport(replacement);
+    expect(useErcStore.getState().running).toBe(false);
+    old.resolve(report());
+    await pending;
+    expect(useErcStore.getState().report).toEqual(replacement);
+  });
+
+  test("an accepted run drops selection from the previous report", async () => {
+    useErcStore.getState().setReport(report());
+    useErcStore.getState().select(1);
+    await useErcStore.getState().run(async () => report({ violations: [] }));
+    expect(useErcStore.getState().selectedIndex).toBeNull();
   });
 });

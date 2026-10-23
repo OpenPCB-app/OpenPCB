@@ -487,7 +487,7 @@ function boardItemsExhaustive(
       ) - t.halfWidthMm;
     const inside = stadiumInsideRegion(region, t.pointsMm, t.halfWidthMm);
     const traceEdge = ctx.resolver.scalar("edgeClearance", {
-      netId: t.netId,
+      netId: ctx.tierNetOf(t),
       layers: [t.layer],
       geometry: {
         kind: "polyline",
@@ -543,7 +543,7 @@ function boardItemsExhaustive(
     // biased region — replaces the old center-only test plus `gap < 0`.
     const inside = discInsideRegion(region, vg.center, vg.radiusMm);
     const viaEdge = ctx.resolver.scalar("edgeClearance", {
-      netId: vg.netId,
+      netId: ctx.tierNetOf(vg),
       layers: vg.layers,
       geometry: { kind: "disc", center: vg.center, radiusMm: vg.radiusMm },
     });
@@ -590,7 +590,7 @@ function boardItemsExhaustive(
     const inner = padMeasure(region, undefined, pad, Infinity);
     if (ctx.stats) ctx.stats.edgeTests += 1;
     const padEdge = ctx.resolver.scalar("edgeClearance", {
-      netId: pad.netId,
+      netId: ctx.tierNetOf(pad),
       layers: pad.layers,
       geometry: { kind: "ring", ring: pad.ring },
     });
@@ -722,7 +722,7 @@ function boardItemsIndexed(
       halo(t.halfWidthMm),
     );
     const traceEdge = ctx.resolver.scalar("edgeClearance", {
-      netId: t.netId,
+      netId: ctx.tierNetOf(t),
       layers: [t.layer],
       geometry: {
         kind: "polyline",
@@ -780,7 +780,7 @@ function boardItemsIndexed(
       halo(vg.radiusMm),
     );
     const viaEdge = ctx.resolver.scalar("edgeClearance", {
-      netId: vg.netId,
+      netId: ctx.tierNetOf(vg),
       layers: vg.layers,
       geometry: { kind: "disc", center: vg.center, radiusMm: vg.radiusMm },
     });
@@ -827,7 +827,7 @@ function boardItemsIndexed(
     // carries it. `halo()` adds the widest of them either way.
     const inner = padMeasure(region, index, pad, halo(pad.rounded.radiusMm));
     const padEdge = ctx.resolver.scalar("edgeClearance", {
-      netId: pad.netId,
+      netId: ctx.tierNetOf(pad),
       layers: pad.layers,
       geometry: { kind: "ring", ring: pad.ring },
     });
@@ -1016,8 +1016,16 @@ export function holePairs(
     // (contract §5.1); the scope geometry is the drill, not the copper.
     const holeReq = ctx.resolver.scalarPair(
       "holeToHole",
-      { netId: a.netId, layers: allLayers, geometry: holeGeometry(a) },
-      { netId: b.netId, layers: allLayers, geometry: holeGeometry(b) },
+      {
+        netId: a.copper ? ctx.tierNetOf(a.copper) : a.netId,
+        layers: allLayers,
+        geometry: holeGeometry(a),
+      },
+      {
+        netId: b.copper ? ctx.tierNetOf(b.copper) : b.netId,
+        layers: allLayers,
+        geometry: holeGeometry(b),
+      },
     );
     if (below(gap, holeReq.mm)) {
       out.push({

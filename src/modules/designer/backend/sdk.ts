@@ -1,4 +1,5 @@
 import { assertQualifiedManufacturing } from "./capability-quarantine";
+import { assertNetIdentityExportable } from "./net-identity/export-gate";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
 import { NotFoundError } from "../../../core/contracts/errors";
@@ -126,7 +127,7 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
       };
     },
     pushCloudSnapshot: (designId, cloudCtx) =>
-      pushCloudSnapshot(rawDb, designId, cloudCtx),
+      pushCloudSnapshot(rawDb, designId, cloudCtx, ctx.logger),
     buildBoardSnapshot: async (designId) => {
       const projection = await store.getPcbProjection(designId);
       if (!projection) return null;
@@ -137,6 +138,7 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
       assertQualifiedManufacturing();
       const pcb = await store.getPcbProjection(designId);
       if (!pcb) return null;
+      assertNetIdentityExportable(pcb);
       const schematic = await store.getSchematicProjection(designId);
       const overrides = await store.listBomOverrides(designId);
       const bundle = buildExportBundle(

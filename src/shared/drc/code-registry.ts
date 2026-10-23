@@ -64,6 +64,7 @@ export const EMIT_SITE_BY_CODE: Record<DrcRuleCode, { checks: readonly string[] 
   OUTLINE_SLOT_WIDTH: { checks: ["manufacturability"] },
   // connectivity / pours
   UNCONNECTED_NET: { checks: ["connectivity"] },
+  NET_ORPHANED_COPPER: { checks: ["net-binding"] },
   ISOLATED_COPPER_ISLAND: { checks: ["copper-pour"] },
   ZONE_INVALID: { checks: ["zones"] },
   // A zone can pour nothing because the derivation refused its geometry
@@ -89,7 +90,10 @@ export const EMIT_SITE_BY_CODE: Record<DrcRuleCode, { checks: readonly string[] 
   // positives, is a rule that cannot be applied / has no effect, and the SI
   // check is the only place that knows (SI contract 14 §4.2, §5).
   DRC_RULE_INVALID: { checks: ["rules", "signal-integrity"] },
-  DRC_RULE_INEFFECTIVE: { checks: ["rules", "signal-integrity"] },
+  // The shared SI validity helper reports missing length-group and pair nets.
+  DRC_RULE_INEFFECTIVE: {
+    checks: ["rules", "signal-integrity", "si-rule-validity"],
+  },
   // courtyards / silkscreen / solder mask (DFM contract 11 §2–§4)
   COURTYARD_OVERLAP: { checks: ["courtyard"] },
   COURTYARD_INVALID: { checks: ["courtyard"] },

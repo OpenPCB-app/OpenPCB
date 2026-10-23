@@ -250,6 +250,9 @@ export function PcbDesignRulesDialog({
     setSaving(true);
     setError(null);
     try {
+      if (lengthGroups.some((group) => group.name.trim().length === 0)) {
+        throw new Error("Length match group name cannot be blank.");
+      }
       await onSave({
         designRules: designRulesForSave(
           board.designRules,
@@ -259,9 +262,7 @@ export function PcbDesignRulesDialog({
         netClasses,
         boardThicknessMm: thickness,
         perNetClassAssignments: assignments,
-        lengthMatchGroups: lengthGroups.filter(
-          (g) => g.name.trim().length > 0,
-        ),
+        lengthMatchGroups: lengthGroups,
       });
       onClose();
     } catch (err) {

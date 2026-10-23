@@ -14,7 +14,9 @@ import type {
 } from "../../../sdks";
 import { MODULE_SDK_TOKENS } from "../../../sdks";
 import { collectCopperZones } from "../../../shared/pcb-areas/copper-zones";
-import { resetSharedSqliteForTesting } from "../db/sqlite-client";
+import { getSharedDb, getSharedSqlite, resetSharedSqliteForTesting } from "../db/sqlite-client";
+import { insertPcbZone } from "../../../modules/designer/backend/pcb/pcb-store";
+import { readNetIdentityState, writeNetIdentityState } from "../../../modules/designer/backend/net-identity/state-store";
 import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
@@ -113,112 +115,127 @@ async function postCommand(
   );
 }
 
+function dispatch(sdk: DesignerSDK, designId: string, command: DesignerCommandEnvelope["command"]) {
+  return sdk.dispatchCommand(designId, envelope(designId, command));
+}
+
+async function namedNet(sdk: DesignerSDK, designId: string, text: string, positionNm = { x: 0, y: 0 }) {
+  const result = await dispatch(sdk, designId, { type: "upsert_label", text, positionNm });
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw new Error(JSON.stringify(result));
+  const net = (await sdk.getSchematicProjection(designId))!.nets.find((net) => net.labelIds.includes(result.createdEntityId!))!;
+  return { labelId: result.createdEntityId!, netId: net.id };
+}
+
+function persistedZones(designId: string): PcbZone[] {
+  return getSharedSqlite().query<{ payload_json: string }>(
+    "SELECT payload_json FROM designer_pcb_entities WHERE design_id = ? AND kind = 'zone' ORDER BY id",
+  ).all(designId).map((row) => JSON.parse(row.payload_json) as PcbZone);
+}
+
 describe("designer PCB zones — nets", () => {
-  test("a named net persists as netName and the projection binds it", async () => {
+  test("a named net binds at command time and keeps its persisted ID after rename", async () => {
     const { sdk } = await createRuntime("zone-net-name");
     const design = await sdk.createDesign({ name: "Named net" });
-    // A label is the cheapest way to get a named schematic net.
-    const label = await sdk.dispatchCommand(
-      design.id,
-      envelope(design.id, {
-        type: "upsert_label",
-        text: "GND",
-        positionNm: { x: 0, y: 0 },
-      }),
-    );
-    expect(label.ok).toBe(true);
-    const netId = Object.entries(
-      (await sdk.getPcbProjection(design.id))!.netNames,
-    ).find(([, name]) => name === "GND")![0];
-
-    const add = await sdk.dispatchCommand(
-      design.id,
-      envelope(design.id, {
-        type: "pcb_add_zone",
-        layer: "F.Cu",
-        net: { netId: null, netName: "GND" },
-        region: { kind: "polygon", pointsMm: SQUARE },
-      }),
-    );
+    const { netId, labelId } = await namedNet(sdk, design.id, "GND");
+    const add = await dispatch(sdk, design.id, {
+      type: "pcb_add_zone", layer: "F.Cu", net: { netId: null, netName: "GND" },
+      region: { kind: "polygon", pointsMm: SQUARE },
+    });
     expect(add.ok).toBe(true);
-    const proj = await sdk.getPcbProjection(design.id);
-    expect(proj?.zones[0]?.netName).toBe("GND");
-    expect(proj?.zones[0]?.netId).toBe(netId);
-    expect(
-      collectCopperZones({
-        zones: proj!.zones,
-        layerCount: proj!.board.layerCount,
-        knownNetIds: new Set(Object.keys(proj!.netNames)),
-      }).zones.map((z) => z.netId),
-    ).toEqual([netId]);
+    expect(persistedZones(design.id)[0]).toMatchObject({ netId, netName: null });
+    expect((await dispatch(sdk, design.id, {
+      type: "upsert_label", labelId, text: "RETURN", positionNm: { x: 0, y: 0 },
+    })).ok).toBe(true);
+    const projection = (await sdk.getPcbProjection(design.id))!;
+    expect(projection.netNames[netId]).toBe("RETURN");
+    expect(projection.zones[0]).toMatchObject({ netId, netName: null });
+    expect(persistedZones(design.id)[0]).toMatchObject({ netId, netName: null });
+    expect(collectCopperZones({ zones: projection.zones, layerCount: projection.board.layerCount,
+      knownNetIds: new Set(Object.keys(projection.netNames)) }).zones.map((zone) => zone.netId)).toEqual([netId]);
   });
 
-  test("an empty net id is stored as null, and a net-less zone still pours", async () => {
+  test("an empty ID refuses; an explicitly net-less zone still pours", async () => {
     const { sdk } = await createRuntime("zone-net-less");
     const design = await sdk.createDesign({ name: "Net-less" });
-    const add = await sdk.dispatchCommand(
-      design.id,
-      envelope(design.id, {
-        type: "pcb_add_zone",
-        layer: "F.Cu",
-        net: { netId: "", netName: "" },
-        region: { kind: "polygon", pointsMm: SQUARE },
-      }),
-    );
-    expect(add.ok).toBe(true);
-    const proj = await sdk.getPcbProjection(design.id);
-    expect(proj?.zones[0]).toMatchObject({ netId: null, netName: null });
-    const derived = collectCopperZones({
-      zones: proj!.zones,
-      layerCount: proj!.board.layerCount,
-      knownNetIds: new Set(Object.keys(proj!.netNames)),
-    });
+    const zone = { type: "pcb_add_zone", layer: "F.Cu", region: { kind: "polygon", pointsMm: SQUARE } } as const;
+    expect(await dispatch(sdk, design.id, { ...zone, net: { netId: "", netName: "" } }))
+      .toMatchObject({ ok: false, code: "NET_REFERENCE_DANGLING", field: "net.netId", reason: "foreign" });
+    expect(persistedZones(design.id)).toEqual([]);
+    expect((await dispatch(sdk, design.id, { ...zone, net: { netId: null, netName: "" } })).ok).toBe(true);
+    const projection = (await sdk.getPcbProjection(design.id))!;
+    expect(projection.zones[0]).toMatchObject({ netId: null, netName: null });
+    const derived = collectCopperZones({ zones: projection.zones, layerCount: projection.board.layerCount,
+      knownNetIds: new Set(Object.keys(projection.netNames)) });
     expect(derived.zones).toHaveLength(1);
     expect(derived.zones[0]?.netId).toBeNull();
   });
 });
 
 describe("designer PCB zones — projection warnings", () => {
-  test("an ambiguous zone net is reported once, not also as unresolved", async () => {
-    const { sdk, server } = await createRuntime("zone-net-ambiguous");
-    const design = await sdk.createDesign({ name: "Ambiguous" });
-    // Same-text labels are ONE net since T-097, so a duplicated name can only
-    // come from a label that spells an auto-generated name: the capacitor's
-    // two unconnected pins are `Net_1` / `Net_2`, and a lone `Net_1` label is
-    // a second, unrelated net of that name.
+  test("an explicit Net_1 label wins the exact name while a connected automatic net keeps its ID and suffix", async () => {
+    const { sdk, server } = await createRuntime("zone-net-name-collision");
+    const design = await sdk.createDesign({ name: "Name collision" });
+    const componentId = await importCapacitorComponent(server);
+    await placeCapacitors(sdk, design.id, componentId, 2);
+    const parts = (await sdk.getSchematicProjection(design.id))!.parts;
+    expect((await dispatch(sdk, design.id, { type: "create_wire",
+      sourcePinId: parts[0]!.pins[0]!.id, targetPinId: parts[1]!.pins[0]!.id })).ok).toBe(true);
+    const automatic = (await sdk.getSchematicProjection(design.id))!.nets.find((net) => net.wireIds.length > 0)!;
+    expect(automatic).toMatchObject({ name: "Net_1", autoNamed: true });
+    const explicit = await namedNet(sdk, design.id, "Net_1", { x: 90_000_000, y: 90_000_000 });
+    const renamed = (await sdk.getSchematicProjection(design.id))!.nets.find((net) => net.id === automatic.id)!;
+    expect(renamed).toMatchObject({ id: automatic.id, name: "Net_1_1", autoNamed: true });
+    expect((await dispatch(sdk, design.id, { type: "pcb_add_zone", layer: "F.Cu",
+      net: { netId: null, netName: "Net_1" }, region: { kind: "polygon", pointsMm: SQUARE } })).ok).toBe(true);
+    expect(persistedZones(design.id)[0]).toMatchObject({ netId: explicit.netId, netName: null });
+    expect(explicit.netId).not.toBe(automatic.id);
+    const projection = (await sdk.getPcbProjection(design.id))!;
+    expect(projection.netNames[automatic.id]).toBe("Net_1_1");
+    expect(projection.warnings.some((warning) => warning.startsWith("zone_net_ambiguous") || warning.startsWith("zone_net_unresolved"))).toBe(false);
+  });
+
+  test("legacy ambiguity reports once without an extra unresolved warning", async () => {
+    const { sdk, server } = await createRuntime("zone-net-legacy-ambiguous");
+    const design = await sdk.createDesign({ name: "Legacy ambiguity" });
+    writeNetIdentityState(getSharedDb(), { ...readNetIdentityState(getSharedDb(), design.id)!,
+      status: "legacy_restored", active: [] });
     const componentId = await importCapacitorComponent(server);
     await placeCapacitors(sdk, design.id, componentId, 1);
-    const label = await sdk.dispatchCommand(
-      design.id,
-      envelope(design.id, {
-        type: "upsert_label",
-        text: "Net_1",
-        positionNm: { x: 90_000_000, y: 90_000_000 },
-      }),
-    );
-    expect(label.ok).toBe(true);
-    const nets = Object.values(
-      (await sdk.getPcbProjection(design.id))!.netNames,
-    ).filter((name) => name === "Net_1");
-    expect(nets.length).toBeGreaterThan(1);
-
-    const add = await sdk.dispatchCommand(
-      design.id,
-      envelope(design.id, {
-        type: "pcb_add_zone",
-        layer: "F.Cu",
-        net: { netId: null, netName: "Net_1" },
-        region: { kind: "polygon", pointsMm: SQUARE },
-      }),
-    );
-    expect(add.ok).toBe(true);
+    await namedNet(sdk, design.id, "Net_1", { x: 90_000_000, y: 90_000_000 });
+    const names = Object.values((await sdk.getPcbProjection(design.id))!.netNames);
+    expect(names.filter((name) => name === "Net_1").length).toBeGreaterThan(1);
+    expect((await dispatch(sdk, design.id, { type: "pcb_add_zone", layer: "F.Cu",
+      net: { netId: null, netName: "Net_1" }, region: { kind: "polygon", pointsMm: SQUARE } })).ok).toBe(true);
     const warnings = (await sdk.getPcbProjection(design.id))!.warnings;
-    expect(
-      warnings.filter((w) => w.startsWith("zone_net_ambiguous")),
-    ).toHaveLength(1);
-    expect(warnings.some((w) => w.startsWith("zone_net_unresolved"))).toBe(
-      false,
-    );
+    expect(warnings.filter((warning) => warning.startsWith("zone_net_ambiguous"))).toHaveLength(1);
+    expect(warnings.some((warning) => warning.startsWith("zone_net_unresolved"))).toBe(false);
+  });
+
+  test("unknown-name updates refuse, while damaged stored hints remain visible and unresolved", async () => {
+    const { sdk, server } = await createRuntime("zone-net-unresolved");
+    const design = await sdk.createDesign({ name: "Unresolved" });
+    const add = await dispatch(sdk, design.id, { type: "pcb_add_zone", layer: "F.Cu",
+      net: { netId: null, netName: null }, region: { kind: "polygon", pointsMm: SQUARE } });
+    if (!add.ok) throw new Error(JSON.stringify(add));
+    const before = persistedZones(design.id);
+    const revision = (await sdk.getPcbProjection(design.id))!.revision;
+    const response = await postCommand(server, design.id, { type: "pcb_update_zone", zoneId: add.createdEntityId,
+      net: { netId: null, netName: "MISSING" } });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ data: { result: {
+      ok: false, code: "NET_REFERENCE_DANGLING", reason: "unknown-name", field: "net.netName", netName: "MISSING",
+    } } });
+    expect(persistedZones(design.id)).toEqual(before);
+    expect((await sdk.getPcbProjection(design.id))!.revision).toBe(revision);
+    insertPcbZone(getSharedDb(), design.id, { ...before[0]!, id: "damaged", netId: null, netName: "MISSING" }, new Date().toISOString());
+    insertPcbZone(getSharedDb(), design.id, { ...before[0]!, id: "stale", netId: "net-frozen", netName: null }, new Date().toISOString());
+    const projection = (await sdk.getPcbProjection(design.id))!;
+    expect(projection.zones.find((zone) => zone.id === "damaged")).toMatchObject({ netId: null, netName: "MISSING" });
+    expect(projection.warnings.filter((warning) => warning.startsWith("zone_net_unresolved"))).toHaveLength(1);
+    expect(projection.warnings.filter((warning) => warning.startsWith("zone_net_stale"))).toHaveLength(1);
+    expect(projection.zones.find((zone) => zone.id === "stale")).toMatchObject({ netId: "net-frozen", netName: null });
+    expect(persistedZones(design.id).find((zone) => zone.id === "damaged")).toMatchObject({ netId: null, netName: "MISSING" });
   });
 });
 
@@ -226,11 +243,13 @@ describe("designer PCB zones — HTTP parser arms", () => {
   test("every add and update field survives the round trip", async () => {
     const { sdk, server } = await createRuntime("zone-http");
     const design = await sdk.createDesign({ name: "HTTP zone" });
+    const ground = await namedNet(sdk, design.id, "GND");
+    const supply = await namedNet(sdk, design.id, "VCC", { x: 20_000_000, y: 0 });
 
     const addResponse = await postCommand(server, design.id, {
       type: "pcb_add_zone",
       layer: "F.Cu",
-      net: { netId: "net-frozen", netName: null },
+      net: { netId: ground.netId, netName: null },
       region: { kind: "polygon", pointsMm: SQUARE, holesMm: [HOLE] },
       name: "Full",
       enabled: false,
@@ -245,9 +264,7 @@ describe("designer PCB zones — HTTP parser arms", () => {
     const added = (await sdk.getPcbProjection(design.id))!.zones[0]!;
     expect(added).toMatchObject({
       layer: "F.Cu",
-      // A persisted netId that no current net holds stays as written; the
-      // derivation is what calls it stale.
-      netId: "net-frozen",
+      netId: ground.netId,
       netName: null,
       region: { kind: "polygon", pointsMm: SQUARE, holesMm: [HOLE] },
       name: "Full",
@@ -284,8 +301,8 @@ describe("designer PCB zones — HTTP parser arms", () => {
       name: "Patched",
       enabled: true,
       layer: "B.Cu",
-      netId: null,
-      netName: "VCC",
+      netId: supply.netId,
+      netName: null,
       region: { kind: "polygon", pointsMm: TRIANGLE },
       priority: 9,
       padConnection: "solid",
@@ -300,6 +317,7 @@ describe("designer PCB zones — HTTP parser arms", () => {
   test("a board region round-trips over HTTP", async () => {
     const { sdk, server } = await createRuntime("zone-http-board");
     const design = await sdk.createDesign({ name: "HTTP board zone" });
+    const ground = await namedNet(sdk, design.id, "GND");
     const response = await postCommand(server, design.id, {
       type: "pcb_add_zone",
       layer: "B.Cu",
@@ -313,7 +331,8 @@ describe("designer PCB zones — HTTP parser arms", () => {
     expect(zone).toMatchObject({
       id: "board:B.Cu",
       layer: "B.Cu",
-      netName: "GND",
+      netId: ground.netId,
+      netName: null,
       region: { kind: "board" },
       priority: 7,
       padConnection: "thermal",
@@ -333,15 +352,12 @@ describe("designer PCB zones — HTTP parser arms", () => {
   test("a delete round-trips over HTTP", async () => {
     const { sdk, server } = await createRuntime("zone-http-delete");
     const design = await sdk.createDesign({ name: "HTTP delete" });
-    const add = await sdk.dispatchCommand(
-      design.id,
-      envelope(design.id, {
-        type: "pcb_add_zone",
-        layer: "F.Cu",
-        net: { netId: null, netName: null },
-        region: { kind: "polygon", pointsMm: SQUARE },
-      }),
-    );
+    const add = await dispatch(sdk, design.id, {
+      type: "pcb_add_zone",
+      layer: "F.Cu",
+      net: { netId: null, netName: null },
+      region: { kind: "polygon", pointsMm: SQUARE },
+    });
     if (!add.ok) return;
     const response = await postCommand(server, design.id, {
       type: "pcb_delete_zone",
@@ -358,16 +374,13 @@ describe("designer PCB zones — history", () => {
     const design = await sdk.createDesign({ name: "History" });
     const zones = async () => (await sdk.getPcbProjection(design.id))!.zones;
 
-    const add = await sdk.dispatchCommand(
-      design.id,
-      envelope(design.id, {
-        type: "pcb_add_zone",
-        layer: "F.Cu",
-        net: { netId: null, netName: null },
-        region: { kind: "polygon", pointsMm: SQUARE },
-        name: "H1",
-      }),
-    );
+    const add = await dispatch(sdk, design.id, {
+      type: "pcb_add_zone",
+      layer: "F.Cu",
+      net: { netId: null, netName: null },
+      region: { kind: "polygon", pointsMm: SQUARE },
+      name: "H1",
+    });
     expect(add.ok).toBe(true);
     if (!add.ok) return;
     const zoneId = add.createdEntityId!;
@@ -380,15 +393,12 @@ describe("designer PCB zones — history", () => {
 
     expect(
       (
-        await sdk.dispatchCommand(
-          design.id,
-          envelope(design.id, {
-            type: "pcb_update_zone",
-            zoneId,
-            name: "H2",
-            priority: 5,
-          }),
-        )
+        await dispatch(sdk, design.id, {
+          type: "pcb_update_zone",
+          zoneId,
+          name: "H2",
+          priority: 5,
+        })
       ).ok,
     ).toBe(true);
     expect((await zones())[0]).toMatchObject({ name: "H2", priority: 5 });
@@ -397,14 +407,7 @@ describe("designer PCB zones — history", () => {
     expect((await sdk.redo(design.id, SESSION)).ok).toBe(true);
     expect((await zones())[0]).toMatchObject({ name: "H2", priority: 5 });
 
-    expect(
-      (
-        await sdk.dispatchCommand(
-          design.id,
-          envelope(design.id, { type: "pcb_delete_zone", zoneId }),
-        )
-      ).ok,
-    ).toBe(true);
+    expect((await dispatch(sdk, design.id, { type: "pcb_delete_zone", zoneId })).ok).toBe(true);
     expect(await zones()).toEqual([]);
     expect((await sdk.undo(design.id, SESSION)).ok).toBe(true);
     expect((await zones())[0]).toMatchObject({ id: zoneId, name: "H2" });
@@ -418,28 +421,22 @@ describe("designer PCB zones — history", () => {
     const region = async () =>
       (await sdk.getPcbProjection(design.id))!.zones[0]!.region;
 
-    const add = await sdk.dispatchCommand(
-      design.id,
-      envelope(design.id, {
-        type: "pcb_add_zone",
-        layer: "F.Cu",
-        net: { netId: null, netName: null },
-        region: { kind: "polygon", pointsMm: SQUARE },
-      }),
-    );
+    const add = await dispatch(sdk, design.id, {
+      type: "pcb_add_zone",
+      layer: "F.Cu",
+      net: { netId: null, netName: null },
+      region: { kind: "polygon", pointsMm: SQUARE },
+    });
     if (!add.ok) return;
     const zoneId = add.createdEntityId!;
 
     expect(
       (
-        await sdk.dispatchCommand(
-          design.id,
-          envelope(design.id, {
-            type: "pcb_update_zone",
-            zoneId,
-            region: { kind: "polygon", pointsMm: SQUARE, holesMm: [HOLE] },
-          }),
-        )
+        await dispatch(sdk, design.id, {
+          type: "pcb_update_zone",
+          zoneId,
+          region: { kind: "polygon", pointsMm: SQUARE, holesMm: [HOLE] },
+        })
       ).ok,
     ).toBe(true);
     expect(await region()).toEqual({
@@ -463,14 +460,11 @@ describe("designer PCB zones — history", () => {
   test("a view-state patch carrying the legacy fill keys creates no board zone", async () => {
     const { sdk } = await createRuntime("zone-view-state");
     const design = await sdk.createDesign({ name: "Legacy patch" });
-    const result = await sdk.dispatchCommand(
-      design.id,
-      envelope(design.id, {
-        type: "pcb_set_view_state",
-        // An old client still sending the removed keys.
-        patch: { copperFillLayers: ["F.Cu"] } as never,
-      }),
-    );
+    const result = await dispatch(sdk, design.id, {
+      type: "pcb_set_view_state",
+      // An old client still sending the removed keys.
+      patch: { copperFillLayers: ["F.Cu"] } as never,
+    });
     expect(result.ok).toBe(true);
     expect((await sdk.getPcbProjection(design.id))?.zones).toEqual([]);
   });

@@ -276,14 +276,12 @@ export function OutlinePanel({
   const duplicatePart = async (part: DesignerPlacedPart) => {
     try {
       await actions.dispatchCommand({
-        type: "place_part",
-        componentId: part.componentId,
+        type: "duplicate_part",
+        partId: part.id,
         positionNm: duplicateSchematicPositionNm(
           part.positionNm,
           useGridPreferences.getState().schematic.snap,
         ),
-        rotationDeg: part.rotationDeg,
-        mirrored: part.mirrored,
       });
     } catch (err) {
       actions.setError(

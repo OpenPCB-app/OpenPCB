@@ -5,6 +5,7 @@ import type {
   DrcRuleCode,
   DrcSeverity,
 } from "../../../../../sdks";
+import { NON_OVERRIDABLE } from "../../../../../shared/drc/severity";
 
 /** Human label per DRC rule code. Shared by the DRC panel + the canvas tooltip. */
 export const CODE_LABEL: Record<DrcRuleCode, string> = {
@@ -17,6 +18,7 @@ export const CODE_LABEL: Record<DrcRuleCode, string> = {
   TRACE_TO_PAD_CLEARANCE: "Trace-to-pad clearance",
   TRACE_TO_VIA_CLEARANCE: "Trace-to-via clearance",
   UNCONNECTED_NET: "Unconnected net",
+  NET_ORPHANED_COPPER: "Orphaned copper",
   NET_SHORT_CIRCUIT: "Short circuit",
   TRACE_LAYER_MISMATCH: "Trace on invalid layer",
   PAD_LAYER_MISMATCH: "Pad on invalid layer",
@@ -86,6 +88,13 @@ export const CODE_LABEL: Record<DrcRuleCode, string> = {
   OUTLINE_WEB_UNCHECKED: "Board geometry not fully checked",
 };
 
+function ownNetName(projection: DesignerPcbProjection | null, netId: string): string | null {
+  const names = projection?.netNames;
+  if (!names || !Object.hasOwn(names, netId)) return null;
+  const name = names[netId];
+  return typeof name === "string" ? name : null;
+}
+
 /** Short human label for a violation anchor (uses the projection for ref/net names). */
 export function resolveAnchorLabel(
   anchor: DrcAnchor,
@@ -115,15 +124,18 @@ export function resolveAnchorLabel(
       );
     case "net":
       return (
-        projection?.netNames[anchor.netId] ?? `net ${anchor.netId.slice(0, 6)}`
+        ownNetName(projection, anchor.netId) ?? `net ${anchor.netId.slice(0, 6)}`
       );
     case "zone": {
       const zone = projection?.zones.find((z) => z.id === anchor.zoneId);
       // The user's own name first (contract §7); the net is only a fallback for
       // imported zones, which carry a net but no name.
       if (zone?.name) return `zone ${zone.name}`;
-      return zone?.netName
-        ? `zone ${zone.netName}`
+      const netName = zone && zone.netId !== null
+        ? ownNetName(projection, zone.netId)
+        : zone?.netName;
+      return netName
+        ? `zone ${netName}`
         : `zone ${anchor.zoneId.slice(0, 6)}`;
     }
     case "keepout": {
@@ -133,8 +145,8 @@ export function resolveAnchorLabel(
       return `keepout ${keepout?.name ?? anchor.keepoutId.slice(0, 6)}`;
     }
     case "diffPair": {
-      const p = projection?.netNames[anchor.pNetId] ?? anchor.pNetId.slice(0, 4);
-      const n = projection?.netNames[anchor.nNetId] ?? anchor.nNetId.slice(0, 4);
+      const p = ownNetName(projection, anchor.pNetId) ?? anchor.pNetId.slice(0, 4);
+      const n = ownNetName(projection, anchor.nNetId) ?? anchor.nNetId.slice(0, 4);
       return `pair ${p}/${n}`;
     }
     case "lengthGroup": {
@@ -186,7 +198,7 @@ export function buildDrcMarkers(
   const waived = new Set(waivedIds ?? []);
   const out: DrcMarker[] = [];
   for (const v of report?.violations ?? []) {
-    if (!v.locationMm || waived.has(v.id)) continue;
+    if (!v.locationMm || (!NON_OVERRIDABLE.has(v.code) && waived.has(v.id))) continue;
     out.push({
       id: v.id,
       x: v.locationMm.x,
