@@ -81,6 +81,12 @@ export function ModelSelectorPill({
   const [refreshing, setRefreshing] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   const dot = dotColor(selectedProvider);
+  const enabledProviders = providers.filter((p) => p.enabled);
+  // A <select> whose value has no matching option renders the first option as
+  // chosen, so picking it fires no change event. Keep an explicit placeholder /
+  // current-value option so every visible choice is actually selectable.
+  const providerListed = enabledProviders.some((p) => p.id === providerId);
+  const modelListed = models.some((m) => m.modelId === model);
 
   const refreshModels = () => {
     if (!onRefreshModels || refreshing) return;
@@ -112,7 +118,9 @@ export function ModelSelectorPill({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-8 max-w-[260px] items-center gap-1.5 rounded-control border border-slate-300 bg-white px-2.5 text-xs text-slate-600 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        className="flex h-8 cursor-pointer max-w-[260px] items-center gap-1.5 rounded-control border border-slate-300 bg-white px-2.5 text-xs text-slate-600 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600"
         title={dot.title}
       >
         <span
@@ -143,13 +151,18 @@ export function ModelSelectorPill({
             }}
             className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
           >
-            {providers
-              .filter((p) => p.enabled)
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
+            {!providerListed ? (
+              <option value={providerId} disabled>
+                {enabledProviders.length === 0
+                  ? "No enabled provider"
+                  : `${selectedProvider?.label ?? "Choose a provider"}${selectedProvider && !selectedProvider.enabled ? " (disabled)" : ""}`}
+              </option>
+            ) : null}
+            {enabledProviders.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
           </select>
 
           <div className="mt-2.5 flex items-center justify-between">
@@ -172,14 +185,15 @@ export function ModelSelectorPill({
           </div>
           {models.length > 0 ? (
             <select
-              value={
-                models.some((m) => m.modelId === model)
-                  ? model
-                  : (models[0]?.modelId ?? "")
-              }
+              value={model}
               onChange={(e) => onModelChange(e.target.value)}
               className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
             >
+              {!modelListed ? (
+                <option value={model} disabled>
+                  {model ? `${model} (not listed)` : "Choose a model"}
+                </option>
+              ) : null}
               {models.map((m) => (
                 <option key={m.modelId} value={m.modelId}>
                   {m.displayName ?? m.modelId}

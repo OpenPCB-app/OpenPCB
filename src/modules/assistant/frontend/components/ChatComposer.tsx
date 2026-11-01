@@ -25,7 +25,11 @@ export interface ChatComposerProps {
   onStop?: () => void;
   /** Streaming / running — swaps Send for Stop and disables submit. */
   busy?: boolean;
+  /** Blocks sending only; the input stays editable so a draft is never lost. */
   disabled?: boolean;
+  /** Why sending is blocked, shown above the input with an optional fix action. */
+  blockedReason?: string | null;
+  onConfigure?: () => void;
   placeholder?: string;
   /** Enabled tool count for the footer indicator. */
   toolCount?: number;
@@ -55,6 +59,8 @@ export function ChatComposer({
   onStop,
   busy = false,
   disabled = false,
+  blockedReason,
+  onConfigure,
   placeholder = "Ask about your PCB, or describe what to build…",
   toolCount,
   contextBudgetKb = 64,
@@ -200,7 +206,7 @@ export function ChatComposer({
 
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      if (!busy && value.trim()) {
+      if (!busy && !disabled && value.trim()) {
         setSlashOpen(false);
         setMentionOpen(false);
         setMentionTriggerPos(null);
@@ -271,6 +277,24 @@ export function ChatComposer({
           ) : null}
         </div>
 
+        {blockedReason ? (
+          <div
+            role="status"
+            className="flex items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"
+          >
+            <span className="min-w-0 truncate">{blockedReason}</span>
+            {onConfigure ? (
+              <button
+                type="button"
+                onClick={onConfigure}
+                className="shrink-0 cursor-pointer font-medium underline-offset-2 hover:underline"
+              >
+                Configure providers
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         {/* Input row */}
         <div className="flex items-end gap-2 px-2.5 py-2">
           <textarea
@@ -278,7 +302,6 @@ export function ChatComposer({
             value={value}
             onChange={(e) => handleChange(e.target.value)}
             onKeyDown={handleKey}
-            disabled={disabled}
             rows={compact ? 2 : 1}
             placeholder={placeholder}
             className={cn(
@@ -299,7 +322,8 @@ export function ChatComposer({
           ) : (
             <button
               type="button"
-              onClick={() => value.trim() && onSubmit()}
+              onClick={() => !disabled && value.trim() && onSubmit()}
+              title={blockedReason ?? "Send"}
               disabled={disabled || !value.trim()}
               aria-label="Send"
               className="mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-600 text-white hover:bg-violet-500 disabled:bg-slate-200 disabled:text-slate-400 dark:disabled:bg-slate-800 dark:disabled:text-slate-600"
@@ -313,20 +337,16 @@ export function ChatComposer({
         <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-3 py-1 text-[10px] text-slate-400 dark:border-slate-800 dark:bg-black/10">
           <div className="flex min-w-0 items-center gap-2">
             {typeof toolCount === "number" ? (
-              <span className="inline-flex items-center gap-1">
-                <Wrench className="h-3 w-3 text-status-success" />
-                {toolCount} tools
-              </span>
+              <>
+                <span className="inline-flex items-center gap-1">
+                  <Wrench className="h-3 w-3 text-status-success" />
+                  {toolCount} tools
+                </span>
+                <span className="text-slate-300 dark:text-slate-600">·</span>
+              </>
             ) : null}
-            <span className="text-slate-300 dark:text-slate-600">·</span>
-            <span
-              className="inline-flex items-center gap-1.5"
-              title="Context budget for grounded tool data"
-            >
-              <span className="relative inline-block h-1 w-8 rounded-pill bg-slate-200 dark:bg-slate-700">
-                <span className="absolute left-0 top-0 h-full w-1/4 rounded-pill bg-status-success" />
-              </span>
-              {contextBudgetKb}k context
+            <span title="Per-tool budget for grounded tool data (Settings → Assistant → Context per tool)">
+              {contextBudgetKb} KB/tool
             </span>
           </div>
           {!compact ? (

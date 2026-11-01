@@ -268,6 +268,8 @@ function AvailableAssistantSpace(props: ModuleSpaceProps): ReactElement {
                   }
                   busy={loading}
                   disabled={!canSend && !loading}
+                  blockedReason={state.blockedReason}
+                  onConfigure={state.openAssistantSettings}
                   toolCount={chatOnly ? undefined : (toolCount ?? undefined)}
                   contextBudgetKb={contextBudgetKb(
                     settings?.contextSizePreference,

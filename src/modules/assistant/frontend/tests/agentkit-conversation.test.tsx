@@ -61,6 +61,26 @@ describe("canonical Assistant conversation transport", () => {
     expect(writes[0]!.headers.get("X-OpenPCB-Token")).toBe("a".repeat(64));
     await until(() => view.input === "");
   });
+  test("disabled app-default provider falls back to the enabled provider and its own model", async () => {
+    fixture.extraProviders = [{ ...provider, id: "openai", label: "OpenAI", kind: "openai", defaultModel: "gpt-4o-mini", enabled: false }];
+    fixture.preferenceSettings = { ...settings, defaultProviderId: "openai", defaultModel: "gpt-4o-mini" };
+    await mount(); await until(() => view.canSend);
+    expect(view.providerId).toBe(provider.id); expect(view.model).toBe(provider.defaultModel);
+    expect(view.blockedReason).toBeNull();
+    await submit("Use the fallback");
+    const write = fixture.requests.find(request => request.method === "POST" && request.url.pathname.endsWith("/messages"));
+    expect(write!.body).toMatchObject({ providerId: provider.id, model: provider.defaultModel });
+  });
+  test("a failed model list does not block sending", async () => {
+    fixture.failModels = true; await mount();
+    await until(() => view.canSend);
+    expect(view.blockedReason).toBeNull();
+  });
+  test("no enabled provider blocks sending with a visible reason", async () => {
+    fixture.preferenceProvider = { ...provider, enabled: false };
+    await mount(); await until(() => view.blockedReason !== null);
+    expect(view.canSend).toBe(false); expect(view.blockedReason).toContain("disabled");
+  });
   test("lost submit response retries same Idempotency-Key without a second turn", async () => {
     fixture.loseNextPost = true; await mount(); await submit("Recover me");
     expect(view.error).toContain("POST response lost"); expect(view.input).toBe("Recover me");

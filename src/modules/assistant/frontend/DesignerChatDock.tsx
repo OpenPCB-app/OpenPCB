@@ -173,6 +173,7 @@ function AvailableDesignerChatDock(props: DesignerConversationProps): ReactEleme
             promptPresetId={promptPresetId}
             onPresetChange={setPromptPresetId}
             selectedProvider={selectedProvider}
+            onOpenSettings={state.openAssistantSettings}
             align="left"
           />
           {toolCount !== null ? (
@@ -275,6 +276,8 @@ function AvailableDesignerChatDock(props: DesignerConversationProps): ReactEleme
           }
           busy={loading}
           disabled={!canSend && !loading}
+          blockedReason={state.blockedReason}
+          onConfigure={state.openAssistantSettings}
           placeholder="Ask about this design…"
           toolCount={toolCount ?? undefined}
           contextBudgetKb={contextBudgetKb(settings?.contextSizePreference)}

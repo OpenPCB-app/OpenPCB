@@ -21,6 +21,8 @@ export class AgentKitHttpFixture {
   loseNextApply = false;
   mutationCount = 0;
   preferenceProvider = { ...provider };
+  extraProviders: Record<string, unknown>[] = [];
+  failModels = false;
   delayProviders: Promise<void> | null = null;
   preferenceAppSettings = { ...appSettings };
   modelCatalogue = [{ providerId: "local", modelId: "fixture-model", displayName: "Fixture", fetchedAt: time }];
@@ -68,8 +70,10 @@ export class AgentKitHttpFixture {
     if (path === "/v1/settings") { const snapshot = { ...this.preferenceSettings }; await this.delaySettings; return Response.json(snapshot); }
     if (path === "/settings") { const snapshot = { ...this.preferenceAppSettings }; await this.delayAppSettings; return Response.json(snapshot); }
     if (path === "/prompt-presets") return Response.json([{ id: "minimal-concise", label: "Concise", description: "Concise" }]);
-    if (path === "/v1/providers") { const snapshot = structuredClone(this.preferenceProvider); await this.delayProviders; return Response.json([snapshot]); }
-    if (path === "/v1/providers/local/models") return Response.json(this.modelCatalogue);
+    if (path === "/v1/providers") { const snapshot = structuredClone(this.preferenceProvider); await this.delayProviders; return Response.json([...structuredClone(this.extraProviders), snapshot]); }
+    if (path === "/v1/providers/local/models") return this.failModels ? Response.json({ title: "upstream down" }, { status: 502 }) : Response.json(this.modelCatalogue);
+    if (/^\/v1\/providers\/[^/]+\/models$/.test(path)) return Response.json([]);
+    if (/^\/providers\/[^/]+\/capabilities\/refresh$/.test(path)) return Response.json({ streaming: true, toolCalling: true, modelList: true });
     if (path === "/v1/tools") return Response.json([]);
     if (path === "/v1/chats") {
       if (method === "POST") { await this.delayCreate; const id = `chat-${this.chats.size + 1}`; this.addChat(id, body.metadata as Record<string, unknown>); return Response.json(this.chats.get(id), { status: 201 }); }

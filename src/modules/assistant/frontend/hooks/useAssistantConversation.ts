@@ -7,6 +7,7 @@ import { useAssistantCache } from "../AssistantClientProvider";
 import { assistantRequest, jsonRequest } from "../client";
 import type { ActiveRunState } from "../components/AssistantRunStatusCard";
 import { useNativeAllowances } from "./useNativeAllowances";
+import { useNavigationStore } from "../../../../core/frontend/src/stores/navigation-store";
 
 const terminal = new Set(["completed", "failed", "cancelled", "interrupted", "incomplete"]);
 type Change = { kind: "applied" | "rejected"; designId: string; revision?: number };
@@ -21,9 +22,18 @@ function useConversationSelection(cache: Cache, chatId: string | null, draftKey:
   const selectionKey = `openpcb.selection:${chatId ?? draftKey}`;
   const selection = cache.resources[selectionKey] as { chatId: string | null; providerId: string; model: string; preset: AssistantPromptPresetId } | undefined;
   const selected = cache.chats.find(item => item.id === chatId);
-  const providerId = selection?.chatId === chatId ? selection.providerId : typeof selected?.metadata.providerId === "string" ? selected.metadata.providerId : cache.settings?.defaultProviderId ?? "";
-  const selectedProvider = cache.providerDetails.find(item => item.id === providerId) ?? null;
-  const model = selection?.chatId === chatId ? selection.model : typeof selected?.metadata.model === "string" ? selected.metadata.model : cache.settings?.defaultModel || selectedProvider?.defaultModel || "";
+  const explicit = selection?.chatId === chatId ? selection : undefined;
+  const preferredId = explicit?.providerId ?? (typeof selected?.metadata.providerId === "string" ? selected.metadata.providerId : cache.settings?.defaultProviderId ?? "");
+  const preferred = cache.providerDetails.find(item => item.id === preferredId) ?? null;
+  // An implicit (chat or app default) provider that is disabled or gone would block the composer
+  // with no visible way out; fall back to the first enabled provider. Explicit picks are honoured.
+  const fallback = !explicit && !preferred?.enabled ? cache.providerDetails.find(item => item.enabled) ?? null : null;
+  const selectedProvider = fallback ?? preferred;
+  const providerId = selectedProvider?.id ?? preferredId;
+  const chatModel = !fallback && typeof selected?.metadata.model === "string" ? selected.metadata.model : undefined;
+  // The app default model only pairs with the app default provider, never with a fallback.
+  const settingsModel = providerId === cache.settings?.defaultProviderId ? cache.settings?.defaultModel : undefined;
+  const model = explicit ? explicit.model : chatModel ?? (settingsModel || selectedProvider?.defaultModel || "");
   const promptPresetId = selection?.chatId === chatId ? selection.preset : presetId(selected?.metadata.promptPresetId ?? cache.appSettings?.defaultPromptPresetId);
   const updateSelection = (next: Partial<{ providerId: string; model: string; preset: AssistantPromptPresetId }>) => cache.updateResource(selectionKey, previous => ({ chatId, providerId, model, preset: promptPresetId, ...(previous as typeof selection), ...next }));
   const setProviderId = (id: string) => updateSelection({ providerId: id, model: cache.providerDetails.find(item => item.id === id)?.defaultModel ?? "" });
@@ -105,14 +115,21 @@ function useConversationProjection(chatId: string | null, chat: Chat, run: Run, 
 
 type Selection = ReturnType<typeof useConversationSelection>;
 function useConversationSubmission(cache: Cache, chat: Chat, chatId: string | null, selection: Selection, loading: boolean) {
-  const { submitted, input, inputKey, pendingKey, providerId, model, promptPresetId, modelState, selectedProvider } = selection;
+  const { submitted, input, inputKey, pendingKey, providerId, model, promptPresetId, selectedProvider } = selection;
   useEffect(() => {
     const pending = submitted;
     if (!pending || pending.chatId !== chatId) return;
     const accepted = chat.messages.some(message => message.role === "user" && message.metadata.optimistic !== true && !pending.existing.includes(message.id) && message.content === pending.content);
     if (accepted) { if ((cache.drafts[pending.key] ?? "").trim() === pending.content) cache.setDraft(pending.key, ""); cache.setResource(pendingKey, undefined); void cache.reloadChats(); }
   }, [cache, chat.messages, chatId]);
-  const readyToSend = !cache.configLoading && !!cache.settings && !!selectedProvider?.enabled && !!model && !!modelState.models[providerId] && !loading && !chat.activeRunId;
+  // The model list is advisory: the backend accepts any model for endpoints that never listed one
+  // and returns a clear `model_not_available` otherwise, so a failed list must not block sending.
+  const blockedReason = cache.configLoading || !cache.settings ? null
+    : !selectedProvider ? "No assistant provider is configured."
+    : !selectedProvider.enabled ? `Provider "${selectedProvider.label}" is disabled.`
+    : !model ? "Choose a model for this provider."
+    : null;
+  const readyToSend = !cache.configLoading && !!cache.settings && !blockedReason && !loading && !chat.activeRunId;
   const canSend = !!chatId && readyToSend;
   const submit = async (event?: FormEvent, override?: string) => {
     event?.preventDefault();
@@ -122,7 +139,7 @@ function useConversationSubmission(cache: Cache, chat: Chat, chatId: string | nu
     cache.setResource(pendingKey, { chatId, key: inputKey, content, existing: chat.messages.map(message => message.id), ...snapshot });
     await chat.submit(content, { providerId: snapshot.providerId, model: snapshot.model, metadata: { promptPresetId: snapshot.preset } });
   };
-  return { readyToSend, canSend, submit };
+  return { readyToSend, canSend, submit, blockedReason };
 }
 
 function useConversationActions(cache: Cache, chat: Chat, proposals: Proposals, chatId: string | null, activeChat: ActiveChat, details: Details, selection: Selection, setLocalError: ErrorSetter, onChanged?: (change: Change) => void) {
@@ -173,6 +190,24 @@ function useChatToolCount(cache: Cache, chatId: string | null, phase: unknown): 
   return count?.chatId === chatId ? count.value : cache.toolCount;
 }
 
+/** Session-wide: each enabled-but-unprobed provider is probed once, not per mounted conversation. */
+const probedProviders = new Set<string>();
+
+/**
+ * A provider added or enabled without a test has no capability row, so the UI cannot tell
+ * whether tools work. Probe it once in the background; the result lands via reloadConfig.
+ */
+function useCapabilityAutoProbe(cache: Cache, provider: { id: string; enabled: boolean; capabilities: unknown } | null) {
+  const id = provider?.enabled && provider.capabilities == null ? provider.id : null;
+  useEffect(() => {
+    if (!id || probedProviders.has(id)) return;
+    probedProviders.add(id);
+    void assistantRequest(cache.base, `/providers/${encodeURIComponent(id)}/capabilities/refresh`, { method: "POST" })
+      .then(() => cache.reloadConfig())
+      .catch(() => {});
+  }, [cache.base, cache.reloadConfig, id]);
+}
+
 export function useAssistantConversation(chatId: string | null, draftKey = "new", onChanged?: (change: Change) => void) {
   const cache = useAssistantCache();
   const chat = useChat(chatId);
@@ -190,6 +225,8 @@ export function useAssistantConversation(chatId: string | null, draftKey = "new"
   const actions = useConversationActions(cache, chat, proposals, chatId, activeChat, details, selection, setLocalError, onChanged);
   const allowances = useNativeAllowances(cache.base, chatId, details.visiblePresentations);
   const toolCount = useChatToolCount(cache, chatId, chat.phase);
+  const openSettings = useNavigationStore(state => state.openSettings);
+  useCapabilityAutoProbe(cache, selection.selectedProvider);
   useEffect(() => { setLocalError(null); }, [chatId]);
   useEffect(() => { if (runId && run.phase && terminal.has(run.phase)) { void run.drain(); void cache.reloadChats(); } }, [runId, run.phase, run.drain, cache.reloadChats]);
   return {
@@ -201,6 +238,7 @@ export function useAssistantConversation(chatId: string | null, draftKey = "new"
     stopRun: async () => chat.cancel(), continueRun: async () => chat.resume(),
     refreshMessages: async () => { await chat.reload(); await details.readDetails(); await proposals.reload(); },
     error: localError ?? chat.error?.message ?? run.error?.message ?? proposals.error?.message ?? allowances.error ?? cache.error,
+    openAssistantSettings: () => openSettings("assistant"),
     setError: setLocalError, chatOnly: selection.selectedProvider?.capabilities?.toolCalling === false, toolCount,
     proposalActions: { busy: proposals.busy || allowances.busy, apply: actions.apply, reject: actions.reject, allow: allowances.allow, revoke: allowances.revoke, isAllowed: allowances.isAllowed }
   };

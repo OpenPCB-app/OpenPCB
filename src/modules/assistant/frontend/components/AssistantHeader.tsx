@@ -137,6 +137,7 @@ export function AssistantHeader({ state }: { state: ReturnType<typeof useAssista
           promptPresetId={promptPresetId}
           onPresetChange={setPromptPresetId}
           selectedProvider={selectedProvider}
+          onOpenSettings={state.openAssistantSettings}
         />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
