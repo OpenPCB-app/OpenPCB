@@ -3115,6 +3115,33 @@ export interface GerberExportResult {
   warnings: string[];
 }
 
+/**
+ * What the stored DRC result says about the run a manufacturing export relies
+ * on (H19 / OPENPCB-67 §3.2). Display data: the provenance stamp's digests,
+ * not these fields, bind the result to the design.
+ */
+export interface ManufacturingDrcEvidence {
+  ranAtRevision: number;
+  ranAt: string;
+  errors: number;
+  warnings: number;
+  infos: number;
+  waived: number;
+  /** Non-waived `*_UNCHECKED` violations ("the engine did not answer"). */
+  unchecked: number;
+  /** Every suppression route besides per-violation waivers. */
+  ignoredRuleClasses: DrcRuleClass[];
+  /** `board.drcSeverityOverrides`, sorted by code; `defaultSeverity` from the severity table. */
+  severityOverrides: Array<{
+    code: DrcRuleCode;
+    severity: DrcSeverity | "ignore";
+    defaultSeverity: DrcSeverity;
+  }>;
+  /** `board.drcRules` entries with an explicit `severity`, sorted by rule id. */
+  ruleSeverities: Array<{ ruleId: string; severity: DrcSeverity }>;
+  engineVersion: string;
+}
+
 export interface BomRow {
   refdesList: string;
   value: string;

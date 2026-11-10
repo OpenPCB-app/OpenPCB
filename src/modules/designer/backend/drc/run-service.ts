@@ -12,8 +12,13 @@
  *     the request path, so command dispatch and the SSE stream keep running
  *     while a dense board is checked.
  *   * Per design at most ONE non-terminal run. A `start` with the same
- *     `(revision, optionsDigest)` joins it; a different key supersedes it and
- *     the superseded caller is re-attached to the newer run (§5).
+ *     `(revision, optionsDigest, contentDigest)` joins it; a different key
+ *     supersedes it and the superseded caller is re-attached to the newer run
+ *     (§5). The content digest catches a lazy non-revisioned projection write
+ *     between two starts (H19 / OPENPCB-67 §3.5).
+ *   * The stored row carries a provenance stamp (H19 §3.5): the content and
+ *     options digests taken at `start`, the engine version, and the digest of
+ *     the raw-footprint entries actually sent to the worker.
  *   * Persistence is a single synchronous upsert on the main thread AFTER the
  *     worker's `done`, guarded by "not cancelled" and "the design head still
  *     exists" — with no `await` between the checks and the write, so nothing
@@ -22,7 +27,6 @@
  *     failure must never surface as an unhandled rejection in Electron's main
  *     process.
  */
-import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type {
@@ -40,11 +44,17 @@ import {
   type DrcWorkerProgress,
 } from "../../../../shared/drc/worker/drc-worker-client";
 import { DrcCancelledError } from "../../../../shared/drc/types";
+import { drcEngineVersion } from "../../../../shared/drc/engine-version";
 import { saveDrcResult, type SaveDrcOptions } from "../drc-results";
-import { buildRawFootprintEntries } from "../pcb/raw-footprint-lookup";
+import { computeBoardContentDigest } from "../pcb/board-content-digest";
+import {
+  buildRawFootprintEntries,
+  digestRawFootprintEntries,
+} from "../pcb/raw-footprint-lookup";
 import { designHeads } from "../schema";
 import type { DesignerStore } from "../store";
 import { DRC_STAGES, drcOptionsFromProjection } from "./drc-engine";
+import { computeDrcOptionsDigest, drcSeveritySettings } from "./run-digest";
 
 type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
@@ -87,6 +97,10 @@ interface RunRecord {
   designId: string;
   revision: number;
   optionsDigest: string;
+  /** `computeBoardContentDigest(projection)`, taken in the same tick as the options digest. */
+  contentDigest: string;
+  /** Set in `execute` from the entries handed to the worker; null until then. */
+  rawFootprintDigest: string | null;
   status: DrcRunStatus;
   progress: DrcRunProgress;
   startedAt: string;
@@ -96,7 +110,7 @@ interface RunRecord {
   cancelReason?: DrcRunCancelReason;
   /** The snapshot the run computes over; cloned into the worker (§2.2). */
   projection: DesignerPcbProjection;
-  /** Recorded with the stored row, exactly as the pre-S10 route did. */
+  /** Recorded with the stored row (`options_json`): suppressions the run applied. */
   options: SaveDrcOptions;
   /** Cooperative cancel for the worker; also drops a queued run. */
   controller: AbortController;
@@ -132,19 +146,6 @@ function snapshotOf(run: RunRecord): DrcRunSnapshot {
     ...(run.error ? { error: run.error } : {}),
     ...(run.cancelReason ? { cancelReason: run.cancelReason } : {}),
   };
-}
-
-/**
- * The join key's second half (§5). View-state suppressions bump the revision,
- * so the digest is insurance rather than the mechanism — but a rules-only
- * change that somehow kept the revision must still supersede.
- */
-function computeOptionsDigest(projection: DesignerPcbProjection): string {
-  const payload = JSON.stringify({
-    ...drcOptionsFromProjection(projection),
-    severityOverrides: projection.board.drcSeverityOverrides ?? null,
-  });
-  return createHash("sha1").update(payload).digest("hex");
 }
 
 function queuedProgress(): DrcRunProgress {
@@ -321,6 +322,18 @@ export function createDrcRunService(params: {
         report,
         run.options,
         new Date().toISOString(),
+        // Unreachable null (execute sets the digest before the worker runs);
+        // an unstamped row is merely stale evidence, never a false pass.
+        run.rawFootprintDigest === null
+          ? null
+          : {
+              contentDigest: run.contentDigest,
+              optionsDigest: run.optionsDigest,
+              engineVersion: drcEngineVersion(
+                process.env.OPENPCB_APP_VERSION ?? "dev",
+              ),
+              rawFootprintDigest: run.rawFootprintDigest,
+            },
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -344,6 +357,7 @@ export function createDrcRunService(params: {
       const rawFootprints = await buildRawFootprintEntries(ctx, run.projection);
       // Cancelled or superseded while the library reads were in flight.
       if (run.status !== "running") return;
+      run.rawFootprintDigest = digestRawFootprintEntries(rawFootprints);
       const report = await runDrcOnWorker(
         { projection: run.projection, rawFootprints },
         {
@@ -395,7 +409,7 @@ export function createDrcRunService(params: {
   function createRun(
     designId: string,
     projection: DesignerPcbProjection,
-    optionsDigest: string,
+    digests: { optionsDigest: string; contentDigest: string },
   ): RunRecord {
     let resolve: (report: DrcReport) => void = () => {};
     let reject: (error: Error) => void = () => {};
@@ -410,12 +424,18 @@ export function createDrcRunService(params: {
       runId: crypto.randomUUID(),
       designId,
       revision: projection.revision,
-      optionsDigest,
+      optionsDigest: digests.optionsDigest,
+      contentDigest: digests.contentDigest,
+      rawFootprintDigest: null,
       status: "queued",
       progress: queuedProgress(),
       startedAt: new Date().toISOString(),
       projection,
-      options: drcOptionsFromProjection(projection),
+      // Severity settings ride along for the export evidence (H19 §3.5).
+      options: {
+        ...drcOptionsFromProjection(projection),
+        ...drcSeveritySettings(projection),
+      },
       controller: new AbortController(),
       settled,
       resolve,
@@ -441,25 +461,29 @@ export function createDrcRunService(params: {
     }
     // Nothing below this line awaits: the lookup and the insert are one tick,
     // so two concurrent `start`s cannot both create a run for one design.
-    const optionsDigest = computeOptionsDigest(projection);
+    const digests = {
+      optionsDigest: computeDrcOptionsDigest(projection),
+      contentDigest: computeBoardContentDigest(projection),
+    };
     const activeId = activeByDesign.get(designId);
     const active = activeId ? runs.get(activeId) : undefined;
     if (active && !isTerminal(active.status)) {
       if (
         active.revision === projection.revision &&
-        active.optionsDigest === optionsDigest
+        active.optionsDigest === digests.optionsDigest &&
+        active.contentDigest === digests.contentDigest
       ) {
         return active;
       }
       // The successor exists before the cancel so the superseded run's
       // waiters have something to be re-attached to; only then does the
       // executor get a chance to pick anything up.
-      const successor = createRun(designId, projection, optionsDigest);
+      const successor = createRun(designId, projection, digests);
       cancelRun(active, "superseded", successor);
       pump();
       return successor;
     }
-    const created = createRun(designId, projection, optionsDigest);
+    const created = createRun(designId, projection, digests);
     pump();
     return created;
   }

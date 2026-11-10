@@ -295,6 +295,8 @@ export const drcResults = sqliteTable("designer_drc_results", {
   infoCount: integer("info_count").notNull(),
   violationsJson: text("violations_json").notNull(),
   optionsJson: text("options_json").notNull().default("{}"),
+  // H19 provenance stamp (`DrcResultProvenance` JSON); NULL on legacy rows.
+  provenanceJson: text("provenance_json"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

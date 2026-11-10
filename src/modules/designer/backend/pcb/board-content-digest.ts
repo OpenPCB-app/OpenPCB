@@ -44,8 +44,17 @@ function qPoint(p: { x: number; y: number } | null | undefined): [number | null,
   return [q(p?.x), q(p?.y)];
 }
 
+/**
+ * Code-unit order, NOT `localeCompare`: the digest is evidence in the
+ * manufacturing manifest (H19 / OPENPCB-67 §3.5) and must not depend on the
+ * host's collation.
+ */
 function byKey<T>(items: readonly T[], key: (item: T) => string): T[] {
-  return [...items].sort((a, b) => key(a).localeCompare(key(b)));
+  return [...items].sort((a, b) => {
+    const ka = key(a);
+    const kb = key(b);
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
 }
 
 /**

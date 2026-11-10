@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { MODULE_SDK_TOKENS } from "../../../../sdks";
 import type { DesignerPcbProjection } from "../../../../sdks/designer";
 import type { LibrarySDK } from "../../../../sdks/library";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
+import { canonicalJson } from "../operation-receipts";
 import type { RawFootprintLookup } from "./courtyard";
 
 /**
@@ -36,6 +38,23 @@ export async function buildRawFootprintEntries(
     }
   }
   return entries;
+}
+
+/**
+ * sha256 over exactly what `buildRawFootprintEntries` returned: canonical JSON
+ * of the entries sorted by footprint id (code-unit order, so the digest is
+ * locale-free), `null` ("no lookup") as the digest of `"none"`. The DRC run
+ * stamps it from the entries it sends the worker; the manufacturing export
+ * recomputes it, so a library edit between the two reads as stale
+ * (H19 / OPENPCB-67 §3.4.1, §3.5).
+ */
+export function digestRawFootprintEntries(
+  entries: ReadonlyArray<readonly [string, Record<string, unknown>]> | null,
+): string {
+  const hash = createHash("sha256");
+  if (entries === null) return hash.update("none").digest("hex");
+  const sorted = [...entries].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return hash.update(canonicalJson(sorted)).digest("hex");
 }
 
 /**

@@ -55,6 +55,7 @@ import {
 import {
   getDrcResult,
   saveDrcResult,
+  type DrcResultStamp,
   type SaveDrcOptions,
   type StoredDrcResult,
 } from "./drc-results";
@@ -222,11 +223,12 @@ export interface DesignerStore {
   ): Promise<DesignerSchematicProjection | null>;
   getPcbProjection(designId: string): Promise<DesignerPcbProjection | null>;
   getBomProjection(designId: string): Promise<BomProjection | null>;
-  /** Persist the latest DRC report for a design (upsert). */
+  /** Persist the latest DRC report for a design (upsert); `provenance` = H19 stamp. */
   saveDrcResult(
     designId: string,
     report: DrcReport,
     options: SaveDrcOptions,
+    provenance?: DrcResultStamp | null,
   ): Promise<void>;
   /** Latest persisted DRC report, or null if never run. */
   getDrcResult(designId: string): Promise<StoredDrcResult | null>;
@@ -693,8 +695,8 @@ export function createDesignerStore(
       return buildBomProjection(pcb, schematic, listBomOverrides(db, designId));
     },
 
-    async saveDrcResult(designId, report, options) {
-      saveDrcResult(db, designId, report, options, nowIso());
+    async saveDrcResult(designId, report, options, provenance = null) {
+      saveDrcResult(db, designId, report, options, nowIso(), provenance);
     },
 
     async getDrcResult(designId) {

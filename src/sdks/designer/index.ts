@@ -230,6 +230,7 @@ export type {
   GerberExportOptions,
   GerberExportRequest,
   GerberExportResult,
+  ManufacturingDrcEvidence,
   BomRow,
   BomLine,
   BomLineRef,
