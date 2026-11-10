@@ -14,6 +14,15 @@ import {
   sameGeneratorIdentity,
   type FootprintGeneratorIdentity,
 } from "../../shared/generator-policy";
+import type {
+  GeneratedFootprintPayload,
+  GeneratorTab,
+} from "../footprint-generator/FootprintGeneratorPanel";
+import {
+  EMPTY_TEMPLATE_SELECTION,
+  sameTemplateIdentity,
+  type TemplateSelection,
+} from "../footprint-generator/footprint-validation";
 
 export type InspectStatus = "idle" | "loading" | "success" | "error";
 export type ModelConversionStatus =
@@ -61,6 +70,11 @@ export interface ImportWizardState {
     metadata: GeneratedFootprintMetadata;
     generator: FootprintGeneratorIdentity;
   } | null;
+  /** Generator panel state kept across step remounts (T-319). */
+  generatorTab: GeneratorTab;
+  templateSelection: TemplateSelection;
+  /** Last template materialize result; cleared by any template form change. */
+  templatePayload: GeneratedFootprintPayload | null;
 
   symbolGridVisible: boolean;
   footprintGridVisible: boolean;
@@ -120,6 +134,9 @@ export interface ImportWizardState {
       generator: FootprintGeneratorIdentity;
     } | null,
   ) => void;
+  setGeneratorTab: (tab: GeneratorTab) => void;
+  setTemplateSelection: (selection: TemplateSelection) => void;
+  setTemplatePayload: (payload: GeneratedFootprintPayload | null) => void;
 
   setSymbolGridVisible: (visible: boolean) => void;
   setFootprintGridVisible: (visible: boolean) => void;
@@ -157,6 +174,9 @@ const INITIAL_STATE = {
   presetSize: null,
   presetDensity: "nominal" as DensityLevel,
   generatedFootprint: null,
+  generatorTab: "ipc" as GeneratorTab,
+  templateSelection: EMPTY_TEMPLATE_SELECTION,
+  templatePayload: null,
   symbolGridVisible: true,
   footprintGridVisible: true,
 };
@@ -266,6 +286,18 @@ export const useImportWizardStore = create<ImportWizardState>((set) => ({
           ? fp
           : null,
     })),
+  // The panel re-emits the new tab's current payload after the switch.
+  setGeneratorTab: (tab) => set({ generatorTab: tab, generatedFootprint: null }),
+  setTemplateSelection: (selection) =>
+    set((state) => ({
+      templateSelection: selection,
+      templatePayload: null,
+      generatedFootprint:
+        state.generatedFootprint?.generator.kind === "template"
+          ? null
+          : state.generatedFootprint,
+    })),
+  setTemplatePayload: (payload) => set({ templatePayload: payload }),
 
   setSymbolGridVisible: (visible) => set({ symbolGridVisible: visible }),
   setFootprintGridVisible: (visible) => set({ footprintGridVisible: visible }),
@@ -297,18 +329,31 @@ export function wouldCommitWithoutFootprint(s: {
   return s.footprintFiles.length === 0 || s.selectedFootprintId.length === 0;
 }
 
-/** A generated footprint is committable only while it matches its generator inputs. */
+/**
+ * A generated footprint is committable only while it comes from the active
+ * generator tab and matches the inputs that tab displays.
+ */
 export function hasCurrentPreset(
   state: Pick<
     ImportWizardState,
-    "presetFamily" | "presetSize" | "presetDensity" | "generatedFootprint"
+    | "presetFamily"
+    | "presetSize"
+    | "presetDensity"
+    | "generatedFootprint"
+    | "generatorTab"
+    | "templateSelection"
   >,
 ): boolean {
   const generated = state.generatedFootprint;
   if (!generated) return false;
-  // Templates are re-materialized by the backend from templateId + params.
-  if (generated.generator.kind === "template") return true;
+  if (generated.generator.kind === "template") {
+    return (
+      state.generatorTab === "template" &&
+      sameTemplateIdentity(generated.generator, state.templateSelection)
+    );
+  }
   if (
+    state.generatorTab !== "ipc" ||
     !state.presetFamily ||
     !state.presetSize ||
     generatorUnavailableReason(state.presetFamily)

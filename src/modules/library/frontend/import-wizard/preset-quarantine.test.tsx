@@ -194,7 +194,6 @@ async function renderPicker(): Promise<HTMLButtonElement[]> {
         onFamilyChange={vi.fn()}
         onSizeChange={vi.fn()}
         onDensityChange={vi.fn()}
-        onGenerate={vi.fn()}
       />,
     ),
   );

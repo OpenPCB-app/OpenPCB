@@ -24,16 +24,17 @@ interface IpcPresetTabProps {
   onFamilyChange: (family: PackageFamily | null) => void;
   onSizeChange: (size: string | null) => void;
   onDensityChange: (density: DensityLevel) => void;
-  onGenerate: () => void;
 }
 
-/** Presentational IPC-7351B family / size / density picker (store-free). */
+/**
+ * Presentational IPC-7351B family / size / density picker (store-free). There
+ * is no Generate button: the panel derives the footprint from the selection.
+ */
 export const IpcPresetTab = memo(function IpcPresetTab({
   selection,
   onFamilyChange,
   onSizeChange,
   onDensityChange,
-  onGenerate,
 }: IpcPresetTabProps): ReactElement {
   const presetFamily = selection.family;
   const presetSize = selection.size;
@@ -149,14 +150,6 @@ export const IpcPresetTab = memo(function IpcPresetTab({
               );
             })}
           </div>
-
-          <button
-            type="button"
-            onClick={onGenerate}
-            className="mt-1 h-9 w-full cursor-pointer rounded-control border border-primary bg-primary text-xs font-semibold text-primary-foreground hover:opacity-90"
-          >
-            Generate footprint
-          </button>
         </section>
       )}
     </div>
