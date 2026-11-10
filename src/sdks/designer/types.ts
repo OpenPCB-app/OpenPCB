@@ -3041,16 +3041,154 @@ export interface DesignerLibraryLookup {
 
 // ─────────────────────── KiCad project import ───────────────────────
 
+/** Wizard / report section a KiCad import warning belongs to. */
+export type KicadImportWarningGroup =
+  | "components"
+  | "nets"
+  | "rules"
+  | "geometry"
+  | "graphics"
+  | "schematic"
+  | "library"
+  | "source";
+
+/**
+ * `capability` = the loss changes copper, mask, paste, holes, the outline,
+ * connectivity or the rules DRC applies → never acknowledgeable.
+ * `cosmetic` = silk / fab only → acknowledgeable.
+ */
+export type KicadImportBlockerClass = "capability" | "cosmetic";
+
+/** How a capability blocker clears. Never by acknowledgement. */
+export type KicadImportLossPredicate =
+  /** Clears only by re-importing a fixed source. */
+  | "permanent"
+  /** Every subject row is gone. */
+  | "subject_deleted"
+  /** Each subject placement is deleted, or its footprint snapshot digest differs. */
+  | "footprint_changed"
+  | "zone_deleted"
+  /** The board outline digest differs from import time. */
+  | "outline_changed"
+  /** Every subject durable net has an explicit `perNetClassAssignments` entry. */
+  | "netclass_assigned"
+  /** None of the subject copper ids remain on the recorded net id. */
+  | "copper_reassigned"
+  /** Gate owned elsewhere (H08 unresolved-name copper, H13 frame, H19 footprints); report only. */
+  | "delegated";
+
+export type KicadImportSubjectKind =
+  | "net"
+  | "footprint"
+  | "placement"
+  | "part"
+  | "graphic"
+  | "zone"
+  | "rule"
+  | "sheet"
+  | "file"
+  | "copper"
+  | "board";
+
 /**
  * Severity-tagged warning shared by the inspect + commit responses. A code is a
  * stable, machine-readable identifier (`zones_dropped`, `hierarchical_sheets_flattened`,
  * `wire_diagonal`, `footprint_missing_lib_id`, …). The message is user-facing
- * English suitable for the import wizard.
+ * English suitable for the import wizard; the wizard shows it, never `code`,
+ * by default. Codes, groups and blocker classes come from the backend catalog
+ * (`backend/import/kicad-project/report.ts`).
  */
 export interface KicadProjectImportWarning {
   code: string;
   message: string;
   severity: "info" | "warning";
+  /** Absent on rows written before the catalog existed → treat as `"source"`. */
+  group?: KicadImportWarningGroup;
+  blocker?: { class: KicadImportBlockerClass; predicate: KicadImportLossPredicate };
+  /** Stable subject. Keys are plan-local at plan time and rewritten to persisted ids at apply time. */
+  subject?: { kind: KicadImportSubjectKind; keys: string[] };
+  details?: Record<string, string | number | boolean | string[]>;
+}
+
+/** Census in SOURCE UNITS. Invariant: `sourceUnits == plannedUnits + droppedUnits`. */
+export interface KicadImportCountRow {
+  /** `"pcb.segment"`, `"pcb.zone"`, `"pcb.footprint"`, `"sch.symbol_instance"`, `"pcb.gr_text"`, … */
+  entity: string;
+  /** Source tokens (schematic: weighted by sheet-instance count). */
+  sourceUnits: number;
+  /** Source units represented by at least one written row. */
+  plannedUnits: number;
+  /** Source units with a drop warning. */
+  droppedUnits: number;
+  /** Rows written (expansions: F&B zone → 2, arc → N chords, board-only footprint → K items). */
+  rows: number;
+  /** Measured after apply (result / report only). */
+  committedRows?: number;
+}
+
+export interface KicadImportComponentOutcome {
+  /** Plan-local group key. */
+  key: string;
+  symbolLibId: string;
+  symbolLibName: string | null;
+  footprintLibId: string;
+  references: string[];
+  status: "reuse" | "create" | "reject";
+  /** Human sentence for `"reject"`. */
+  reason?: string;
+}
+
+export interface KicadImportNetSummary {
+  kicadNets: number;
+  boundByPads: number;
+  boundByAlias: number;
+  split: number;
+  merged: number;
+  shortedByMerge: number;
+  padless: number;
+  unbound: number;
+  caseCollisionsRenamed: number;
+  noNetCopperItems: number;
+}
+
+export interface KicadImportPlanSummary {
+  planDigest: string;
+  frame: "kicad-legacy-unqualified" | "kicad-canonical-v1";
+  counts: KicadImportCountRow[];
+  components: KicadImportComponentOutcome[];
+  nets: KicadImportNetSummary;
+  unsupported: Array<{
+    token: string;
+    count: number;
+    where: "pcb" | "sch" | "footprint" | "pad" | "setup";
+  }>;
+  capabilityBlockers: number;
+  cosmeticBlockers: number;
+}
+
+/** Persisted import report of one KiCad project import (`designer_import_reports`). */
+export interface KicadImportReport {
+  reportId: string;
+  designId: string;
+  importId: string;
+  sourceFileName: string;
+  sourceSha256: string;
+  sourceVersion: string | null;
+  frame: KicadImportPlanSummary["frame"];
+  createdAt: string;
+  counts: KicadImportCountRow[];
+  warnings: KicadProjectImportWarning[];
+  nets: KicadImportNetSummary;
+  netMap: Array<{ kicadKey: string; kicadName: string; kind: string; netId: string | null }>;
+  blockers: Array<{
+    blockerKey: string;
+    code: string;
+    class: KicadImportBlockerClass;
+    predicate: KicadImportLossPredicate;
+    /** Evaluated live on read. */
+    open: boolean;
+    acknowledgedAt: string | null;
+  }>;
 }
 
 export interface KicadProjectInspectReport {
@@ -3089,6 +3227,8 @@ export interface KicadProjectInspectReport {
    */
   netClassAssignments?: Record<string, string>;
   warnings: KicadProjectImportWarning[];
+  /** Dry-run import plan summary (source-versus-result counts, blockers, `planDigest`). */
+  plan?: KicadImportPlanSummary;
 }
 
 /** KiCad's `board.design_settings.rules`, in mm (rule-semantics §12.3). */
@@ -3151,6 +3291,12 @@ export interface KicadProjectCommitRequest {
   /** ZIP archive of the KiCad project bundle (bytes). Server resolves files internally. */
   archiveBytes: Uint8Array;
   archiveFileName: string;
+  /** Digest of the reviewed plan; a mismatch at commit is a 409 `plan_changed`. */
+  planDigest?: string;
+  /** Client UUID v4 for idempotent replay and status lookup; server-generated when absent. */
+  importId?: string;
+  /** In-process callers only; never serialised. */
+  signal?: AbortSignal;
 }
 
 export interface KicadProjectCommitResult {
@@ -3171,6 +3317,15 @@ export interface KicadProjectCommitResult {
     deferred: KicadProjectDeferredEntityKind[];
   };
   warnings: KicadProjectImportWarning[];
+  /*
+   * Set by the staged import pipeline. Optional until that pipeline replaces
+   * the current commit path, which does not produce them.
+   */
+  importId?: string;
+  reportId?: string;
+  counts?: KicadImportCountRow[];
+  capabilityBlockers?: number;
+  cosmeticBlockers?: number;
 }
 
 export type KicadProjectDeferredEntityKind =

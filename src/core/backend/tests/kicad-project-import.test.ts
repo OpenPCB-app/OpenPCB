@@ -21,6 +21,7 @@ import {
   buildInspectReport,
   resolveProjectFiles,
 } from "../../../modules/designer/backend/import/kicad-project/inspect";
+import { setKicadDrillCapabilityForTesting } from "../../../modules/library/backend/import/commit-kicad";
 
 function isolateTestDb(label: string): void {
   resetSharedSqliteForTesting();
@@ -289,6 +290,53 @@ function buildOffGridProjectZip(): Uint8Array {
     },
     { name: "offgrid.kicad_sch", bytes: encoder.encode(schematicContent) },
     { name: "offgrid.kicad_pcb", bytes: encoder.encode(pcbContent) },
+  ]);
+}
+
+/**
+ * USB-C J1 shape (QA T-247): two unnumbered NPTH pegs beside numbered pads,
+ * one of them a through-hole shield pad.
+ */
+function buildUsbCPegProjectZip(): Uint8Array {
+  const encoder = new TextEncoder();
+  const schematicContent = `
+    (kicad_sch (version 20231120) (generator eeschema)
+      (lib_symbols
+        (symbol "Connector:USB_C_Pegs"
+          (property "Reference" "J" (at 0 0 0))
+          (property "Value" "USB_C_Pegs" (at 0 0 0))
+          (pin power_in line (at -5.08 2.54 0) (length 2.54) (name "VBUS") (number "A4"))
+          (pin power_in line (at -5.08 0 0) (length 2.54) (name "GND") (number "A1"))
+          (pin passive line (at -5.08 -2.54 0) (length 2.54) (name "SHIELD") (number "S1"))))
+      (symbol (lib_id "Connector:USB_C_Pegs") (at 50 60 0) (unit 1)
+        (uuid "33333333-3333-3333-3333-333333333333")
+        (property "Reference" "J1" (at 0 0 0))
+        (property "Value" "USB_C_Pegs" (at 0 0 0))))`.trim();
+  const pcbContent = `
+    (kicad_pcb (version 20231120) (generator pcbnew)
+      (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+      (net 0 "") (net 1 "VBUS") (net 2 "GND")
+      (footprint "Connector_USB:USB_C_Pegs" (layer "F.Cu") (at 20 20 0)
+        (property "Reference" "J1" (at 0 0 0))
+        (property "Value" "USB_C_Pegs" (at 0 0 0))
+        (pad "" np_thru_hole circle (at -2.89 -1.5) (size 0.65 0.65) (drill 0.65) (layers "*.Cu" "*.Mask"))
+        (pad "" np_thru_hole circle (at 2.89 -1.5) (size 0.65 0.65) (drill 0.65) (layers "*.Cu" "*.Mask"))
+        (pad "A4" smd rect (at -1 0) (size 0.6 1.2) (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "VBUS"))
+        (pad "A1" smd rect (at 1 0) (size 0.6 1.2) (layers "F.Cu" "F.Paste" "F.Mask") (net 2 "GND"))
+        (pad "S1" thru_hole oval (at -4.32 1) (size 1 2.1) (drill oval 0.6 1.7) (layers "*.Cu" "*.Mask") (net 2 "GND")))
+      (gr_line (start 0 0) (end 40 0) (layer "Edge.Cuts") (width 0.05))
+      (gr_line (start 40 0) (end 40 40) (layer "Edge.Cuts") (width 0.05))
+      (gr_line (start 40 40) (end 0 40) (layer "Edge.Cuts") (width 0.05))
+      (gr_line (start 0 40) (end 0 0) (layer "Edge.Cuts") (width 0.05)))`.trim();
+  return createStoredZip([
+    {
+      name: "usbc.kicad_pro",
+      bytes: encoder.encode(
+        JSON.stringify({ meta: { filename: "usbc.kicad_pro", version: 1 } }),
+      ),
+    },
+    { name: "usbc.kicad_sch", bytes: encoder.encode(schematicContent) },
+    { name: "usbc.kicad_pcb", bytes: encoder.encode(pcbContent) },
   ]);
 }
 
@@ -579,6 +627,54 @@ describe("KiCad project import (F3)", () => {
       y: -61_000_003,
     });
     expect(partAfter("R2")).toEqual(part("R2"));
+  });
+
+  // T-247 (H14 P0): J1 stays rejected, with a human reason, until the
+  // installed kicad-import represents plating and slots; then it imports.
+  test("USB-C J1 with unnumbered NPTH pegs: rejected without drill capability", async () => {
+    isolateTestDb("f3-j1-no-capability");
+    setKicadDrillCapabilityForTesting({ plating: false, slots: false });
+    try {
+      const sdk = await bootRuntime();
+      const result = await sdk.commitKicadProject({
+        archiveFileName: "usbc.zip",
+        archiveBytes: buildUsbCPegProjectZip(),
+      });
+      const unresolved = result.warnings.filter(
+        (w) => w.code === "component_unresolved",
+      );
+      expect(unresolved).toHaveLength(1);
+      expect(unresolved[0]!.message).toStartWith("J1: ");
+      expect(unresolved[0]!.message).toContain(
+        "has non-plated or slotted holes this version can't represent yet.",
+      );
+      expect(unresolved[0]!.message).not.toContain("empty number");
+      const sch = (await sdk.getSchematicProjection(result.designId))!;
+      expect(sch.parts.find((p) => p.reference === "J1")).toBeUndefined();
+    } finally {
+      setKicadDrillCapabilityForTesting(null);
+    }
+  });
+
+  test("USB-C J1 with unnumbered NPTH pegs: imported with drill capability", async () => {
+    isolateTestDb("f3-j1-capability");
+    setKicadDrillCapabilityForTesting({ plating: true, slots: true });
+    try {
+      const sdk = await bootRuntime();
+      const result = await sdk.commitKicadProject({
+        archiveFileName: "usbc.zip",
+        archiveBytes: buildUsbCPegProjectZip(),
+      });
+      expect(
+        result.warnings.filter((w) => w.code === "component_unresolved"),
+      ).toEqual([]);
+      const sch = (await sdk.getSchematicProjection(result.designId))!;
+      expect(sch.parts.find((p) => p.reference === "J1")).toBeDefined();
+      const pcb = (await sdk.getPcbProjection(result.designId))!;
+      expect(pcb.placements.find((p) => p.reference === "J1")).toBeDefined();
+    } finally {
+      setKicadDrillCapabilityForTesting(null);
+    }
   });
 
   test("commit rejects ZIP missing .kicad_pcb", async () => {

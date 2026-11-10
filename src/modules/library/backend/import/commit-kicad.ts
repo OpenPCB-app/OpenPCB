@@ -18,6 +18,7 @@ import {
 import { ImportValidationError, parseImportBundle } from "./inspect-kicad";
 import type { CommitKicadRequest, CommitKicadResponse } from "./types";
 import {
+  type FootprintWithPads,
   validateFootprintPads,
   validateSymbolPinsCoverFootprintPads,
 } from "./validate-pads";
@@ -118,6 +119,77 @@ function findExistingFootprintId(
   return null;
 }
 
+/** Drill fields the installed `@openpcb/kicad-import` preview represents. */
+export interface KicadDrillCapability {
+  plating: boolean;
+  slots: boolean;
+}
+
+// One NPTH pad with an oval (slotted) drill: the preview keeps `plated` /
+// `drillSlotMm` only once the package can represent them.
+const DRILL_PROBE_FOOTPRINT = `(footprint "openpcb_drill_capability_probe" (layer "F.Cu")
+  (pad "" np_thru_hole oval (at 0 0) (size 0.6 1.7) (drill oval 0.6 1.7) (layers "*.Cu" "*.Mask")))`;
+
+let probedDrillCapability: KicadDrillCapability | null = null;
+let drillCapabilityOverride: KicadDrillCapability | null = null;
+
+function probeDrillCapability(): KicadDrillCapability {
+  try {
+    const bundle = parseImportBundle({
+      symbolLibrary: null,
+      footprints: [
+        { fileName: "drill-probe.kicad_mod", content: DRILL_PROBE_FOOTPRINT },
+      ],
+    });
+    const pad = bundle.normalizedFootprints[0]?.preview.pads[0];
+    if (!pad) return { plating: false, slots: false };
+    return { plating: "plated" in pad, slots: "drillSlotMm" in pad };
+  } catch {
+    return { plating: false, slots: false };
+  }
+}
+
+/** Feature-detected once per process (H14 §3.7); fail closed on probe error. */
+export function kicadDrillCapability(): KicadDrillCapability {
+  if (drillCapabilityOverride) return drillCapabilityOverride;
+  probedDrillCapability ??= probeDrillCapability();
+  return probedDrillCapability;
+}
+
+export function setKicadDrillCapabilityForTesting(
+  capability: KicadDrillCapability | null,
+): void {
+  drillCapabilityOverride = capability;
+}
+
+/**
+ * Unnumbered pads are mechanical (NPTH pegs, mounting holes) and are only
+ * accepted once plating and slots survive into the preview; until then a
+ * drilled unnumbered pad would import as a plated round hole, so it is
+ * rejected with a reason the import wizard can show as is.
+ */
+function validateImportedFootprintPads(footprint: FootprintWithPads): void {
+  const capability = kicadDrillCapability();
+  if (capability.plating && capability.slots) {
+    validateFootprintPads(footprint, { allowUnnumberedPads: true });
+    return;
+  }
+  // The pinned parser drops `(drill oval …)` diameters, so a through-hole
+  // layer counts as a hole too.
+  const drilledUnnumbered = footprint.pads.some(
+    (pad) =>
+      (pad.number ?? "").trim().length === 0 &&
+      ((typeof pad.drillDiameterMm === "number" && pad.drillDiameterMm > 0) ||
+        pad.layer === "*.Cu"),
+  );
+  if (drilledUnnumbered) {
+    throw new ImportValidationError(
+      `Footprint "${footprint.name}" has non-plated or slotted holes this version can't represent yet.`,
+    );
+  }
+  validateFootprintPads(footprint);
+}
+
 function dedupeTags(values: readonly string[]): string[] {
   return values
     .map((tag) => tag.trim().toLowerCase())
@@ -183,7 +255,7 @@ export function commitKicadImport(
   // import time, not later on the PCB tab. Pin↔pad subset enforced when both
   // a symbol and footprint are selected (skipped for symbol-only import).
   if (selectedFootprint) {
-    validateFootprintPads(selectedFootprint.preview);
+    validateImportedFootprintPads(selectedFootprint.preview);
     validateSymbolPinsCoverFootprintPads(
       selectedSymbol,
       selectedFootprint.preview,
