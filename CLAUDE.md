@@ -136,6 +136,9 @@ src/
     │                       `rendering/pcb/outline-geometry.ts` and `backend/pcb/outline-geometry.ts`
     │                       are re-export shims over it; courtyard-rings.ts — the S12 per-side
     │                       courtyard regions (11 §2)
+    ├── kicad-frame/        KiCad K→canonical frame helpers (`angles.ts` `norm360`,
+    │                       `board-footprint-unplace.ts`) — see
+    │                       docs/pcb-hardening/KF1-kicad-frame-contract.md
     ├── pcb-routing/        PCB routing
     ├── rendering/          re-export shim over @openpcb/rendering-core (see above) — EXCEPT the
     │                       in-tree `pcb/` (drills, outline kernels, chain-edges, loop-ring,
@@ -150,7 +153,7 @@ scripts/                module-cli.ts, gen-modules.ts, gen-sdk.ts, gen-contract-
 tests/e2e/              Playwright
 ```
 
-The shared tree has **nine** subtrees, listed above. There is no `src/shared/backend/`.
+The shared tree has **ten** subtrees, listed above. There is no `src/shared/backend/`.
 
 ### Modules
 

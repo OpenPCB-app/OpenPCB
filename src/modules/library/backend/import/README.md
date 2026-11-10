@@ -33,3 +33,19 @@ npm run test:react -- src/modules/library/frontend/import-wizard/import-quaranti
 
 This is an interim capability restriction. The underlying KiCad transform,
 generator and manufacturing qualification work remains separate.
+
+## Qualification-based intake (KF1)
+
+Target policy (H13, `docs/pcb-hardening/KF1-kicad-frame-contract.md`). The blanket block above is
+replaced, in later slices, by frame qualification; until then the text above still describes the
+shipped behaviour.
+
+- A KiCad footprint is accepted only when the installed `@openpcb/kicad-import` is qualified
+  (exports `KICAD_FOOTPRINT_TRANSFORM_VERSION` in `QUALIFIED_KICAD_TRANSFORM_VERSIONS`), the
+  server-built preview carries a matching frame stamp, and the preview satisfies the KF1 geometry
+  relation against its raw pads. Pinned 0.1.2 exports no transform version, so nothing qualifies.
+- A `.opclib` is accepted only when every footprint classifies as `kicad-converted` or `authored`
+  (signed pack, or geometry-verified). A stamp alone never authorizes.
+- Unqualified input is rejected while `library.footprintIntakeQuarantine` is on (release) and stored
+  as `legacy-kicad-ydown` otherwise; legacy rows are blocked from export, not removed.
+- `raw` stays in the KiCad (K) frame; never compare it with `preview` except through KF1.

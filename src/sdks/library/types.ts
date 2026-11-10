@@ -104,6 +104,54 @@ export interface LibraryFootprintDetail {
   warnings: LibraryPreviewWarning[];
   preview: Record<string, unknown> | null;
   provenance: LibrarySourceProvenance | null;
+  frameClass?: LibraryFootprintFrameClass;
+  frameReason?: string;
+}
+
+// ── Footprint frame provenance (KF1, docs/pcb-hardening/KF1-kicad-frame-contract.md)
+
+export type FootprintFrameOrigin = "kicad-converted" | "authored";
+
+export interface FootprintFrameProvenance {
+  frame: "openpcb-y-up";
+  origin: FootprintFrameOrigin;
+  /** kicad-converted: ≥1; authored: 0. */
+  transformVersion: number;
+  /** "@openpcb/kicad-import" | "openpcb-editor" | "ipc-7351b" | "parametric:<id>" */
+  tool: string;
+}
+
+export type LibraryFootprintFrameClass =
+  /** Canonical; stamp qualified AND verified (signature or geometry). */
+  | "kicad-converted"
+  /** Drawn / IPC / parametric — natively canonical, no KiCad raw. */
+  | "authored"
+  /** No geometry. */
+  | "placeholder"
+  /** KiCad-derived, stored in the KiCad Y-down frame (mirrored). */
+  | "legacy-kicad-ydown"
+  /** Cannot be proven either way. */
+  | "ambiguous";
+
+/** How the class was established. Re-derived from evidence on every classification — never copied. */
+export type LibraryFootprintFrameTrust =
+  /** Pack row whose signature is valid now (library_releases). */
+  | "signed-pack"
+  /** preview == KF1 relation(raw) for the stamped transform version. */
+  | "geometry-verified"
+  /** Authored rows without KiCad raw (no K source exists to mirror). */
+  | "markers";
+
+export interface LibraryFootprintFrameEvidence {
+  footprintId: string;
+  frameClass: LibraryFootprintFrameClass;
+  trust: LibraryFootprintFrameTrust | null;
+  frame: FootprintFrameProvenance | null;
+  /** Current row preview (C or K depending on class). */
+  currentPreview: FootprintRenderModel | null;
+  /** Pre-rewrite preview from library_footprint_frame_backups (latest run), else null. */
+  legacyPreview: FootprintRenderModel | null;
+  reason: string;
 }
 
 /** One row of `library_component_footprints` enriched with display metadata. */
@@ -184,6 +232,9 @@ export interface LibraryFootprintPlacementSnapshot {
   /** Component-specific symbol-pin → footprint-pad map. Missing/null means fallback to matching numbers. */
   pinMap?: LibraryPinMapEntry[] | null;
   model3d?: LibraryFootprintModelDescriptor;
+  frame?: FootprintFrameProvenance;
+  frameClass?: LibraryFootprintFrameClass;
+  frameTrust?: LibraryFootprintFrameTrust;
 }
 
 export interface LibraryComponentPlacementDetail {
@@ -298,4 +349,5 @@ export interface LibraryAddComponentFootprintInput {
 export interface LibraryDefaultFootprintRef {
   footprintId: string;
   sourceHash: string | null;
+  frameClass?: LibraryFootprintFrameClass;
 }

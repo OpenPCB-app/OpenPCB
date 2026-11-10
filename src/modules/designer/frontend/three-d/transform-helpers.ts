@@ -27,6 +27,9 @@ interface ModelRefCorrection {
   offset?: { x?: number; y?: number; z?: number };
   rotation?: { x?: number; y?: number; z?: number };
   scale?: { x?: number; y?: number; z?: number };
+  /** Present only on a verbatim KiCad `(model …)` block (`Model3DRef`, written
+   * by `commit-kicad-zip.ts`); CoreLibrary/opclib refs never carry it. */
+  resolvedFileName?: unknown;
 }
 
 function parseModelRef(raw: unknown): ModelRefCorrection | null {
@@ -34,20 +37,35 @@ function parseModelRef(raw: unknown): ModelRefCorrection | null {
   return raw as ModelRefCorrection;
 }
 
+function isKicadSourcedModelRef(ref: ModelRefCorrection): boolean {
+  return typeof ref.resolvedFileName === "string";
+}
+
+/**
+ * KiCad `(rotate)` semantics, verified against KiCad 8.0.4
+ * `3d-viewer/3d_rendering/opengl/render_3d_opengl.cpp`
+ * (`RENDER_3D_OPENGL::get3dModelsFromFootprint`, lines 1031-1036): the model
+ * matrix is `translate(offset) · rotZ(−z) · rotY(−y) · rotX(−x) · scale`,
+ * i.e. negated angles in Z·Y·X order. `(offset)` is mm (`FP_3DMODEL::m_Offset`,
+ * `pcbnew/footprint.h:98`) in the Y-up 3D frame, so it is used unchanged.
+ * See KF1 §3 "KiCad 3D model". CoreLibrary refs keep the authored XYZ order.
+ */
+function modelRefRotation(ref: ModelRefCorrection): THREE.Euler {
+  const rotation = ref.rotation ?? {};
+  const x = THREE.MathUtils.degToRad(rotation.x ?? 0);
+  const y = THREE.MathUtils.degToRad(rotation.y ?? 0);
+  const z = THREE.MathUtils.degToRad(rotation.z ?? 0);
+  return isKicadSourcedModelRef(ref)
+    ? new THREE.Euler(-x, -y, -z, "ZYX")
+    : new THREE.Euler(x, y, z, "XYZ");
+}
+
 function buildModelRefMatrix(ref: ModelRefCorrection): THREE.Matrix4 {
   const offset = ref.offset ?? {};
-  const rotation = ref.rotation ?? {};
   const scale = ref.scale ?? {};
   return new THREE.Matrix4().compose(
     new THREE.Vector3(offset.x ?? 0, offset.y ?? 0, offset.z ?? 0),
-    new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(
-        THREE.MathUtils.degToRad(rotation.x ?? 0),
-        THREE.MathUtils.degToRad(rotation.y ?? 0),
-        THREE.MathUtils.degToRad(rotation.z ?? 0),
-        "XYZ",
-      ),
-    ),
+    new THREE.Quaternion().setFromEuler(modelRefRotation(ref)),
     new THREE.Vector3(scale.x ?? 1, scale.y ?? 1, scale.z ?? 1),
   );
 }
@@ -78,6 +96,25 @@ export function getPlacementTransformProps(
   };
 }
 
+/**
+ * Model-group variant of `getPlacementTransformProps` (KF1 §3, "3D back-side
+ * model"). KiCad turns a flipped model through the board,
+ * `R_z(θ)·diag(1,−1,−1) = R_z(θ+180)·diag(−1,1,−1)`: a proper rotation
+ * (det = +1), so the body hangs below the bottom face instead of being
+ * mirror-imaged into the board. The flat 2D overlay keeps `(−1,1,1)`.
+ */
+export function getModelPlacementTransformProps(
+  placement: PcbPlacedPart,
+  boardThicknessMm: number,
+): PlacementTransformProps {
+  const transform = getPlacementTransformProps(placement, boardThicknessMm);
+  const isBackLayer = placement.layer === "B.Cu";
+  return {
+    ...transform,
+    scale: [transform.scale[0], 1, isBackLayer ? -1 : 1],
+  };
+}
+
 export function applyPlacementTransform(
   group: THREE.Group,
   placement: PcbPlacedPart,
@@ -101,7 +138,10 @@ export function applyPlacementTransform(
     multiplyGroupTransform(group, buildModelRefMatrix(modelRef));
   }
 
-  const transform = getPlacementTransformProps(placement, boardThicknessMm);
+  const transform = getModelPlacementTransformProps(
+    placement,
+    boardThicknessMm,
+  );
   const matrix = new THREE.Matrix4().compose(
     new THREE.Vector3(...transform.position),
     new THREE.Quaternion().setFromEuler(
