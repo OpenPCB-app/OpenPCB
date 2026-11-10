@@ -50,6 +50,12 @@ export const FootprintStep = memo(function FootprintStep({
     setPresetSize,
     setPresetDensity,
     setGeneratedFootprint,
+    generatorTab,
+    setGeneratorTab,
+    templateSelection,
+    setTemplateSelection,
+    templatePayload,
+    setTemplatePayload,
   } = useImportWizardStore(
     useShallow((s) => ({
       footprintFiles: s.footprintFiles,
@@ -71,6 +77,12 @@ export const FootprintStep = memo(function FootprintStep({
       setPresetSize: s.setPresetSize,
       setPresetDensity: s.setPresetDensity,
       setGeneratedFootprint: s.setGeneratedFootprint,
+      generatorTab: s.generatorTab,
+      setGeneratorTab: s.setGeneratorTab,
+      templateSelection: s.templateSelection,
+      setTemplateSelection: s.setTemplateSelection,
+      templatePayload: s.templatePayload,
+      setTemplatePayload: s.setTemplatePayload,
     })),
   );
 
@@ -107,7 +119,7 @@ export const FootprintStep = memo(function FootprintStep({
   const importVerb = quarantined ? "Preview" : "Import";
 
   const emptyMessage = isPresetMode
-    ? "Select a package family and size, then click Generate."
+    ? "Select a package family and size, or generate a template."
     : footprintFiles.length === 0
       ? `${importVerb} one or more .kicad_mod files to preview geometry.`
       : "No footprint preview available for current selection.";
@@ -217,6 +229,12 @@ export const FootprintStep = memo(function FootprintStep({
                 if (next.density !== presetDensity)
                   setPresetDensity(next.density);
               }}
+              activeTab={generatorTab}
+              onActiveTabChange={setGeneratorTab}
+              templateSelection={templateSelection}
+              onTemplateSelectionChange={setTemplateSelection}
+              templatePayload={templatePayload}
+              onTemplatePayloadChange={setTemplatePayload}
               onGenerated={(g) =>
                 setGeneratedFootprint(
                   g

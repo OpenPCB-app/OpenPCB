@@ -1,6 +1,8 @@
 import type {
   LibraryAddComponentFootprintInput,
   LibraryDefaultFootprintRef,
+  LibraryFootprintPlacementSnapshot,
+  LibraryFootprintQualification,
   LibraryComponent,
   LibraryComponentDetail,
   LibraryComponentPlacementDetail,
@@ -13,6 +15,7 @@ import type {
 } from "./types";
 
 export type {
+  FootprintGenerationStamp,
   LibraryAddComponentFootprintInput,
   LibraryAuthoredFootprintSource,
   LibraryDefaultFootprintRef,
@@ -30,6 +33,8 @@ export type {
   LibraryFootprintModelDescriptor,
   LibraryFootprintModelStatus,
   LibraryFootprintPlacementSnapshot,
+  LibraryFootprintQualification,
+  LibraryFootprintQualificationStatus,
   LibraryComponentFootprintVariant,
   LibraryListTagsOptions,
   LibraryMountType,
@@ -73,4 +78,18 @@ export interface LibrarySDK {
   getDefaultFootprintRefs(
     componentIds: readonly string[],
   ): Promise<Record<string, LibraryDefaultFootprintRef>>;
+  /** Generator qualification of stored footprint rows; unknown ids are absent. */
+  getFootprintQualifications(
+    footprintIds: readonly string[],
+  ): Promise<Record<string, LibraryFootprintQualification>>;
+  /**
+   * Generator qualification of placed footprints, classified from each
+   * snapshot's own pads (the geometry the Gerber writes), keyed by `key`.
+   */
+  classifyPlacedFootprints(
+    items: readonly {
+      key: string;
+      snapshot: LibraryFootprintPlacementSnapshot;
+    }[],
+  ): Promise<Record<string, LibraryFootprintQualification>>;
 }

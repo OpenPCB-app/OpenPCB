@@ -5,6 +5,7 @@ import {
   ALL_FAMILIES,
   generateFootprint,
 } from "../../../shared/rendering/ipc7351b";
+import { getTemplate } from "../../../shared/rendering/parametric";
 import type { SymbolRenderSource } from "../../../shared/rendering/types";
 import {
   getSharedSqlite,
@@ -14,7 +15,9 @@ import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
+import { ipcFamilyAvailability } from "../../../modules/library/shared/generator-qualification";
 import { getKicadFixturePath } from "./helpers/kicad-fixtures";
+import { pinHeaderGenerator, templatePayload } from "./helpers/template-footprint";
 
 let server: ReturnType<typeof createHttpServer>;
 let symbolId: string;
@@ -50,8 +53,12 @@ const drawnSymbol: { source: SymbolRenderSource; referencePrefix: string } = {
 };
 
 async function post(endpoint: string, body: unknown): Promise<Response> {
+  return postLibrary(`imports/${endpoint}`, body);
+}
+
+async function postLibrary(subpath: string, body: unknown): Promise<Response> {
   return server.fetch(
-    new Request(`http://localhost/api/modules/library/imports/${endpoint}`, {
+    new Request(`http://localhost/api/modules/library/${subpath}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
@@ -122,8 +129,8 @@ afterAll(() => {
 for (const endpoint of ["generated", "drawn"]) {
   test(`${endpoint}: every quarantined size/density returns actionable 422 with no library writes`, async () => {
     const before = snapshot();
-    for (const family of ALL_FAMILIES.filter((family) =>
-      ["sot", "qfn"].includes(family.id),
+    for (const family of ALL_FAMILIES.filter(
+      (family) => !ipcFamilyAvailability(family.id).available,
     )) {
       for (const size of family.sizes) {
         for (const density of ["most", "nominal", "least"] as const) {
@@ -191,7 +198,56 @@ for (const endpoint of ["generated", "drawn"]) {
     }
   });
 
-  test(`${endpoint}: allowed tuple persists exact server geometry and generator provenance`, async () => {
+  test(`${endpoint}: template generator persists exact server geometry and provenance`, async () => {
+    const generator = pinHeaderGenerator(1, 2);
+    const preview = templatePayload(generator);
+    const response = await post(
+      endpoint,
+      request(endpoint, { generator, ...preview }),
+    );
+    expect(response.status).toBe(201);
+    const payload = (await response.json()) as {
+      data: { componentId: string };
+    };
+    const row = getSharedSqlite()
+      .query<{ data_json: string }, [string]>(
+        "SELECT f.data_json FROM library_footprints f JOIN library_components c ON c.footprint_id=f.id WHERE c.id=?",
+      )
+      .get(payload.data.componentId)!;
+    const data = JSON.parse(row.data_json);
+    expect(data.raw.source).toEqual(preview.source);
+    expect(data.normalized.name).toBe(preview.metadata.name);
+    expect(data.provenance.generator).toEqual({
+      ...generator,
+      params: expect.objectContaining(generator.params),
+    });
+    expect(data.provenance.generatorVersion).toBe(
+      getTemplate("pin-header")!.generatorVersion,
+    );
+  });
+
+  test(`${endpoint}: overlapping template output returns 422 with no library writes`, async () => {
+    const before = snapshot();
+    const response = await post(
+      endpoint,
+      request(endpoint, {
+        generator: {
+          kind: "template",
+          templateId: "screw-terminal",
+          params: { poles: 2, pitchMm: 2.54, drillMm: 2.5 },
+        },
+      }),
+    );
+    expect(response.status).toBe(422);
+    const problem = (await response.json()) as { code: string; detail: string };
+    expect(problem.code).toBe("UNQUALIFIED_GENERATOR");
+    expect(problem.detail).toContain("pads 1 and 2 overlap");
+    expect(snapshot()).toBe(before);
+  });
+
+  // Every family is quarantined on the pinned rendering-core (H15 D1); this
+  // runs once a qualified, accepted generator is installed.
+  test.if(ipcFamilyAvailability("chip").available)(`${endpoint}: allowed tuple persists exact server geometry and generator provenance`, async () => {
     const generator = {
       kind: "ipc7351b",
       family: "chip",
@@ -226,8 +282,33 @@ for (const endpoint of ["generated", "drawn"]) {
     expect(data.provenance.presetParameters).toEqual(
       ALL_FAMILIES[0].sizes.find((size) => size.label === "0603")!.params,
     );
+    expect(data.provenance.padFingerprint).toMatch(/^[a-f0-9]{64}$/);
   });
 }
+
+test("template materialize refuses overlapping output and serves clean output", async () => {
+  const rejected = await postLibrary("templates/pin-header/materialize", {
+    params: { rows: 1, pinsPerRow: 4, pitchMm: 1.27, mount: "tht" },
+  });
+  expect(rejected.status).toBe(422);
+  const problem = (await rejected.json()) as { code: string; detail: string };
+  expect(problem.code).toBe("UNQUALIFIED_GENERATOR");
+  expect(problem.detail).toContain("overlap");
+
+  const served = await postLibrary("templates/mounting-array/materialize", {
+    params: {},
+  });
+  expect(served.status).toBe(200);
+  const body = (await served.json()) as {
+    data: { source: { pads: { number: string }[] } };
+  };
+  expect(body.data.source.pads.map((pad) => pad.number)).toEqual([
+    "",
+    "",
+    "",
+    "",
+  ]);
+});
 
 test("provenance='drawn' cannot bypass generated endpoint validation", async () => {
   const preview = generateFootprint("sot", "SOT-23", "nominal");

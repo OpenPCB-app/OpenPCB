@@ -2,6 +2,7 @@ import type {
   DensityLevel,
   PackageFamily,
 } from "../../../shared/rendering/ipc7351b";
+import { ipcFamilyAvailability } from "./generator-qualification";
 
 export interface IpcGeneratorIdentity {
   kind: "ipc7351b";
@@ -20,16 +21,12 @@ export type FootprintGeneratorIdentity =
   | IpcGeneratorIdentity
   | TemplateGeneratorIdentity;
 
+/** Null when the family may be generated; otherwise the reason it is quarantined. */
 export function generatorUnavailableReason(
   family: PackageFamily,
 ): string | null {
-  if (family === "sot") {
-    return "SOT presets are unavailable because generated pad counts and tab layouts are incorrect. Import a verified footprint or draw one instead.";
-  }
-  if (family === "qfn") {
-    return "QFN presets are unavailable because the exposed pad overlaps signal pads. Import a verified footprint or draw one instead.";
-  }
-  return null;
+  const availability = ipcFamilyAvailability(family);
+  return availability.available ? null : availability.reason;
 }
 
 export function sameGeneratorIdentity(

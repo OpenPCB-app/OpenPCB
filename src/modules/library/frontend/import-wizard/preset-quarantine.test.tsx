@@ -2,7 +2,12 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { generateFootprint } from "../../../../shared/rendering/ipc7351b";
+import {
+  ALL_FAMILIES,
+  generateFootprint,
+} from "../../../../shared/rendering/ipc7351b";
+import { generatorUnavailableReason } from "../../shared/generator-policy";
+import { installedIpcQualification } from "../../shared/generator-qualification";
 import { IpcPresetTab } from "../footprint-generator/IpcPresetTab";
 import { useImportWizardStore, hasCurrentPreset } from "./useImportWizardStore";
 import { ImportWizardPage } from "./ImportWizardPage";
@@ -10,6 +15,23 @@ import {
   commitDrawnImportRequest,
   commitGeneratedImportRequest,
 } from "./import-api";
+
+// Every IPC family is quarantined on the pinned rendering-core (H15 D1). The
+// positive wizard paths below mark chosen families available; the rest keep
+// the real policy.
+const qualification = vi.hoisted(() => ({ available: new Set<string>() }));
+vi.mock("../../shared/generator-qualification", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../shared/generator-qualification")>();
+  const ipcFamilyAvailability: typeof actual.ipcFamilyAvailability = (
+    family,
+    ...rest
+  ) =>
+    qualification.available.has(family)
+      ? { available: true, revision: 2 }
+      : actual.ipcFamilyAvailability(family, ...rest);
+  return { ...actual, ipcFamilyAvailability };
+});
 
 vi.mock("./steps/SymbolStep", () => ({ SymbolStep: () => null }));
 vi.mock("./steps/FootprintStep", () => ({ FootprintStep: () => null }));
@@ -91,6 +113,7 @@ async function renderWizard(): Promise<void> {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  qualification.available = new Set(["chip"]);
   useImportWizardStore.getState().reset();
   useImportWizardStore.setState({
     symbolSource: "draw",
@@ -163,7 +186,7 @@ test("unsafe generator output cannot be injected into current wizard state", () 
   expect(useImportWizardStore.getState().generatedFootprint).toBeNull();
 });
 
-test("picker disables SOT/QFN with visible reasons, keeps other families available", async () => {
+async function renderPicker(): Promise<HTMLButtonElement[]> {
   await act(async () =>
     root.render(
       <IpcPresetTab
@@ -171,24 +194,48 @@ test("picker disables SOT/QFN with visible reasons, keeps other families availab
         onFamilyChange={vi.fn()}
         onSizeChange={vi.fn()}
         onDensityChange={vi.fn()}
-        onGenerate={vi.fn()}
       />,
     ),
   );
-  const buttons = [...host.querySelectorAll("button")];
-  for (const family of ["SOT", "QFN"]) {
-    const button = buttons.find((button) =>
-      button.textContent?.startsWith(family),
-    )!;
-    expect(button.disabled).toBe(true);
-    expect(button.title).toContain("unavailable");
-    expect(button.textContent).toContain(
-      "Import a verified footprint or draw one",
-    );
+  return [...host.querySelectorAll("button")];
+}
+
+function familyButton(
+  buttons: readonly HTMLButtonElement[],
+  label: string,
+): HTMLButtonElement {
+  const button = buttons.find((candidate) =>
+    candidate.textContent?.startsWith(label),
+  );
+  if (!button) throw new Error(`${label} family button missing`);
+  return button;
+}
+
+test.runIf(installedIpcQualification() === null)(
+  "picker disables all five IPC families with visible reasons on the pinned generator",
+  async () => {
+    qualification.available = new Set();
+    const buttons = await renderPicker();
+    for (const family of ["Chip", "SOT", "SOIC", "QFP", "QFN"]) {
+      const button = familyButton(buttons, family);
+      expect(button.disabled).toBe(true);
+      expect(button.title).toContain("unavailable");
+      expect(button.textContent).toContain(
+        "Import a verified footprint or draw one",
+      );
+    }
+  },
+);
+
+test("picker offers exactly the families the qualification policy makes available", async () => {
+  const buttons = await renderPicker();
+  expect(familyButton(buttons, "Chip").disabled).toBe(false);
+  for (const family of ALL_FAMILIES) {
+    const reason = generatorUnavailableReason(family.id);
+    const button = familyButton(buttons, family.label);
+    expect(button.disabled).toBe(reason !== null);
+    expect(button.title).toBe(reason ?? "");
   }
-  expect(
-    buttons.find((button) => button.textContent?.startsWith("Chip"))?.disabled,
-  ).toBe(false);
 });
 
 for (const symbolSource of ["draw", "import"] as const) {

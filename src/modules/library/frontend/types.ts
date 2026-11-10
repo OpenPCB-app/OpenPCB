@@ -1,4 +1,8 @@
-import type { LibraryComponent, LibraryPinMapEntry } from "../../../sdks/library";
+import type {
+  LibraryComponent,
+  LibraryFootprintQualification,
+  LibraryPinMapEntry,
+} from "../../../sdks/library";
 import type {
   FootprintRenderModel,
   SymbolRenderModel,
@@ -62,6 +66,8 @@ export interface ComponentFootprintVariant {
     metric: string | null;
   };
   pinMap: LibraryPinMapEntry[] | null;
+  /** Generator qualification of the stored pads (H15 §3.4). */
+  qualification?: LibraryFootprintQualification;
 }
 
 export interface ComponentDetailPayload {

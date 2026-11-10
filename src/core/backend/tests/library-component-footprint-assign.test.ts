@@ -4,12 +4,14 @@ import path from "node:path";
 import type { LibrarySDK } from "../../../sdks";
 import { MODULE_SDK_TOKENS } from "../../../sdks";
 import { generateFootprint } from "../../../shared/rendering/ipc7351b";
+import { ipcFamilyAvailability } from "../../../modules/library/shared/generator-qualification";
 import { resetSharedSqliteForTesting } from "../db/sqlite-client";
 import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
 import { MentionRegistry } from "../mentions";
+import { pinHeaderGenerator, templatePayload } from "./helpers/template-footprint";
 
 const PLACEHOLDER = "fp-no-footprint-yet";
 
@@ -92,6 +94,14 @@ async function importNone(
 }
 
 // Generated footprints are re-derived server-side from these parameters.
+// Every IPC family is quarantined on the pinned rendering-core (H15 D1), so the
+// generated positives use an 8-pad template.
+const HEADER8_GENERATOR = pinHeaderGenerator(2, 4);
+
+function header8() {
+  return templatePayload(HEADER8_GENERATOR);
+}
+
 const SOIC8_GENERATOR = {
   kind: "ipc7351b",
   family: "soic",
@@ -104,8 +114,10 @@ function soic8() {
   return { source: result.source, metadata: result.metadata };
 }
 
+const SOIC_AVAILABLE = ipcFamilyAvailability("soic").available;
+
 describe("library: assign / replace component default footprint", () => {
-  test("POST /components/:id/footprints (generated SOIC-8) links + sets default", async () => {
+  test("POST /components/:id/footprints (generated pin header) links + sets default", async () => {
     const { server, sdk } = await boot();
     const id = await importNone(server, "FpAddA", ["1", "2"]);
     const before = await sdk.resolveComponentForPlacement(id);
@@ -113,8 +125,8 @@ describe("library: assign / replace component default footprint", () => {
 
     const res = await call(server, "POST", `/components/${id}/footprints`, {
       mode: "generated",
-      source: soic8(),
-      generator: SOIC8_GENERATOR,
+      source: header8(),
+      generator: HEADER8_GENERATOR,
     });
     expect(res.status).toBe(201);
     const footprintId = res.json.data.footprintId as string;
@@ -129,6 +141,35 @@ describe("library: assign / replace component default footprint", () => {
     expect(variants.filter((v) => v.isDefault).map((v) => v.footprintId)).toEqual([
       footprintId,
     ]);
+  });
+
+  test.if(SOIC_AVAILABLE)("POST /components/:id/footprints (generated SOIC-8) links + sets default", async () => {
+    const { server, sdk } = await boot();
+    const id = await importNone(server, "FpAddIpc", ["1", "2"]);
+    const res = await call(server, "POST", `/components/${id}/footprints`, {
+      mode: "generated",
+      source: soic8(),
+      generator: SOIC8_GENERATOR,
+    });
+    expect(res.status).toBe(201);
+    const after = await sdk.resolveComponentForPlacement(id);
+    expect(after?.footprint.footprintId).toBe(res.json.data.footprintId);
+    expect(after?.footprint.preview?.pads.length).toBe(8);
+  });
+
+  test.if(!SOIC_AVAILABLE)("POST footprints with a quarantined IPC family is 422; nothing persisted", async () => {
+    const { server, sdk } = await boot();
+    const id = await importNone(server, "FpAddQuarantined", ["1", "2"]);
+    const res = await call(server, "POST", `/components/${id}/footprints`, {
+      mode: "generated",
+      source: soic8(),
+      generator: SOIC8_GENERATOR,
+    });
+    expect(res.status).toBe(422);
+    expect(res.json.code).toBe("UNQUALIFIED_GENERATOR");
+    const after = await sdk.resolveComponentForPlacement(id);
+    expect(after?.footprint.footprintId).toBe(PLACEHOLDER);
+    expect(after?.footprintVariants.length).toBe(1);
   });
 
   test("POST footprints with setDefault=false keeps the old default", async () => {
@@ -155,8 +196,8 @@ describe("library: assign / replace component default footprint", () => {
     const id = await importNone(server, "FpAddC", ["1", "99"]);
     const res = await call(server, "POST", `/components/${id}/footprints`, {
       mode: "generated",
-      source: soic8(),
-      generator: SOIC8_GENERATOR,
+      source: header8(),
+      generator: HEADER8_GENERATOR,
     });
     expect(res.status).toBe(400);
     const after = await sdk.resolveComponentForPlacement(id);
@@ -170,8 +211,8 @@ describe("library: assign / replace component default footprint", () => {
     const other = await importNone(server, "FpPatchSrc", ["1"]);
     const created = await call(server, "POST", `/components/${other}/footprints`, {
       mode: "generated",
-      source: soic8(),
-      generator: SOIC8_GENERATOR,
+      source: header8(),
+      generator: HEADER8_GENERATOR,
     });
     const fpId = created.json.data.footprintId as string;
 
@@ -200,8 +241,8 @@ describe("library: assign / replace component default footprint", () => {
     const src = await importNone(server, "FpMmSrc", ["1"]);
     const created = await call(server, "POST", `/components/${src}/footprints`, {
       mode: "generated",
-      source: soic8(),
-      generator: SOIC8_GENERATOR,
+      source: header8(),
+      generator: HEADER8_GENERATOR,
     });
     const fpId = created.json.data.footprintId as string;
     const id = await importNone(server, "FpMm", ["1", "42"]);
@@ -235,7 +276,7 @@ describe("library: assign / replace component default footprint", () => {
       server,
       "POST",
       `/components/${builtin!.id}/footprints`,
-      { mode: "generated", source: soic8(), generator: SOIC8_GENERATOR },
+      { mode: "generated", source: header8(), generator: HEADER8_GENERATOR },
     );
     expect(post.status).toBe(400);
   });

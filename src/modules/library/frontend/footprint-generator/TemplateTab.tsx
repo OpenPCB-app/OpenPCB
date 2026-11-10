@@ -1,13 +1,26 @@
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 import { Button, Field, Input, Select } from "@shared/frontend/ui";
 import type {
   ParamField,
   ParamSchema,
   ParamValue,
+  ParamValues,
 } from "../../../../shared/rendering/parametric";
 import type { FootprintRenderSource } from "../../../../shared/rendering/types";
 import { toUserError } from "../utils";
-import { validateTemplateParams } from "./footprint-validation";
+import {
+  templateRequestKey,
+  validateTemplateParams,
+  type TemplateSelection,
+} from "./footprint-validation";
 
 interface TemplateInfo {
   id: string;
@@ -104,23 +117,48 @@ function ParamInput({
   );
 }
 
-/** Parametric-template form: GET /templates, POST /templates/:id/materialize. */
+function formValue(value: ParamValue | undefined): string | boolean | undefined {
+  return typeof value === "number" ? String(value) : value;
+}
+
+/**
+ * Parametric-template form: GET /templates, POST /templates/:id/materialize.
+ * The selection is owned by the caller so it survives remounts. Any edit
+ * invalidates the previous result, and a response is emitted only while its
+ * request key still equals the displayed form's key (T-319 race).
+ */
 export function TemplateTab({
   backendURL,
   moduleId,
+  selection,
+  onSelectionChange,
   onMaterialized,
+  onInvalidated,
 }: {
   backendURL: string | null | undefined;
   moduleId: string;
+  selection: TemplateSelection;
+  onSelectionChange: (next: TemplateSelection) => void;
   onMaterialized: (result: MaterializedTemplate) => void;
+  /** Any form change: the previous result no longer matches what is displayed. */
+  onInvalidated: () => void;
 }): ReactElement {
   const base = backendURL ? `${backendURL}/api/modules/${moduleId}` : null;
   const [templates, setTemplates] = useState<TemplateInfo[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [templateId, setTemplateId] = useState("");
-  const [values, setValues] = useState<FormValues>({});
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const templateId = selection.templateId;
+  const values = selection.values;
+
+  // Read by the load effect without re-running it on every keystroke.
+  const latest = useRef({ selection, onSelectionChange, onInvalidated });
+  useLayoutEffect(() => {
+    latest.current = { selection, onSelectionChange, onInvalidated };
+  });
+  const currentKeyRef = useRef<string | null>(null);
+  const controllerRef = useRef<AbortController | null>(null);
+  useEffect(() => () => controllerRef.current?.abort(), []);
 
   useEffect(() => {
     if (!base) return;
@@ -139,11 +177,15 @@ export function TemplateTab({
             toUserError(payload, `Templates failed (HTTP ${response.status})`),
           );
         }
-        setTemplates(payload.data.templates);
-        const first = payload.data.templates[0];
-        if (first) {
-          setTemplateId(first.id);
-          setValues(toFormValues(first.defaults));
+        const loaded = payload.data.templates;
+        setTemplates(loaded);
+        const { selection: shown, onSelectionChange: select, onInvalidated: invalidate } =
+          latest.current;
+        // Keep a remembered selection; only an absent or unknown id resets.
+        const first = loaded[0];
+        if (first && !loaded.some((t) => t.id === shown.templateId)) {
+          invalidate();
+          select({ templateId: first.id, values: toFormValues(first.defaults) });
         }
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -164,9 +206,37 @@ export function TemplateTab({
     [template, values],
   );
   const errors = validation && !validation.ok ? validation.errors : {};
+  const currentKey =
+    template && validation?.ok
+      ? templateRequestKey(template.id, validation.values)
+      : null;
+  useLayoutEffect(() => {
+    currentKeyRef.current = currentKey;
+  }, [currentKey]);
+
+  const change = useCallback(
+    (next: TemplateSelection) => {
+      // Drop whatever is in flight before the new form is even rendered.
+      currentKeyRef.current = null;
+      controllerRef.current?.abort();
+      controllerRef.current = null;
+      setBusy(false);
+      setSubmitError(null);
+      onInvalidated();
+      onSelectionChange(next);
+    },
+    [onInvalidated, onSelectionChange],
+  );
 
   const handleGenerate = useCallback(async () => {
     if (!base || !template || !validation?.ok) return;
+    const requestKey = templateRequestKey(template.id, validation.values);
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    currentKeyRef.current = requestKey;
+    const stale = () =>
+      controller.signal.aborted || currentKeyRef.current !== requestKey;
     setBusy(true);
     setSubmitError(null);
     try {
@@ -176,12 +246,14 @@ export function TemplateTab({
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ params: validation.values }),
+          signal: controller.signal,
         },
       );
       const payload = (await readJson(response)) as {
         ok?: boolean;
         data?: MaterializedTemplate;
       } | null;
+      if (stale()) return;
       if (!response.ok || !payload?.ok || !payload.data) {
         throw new Error(
           toUserError(payload, `Generate failed (HTTP ${response.status})`),
@@ -189,11 +261,15 @@ export function TemplateTab({
       }
       onMaterialized(payload.data);
     } catch (error) {
+      if (stale()) return;
       setSubmitError(
         error instanceof Error ? error.message : "Failed to generate footprint",
       );
     } finally {
-      setBusy(false);
+      if (controllerRef.current === controller) {
+        controllerRef.current = null;
+        setBusy(false);
+      }
     }
   }, [base, onMaterialized, template, validation]);
 
@@ -212,12 +288,13 @@ export function TemplateTab({
         <Select
           id="tpl-select"
           options={templates.map((t) => ({ id: t.id, label: t.label }))}
-          value={templateId}
+          value={template.id}
           onChange={(id) => {
             const next = templates.find((t) => t.id === id);
-            setTemplateId(id);
-            setValues(next ? toFormValues(next.defaults) : {});
-            setSubmitError(null);
+            change({
+              templateId: id,
+              values: next ? toFormValues(next.defaults) : {},
+            });
           }}
         />
       </Field>
@@ -225,11 +302,11 @@ export function TemplateTab({
         <ParamInput
           key={`${template.id}:${field.key}`}
           field={field}
-          value={values[field.key]}
+          value={formValue(values[field.key])}
           error={errors[field.key]}
           onChange={(next) => {
-            setValues((prev) => ({ ...prev, [field.key]: next }));
-            setSubmitError(null);
+            const nextValues: ParamValues = { ...values, [field.key]: next };
+            change({ templateId: template.id, values: nextValues });
           }}
         />
       ))}

@@ -15,6 +15,7 @@ import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
 import { MentionRegistry } from "../mentions";
+import { pinHeaderGenerator, templatePayload } from "./helpers/template-footprint";
 
 const PLACEHOLDER = "fp-no-footprint-yet";
 const SESSION = "refresh-fp-session";
@@ -143,18 +144,13 @@ describe("designer: footprintStale + refresh_part_footprint", () => {
       positionMm: { x: 7.5, y: -3.25 },
     });
 
-    // Library assigns a real footprint → both parts stale.
+    // Library assigns a real footprint → both parts stale. (Every IPC family is
+    // quarantined on the pinned rendering-core, H15 D1: use an 8-pad template.)
+    const generator = pinHeaderGenerator(2, 4);
     const added = await lib(env, "POST", `/components/${comp}/footprints`, {
       mode: "generated",
-      source: (({ source, metadata }) => ({ source, metadata }))(
-        generateFootprint("soic", "SOIC-8", "nominal"),
-      ),
-      generator: {
-        kind: "ipc7351b",
-        family: "soic",
-        size: "SOIC-8",
-        density: "nominal",
-      },
+      source: templatePayload(generator),
+      generator,
     });
     expect(added.status).toBe(201);
     const newFp = added.json.data.footprintId as string;
